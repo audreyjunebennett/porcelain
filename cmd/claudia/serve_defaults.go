@@ -8,18 +8,18 @@ import (
 
 func defaultSupervisorIndexerBin() string {
 	dir := executableDir()
+	names := []string{"claudia-index"}
+	if runtime.GOOS == "windows" {
+		names = []string{"claudia-index.exe", "claudia-index"}
+	}
+	if p := firstExistingInSearchDirs(dir, names); p != "" {
+		return p
+	}
 	if dir == "" {
 		if runtime.GOOS == "windows" {
 			return "claudia-index.exe"
 		}
 		return "claudia-index"
-	}
-	names := []string{"claudia-index"}
-	if runtime.GOOS == "windows" {
-		names = []string{"claudia-index.exe", "claudia-index"}
-	}
-	if p := firstExistingFile(dir, names); p != "" {
-		return p
 	}
 	if runtime.GOOS == "windows" {
 		return "claudia-index.exe"
@@ -29,14 +29,11 @@ func defaultSupervisorIndexerBin() string {
 
 func defaultSupervisorBifrostBin() string {
 	dir := executableDir()
-	if dir == "" {
-		return "bifrost"
-	}
 	names := []string{"bifrost-http", "bifrost"}
 	if runtime.GOOS == "windows" {
 		names = []string{"bifrost-http.exe", "bifrost.exe", "bifrost-http", "bifrost"}
 	}
-	if p := firstExistingFile(dir, names); p != "" {
+	if p := firstExistingInSearchDirs(dir, names); p != "" {
 		return p
 	}
 	return "bifrost"
@@ -44,14 +41,11 @@ func defaultSupervisorBifrostBin() string {
 
 func defaultSupervisorQdrantBin() string {
 	dir := executableDir()
-	if dir == "" {
-		return ""
-	}
 	names := []string{"qdrant"}
 	if runtime.GOOS == "windows" {
 		names = []string{"qdrant.exe", "qdrant"}
 	}
-	return firstExistingFile(dir, names)
+	return firstExistingInSearchDirs(dir, names)
 }
 
 func executableDir() string {
@@ -70,4 +64,23 @@ func firstExistingFile(dir string, names []string) string {
 		}
 	}
 	return ""
+}
+
+// firstExistingInSearchDirs checks the executable directory, then <exeDir>/bin,
+// matching how `make install` / `make desktop-run` lay out ./bin/bifrost-http and ./bin/qdrant
+// next to claudia-desktop at the repo root (Explorer launch uses no CLI flags).
+func firstExistingInSearchDirs(exeDir string, names []string) string {
+	for _, d := range supervisorBinSearchDirs(exeDir) {
+		if p := firstExistingFile(d, names); p != "" {
+			return p
+		}
+	}
+	return ""
+}
+
+func supervisorBinSearchDirs(exeDir string) []string {
+	if exeDir == "" {
+		return nil
+	}
+	return []string{exeDir, filepath.Join(exeDir, "bin")}
 }
