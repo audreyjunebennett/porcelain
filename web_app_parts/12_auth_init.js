@@ -1,18 +1,7 @@
 /* ── Auth: sign in / sign out (session cookie); sync "Chat as" when signed in ── */
 var signInBtn=document.getElementById('signInBtn'),signOutBtn=document.getElementById('signOutBtn'),signedInAs=document.getElementById('signedInAs');
 var loginOverlay=document.getElementById('loginOverlay'),loginForm=document.getElementById('loginForm'),loginUser=document.getElementById('loginUser'),loginUsername=document.getElementById('loginUsername'),loginPassword=document.getElementById('loginPassword'),loginCancel=document.getElementById('loginCancel'),loginSubmit=document.getElementById('loginSubmit'),loginError=document.getElementById('loginError');
-function showAccessTokenPrompt(){
-  var wrap=document.getElementById('accessTokenOverlay');
-  if(wrap)return;
-  wrap=document.createElement('div');wrap.id='accessTokenOverlay';wrap.setAttribute('aria-modal','true');wrap.setAttribute('role','dialog');
-  wrap.style.cssText='position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box';
-  var box=document.createElement('div');box.style.cssText='background:var(--bg-card,#2a2540);border-radius:12px;padding:24px;max-width:360px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.4)';
-  box.innerHTML='<p style="margin:0 0 12px;font-size:15px;color:#f0eaff">This server requires an access token.</p><p style="margin:0 0 16px;font-size:13px;color:#b8b0d0">Enter the token Ruby gave you (e.g. when port is forwarded for play):</p><input type="password" id="accessTokenInput" placeholder="Access token" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,122,217,.4);background:rgba(0,0,0,.2);color:#f0eaff;font-size:14px;margin-bottom:12px;box-sizing:border-box"><button type="button" id="accessTokenSave" style="width:100%;padding:10px;border-radius:8px;border:none;background:linear-gradient(135deg,#ff7ad9,#b366ff);color:#fff;font-size:14px;cursor:pointer">Save and continue</button>';
-  wrap.appendChild(box);
-  document.body.appendChild(wrap);
-  var input=document.getElementById('accessTokenInput'),btn=document.getElementById('accessTokenSave');
-  if(btn&&input){btn.onclick=function(){var t=(input.value||'').trim();if(!t)return;try{localStorage.setItem('claudia_access_token',t);}catch(e){}location.reload();};}
-}
+
 function setSignedInState(signedIn,user,displayName){
   if(signInBtn){signInBtn.style.display=signedIn?'none':'block';}
   if(signedInAs){signedInAs.style.display=signedIn?'inline':'none';signedInAs.textContent=signedIn?'Signed in as '+(displayName||user||''):'';}
@@ -27,28 +16,10 @@ function applyLockLabelsToDropdown(){if(!userSelect||!userSelect.options)return;
 function showAccountLocked(){var who=userSelect?userSelect.value:'';if(loginUser){loginUser.value=who;}if(loginError){loginError.textContent='Sign in as '+(userDisplayNames[who]||who)+' to access her chats.';loginError.style.display='block';}showLoginOverlay();}
 /* ── Init ── */
 showEmpty(); // visible immediately while loadAll fetches
-Promise.all([
-  fetch('/api/auth/status',{credentials:'include',cache:'no-store'}).then(function(r){return r.ok?r.json():{};}).catch(function(){return {};}),
-  fetch('/api/config',{cache:'no-store'}).then(function(r){
-    if(r.status===403){ return {accessTokenRequired:true}; }
-    return r.ok?r.json():{};
-  }).catch(function(){ return {accessTokenRequired:true}; })
-]).then(function(arr){
-  var d=arr[0],config=arr[1]||{};
+fetch('/api/auth/status',{credentials:'include',cache:'no-store'}).then(function(r){return r.ok?r.json():{};}).catch(function(){return {};}).then(function(d){
   protectedUsers=(d&&d.protectedUsers)||[];signedInUser=d&&d.signedInUser||null;
   if(signedInUser){setSignedInState(true,signedInUser,userDisplayNames[signedInUser]);if(userSelect){userSelect.value=signedInUser;}lastSelectedUser=signedInUser;fetchAvatarMe();loadAvatarPicker();}else{setSignedInState(false);}
   applyLockLabelsToDropdown();
-  if(config.accessTokenRequired){
-    try{
-      var tok=localStorage.getItem('claudia_access_token');
-      if(!tok||tok.length===0){ showAccessTokenPrompt(); return; }
-      fetch('/conversations',mergeApiHeaders({cache:'no-store',credentials:'include'})).then(function(r){
-        if(r.status===403){ try{localStorage.removeItem('claudia_access_token');}catch(e){} showAccessTokenPrompt(); return; }
-        initAfterToken();
-      }).catch(function(){ try{localStorage.removeItem('claudia_access_token');}catch(e){} showAccessTokenPrompt(); });
-      return;
-    }catch(e){ showAccessTokenPrompt(); return; }
-  }
   initAfterToken();
   function initAfterToken(){
   if(signInBtn){signInBtn.addEventListener('click',showLoginOverlay);}

@@ -498,7 +498,7 @@
     #inputArea.mode-therapist .chat-mode-label{color:rgba(80,200,180,.95)}
     #inputArea.mode-learning .chat-mode-label{color:rgba(255,180,80,.95)}
     #inputArea.mode-ai_tasks .chat-mode-label{color:rgba(140,120,255,.95)}
-    #inputArea .input-row{display:flex;align-items:flex-end;gap:10px}
+    #inputArea .input-row{display:flex;align-items:flex-end;gap:10px;width:100%;min-width:0;flex-wrap:nowrap}
     .file-bubbles{display:flex;flex-wrap:wrap;gap:8px;padding:0 0 8px;align-items:center;min-height:0}
     .file-bubbles:empty{display:none}
     .file-bubble{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:12px;background:rgba(255,122,217,.12);border:1px solid rgba(255,122,217,.4);font-size:12px;font-weight:600;color:var(--text);max-width:100%;flex-shrink:0;transform-origin:center center}
@@ -524,22 +524,22 @@
     .attach-preview-bar .attach-preview-close{position:absolute;top:10px;right:max(10px,env(safe-area-inset-right));width:32px;height:32px;min-width:32px;min-height:32px;border-radius:50%;border:none;background:rgba(0,0,0,.4);color:#fff;font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent;flex-shrink:0}
     .attach-preview-bar .attach-preview-close:hover,.attach-preview-bar .attach-preview-close:active{background:rgba(255,122,217,.5)}
     .attach-preview-bar .attach-preview-hint{font-size:13px;color:var(--text-dim);flex:1;min-width:0;padding-right:40px}
-    #msgInput{flex:1;border-radius:22px;border:2px solid var(--border);background:var(--bg);color:var(--text);padding:10px 14px;font-size:16px;line-height:1.4;resize:none;font-family:inherit;outline:none;max-height:130px;min-height:42px;overflow-y:auto;transition:border-color .15s;-webkit-appearance:none;appearance:none}
+    #msgInput{flex:1 1 auto;min-width:0;width:100%;box-sizing:border-box;border-radius:22px;border:2px solid var(--border);background:var(--bg);color:var(--text);padding:10px 14px;font-size:16px;line-height:1.4;resize:none;font-family:inherit;outline:none;max-height:130px;min-height:42px;overflow-y:auto;transition:border-color .15s;-webkit-appearance:none;appearance:none}
     #msgInput::placeholder{color:var(--text-dim);opacity:1}
     #msgInput:focus,#msgInput:focus-visible{border-color:var(--pink);outline:2px solid var(--pink);outline-offset:2px}
-    #attachImgBtn{width:38px;height:38px;border-radius:50%;border:2px solid var(--pink);background:var(--bg);color:var(--pink);cursor:pointer;font-size:19px;flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:0;-webkit-appearance:none;appearance:none;box-shadow:0 0 0 1px var(--border),0 0 10px rgba(255,122,217,.25);line-height:1}
+    #attachImgBtn{width:38px;height:38px;min-width:38px;min-height:38px;border-radius:50%;border:2px solid var(--pink);background:var(--bg);color:var(--pink);cursor:pointer;font-size:19px;flex:0 0 38px;display:flex;align-items:center;justify-content:center;padding:0;-webkit-appearance:none;appearance:none;box-shadow:0 0 0 1px var(--border),0 0 10px rgba(255,122,217,.25);line-height:1;overflow:hidden}
     #attachImgBtn .attach-btn-icon{filter:drop-shadow(0 0 4px var(--pink));transition:filter .15s}
     #attachImgBtn:hover,#attachImgBtn:focus{background:var(--surface2);border-color:var(--pink);box-shadow:0 0 0 1px var(--border),0 0 14px rgba(255,122,217,.5),0 0 24px rgba(255,100,235,.3)}
     #attachImgBtn:hover .attach-btn-icon,#attachImgBtn:focus .attach-btn-icon{filter:drop-shadow(0 0 6px var(--pink)) drop-shadow(0 0 12px rgba(255,122,217,.8))}
     /* Send button: same purple/pink shimmer gradient as pin buttons */
-    #sendBtn{-webkit-appearance:none;appearance:none;width:42px;height:42px;border-radius:50%;border:2px solid transparent;background:linear-gradient(#06000f,#06000f) padding-box,linear-gradient(135deg,#ff66ee,#ff44e0,#e030ff,#c030e8,#ff88f0,#ff44e0) border-box;background-origin:padding-box,border-box;background-clip:padding-box,border-box;color:#ff99ee;cursor:pointer;font-size:18px;font-weight:900;display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;line-height:1;box-shadow:0 0 8px rgba(255,68,224,.5),0 0 14px rgba(255,80,230,.4),0 0 22px rgba(200,50,240,.3),inset 0 0 10px rgba(255,60,220,.08);transition:opacity .15s,transform .1s,box-shadow .2s,color .15s}
-    #sendBtn .send-btn-icon{filter:drop-shadow(0 0 4px rgba(255,136,238,.7)) drop-shadow(0 0 8px rgba(255,100,240,.5));transition:filter .15s}
+    #sendBtn{-webkit-appearance:none;appearance:none;width:42px;height:42px;min-width:42px;min-height:42px;border-radius:50%;border:2px solid transparent;background:linear-gradient(#06000f,#06000f) padding-box,linear-gradient(135deg,#ff66ee,#ff44e0,#e030ff,#c030e8,#ff88f0,#ff44e0) border-box;background-origin:padding-box,border-box;background-clip:padding-box,border-box;color:#ff99ee;cursor:pointer;font-size:18px;font-weight:900;display:flex;align-items:center;justify-content:center;flex:0 0 42px;padding:0;line-height:1;box-shadow:0 0 8px rgba(255,68,224,.5),0 0 14px rgba(255,80,230,.4),0 0 22px rgba(200,50,240,.3),inset 0 0 10px rgba(255,60,220,.08);transition:opacity .15s,transform .1s,box-shadow .2s,color .15s;overflow:hidden;position:relative}
+    #sendBtn .send-btn-icon{width:26px;height:26px;max-width:26px;max-height:26px;display:block;object-fit:contain;flex:0 0 auto;pointer-events:none;filter:drop-shadow(0 0 4px rgba(255,136,238,.7)) drop-shadow(0 0 8px rgba(255,100,240,.5));transition:filter .15s}
     #sendBtn:active{transform:scale(.92)}
     #sendBtn:hover:not(:disabled){color:#fff;box-shadow:0 0 10px rgba(255,136,240,.5),0 0 18px rgba(255,100,238,.45),0 0 30px rgba(255,80,240,.4),0 0 48px rgba(220,50,240,.25),inset 0 0 16px rgba(255,100,245,.1)}
     #sendBtn:hover:not(:disabled) .send-btn-icon{filter:drop-shadow(0 0 6px rgba(255,136,238,.9)) drop-shadow(0 0 12px rgba(255,100,240,.6)) drop-shadow(0 0 4px rgba(255,255,255,.2))}
     #sendBtn:disabled{opacity:.4;cursor:default}
     #sendBtn:focus-visible{outline:2px solid rgba(255,255,255,.9);outline-offset:2px}
-    .voice-input-btn,#voiceInputBtn{-webkit-appearance:none;appearance:none;width:36px;height:36px;border-radius:50%;border:1px solid var(--claudia-border);background:var(--claudia-bg);color:var(--pink);cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;transition:opacity .15s,background .15s}
+    .voice-input-btn,#voiceInputBtn{-webkit-appearance:none;appearance:none;width:36px;height:36px;min-width:36px;min-height:36px;border-radius:50%;border:1px solid var(--claudia-border);background:var(--claudia-bg);color:var(--pink);cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;flex:0 0 36px;padding:0;transition:opacity .15s,background .15s;overflow:hidden}
     .voice-input-btn:hover,#voiceInputBtn:hover{opacity:.9;background:rgba(255,122,217,.12)}
     .voice-input-btn.listening,#voiceInputBtn.listening{background:rgba(255,122,217,.3);box-shadow:0 0 12px rgba(255,122,217,.4)}
     #attachImgBtn:focus-visible{outline:2px solid var(--pink);outline-offset:2px}
@@ -666,6 +666,7 @@
     <div class="sb-top-buttons">
       <button type="button" id="sbUserBtn" class="sb-top-btn" aria-expanded="false" aria-controls="sbUserPanel" title="User, avatar, sign in">User</button>
       <a href="/dashboard" class="sb-top-btn" title="Journal, quick facts, reminders">Dashboard</a>
+
       <a href="/files" class="sb-top-btn" title="Browse project files">Files</a>
     </div>
     <div id="sbUserPanel" class="sb-user-panel" role="region" aria-label="User settings">

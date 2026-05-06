@@ -97,6 +97,18 @@ metrics.sqlite
 # Comment this out if you'd rather commit the bundled JS for reproducibility.
 # pwa/static/web_app.js
 
+# ── Design asset library ─────────────────────────────────────────────────────
+# ~600 SVG files for design reference — not needed in the repo.
+# Exceptions: Canonical Icons (branded project assets) and bee/ (used in PWA).
+assets/*
+!assets/Canonical Icons/
+!assets/bee/
+
+# ── Syncthing internals ───────────────────────────────────────────────────────
+.stfolder/
+**/.stfolder/
+.stignore
+
 # ── Misc ─────────────────────────────────────────────────────────────────────
 # Claude Code session scratch
 .claude/

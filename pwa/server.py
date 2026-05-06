@@ -20,7 +20,7 @@ from pathlib import Path
 import httpx
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse, FileResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 # Load D:\Rebirth\.env if present (gitignored, holds API keys)
@@ -38,6 +38,7 @@ TRANSCRIPTS_DIR = Path(os.environ.get("CLAUDIA_TRANSCRIPTS_DIR", r"D:\Rebirth\Mo
 FILES_ROOT      = Path(os.environ.get("CLAUDIA_FILES_ROOT",      r"D:\\"))
 ASSETS_DIR      = Path(os.environ.get("CLAUDIA_ASSETS_DIR",      r"D:\Rebirth\assets"))
 PORT            = int(os.environ.get("CLAUDIA_PWA_PORT",          "8080"))
+BEE_ICON_PATH   = ASSETS_DIR / "bee" / "bee-svgrepo-com.svg"
 
 # API keys — must come from .env or system env. Empty default = clear failure if not set.
 GROQ_KEY    = os.environ.get("GROQ_API_KEY",   "")
@@ -80,6 +81,12 @@ app = FastAPI(title="Claudia")
 # Mount /assets/* for the PWA's icon/asset library at D:\Rebirth\assets\
 if ASSETS_DIR.exists():
     app.mount("/assets", StaticFiles(directory=str(ASSETS_DIR)), name="assets")
+
+
+@app.get("/health")
+async def health():
+    """Simple app health check for local dev probes."""
+    return {"ok": True, "app": "Claudia", "port": PORT}
 
 
 def claudia_shell_html() -> str:
@@ -170,14 +177,14 @@ async def root():
 <html><head><meta charset="UTF-8"><title>Claudia · routes</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#F6F1EE;color:#4A3F4F;margin:0;padding:30px;line-height:1.6;max-width:640px;margin:0 auto;}
-h1{color:#D89AA8;font-size:22px;margin:0 0 6px;}
-.sub{color:#9B8FA0;font-size:13px;margin-bottom:24px;}
-.card{background:#FDFAF6;border:1.5px solid #DBC9B5;border-radius:14px;padding:18px 20px;margin-bottom:14px;box-shadow:0 2px 6px rgba(74,63,79,.06);}
-.card h2{font-size:14px;margin:0 0 4px;color:#D89AA8;}
-.card a{display:inline-block;color:#84B8BA;font-family:"SF Mono",Consolas,monospace;font-size:14px;font-weight:600;text-decoration:none;}
-.card a:hover{text-decoration:underline;}
-.note{font-size:12px;color:#9B8FA0;margin-top:6px;}
+body{{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#F6F1EE;color:#4A3F4F;margin:0;padding:30px;line-height:1.6;max-width:640px;margin:0 auto;}}
+h1{{color:#D89AA8;font-size:22px;margin:0 0 6px;}}
+.sub{{color:#9B8FA0;font-size:13px;margin-bottom:24px;}}
+.card{{background:#FDFAF6;border:1.5px solid #DBC9B5;border-radius:14px;padding:18px 20px;margin-bottom:14px;box-shadow:0 2px 6px rgba(74,63,79,.06);}}
+.card h2{{font-size:14px;margin:0 0 4px;color:#D89AA8;}}
+.card a{{display:inline-block;color:#84B8BA;font-family:"SF Mono",Consolas,monospace;font-size:14px;font-weight:600;text-decoration:none;}}
+.card a:hover{{text-decoration:underline;}}
+.note{{font-size:12px;color:#9B8FA0;margin-top:6px;}}
 </style></head><body>
 <h1>✨ Claudia · pwa server</h1>
 <p class="sub">port {PORT} — file / notes / code APIs only. See your routes:</p>
@@ -265,6 +272,10 @@ def _icon_alias_response():
 @app.get("/bee.svg")
 async def bee_svg():
     """Send button art in original UI."""
+    if BEE_ICON_PATH.exists():
+        raw = BEE_ICON_PATH.read_text(encoding="utf-8")
+        raw = raw.replace('stroke="#000000"', 'stroke="#ff88ee"').replace('stroke-opacity="0.9"', 'stroke-opacity="0.98"')
+        return Response(content=raw, media_type="image/svg+xml")
     return _icon_alias_response()
 
 
@@ -343,6 +354,56 @@ async def list_models():
     models.append({"id": GEMINI_MODEL, "provider": "gemini", "label": f"Gemini · {GEMINI_MODEL}"})
     models.append({"id": GROQ_MODEL,   "provider": "groq",   "label": f"Groq · {GROQ_MODEL}"})
     return models
+
+
+@app.get("/v1/models")
+async def openai_models():
+    """Small OpenAI-compatible models listing for local tool probes."""
+    models = await list_models()
+    return {
+        "object": "list",
+        "data": [
+            {
+                "id": model["id"],
+                "object": "model",
+                "created": 0,
+                "owned_by": model["provider"],
+            }
+            for model in models
+        ],
+    }
+
+
+@app.post("/v1/embeddings")
+async def openai_embeddings(request: Request):
+    """Return a harmless placeholder embedding for local compatibility probes."""
+    body = await request.json()
+    inputs = body.get("input", "")
+    model = body.get("model", "claudia-local")
+
+    if isinstance(inputs, list):
+        data = [
+            {
+                "object": "embedding",
+                "index": idx,
+                "embedding": [0.0],
+            }
+            for idx, _ in enumerate(inputs)
+        ]
+        prompt_tokens = sum(len(str(item)) for item in inputs)
+    else:
+        data = [{"object": "embedding", "index": 0, "embedding": [0.0]}]
+        prompt_tokens = len(str(inputs))
+
+    return {
+        "object": "list",
+        "data": data,
+        "model": model,
+        "usage": {
+            "prompt_tokens": prompt_tokens,
+            "total_tokens": prompt_tokens,
+        },
+    }
 
 
 # ── Chat ──────────────────────────────────────────────────────────────────────
