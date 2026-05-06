@@ -1,0 +1,9 @@
+fix: force desktop child shutdown after window close
+
+When the desktop window closes on Windows, supervised child processes can
+linger in the background and keep the gateway port occupied. This change
+tracks the child exec.Cmd handles in runServe and adds a bounded wait on
+shutdown before force-killing any child that ignores context cancellation.
+
+This keeps the desktop app from appearing closed while bifrost, qdrant, or
+the indexer are still alive and blocking relaunch.

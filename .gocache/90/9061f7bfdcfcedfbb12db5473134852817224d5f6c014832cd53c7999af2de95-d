@@ -1,0 +1,4 @@
+./client.go
+./getnormalize.go
+./merge.go
+./summary.go

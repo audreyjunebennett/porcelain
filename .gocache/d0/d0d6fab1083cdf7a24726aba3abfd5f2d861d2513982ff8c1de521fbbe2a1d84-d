@@ -1,0 +1,8 @@
+./assistant.go
+./fingerprint.go
+./normalize.go
+./score.go
+./service.go
+./session_attach.go
+./store.go
+./vector.go

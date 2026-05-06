@@ -376,12 +376,17 @@ async function sendChat() {
 
   let fullText = "";
   try {
+    // Always use gateway — get virtual model id for RAG
+    const gs = await fetch("/api/gateway/status").then(r => r.json());
+    const gwModel = gs.virtual_model || "Claudia-0.2.0";
+
     const resp = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         messages: [{ role: "system", content: systemPrompt }, ...chatHistory],
-        provider, model,
+        provider: "gateway",
+        model: gwModel,
       }),
     });
     const reader = resp.body.getReader();

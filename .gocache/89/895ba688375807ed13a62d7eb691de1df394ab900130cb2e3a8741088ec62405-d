@@ -1,0 +1,9 @@
+./color_windows.go
+./date_windows.go
+./dlgs.go
+./dlgs_windows.go
+./entry_windows.go
+./file_windows.go
+./list_windows.go
+./message_windows.go
+./password_windows.go

@@ -3,7 +3,7 @@
 from pathlib import Path
 
 REBIRTH = Path(__file__).resolve().parents[2]
-SRC = REBIRTH / "Previously Claudia Core" / "Scripts" / "mobile_orchestrator_api.py"
+SRC = Path(r"D:\Previously Claudia Core\Scripts\mobile_orchestrator_api.py")
 OUT = REBIRTH / "pwa" / "static" / "claudia_web.html"
 
 lines = SRC.read_text(encoding="utf-8").splitlines()

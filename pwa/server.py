@@ -39,6 +39,7 @@ FILES_ROOT      = Path(os.environ.get("CLAUDIA_FILES_ROOT",      r"D:\\"))
 ASSETS_DIR      = Path(os.environ.get("CLAUDIA_ASSETS_DIR",      r"D:\Rebirth\assets"))
 PORT            = int(os.environ.get("CLAUDIA_PWA_PORT",          "8080"))
 BEE_ICON_PATH   = ASSETS_DIR / "bee" / "bee-svgrepo-com.svg"
+CANONICAL_ICON_PATH = ASSETS_DIR / "Canonical Icons" / "icon.svg"
 
 # API keys — must come from .env or system env. Empty default = clear failure if not set.
 GROQ_KEY    = os.environ.get("GROQ_API_KEY",   "")
@@ -131,16 +132,23 @@ async def stream_openai_compat(
 ):
     """Stream from any OpenAI-compatible endpoint and yield SSE chunks."""
     headers = {
-        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
+
+    # Gemini API uses key as query param, not Authorization header
+    if "generativelanguage.googleapis.com" in base_url:
+        url = f"{base_url}/v1/chat/completions?key={api_key}"
+    else:
+        headers["Authorization"] = f"Bearer {api_key}"
+        url = f"{base_url}/v1/chat/completions"
+
     if extra_headers:
         headers.update(extra_headers)
     body = {"model": model, "messages": messages, "stream": True}
     try:
         async with httpx.AsyncClient(timeout=120) as client:
             async with client.stream(
-                "POST", f"{base_url}/v1/chat/completions",
+                "POST", url,
                 headers=headers, json=body
             ) as resp:
                 if resp.status_code != 200:
@@ -269,6 +277,39 @@ def _icon_alias_response():
     return FileResponse(THIS_DIR / "static" / "icon.svg", media_type="image/svg+xml")
 
 
+def _first_existing_path(paths: list[Path]) -> Path | None:
+    for path in paths:
+        if path.exists() and path.is_file():
+            return path
+    return None
+
+
+def _asset_candidates(bucket: str, asset_path: str) -> list[Path]:
+    normalized_bucket = (bucket or "").strip().lower()
+    normalized_asset = asset_path.replace("/", os.sep).replace("\\", os.sep).strip(os.sep)
+    alias_roots = {
+        "bucket_tree_flowers": ASSETS_DIR / "bucket tree flowers",
+        "horns": ASSETS_DIR / "horns",
+    }
+    roots = [alias_roots.get(normalized_bucket, ASSETS_DIR / bucket)]
+    if normalized_bucket == "horns":
+        roots.append(ASSETS_DIR / "ex out crossed out")
+    return [root / normalized_asset for root in roots if root]
+
+
+def _guess_media_type(path: Path) -> str:
+    ext = path.suffix.lower()
+    if ext == ".svg":
+        return "image/svg+xml"
+    if ext == ".png":
+        return "image/png"
+    if ext in {".jpg", ".jpeg"}:
+        return "image/jpeg"
+    if ext == ".webp":
+        return "image/webp"
+    return "application/octet-stream"
+
+
 @app.get("/bee.svg")
 async def bee_svg():
     """Send button art in original UI."""
@@ -277,6 +318,35 @@ async def bee_svg():
         raw = raw.replace('stroke="#000000"', 'stroke="#ff88ee"').replace('stroke-opacity="0.9"', 'stroke-opacity="0.98"')
         return Response(content=raw, media_type="image/svg+xml")
     return _icon_alias_response()
+
+
+@app.get("/header_icon.svg")
+async def header_icon():
+    icon_path = _first_existing_path([CANONICAL_ICON_PATH, THIS_DIR / "static" / "icon.svg"])
+    if not icon_path:
+        raise HTTPException(404, "header icon missing")
+    return FileResponse(icon_path, media_type="image/svg+xml")
+
+
+@app.get("/chat_icon.png")
+async def chat_icon():
+    icon_path = _first_existing_path(
+        [
+            THIS_DIR / "static" / "claudia-avatar-sm.png",
+            THIS_DIR / "static" / "claudia-avatar.png",
+        ]
+    )
+    if not icon_path:
+        raise HTTPException(404, "chat icon missing")
+    return FileResponse(icon_path, media_type="image/png")
+
+
+@app.get("/api/asset/{bucket}/{asset_path:path}")
+async def asset_file(bucket: str, asset_path: str):
+    asset = _first_existing_path(_asset_candidates(bucket, asset_path))
+    if not asset:
+        raise HTTPException(404, "asset missing")
+    return FileResponse(asset, media_type=_guess_media_type(asset))
 
 
 @app.get("/claudia_avatar.svg")
@@ -412,26 +482,26 @@ async def openai_embeddings(request: Request):
 async def chat(request: Request):
     body = await request.json()
     messages  = body.get("messages", [])
-    provider  = body.get("provider", "gemini")
-    model     = body.get("model", GEMINI_MODEL)
+    model     = body.get("model")
     project   = body.get("project", "").strip()   # optional RAG project (transcripts / notes)
 
     if not messages or messages[0].get("role") != "system":
         messages = [{"role": "system", "content": SYSTEM_PROMPT}] + messages
 
-    gw_headers = {"X-Claudia-Project": project} if project else None
+    # Gateway-only routing — no fallbacks to other providers
+    if not model:
+        try:
+            async with httpx.AsyncClient(timeout=3) as client:
+                gw_status = await client.get(f"{GATEWAY_URL}/status")
+                if gw_status.status_code == 200:
+                    gw = (gw_status.json() or {}).get("gateway") or {}
+                    model = gw.get("virtual_model") or GATEWAY_VIRTUAL_FALLBACK
+        except Exception:
+            pass
+    model = model or GATEWAY_VIRTUAL_FALLBACK
 
-    if provider == "gateway":
-        gen = stream_openai_compat(GATEWAY_URL, GATEWAY_TOKEN, model, messages, gw_headers)
-    elif provider == "ollama":
-        gen = stream_openai_compat(OLLAMA_URL, "ollama", model, messages)
-    elif provider == "groq":
-        gen = stream_openai_compat("https://api.groq.com/openai", GROQ_KEY, model, messages)
-    else:  # gemini (default)
-        gen = stream_openai_compat(
-            "https://generativelanguage.googleapis.com/v1beta/openai",
-            GEMINI_KEY, model, messages,
-        )
+    gw_headers = {"X-Claudia-Project": project} if project else None
+    gen = stream_openai_compat(GATEWAY_URL, GATEWAY_TOKEN, model, messages, gw_headers)
 
     return StreamingResponse(
         gen,

@@ -1,0 +1,2 @@
+./log.go
+./stdio_tee_windows.go

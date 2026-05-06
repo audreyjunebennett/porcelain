@@ -1,0 +1,13 @@
+./client.go
+./config.go
+./debounce.go
+./hash.go
+./ignore.go
+./indexer.go
+./ingest_skip.go
+./ops_events.go
+./queue.go
+./scope.go
+./supervised_file.go
+./syncstate.go
+./walker.go

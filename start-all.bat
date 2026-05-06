@@ -1,10 +1,10 @@
 @echo off
-title Claudia - Start All
+title Locus - Start All
 echo.
-echo  Starting Claudia stack...
+echo  Starting Porcelain stack (Locus + Gateway + Ingest)...
 echo.
 
-:: Clear stale Claudia processes so relaunching works even after a bad prior exit
+:: Clear stale processes so relaunching works even after a bad prior exit
 taskkill /f /im claudia-desktop.exe >nul 2>nul
 taskkill /f /im claudia.exe >nul 2>nul
 
@@ -32,18 +32,20 @@ start "" /d "D:\Rebirth\claudia-gateway" claudia-desktop.exe desktop ^
 :: Ingest watcher - polls every 30s, pushes Moto X transcripts + D:\Notes into Qdrant
 start "Claudia Ingest" cmd /k "py -3.14 D:\Rebirth\ingest_watcher.py"
 
-:: PWA server - legacy tabbed app + APIs, port 8080
-start "Claudia PWA" cmd /k "py -3.14 D:\Rebirth\pwa\server.py"
+:: PWA server (8080) is optional. The original PWA lives on Locus (11435).
+:: If you want the legacy tabbed UI / Rebirth shell, uncomment this.
+:: start "Claudia PWA" cmd /k "py -3.14 D:\Rebirth\pwa\server.py"
 
-:: Orchestrator - original PWA + conversations + auth, port 11435
-start "Claudia Orchestrator" cmd /k "cd /d ""D:\Rebirth\Previously Claudia Core"" && py -3.14 Scripts\mobile_orchestrator_api.py"
+:: Locus - creative workspace server (PWA + conversations + auth), port 11435
+start "Locus Server" cmd /k "py -3.14 D:\Rebirth\pwa\tools\run_mobile_orchestrator.py"
 
 echo.
 echo  All services started.
 echo.
 echo  Gateway panel:                              http://localhost:3000/ui/panel
 echo  Original PWA (with sidebar/conversations):  https://localhost:11435/web
-echo  Legacy tabbed app:                          http://localhost:8080/legacy-app
+echo  PWA shell + APIs (optional):                http://localhost:8080
+echo  Legacy tabbed app (optional):               http://localhost:8080/legacy-app
 echo  iPhone: use Tailscale IP shown in PWA window.
 echo.
 pause

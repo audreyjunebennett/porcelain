@@ -1,0 +1,8 @@
+./default_mode_stub.go
+./gateway.go
+./main.go
+./serve.go
+./serve_defaults.go
+./tokencount.go
+./version.go
+./webview_stub.go
