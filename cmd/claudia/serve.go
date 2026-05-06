@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -64,6 +65,40 @@ func webviewEntryURL(ln net.Addr, bootstrap bool) string {
 	return base + "/ui/login?next=" + url.PathEscape("/ui/desktop")
 }
 
+func waitForChildExit(name string, cmd *exec.Cmd, waitCh <-chan error, timeout time.Duration, log *slog.Logger) {
+	if waitCh == nil {
+		return
+	}
+	select {
+	case werr := <-waitCh:
+		if werr != nil && log != nil {
+			log.Debug(name+" process finished", "err", werr)
+		}
+		return
+	case <-time.After(timeout):
+	}
+
+	if cmd != nil && cmd.Process != nil {
+		if log != nil {
+			log.Warn(name+" did not exit after context cancel; forcing kill", "pid", cmd.Process.Pid, "timeout", timeout)
+		}
+		if err := cmd.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) && log != nil {
+			log.Warn(name+" kill failed", "err", err)
+		}
+	}
+
+	select {
+	case werr := <-waitCh:
+		if werr != nil && log != nil {
+			log.Debug(name+" process finished after kill", "err", werr)
+		}
+	case <-time.After(5 * time.Second):
+		if log != nil {
+			log.Warn(name + " still has not exited after forced kill")
+		}
+	}
+}
+
 func runServe(args []string, openWebview bool) {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
 	configPath := fs.String("config", "", "Path to gateway.yaml (default: $CLAUDIA_GATEWAY_CONFIG or ./config/gateway.yaml)")
@@ -117,8 +152,11 @@ func runServe(args []string, openWebview bool) {
 	qBin := strings.TrimSpace(*qdrantBin)
 
 	childCtx, stopChildren := context.WithCancel(context.Background())
+	var qdrantProc *exec.Cmd
 	var qdrantWait chan error
+	var bifrostProc *exec.Cmd
 	var bifrostWaitErr chan error
+	var indexerProc *exec.Cmd
 	var indexerWait chan error
 
 	if !bootstrap {
@@ -133,7 +171,8 @@ func runServe(args []string, openWebview bool) {
 				Stdout:     platform.StdoutTee(qSink),
 				Stderr:     platform.StderrTee(qSink),
 			}
-			qdrantProc, qerr := supervisor.StartQdrant(childCtx, qcfg, log)
+			var qerr error
+			qdrantProc, qerr = supervisor.StartQdrant(childCtx, qcfg, log)
 			if qerr != nil {
 				stopChildren()
 				fmt.Fprintf(os.Stderr, "claudia serve: %v\n", qerr)
@@ -169,7 +208,8 @@ func runServe(args []string, openWebview bool) {
 			Stdout:     platform.StdoutTee(bSink),
 			Stderr:     platform.StderrTee(bSink),
 		}
-		proc, berr := supervisor.StartBifrost(childCtx, bcfg, log)
+		var berr error
+		bifrostProc, berr = supervisor.StartBifrost(childCtx, bcfg, log)
 		if berr != nil {
 			stopChildren()
 			if qdrantWait != nil {
@@ -188,7 +228,7 @@ func runServe(args []string, openWebview bool) {
 		}
 		bifrostWaitErr = make(chan error, 1)
 		go func() {
-			bifrostWaitErr <- proc.Wait()
+			bifrostWaitErr <- bifrostProc.Wait()
 		}()
 
 		if !*noWait {
@@ -220,7 +260,8 @@ func runServe(args []string, openWebview bool) {
 			} else {
 				idxSink := logStore.Writer("indexer")
 				gwLocal := gatewayPublicURLFromResolved(res)
-				idxProc, ierr := supervisor.StartIndexer(childCtx, supervisor.IndexerConfig{
+				var ierr error
+				indexerProc, ierr = supervisor.StartIndexer(childCtx, supervisor.IndexerConfig{
 					Bin:        idxBin,
 					ConfigPath: res.IndexerSupervisedConfigPath,
 					WorkDir:    wd,
@@ -236,7 +277,7 @@ func runServe(args []string, openWebview bool) {
 				} else {
 					indexerWait = make(chan error, 1)
 					go func() {
-						indexerWait <- idxProc.Wait()
+						indexerWait <- indexerProc.Wait()
 					}()
 				}
 			}
@@ -355,21 +396,9 @@ func runServe(args []string, openWebview bool) {
 	}
 
 	stopChildren()
-	if qdrantWait != nil {
-		if werr := <-qdrantWait; werr != nil && log != nil {
-			log.Debug("qdrant process finished", "err", werr)
-		}
-	}
-	if bifrostWaitErr != nil {
-		if werr := <-bifrostWaitErr; werr != nil && log != nil {
-			log.Debug("bifrost process finished", "err", werr)
-		}
-	}
-	if indexerWait != nil {
-		if werr := <-indexerWait; werr != nil && log != nil {
-			log.Debug("indexer process finished", "err", werr)
-		}
-	}
+	waitForChildExit("qdrant", qdrantProc, qdrantWait, 10*time.Second, log)
+	waitForChildExit("bifrost", bifrostProc, bifrostWaitErr, 10*time.Second, log)
+	waitForChildExit("indexer", indexerProc, indexerWait, 10*time.Second, log)
 
 	if serveErr != nil && serveErr != http.ErrServerClosed {
 		log.Error("http server", "err", serveErr)
