@@ -513,10 +513,10 @@ func TestLogsDerive_indexerPresent_groupKey(t *testing.T) {
 		t.Fatalf("fallback got %q", v2.String())
 	}
 	v3, err := gfn(goja.Undefined(), vm.ToValue(map[string]any{
-		"principal_id":         "t1",
+		"principal_id":        "t1",
 		"defaults_project_id": "myproj",
 		"defaults_flavor_id":  "f1",
-		"index_run_id":          "run-x",
+		"index_run_id":        "run-x",
 	}))
 	if err != nil {
 		t.Fatal(err)
@@ -541,20 +541,20 @@ func TestLogsDerive_indexerPartition_humanStartMsgSplitsBuckets(t *testing.T) {
 	cache := []any{
 		map[string]any{
 			"parsed": map[string]any{"rawFlat": map[string]any{
-				"service":             "indexer",
-				"index_run_id":        "run1",
-				"msg":                 "indexer run start",
-				"root_ids":            "r1,r2",
-				"watch_root_paths":    []any{"/a", "/b"},
-				"root_scopes":         rs,
+				"service":              "indexer",
+				"index_run_id":         "run1",
+				"msg":                  "indexer run start",
+				"root_ids":             "r1,r2",
+				"watch_root_paths":     []any{"/a", "/b"},
+				"root_scopes":          rs,
 				"indexer_multi_target": true,
 			}},
 		},
 		map[string]any{
 			"parsed": map[string]any{"rawFlat": map[string]any{
-				"service":      "indexer",
-				"index_run_id": "run1",
-				"msg":          "indexer.queue.snapshot",
+				"service":              "indexer",
+				"index_run_id":         "run1",
+				"msg":                  "indexer.queue.snapshot",
 				"indexer_multi_target": true,
 			}},
 		},
@@ -674,4 +674,3 @@ func TestLogsDerive_indexerPartition_syntheticJobsWhenStartMissing(t *testing.T)
 		t.Fatalf("want synthetic keys %q and %q, have object", k1, k2)
 	}
 }
-

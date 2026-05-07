@@ -160,8 +160,11 @@ func TestIndexer_OneShotIngestsScannedFiles(t *testing.T) {
 		ix.RunWorkers(ctx)
 		close(done)
 	}()
+	// Do not use queue length as a completion signal: the scan job can dequeue
+	// (making the queue empty) and *then* enqueue fan-out work. Instead, wait
+	// for the expected ingests to arrive.
 	for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline); {
-		if ix.Queue().Len() == 0 {
+		if got := g.seenSources(); len(got) == 2 {
 			break
 		}
 		time.Sleep(10 * time.Millisecond)
