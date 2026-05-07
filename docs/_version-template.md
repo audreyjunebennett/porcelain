@@ -15,9 +15,9 @@ One to three short sentences that explain the value of this version for the oper
 
 | Theme | Outcome | Status |
 |-------|---------|--------|
-| [Theme 1 - Short title](#theme-1-short-title) | One-line user-facing outcome | `todo` |
-| [Theme 2 - Short title](#theme-2-short-title) | One-line user-facing outcome | `todo` |
-| [Theme 3 - Short title](#theme-3-short-title) | One-line user-facing outcome | `todo` |
+| [Short title](#theme-1-short-title) | One-line user-facing outcome | `todo` |
+| [Short title](#theme-2-short-title) | One-line user-facing outcome | `todo` |
+| [Short title](#theme-3-short-title) | One-line user-facing outcome | `todo` |
 
 ---
 
@@ -29,7 +29,7 @@ Describe the release in a paragraph or two: the problem it solves, the operator 
 
 ---
 
-## Theme 1 - Short title
+## Short title
 
 **Goal:** One sentence describing the outcome.
 
@@ -46,7 +46,7 @@ Describe the release in a paragraph or two: the problem it solves, the operator 
 
 ---
 
-## Theme 2 - Short title
+## Short title
 
 **Goal:** ...
 
@@ -62,7 +62,7 @@ Describe the release in a paragraph or two: the problem it solves, the operator 
 
 ---
 
-## Theme 3 - Short title
+## Short title
 
 **Goal:** ...
 
