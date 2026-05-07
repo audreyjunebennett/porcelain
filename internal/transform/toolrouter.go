@@ -27,7 +27,7 @@ Respond with ONLY valid JSON (no markdown fences, no prose). Use one of these sh
 
 Every tool in the input list must appear exactly once by its function "name".`
 
-// Config drives the tool-slimming transformer (see docs/version-v0.1.1.md).
+// Config drives the tool-slimming transformer (see docs/plans/version-v0.1.1.md).
 type Config struct {
 	Enabled      bool
 	RouterModels []string

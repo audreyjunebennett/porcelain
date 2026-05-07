@@ -1,23 +1,18 @@
 ---
-description: After edits, suggest make targets to rebuild or verify from what changed
+description: After edits, hint which make targets rebuild or reset local data
 alwaysApply: true
 ---
 
-# Post-change `make` hints
+# Post-change rebuild hints
 
-If the change affects binaries, embedded assets, scripts, or local service data, close with **Run the following:** and space-separated `make` targets (omit when N/A). Full list: `make help`.
+Close with **Run the following:** and the relevant targets (omit when N/A). Full list: `make help`.
 
-| If you touched… | Run (pick what applies) |
-|-----------------|-------------------------|
-| `cmd/`, `internal/`, `go.mod` / `go.sum` | `claudia-build` · dev `claudia-run` / `claudia-serve` · verify `test` or `precommit` |
-| Desktop / webview / CGO (`webview_*.go`, etc.) | `desktop-build` · `vet-desktop` / `test-desktop` · once: `desktop-install` |
-| Free-tier catalog (`internal/freecatalog/`, `cmd/catalog-write-free`) | `catalog-free` (network; optional `INTERSECT=`) |
-| Available-models snapshot (`cmd/catalog-write-available`, or regenerating that YAML) | `catalog-available` (BiFrost reachable + env from docs/help) |
-| Regenerate **`provider-free-tier.generated.yaml`** (snapshot + docs + intersect) | `config-provider-free-tier` |
-| Release / bundles (`scripts/release-*.sh`, dist packaging) | `package` / `release-snapshot` / `release-install` |
-| `Makefile` or `scripts/` | Parent target for that script—often `claudia-build`, `claudia-install`, `install`, `configure`, `up`, or the rows above |
-| Stack onboarding or process control | `install` (or `claudia-install` + `desktop-install`) · `configure` · `up` · `claudia-start` / `claudia-stop` / `claudia-status` · `logs` |
-| Clean artifacts or reset BiFrost+Qdrant data | `clean` · `clean-all CONFIRM=1` · `clean-data CONFIRM=1` |
-| gofmt / CI-style gate | `fmt` · `fmt-check` · or `precommit` |
+| If you changed… | Rebuild |
+|-----------------|---------|
+| `cmd/claudia`, most `internal/` (not indexer-only below) | `claudia-build` |
+| Desktop / webview / CGO (`webview_*.go`, `default_mode_*.go`, `-tags desktop`) | `desktop-build` |
+| `cmd/claudia-index`, `internal/indexer/` | `indexer-build` |
 
-Keep this table as the default map; do not paste long Makefile excerpts into chat.
+If the change needs a **fresh BiFrost / Qdrant / gateway metrics state**, also say: **`make clean-data CONFIRM=1`**.
+
+Keep this short; do not paste Makefile excerpts into chat.

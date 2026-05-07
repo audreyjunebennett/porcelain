@@ -1,7 +1,7 @@
 // Package chunk implements server-side text chunking for v0.2 ingest.
 //
 // Defaults: 512 UTF-8 code units (runes) per chunk with 128-rune overlap, per
-// docs/version-v0.2.md. The implementation walks runes (not bytes) so that
+// docs/plans/version-v0.2.md. The implementation walks runes (not bytes) so that
 // multibyte code points are not split mid-character.
 package chunk
 

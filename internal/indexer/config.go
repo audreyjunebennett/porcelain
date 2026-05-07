@@ -1,6 +1,6 @@
 // Package indexer implements the v0.4+ claudia-index workspace file indexer.
 //
-// Scope per docs/indexer.plan.md:
+// Scope per docs/plans/indexer.plan.md:
 //
 //	v0.2: watch roots, ignores, whole-file ingest, backoff, relative source paths.
 //	v0.3: defaults + per-root + per-glob project_id / flavor_id / workspace_id,
@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	// Defaults aligned with docs/indexer.plan.md § Failure handling.
+	// Defaults aligned with docs/plans/indexer.plan.md § Failure handling.
 	defaultRetryAttempts        = 5
 	defaultRetryBaseDelay       = 500 * time.Millisecond
 	defaultRetryMaxDelay        = 30 * time.Second

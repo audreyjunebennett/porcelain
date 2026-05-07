@@ -45,7 +45,7 @@ elif [[ "$os" =~ ^MINGW ]] || [[ "$os" =~ ^MSYS ]] || [[ "$os" =~ ^CYGWIN ]]; th
   REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
   # shellcheck source=scripts/msys2-gcc-path.sh
   source "$REPO_ROOT/scripts/msys2-gcc-path.sh"
-  echo "desktop-install: Windows — use MSYS2 UCRT64 gcc (see scripts/install-gcc.sh / docs/makefile-plan.md)."
+  echo "desktop-install: Windows — use MSYS2 UCRT64 gcc (see scripts/install-gcc.sh / docs/plans/makefile-plan.md)."
   echo "desktop-install: Also install the WebView2 runtime if the window is blank:"
   echo "  https://developer.microsoft.com/en-us/microsoft-edge/webview2/"
   msys2_prepend_gcc_path || true

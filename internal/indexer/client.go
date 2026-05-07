@@ -633,7 +633,7 @@ func (e *HTTPError) Error() string {
 }
 
 // IsRetryable reports whether the error is a transient HTTP error per the
-// failure-handling section of indexer.plan.md (5xx, 408, 425, 429).
+// failure-handling section of docs/plans/indexer.plan.md (5xx, 408, 425, 429).
 func IsRetryable(err error) bool {
 	var he *HTTPError
 	if !errors.As(err, &he) {

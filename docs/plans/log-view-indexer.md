@@ -1,8 +1,30 @@
-# Log view: Indexer UX — living plan
+# Plan: Log view - Indexer UX
 
-**Purpose:** Make indexer information in **`/ui/logs`** understandable to operators, with stable backend signals and front-end rollups.
+| Field | Value |
+|-------|-------|
+| **Doc kind** | `feature-plan` |
+| **Owners / areas** | Indexer, gateway embed UI, operator logs |
+| **Status** | `shipped` |
+| **Targets** | Indexer log UX P0-P2; P3 deferred |
+| **Last updated** | See git history |
+| **Supersedes / superseded by** | Builds on [`log-presentation-layer.plan.md`](log-presentation-layer.plan.md) |
 
-**Related docs:** [`indexer.md`](indexer.md), [`log-presentation-layer.plan.md`](log-presentation-layer.plan.md), [`indexer.plan.md`](indexer.plan.md).
+## At a glance
+
+Make it easy to see what the indexer is doing in the operator log view. One card per indexer shows which workspace it is working on, whether it's idle or backlogged, how many vectors are stored, and the most recent file it touched — without scanning raw JSON lines.
+
+| Phase | Outcome | Status |
+|-------|---------|--------|
+| [P0 — Backend instrumentation](#phase-p0--backend-instrumentation) | Stable indexer identity, declared state, Qdrant stats, ignore metrics | `done` |
+| [P1 — Log UI summary feed](#phase-p1--log-ui-summary-feed) | Per-indexer cards with title, idle hint, watched paths | `done` |
+| [P2 — UI polish](#phase-p2--ui-polish) | Event-mix chart, queue bar, jobs rollup, plain-language summary | `done` |
+| [P3 — Multi-collection futures](#phase-p3--multi-key--futures-deferred) | Separate Qdrant stats per project + flavor; optional human summary field | `deferred` |
+
+---
+
+**Purpose:** Make indexer information in `/ui/logs` understandable to operators, with stable backend signals and front-end rollups.
+
+**Related docs:** [`indexer.md`](../indexer.md), [`log-presentation-layer.plan.md`](log-presentation-layer.plan.md), [`indexer.plan.md`](indexer.plan.md).
 
 **Document control**
 
@@ -10,7 +32,7 @@
 |--------|--------|
 | Primary code owner | Gateway + embed UI in `claudia-gateway` |
 | Last plan update | See git history for this file |
-| Log JSON contract | [`docs/indexer.md`](indexer.md) § Structured operator logs |
+| Log JSON contract | [`indexer.md`](../indexer.md) § Structured operator logs |
 
 ---
 
@@ -20,7 +42,7 @@
 2. **When merging a change:** Set step to `done`; add one short **Implementation notes** bullet (file paths, gotchas, env flags).
 3. **If scope changes:** Add or split steps; do not delete history — move cancelled items to **Deferred / won’t do** with reason.
 4. **After touching Go or embed UI:** Note which **Tests** you ran (`go test ./...`, targeted package, manual `/ui/logs`).
-5. **Keep §1 slug table** aligned with [`docs/indexer.md`](indexer.md) — one source of truth for field names.
+5. **Keep §1 slug table** aligned with [`indexer.md`](../indexer.md) — one source of truth for field names.
 
 **Status legend**
 
@@ -30,17 +52,6 @@
 | `in_progress` | Active work |
 | `done` | Shipped in tree (main or branch per team policy) |
 | `deferred` | Explicitly postponed |
-
----
-
-## Overall status (high level)
-
-| Phase | Theme | Status |
-|-------|--------|--------|
-| **P0** | Backend: `indexer_key`, tenant/label, declarative state, Qdrant stats poll, discovery ignore metrics | **done** |
-| **P1** | UI: group by key, titles, idle recency, expanded summary, labels | **done** |
-| **P2** | UI polish: event-mix histogram, queue bar, jobs rollup + advanced, slug→prose module, hide indexer badges in expand, goja tests | **done** |
-| **P3** | Multi-collection / per-flavor stats (single process, multiple keys) | **deferred** (see §Limitations) |
 
 ---
 
@@ -54,7 +65,7 @@
 | P0.2 | `IndexerKey(...)` stable id; `log.With` attaches `indexer_key`, `tenant_id`, `principal_id`, `user_label` after config fetch (`internal/indexer/key.go`, `indexer.go` `FetchAndLogConfig`) | done |
 | P0.3 | Startup order: `FetchAndLogConfig` → `LogIndexerRunStart` (`cmd/claudia-index/main.go`) | done |
 | P0.4 | `indexer.run.start` includes `watch_root_paths` (absolute local paths) (`internal/indexer/observation.go`) | done |
-| P0.5 | Slug **`gateway.indexer.config`** on config line (was human-only string before) | done |
+| P0.5 | Slug `gateway.indexer.config` on config line (was human-only string before) | done |
 | P0.6 | `GatewayClient.FetchStorageStats`; `EmitStorageStatsAndState` logs `indexer.storage.stats` + `indexer.state` (`internal/indexer/client.go`, `observation.go`) | done |
 | P0.7 | `RunObservationLoop` in watch mode; default poll **2m** via `storage_stats_poll_ms` in YAML (`internal/indexer/config.go`); **&lt; 0** disables | done |
 | P0.8 | One-shot: single `EmitStorageStatsAndState` before `indexer.run.done` | done |
@@ -76,11 +87,11 @@
 | Step | Description | Status |
 |------|-------------|--------|
 | P1.1 | Section title **Indexers** (`renderSummarizedUnified` in `internal/server/embedui/logs.js`) | done |
-| P1.2 | Group cards by **`indexer_key`**, fallback **`index_run_id`** | done |
+| P1.2 | Group cards by `indexer_key`, fallback `index_run_id` | done |
 | P1.3 | Card title: `user_label — workspace / project · flavor` | done |
-| P1.4 | Subtitle from latest **`indexer.state`** + optional **last `rel`** when file activity ≤ **120s** (`INDEXER_IDLE_RECENCY_MS`) | done |
+| P1.4 | Subtitle from latest `indexer.state` + optional **last `rel`** when file activity ≤ **120s** (`INDEXER_IDLE_RECENCY_MS`) | done |
 | P1.5 | Status pill mapping: `watch_idle`/`idle`→waiting, `recovery`→monitor style, else indexing/complete/error | done |
-| P1.6 | Metrics: prefer **`qdrant_points`** from `indexer.storage.stats`, else chunk rollup | done |
+| P1.6 | Metrics: prefer `qdrant_points` from `indexer.storage.stats`, else chunk rollup | done |
 | P1.7 | Expanded summary: User, indexer key, IDs, **paths excluded by ignore rules**, **watched paths** `<pre>` (`logs.css` `.indexer-paths-pre`) | done |
 | P1.8 | `collectIndexerRunMeta` extensions (`internal/server/embedui/logs/derive/indexerMetrics.js`): `user_label`, `lastDeclaredState`, `qdrantPointsLive`, `filesExcludedByIgnores`, `watchRootPaths` | done |
 | P1.9 | `flatLooksLikeIndexerRunStart` accepts `watch_root_paths` array | done |
@@ -117,7 +128,7 @@
 
 | Step | Description | Status |
 |------|-------------|--------|
-| P3.1 | Separate **Qdrant stats** polls per **`(project, flavor)`** when YAML overrides vary by path | deferred |
+| P3.1 | Separate **Qdrant stats** polls per `(project, flavor)` when YAML overrides vary by path | deferred |
 | P3.2 | Optional `operator_summary` human string alongside `msg` slug | deferred |
 
 ---
@@ -141,7 +152,7 @@
 | # | Scenario | Pass criteria |
 |---|----------|----------------|
 | M1 | Supervised indexer, `log_json: true`, load `/ui/logs` | **Indexers** section; card title shows **token label**; expanded shows **watched paths** |
-| M2 | Wait >2 min idle after ingest | **`indexer.state`** with `watch_idle`; UI **waiting** pill; subtitle plain language |
+| M2 | Wait >2 min idle after ingest | `indexer.state` with `watch_idle`; UI **waiting** pill; subtitle plain language |
 | M3 | Touch a file under a root | Within **2 min**, subtitle includes **relative path** |
 | M4 | `storage_stats_poll_ms: -1` in indexer YAML | No periodic `indexer.storage.stats`/`indexer.state` spam (watch mode); one-shot still emits once at end |
 | M5 | Large ignore set | Expanded summary shows **paths excluded by ignore rules** matching discovery |
@@ -150,16 +161,16 @@
 
 ## 1. Canonical `msg` slugs (rollup + UI)
 
-*Keep aligned with [`docs/indexer.md`](indexer.md). Implemented slugs emphasized.*
+*Keep aligned with [`indexer.md`](../indexer.md). Implemented slugs emphasized.*
 
 | `msg` slug | Typical level | Purpose |
 |------------|---------------|---------|
-| `indexer.run.start` | INFO | `roots`, `root_ids`, **`watch_root_paths`**, scope / ingest ids |
-| **`gateway.indexer.config`** | INFO | Gateway RAG/embed settings (**replaces** undocumented human-only grouping for config line) |
-| **`indexer.storage.stats`** | INFO / WARN | **`qdrant_points`**, `collection`, `vector_dim`, `available`, errors as warn + `err` |
-| **`indexer.state`** | INFO | **`state`**, `queue_depth`, `ingest_inflight`, `initial_scan_complete`, `watch_mode`, `recovery`, **`qdrant_points_reported`** |
+| `indexer.run.start` | INFO | `roots`, `root_ids`, `watch_root_paths`, scope / ingest ids |
+| `gateway.indexer.config` | INFO | Gateway RAG/embed settings (**replaces** undocumented human-only grouping for config line) |
+| `indexer.storage.stats` | INFO / WARN | `qdrant_points`, `collection`, `vector_dim`, `available`, errors as warn + `err` |
+| `indexer.state` | INFO | `state`, `queue_depth`, `ingest_inflight`, `initial_scan_complete`, `watch_mode`, `recovery`, `qdrant_points_reported` |
 | `indexer.reconcile.summary` | INFO | Corpus inventory loaded |
-| `indexer.discovery.summary` | INFO | **`files_excluded_by_ignore_rules`**, **`skipped_ignored_files`**, **`skipped_ignored_dirs`**, other `skipped_*`, `candidates_*` |
+| `indexer.discovery.summary` | INFO | `files_excluded_by_ignore_rules`, `skipped_ignored_files`, `skipped_ignored_dirs`, other `skipped_*`, `candidates_*` |
 | `indexer.queue.snapshot` | INFO | Worker / queue / ingest counters |
 | `indexer.run.progress` | INFO | Milestones (e.g. `initial_scan`) |
 | `indexer.retry.scheduled` | WARN | Backoff |
@@ -168,7 +179,7 @@
 | `indexer.job.*` | INFO/ERROR | Per-file lifecycle |
 | `indexer.run.done` / stop | INFO | Final counters |
 
-**Structured fields commonly repeated (after successful config fetch):** `index_run_id`, `service`, **`indexer_key`**, **`tenant_id`**, **`principal_id`**, **`user_label`**.
+**Structured fields commonly repeated (after successful config fetch):** `index_run_id`, `service`, `indexer_key`, `tenant_id`, `principal_id`, `user_label`.
 
 ---
 
@@ -176,13 +187,13 @@
 
 | Decision | Resolution |
 |----------|------------|
-| Grouping key | **Cards per `indexer_target_key`** (`ik_…` fingerprint of tenant + project + flavor): multi-root YAML with **distinct** ingest targets sets **`indexer_multi_target`** (no shared `log.With indexer_key`) and **`root_scopes`** on `indexer.run.start`; UI partitions lines by target (job `root`, `ingest_project`, fan-out shared lines). Single-target runs still attach one `indexer_key`. Fallback `index_run_id` when needed. |
+| Grouping key | **Cards per `indexer_target_key`** (`ik_…` fingerprint of tenant + project + flavor): multi-root YAML with **distinct** ingest targets sets `indexer_multi_target` (no shared `log.With indexer_key`) and `root_scopes` on `indexer.run.start`; UI partitions lines by target (job `root`, `ingest_project`, fan-out shared lines). Single-target runs still attach one `indexer_key`. Fallback `index_run_id` when needed. |
 | Qdrant truth | **Poll `GET /v1/indexer/storage/stats`** on a timer (default **2 min**); one-shot emits once at end. |
-| Declarative state | **`indexer.state`** every poll tick + derived fields (`uploading`, `recovery`, …). |
-| Idle / file subtitle | **`INDEXER_IDLE_RECENCY_MS = 120000`** in `logs.js`. |
-| User in title/summary | **`user_label`** from gateway config response + rollup. |
+| Declarative state | `indexer.state` every poll tick + derived fields (`uploading`, `recovery`, …). |
+| Idle / file subtitle | `INDEXER_IDLE_RECENCY_MS = 120000` in `logs.js`. |
+| User in title/summary | `user_label` from gateway config response + rollup. |
 | Watched paths | **Full absolute paths** acceptable in logs and expanded summary. |
-| Ignore rule visibility | **`files_excluded_by_ignore_rules`** (+ file/dir breakdown in discovery summary). |
+| Ignore rule visibility | `files_excluded_by_ignore_rules` (+ file/dir breakdown in discovery summary). |
 
 ---
 
@@ -190,8 +201,8 @@
 
 1. **Single stats scope:** One **default header** poll per process; multiple flavors/globs ≠ multiple live Qdrant counts without **P3.1**.
 2. **Grouped history:** Cards keyed by `indexer_key` **merge events** across restarts sharing the same key (usually desired).
-3. **Pre-config lines:** If `FetchAndLogConfig` fails permanently, logs may lack `indexer_key` → UI falls back to **`index_run_id`** only.
-4. **Progress semantics:** Histogram is **volume by message type**, not time-ordered lifecycle; fine-grained backlog vs uploading still via **`indexer.state`** + queue snapshots.
+3. **Pre-config lines:** If `FetchAndLogConfig` fails permanently, logs may lack `indexer_key` → UI falls back to `index_run_id` only.
+4. **Progress semantics:** Histogram is **volume by message type**, not time-ordered lifecycle; fine-grained backlog vs uploading still via `indexer.state` + queue snapshots.
 
 ---
 
@@ -216,9 +227,9 @@
 
 ### Done (P0+P1 core)
 
-- [x] Structured **`indexer_key`** and identity fields on indexer JSON logs after config fetch.
-- [x] **`indexer.state`** and **`indexer.storage.stats`** on a documented cadence.
-- [x] UI section **Indexers**; grouping by **`indexer_key`**; operator-facing title + summary fields.
+- [x] Structured `indexer_key` and identity fields on indexer JSON logs after config fetch.
+- [x] `indexer.state` and `indexer.storage.stats` on a documented cadence.
+- [x] UI section **Indexers**; grouping by `indexer_key`; operator-facing title + summary fields.
 - [x] **2 minute** idle semantics for subtitle file hint.
 
 ### P2 (complete)

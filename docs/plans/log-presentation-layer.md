@@ -1,5 +1,28 @@
 # Plan: Log presentation layer (Claudia gateway)
 
+| Field | Value |
+|-------|-------|
+| **Doc kind** | `feature-plan` |
+| **Owners / areas** | Gateway, embed UI, operator logs |
+| **Status** | `active` |
+| **Targets** | Operator log presentation layer |
+| **Last updated** | See git history |
+| **Supersedes / superseded by** | None |
+
+## At a glance
+
+Make the operator log view tell a story instead of dumping JSON. Each user's chat reads as a thread — request, routing, retrieval, answer — and each subsystem (gateway, BiFrost, Qdrant, indexer) shows a running status card. Raw lines stay one click away whenever you need them.
+
+| Phase | Outcome | Status |
+|-------|---------|--------|
+| [Phase A — Shape & headline](#phase-a--shape-detection--headline-ui-only) | Summary vs Detailed toggle; HTTP and indexer headlines | `done` |
+| [Phase B — Correlation IDs](#phase-b--correlation-ids-gateway--clients) | Stable `request_id`, `conversation_id`, `index_run_id` across logs | `done` |
+| [Phase C — Indexer run narrative](#phase-c--indexer-run-narrative) | One card per indexer run with progress | `done` |
+| [Phase D — Conversations & subsystem cards](#phase-d--conversation--bifrost-rollup--principal-panel) | Per-user threads and per-service health cards | `done` |
+| [Phase E — Server-side event store](#phase-e--optional-server-side-event-store) | Optional persistence for cross-restart history and search | `todo` |
+
+---
+
 This document describes a **log presentation layer**: how operator-facing logs stay **verbatim on the wire** (or in the ring buffer) while the **UI interprets, shapes, groups, and summarizes** them so troubleshooting is faster and less noisy. It also defines **how an implementation agent should work with you**—exploration spikes, checkpoints, and optional experiments—so the design evolves deliberately rather than as a one-shot UI tweak.
 
 **Intent:** Readers should grasp **what** happened (nouns + verbs), **where** (path, project, tenant), and **outcome** (success vs error, latency) **at a glance**, with optional **threads** (indexer runs, chat completions, BiFrost round-trips) and **rollup** of high-volume lines. A **dedicated, user-centric view** (see [§3](#3-user-and-conversation-centric-view)) groups traffic by **gateway principal** (the authenticated API key / token) so each **conversation** reads as a **story**: routing and fallbacks, RAG (Qdrant), upstream (BiFrost), and the response path back to the client—**concise by default**, expandable for depth, with **error state** visible on the parent conversation. A parallel **subsystem view** (see [§4](#4-subsystem-health-and-service-narratives)) tells the **same underlying events** from the **service perspective** (gateway, **Qdrant**, **BiFrost**, **indexer**): health, uptime, last activity, **metrics**, and **errors**—also as a **story** with **one-line summaries** that **expand** to full detail. **Unified tagging** ([§5](#5-unified-event-tagging)) ties user, conversation, index run, and service dimensions to **every** class of message so both views filter and correlate consistently. A **detailed / developer** view must remain available so nothing is lost for deep debugging.
@@ -32,7 +55,7 @@ This document describes a **log presentation layer**: how operator-facing logs s
 | Chat / upstream | **Conversation-scoped** card where follow-up requests and BiFrost-related lines can roll up when desired. |
 | **By user (principal)** | **Dedicated panel**: each API key (see [§3](#3-user-and-conversation-centric-view)) lists **conversations**; each conversation shows a **header**, **timeline**, **service summaries** (Qdrant, BiFrost, fallbacks), **errors**, and **safe context growth** metrics—compact first, **folder-style** expand for older events. |
 | **Subsystems** | **Dedicated panel** (see [§4](#4-subsystem-health-and-service-narratives)): **gateway**, **Qdrant**, **BiFrost**, **indexer** each as a **running story**—**start time**, **last message**, **uptime**, **metrics**, **captured errors**—with the same **summary line → expand** pattern as the user view. Content is **overlapping / redundant** with lines that appear under conversations (same events, operator-first framing). |
-| **Tagging** | Structured logs carry **dimensions** for **principal**, **conversation**, **index** / **`index_run_id`**, **service** (`gateway` / `qdrant` / `bifrost` / `indexer`), and **system** context so both panels and **Detailed** grid stay aligned ([§5](#5-unified-event-tagging)). |
+| **Tagging** | Structured logs carry **dimensions** for **principal**, **conversation**, **index** / `index_run_id`, **service** (`gateway` / `qdrant` / `bifrost` / `indexer`), and **system** context so both panels and **Detailed** grid stay aligned ([§5](#5-unified-event-tagging)). |
 | Safety | No prompt/response bodies; redaction rules unchanged; correlation ids are metadata only. |
 
 ---
@@ -44,7 +67,7 @@ This document describes a **log presentation layer**: how operator-facing logs s
 3. **Shape over syntax:** Classify lines into a small **taxonomy** (`http.access`, `chat.*`, `indexer.*`, `bifrost.*`, `generic`, …) from fields and `msg` patterns, with a safe fallback.
 4. **Correlation is explicit:** Threading and rollup require stable **ids** attached in structured logs (`request_id`, `conversation_id`, `index_run_id`, …). Heuristic grouping is a stopgap, not the end state.
 5. **Progressive disclosure:** Headline + badge + metrics first; full key/value (or raw JSON) behind “Details”.
-6. **Principal-first narrative:** When viewing **Conversations**, the spine of the story is **what the user’s token did** through the gateway: one **`conversation_id`** (or equivalent) should tie together chat, RAG, upstream, and response-path logs. **Subprocess** lines (Qdrant, BiFrost) may join that story via **shared request/conversation id** logged on the gateway side at call time, or via summarized gateway-only events if raw child logs cannot be correlated.
+6. **Principal-first narrative:** When viewing **Conversations**, the spine of the story is **what the user’s token did** through the gateway: one `conversation_id` (or equivalent) should tie together chat, RAG, upstream, and response-path logs. **Subprocess** lines (Qdrant, BiFrost) may join that story via **shared request/conversation id** logged on the gateway side at call time, or via summarized gateway-only events if raw child logs cannot be correlated.
 7. **Two stories, one event stream:** **User/conversation** and **subsystem** panels are **redundant presentations** of the same underlying log lines (plus service-local metrics). Implementations should **not** duplicate storage; the UI **projects** the same tagged events into either narrative. Operators choose the lens; **Detailed** remains the lossless view.
 8. **Tags on every narrative line:** Where feasible, each structured log line includes **facets** ([§5](#5-unified-event-tagging)) so filters like “this conversation” and “this indexer run” and “Qdrant” intersect cleanly.
 
@@ -56,7 +79,7 @@ This section specifies the **operator UI** experience you described: logs organi
 
 ### 3.1 Principal (user) identity
 
-- **Definition:** The **authenticated principal** is whoever the gateway associates with the **`Authorization: Bearer`** token on `/v1/*` (same model as chat). For grouping and display:
+- **Definition:** The **authenticated principal** is whoever the gateway associates with the `Authorization: Bearer` token on `/v1/*` (same model as chat). For grouping and display:
   - Use a **stable internal id** (e.g. token index, configured **label** from [`tokens.yaml`](../config/tokens.yaml) if present, or a **short fingerprint** such as hash prefix).
   - **Never** show the full API key or raw token in the UI or in log fields intended for this view ([`SECURITY.md`](../SECURITY.md)).
 - **Layout:** A **dedicated section** (tab, sidebar, or top-level panel) **“By user”** / **“Conversations”** lists principals; expanding a principal shows **recent conversations** (sessions) for that principal.
@@ -67,7 +90,7 @@ Each **conversation** (or **session**) is a container for everything that suppor
 
 | Story beat (illustrative) | Examples of underlying events |
 |---------------------------|-------------------------------|
-| User request in | Inbound **`/v1/chat/completions`** (or related) with **`conversation_id`** / **`request_id`**. |
+| User request in | Inbound `/v1/chat/completions` (or related) with `conversation_id` / `request_id`. |
 | Routing / fallback | Logs indicating **model routing**, **provider fallback**, retries, or degraded path (exact `msg` / shape TBD in implementation). |
 | RAG / retrieval | Gateway-side **Qdrant** calls (or summarized “retrieval” events); count + latency rollup. |
 | Upstream LLM | **BiFrost** (or other upstream) request/response **metadata**—not bodies. |
@@ -77,7 +100,7 @@ Each **conversation** (or **session**) is a container for everything that suppor
 
 ### 3.3 Visual design (concise, expandable, folder-style history)
 
-- **Conversation header / summary** — One line (or card title): e.g. model id, first line of intent **if already logged safely** as a short label, or “Chat completion” + **`conversation_id`** short id; **error badge** if anything in the session failed.
+- **Conversation header / summary** — One line (or card title): e.g. model id, first line of intent **if already logged safely** as a short label, or “Chat completion” + `conversation_id` short id; **error badge** if anything in the session failed.
 - **Session metadata** — **Started at**, **ended at** (or **Active**), **elapsed time** for the session window.
 - **Auto-compact timeline** — By default show only the **last N** events (e.g. 3–5), configurable. Older events live under a control such as **“Earlier events (M)”** (disclosure / folder / accordion)—still loaded, not deleted.
 - **Per-event rows** — Each row is **one story beat** (or rolled-up group); **click to expand** for full structured fields / link to **Detailed** row or raw JSON.
@@ -97,8 +120,8 @@ You want to see **how context evolves** as the conversation continues **without*
 The conversation view **depends** on explicit ids and consistent shapes:
 
 - **`conversation_id`:** Propagated from the chat handler through **RAG**, **upstream**, and **response** logging (see [Phase B](#phase-b--correlation-ids-gateway--clients)).
-- **`request_id`:** Middleware-scoped id for every inbound request; child operations should log **parent** `request_id` or **`conversation_id`**.
-- **Qdrant / BiFrost:** Prefer **gateway-emitted** summary lines (“qdrant.query”, “upstream.completion”) that already carry **`conversation_id`**. Relying on raw **qdrant** / **bifrost** `servicelogs` **source** lines may require **id injection** in the gateway before the call, or accepting that some beats are **gateway-only** summaries.
+- **`request_id`:** Middleware-scoped id for every inbound request; child operations should log **parent** `request_id` or `conversation_id`.
+- **Qdrant / BiFrost:** Prefer **gateway-emitted** summary lines (“qdrant.query”, “upstream.completion”) that already carry `conversation_id`. Relying on raw **qdrant** / **bifrost** `servicelogs` **source** lines may require **id injection** in the gateway before the call, or accepting that some beats are **gateway-only** summaries.
 
 ### 3.6 Relation to other phases
 
@@ -116,7 +139,7 @@ This section specifies a **second major panel** in the presentation layer: **hea
 
 | Service | Role in the UI story |
 |---------|----------------------|
-| **Gateway** | The **`claudia`** process itself: listen address, config loads, auth outcomes, chat/RAG/orchestration **without** duplicating every HTTP row—**headline** events plus errors. |
+| **Gateway** | The `claudia` process itself: listen address, config loads, auth outcomes, chat/RAG/orchestration **without** duplicating every HTTP row—**headline** events plus errors. |
 | **Qdrant** | Vector store (supervised or external): readiness, collection health, query/update **summaries** when logged; errors and latency **rollup**. |
 | **BiFrost** | Upstream LLM hub: startup, provider health, request/response **metadata** (not bodies), errors, fallbacks **as seen by the gateway or BiFrost logs**. |
 | **Indexer** | `claudia-index` (standalone or supervised): run lifecycle, progress, backoff, ingest outcomes—aligned with [`indexer.plan.md`](indexer.plan.md) v0.5+ observability when available. |
@@ -160,25 +183,25 @@ Implementations should prefer **explicit** fields on each relevant `slog` record
 
 | Tag | Meaning |
 |-----|---------|
-| **`principal_id`** / **`tenant`** | Authenticated API key identity (never the raw secret)—who the event **belongs to** when applicable. |
-| **`conversation_id`** | Chat session thread; empty when N/A (e.g. pure indexer or startup). |
-| **`request_id`** | HTTP request correlation from middleware. |
-| **`index_run_id`** | Indexer run / batch correlation; empty when N/A. |
-| **`service`** | **`gateway`** \| **`qdrant`** \| **`bifrost`** \| **`indexer`** \| **`system`** (cross-cutting: supervisor, OS). |
-| **`shape`** / **`msg` family** | Presentation classification (`http.access`, `chat.completion`, `rag.query`, `indexer.run.progress`, …). |
+| `principal_id` / `tenant` | Authenticated API key identity (never the raw secret)—who the event **belongs to** when applicable. |
+| `conversation_id` | Chat session thread; empty when N/A (e.g. pure indexer or startup). |
+| `request_id` | HTTP request correlation from middleware. |
+| `index_run_id` | Indexer run / batch correlation; empty when N/A. |
+| `service` | `gateway` \| `qdrant` \| `bifrost` \| `indexer` \| `system` (cross-cutting: supervisor, OS). |
+| `shape` / **`msg` family** | Presentation classification (`http.access`, `chat.completion`, `rag.query`, `indexer.run.progress`, …). |
 
 **Optional:** `project_id`, `flavor_id` where already used for RAG scope.
 
 ### 5.2 Rules
 
-- **Not every line has every tag.** **Startup** lines may be **`service=gateway`** only; **ingest** lines may carry **`index_run_id`** + **`principal_id`**; **chat** lines should carry **`conversation_id`** + **`principal_id`** and propagate to **RAG** and **upstream** summaries.
+- **Not every line has every tag.** **Startup** lines may be `service=gateway` only; **ingest** lines may carry `index_run_id` + `principal_id`; **chat** lines should carry `conversation_id` + `principal_id` and propagate to **RAG** and **upstream** summaries.
 - **Subprocess** stdout (Qdrant/BiFrost) may lack tags until the **supervisor or gateway** prefixes structured lines or the UI **infers** `service` from `source`.
 - **Goal:** filters **“show me Qdrant errors for this conversation”** or **“indexer events for this principal”** are **well-defined** when tags are present.
 
 ### 5.3 Relation to phases
 
-- **[Phase B](#phase-b--correlation-ids-gateway--clients)** introduces ids; tagging extends Phase B with **`service`** and stable **`principal_id`** representation.
-- **Subsystem panel ([§4](#4-subsystem-health-and-service-narratives))** primarily filters/group by **`service`** + time; **conversation panel** by **`principal_id`** + **`conversation_id`**.
+- **[Phase B](#phase-b--correlation-ids-gateway--clients)** introduces ids; tagging extends Phase B with `service` and stable `principal_id` representation.
+- **Subsystem panel ([§4](#4-subsystem-health-and-service-narratives))** primarily filters/group by `service` + time; **conversation panel** by `principal_id` + `conversation_id`.
 
 ---
 
@@ -229,7 +252,7 @@ Implementations should prefer **explicit** fields on each relevant `slog` record
 - `request_id` on every inbound gateway request (middleware); include on downstream slog calls where feasible.
 - Chat completion path: `conversation_id` (client-supplied if allowed and validated, else generated) on related logs.
 - Ingest / indexer: agreed header or field `index_run_id` on batches; gateway logs echo it.
-- **`service`** (and related facets per [§5](#5-unified-event-tagging)) on gateway-emitted lines so **subsystem** and **conversation** projections share a **tag vocabulary**.
+- `service` (and related facets per [§5](#5-unified-event-tagging)) on gateway-emitted lines so **subsystem** and **conversation** projections share a **tag vocabulary**.
 
 **Exit criteria:** UI can group lines by id without guessing from timestamps; tags enable **subsystem** vs **user** lenses on the **same** events.
 
@@ -250,7 +273,7 @@ Implementations should prefer **explicit** fields on each relevant `slog` record
 - Summary mode: optional rollup (“N HTTP events, worst status, total ms”) inside a conversation thread.
 - **Principal-aware UI ([§3](#3-user-and-conversation-centric-view)):** panel listing **by API key / principal label**; nested **conversation cards** with header, start/end/elapsed, service summaries, **error count** and header tint, **auto-compact** last-N timeline + **expandable earlier events**, per-row expand for details.
 - **Subsystem panel ([§4](#4-subsystem-health-and-service-narratives)):** **gateway**, **Qdrant**, **BiFrost**, **indexer** cards with **started / last message / uptime**, **metrics**, **error rollup**, and **expandable** event timelines (same summary-line pattern as conversations).
-- **Unified tagging ([§5](#5-unified-event-tagging)):** structured logs include **`service`**, **`principal_id`**, **`conversation_id`**, **`request_id`**, **`index_run_id`** where applicable so user and subsystem views **cross-link** and filter consistently.
+- **Unified tagging ([§5](#5-unified-event-tagging)):** structured logs include `service`, `principal_id`, `conversation_id`, `request_id`, `index_run_id` where applicable so user and subsystem views **cross-link** and filter consistently.
 - **Context growth:** display **metadata only** (turn index, estimated sizes, RAG attachment counts) when the gateway logs or exposes them—no bodies by default.
 
 **Exit criteria:** A chat session’s related traffic is navigable as one thread **under the correct principal**, with service participation **summarized** and **errors** visible at conversation scope; **subsystem health** is visible as a **parallel story** with the same expand/collapse behavior; raw lines remain reachable.
@@ -325,7 +348,7 @@ Short spikes (time-boxed, may be thrown away):
 2. **Indexer ↔ gateway:** Single `index_run_id` scheme and whether the gateway mints it or the indexer does.
 3. **Persistence of UI prefs:** Summary/Detailed only, or also default filters (app, level)?
 4. **Cross-origin / embedded shell:** Ensure any new query params (`?view=summary`) work in iframe + `postMessage` activation paths in [`logs.html`](../internal/server/embedui/logs.html).
-5. **Principal label:** Fingerprint-only vs mapping to **`tokens.yaml`** comment/name when available.
+5. **Principal label:** Fingerprint-only vs mapping to `tokens.yaml` comment/name when available.
 6. **Context metrics contract:** Which fields are logged per turn (e.g. `context_tokens_est`, `rag_hits`) and whether they are suitable for a **delta** visualization.
 7. **Subsystem metrics:** Which **gateway/supervised** lines become the **source of truth** for Qdrant/BiFrost “metrics” on the card vs leaving fields empty when not logged.
 8. **Cross-link UX:** Whether “jump to conversation” / “jump to service timeline” is **in-scope** for v1 of the presentation layer or deferred.
@@ -339,12 +362,12 @@ _Append here as phases land (date, PR or commit, one paragraph)._
 | Date | Note |
 |------|------|
 | — | Plan authored; no implementation yet. |
-| 2026-04-21 | **version-0.2.1:** Phases A–D (initial): `requestid` middleware; `service` + `request_id` on access logs; chat **`conversation_id`** (header `X-Claudia-Conversation-Id` or generated) + **`principal_id`** on chat logs; **`msg`** tags on chat/RAG/ingest; ingest **`index_run_id`** echo + indexer client header; indexer **`indexer.run.*`** + `index_run_id` on process logs; logs UI **Detailed / Summary / Conversations / Subsystems** + `localStorage` view preference; **`wrapResponse`** initial status fixed so logged **statusCode** matches handler. See [`log-presentation-acceptance.md`](log-presentation-acceptance.md). **Phase E** not implemented. |
-| 2026-04-21 | **Logs UI (presentation follow-up):** **Conversations:** principals as `<details>`, nested cards with start/last/spanned time, **HTTP rollup** (worst status, count, Σ ms), **service chips** (RAG / BiFrost / Qdrant / ingest), **context** strip when `turn_index` / token estimates / hits appear on lines, per-event `<details>` with full fields, **Earlier events** folder. **Subsystems:** first/last/window time, buffered **metrics** chips, expandable timelines, **Conversation** links when `conversation_id`+`principal_id` present. **Indexer runs** view: one card per **`index_run_id`**, latest `indexer.run.progress` phase/candidates, timelines. **`?view=`** sync (overrides `localStorage`), **`?seq=`** / **`?principal=`** + **`?conversation=`** focus, **`data-log-seq`** on table rows, filter prefs persisted, **`postMessage`** may set `view`. **Phase E** (server event store) still out of scope. |
-| 2026-05-03 | **Phase B (hardening):** Response **`X-Request-ID`** on all requests; **`X-Claudia-Conversation-Id`** echoed on chat responses; RAG **internal** DEBUG/TRACE lines carry **`request_id`**, **`conversation_id`**, **`index_run_id`** (ingest), **`msg`** + **`service=gateway`**; **`ingest_session`** (chunked) logs match simple ingest (`ingest.complete`, correlation on errors); **`X-Claudia-Index-Run-Id`** on session start and indexer config `optional_headers`. |
-| 2026-05-03 | **Indexer structured operator events:** `claudia-index` emits **`msg`** slugs for discovery/reconcile/queue/retry/recovery/job/run-done (`internal/indexer/ops_events.go`, `indexer.go`, `cmd/claudia-index/main.go`); field table in **`docs/indexer.md`** § Structured operator logs. Counters roll up into **`indexer.run.done`**. |
+| 2026-04-21 | **version-0.2.1:** Phases A–D (initial): `requestid` middleware; `service` + `request_id` on access logs; chat `conversation_id` (header `X-Claudia-Conversation-Id` or generated) + `principal_id` on chat logs; `msg` tags on chat/RAG/ingest; ingest `index_run_id` echo + indexer client header; indexer `indexer.run.*` + `index_run_id` on process logs; logs UI **Detailed / Summary / Conversations / Subsystems** + `localStorage` view preference; `wrapResponse` initial status fixed so logged **statusCode** matches handler. See [`log-presentation-acceptance.md`](log-presentation-acceptance.md). **Phase E** not implemented. |
+| 2026-04-21 | **Logs UI (presentation follow-up):** **Conversations:** principals as `<details>`, nested cards with start/last/spanned time, **HTTP rollup** (worst status, count, Σ ms), **service chips** (RAG / BiFrost / Qdrant / ingest), **context** strip when `turn_index` / token estimates / hits appear on lines, per-event `<details>` with full fields, **Earlier events** folder. **Subsystems:** first/last/window time, buffered **metrics** chips, expandable timelines, **Conversation** links when `conversation_id`+`principal_id` present. **Indexer runs** view: one card per `index_run_id`, latest `indexer.run.progress` phase/candidates, timelines. `?view=` sync (overrides `localStorage`), `?seq=` / `?principal=` + `?conversation=` focus, `data-log-seq` on table rows, filter prefs persisted, `postMessage` may set `view`. **Phase E** (server event store) still out of scope. |
+| 2026-05-03 | **Phase B (hardening):** Response `X-Request-ID` on all requests; `X-Claudia-Conversation-Id` echoed on chat responses; RAG **internal** DEBUG/TRACE lines carry `request_id`, `conversation_id`, `index_run_id` (ingest), `msg` + `service=gateway`; `ingest_session` (chunked) logs match simple ingest (`ingest.complete`, correlation on errors); `X-Claudia-Index-Run-Id` on session start and indexer config `optional_headers`. |
+| 2026-05-03 | **Indexer structured operator events:** `claudia-index` emits `msg` slugs for discovery/reconcile/queue/retry/recovery/job/run-done (`internal/indexer/ops_events.go`, `indexer.go`, `cmd/claudia-index/main.go`); field table in `docs/indexer.md` § Structured operator logs. Counters roll up into `indexer.run.done`. |
 | 2026-05-04 | **Summarized expand panels:** removed **Last events** previews from conversation + service `<details>` bodies; **Services** expanded Summary uses rollups from buffered lines — **indexer:** upload/ingest/skipped, fail/retry/pause, workers + latest queue snapshot + unique `rel`; **gateway:** HTTP Σ ms, `ingest.complete` / RAG / chat slug counts, warn+error; **qdrant:** HTTP Σ ms, line count, warn+error. **Indexer run** expand adds the same job rollup plus existing vector / gateway OK\|error mini row. |
-| 2026-05-03 | **Gateway v0.2.2 (release):** supervised **`claudia-index`** optional child; operator **`/ui/indexer`** + **`/ui/continue`**; shell main summary and logs refinements; consolidated stats/observability in the desktop shell. Operator summary: [`releases-v0.2.x.md`](releases-v0.2.x.md). |
+| 2026-05-03 | **Gateway v0.2.2 (release):** supervised `claudia-index` optional child; operator `/ui/indexer` + `/ui/continue`; shell main summary and logs refinements; consolidated stats/observability in the desktop shell. Operator summary: [`releases-v0.2.x.md`](releases-v0.2.x.md). |
 
 ---
 

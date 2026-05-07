@@ -20,7 +20,7 @@ paths:
   tokens: "./tokens.yaml"
   routing_policy: "./routing-policy.yaml"
   provider_free_tier: "./provider-free-tier.yaml"
-  # Vendor quota ceilings for admission/guards; see docs/version-v0.1.1.md §3.7.
+  # Vendor quota ceilings for admission/guards; see docs/plans/version-v0.1.1.md §3.7.
   # Omitting the file entirely or shipping it empty means no enforcement.
   provider_model_limits: "./provider-model-limits.yaml"
 
@@ -55,7 +55,7 @@ routing:
     - "groq/groq/compound-mini"
     - "ollama/llama3.2:3b"
     - "ollama/qwen3.5:9b"
-  # Ordered list of upstream models used for the tool-router transformer (try in order; see docs/version-v0.1.1.md).
+  # Ordered list of upstream models used for the tool-router transformer (try in order; see docs/plans/version-v0.1.1.md).
   # Leave empty to skip router calls. When non-empty, POST /v1/chat/completions may call the first working model
   # to score tools before the main upstream completion.
   router_models: []
@@ -69,7 +69,7 @@ routing:
     enabled: false
     confidence_threshold: 0.5
 
-# Gateway metrics (SQLite under ../data/gateway/ relative to this file; see docs/version-v0.1.1.md §3.6).
+# Gateway metrics (SQLite under ../data/gateway/ relative to this file; see docs/plans/version-v0.1.1.md §3.6).
 metrics:
   enabled: true
   # sqlite_path: "../data/gateway/metrics.sqlite"
@@ -105,7 +105,7 @@ indexer:
 
 # v0.2 Retrieval-Augmented Generation. When enabled, the virtual Claudia model
 # performs Qdrant retrieval before chat; POST /v1/ingest, GET /v1/indexer/*,
-# and the /health Qdrant probe are activated. See docs/version-v0.2.md.
+# and the /health Qdrant probe are activated. See docs/plans/version-v0.2.md.
 rag:
   enabled: true
   qdrant:

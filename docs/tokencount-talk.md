@@ -8,15 +8,15 @@ This document summarizes a multi-turn discussion about how **Claudia Gateway** e
 
 | Source | Focus | Main suggestions |
 |--------|--------|-------------------|
-| **Cursor (assistant)** | Grounded in this repo | Today: **`json.Marshal` of the full proxied body** → **`cl100k_base`** `EncodeOrdinary` only (no template tax, no `max_tokens` reserve). **413** comes from **upstream** rules, not “gateway count + estimated response.” **Bytes vs tokens:** large JSON/base64 can hit **byte limits** before token limits. **Parity:** `tiktoken-go` *is* tiktoken-compatible; compare encodings (e.g. **`o200k_base`**) or Python goldens without bloating prod. **Heuristics:** prefer **structured** checks (payload bytes, **`prompt + max_tokens ≤ window`**, optional tools slack) over blind **2× tools** or **4–6×** on top of an already full-body count (**double-count risk**). |
-| **Gemini** | General API / ops advice | **(1) Chat template tax:** ~4–10 tokens per turn; Groq/Llama-style: ~**4 per message + 3** for final assistant priming; **Gemini:** use **`countTokens`** API instead of guessing. **(2) JSON vs 413:** treat **HTTP body size** (~**4 MB** Groq rule of thumb); cap **~3.5 MB** bytes. **(3) Local formula:** e.g. `(stringTokens × 1.05) + (messageCount × 8) + reserve`; **Llama 3–style tokenizer** for Groq; **tools × ~1.2**; always account for **`max_tokens`** as **reservation** against context; **~90%** of advertised limits as internal cap; **~12 tokens per** system/user/assistant block variant. |
-| **Grok** | Heuristic overlays | **Double-count encoded tools** (literal second pass on tool cost) — flagged as **too blunt** if the base already includes `tools` in full JSON. Later: **+4 tokens per message**; **+50–200** when assistant has **`tool_calls`**; **+3–5** per **`role: tool`** message; **+3** end assistant priming; **+10–20** request-level overhead — adopt **spirit** with **config**, but **`tool_calls`** should be **size-based**, not a flat 50–200. |
+| **Cursor (assistant)** | Grounded in this repo | Today: **`json.Marshal` of the full proxied body** → `cl100k_base` `EncodeOrdinary` only (no template tax, no `max_tokens` reserve). **413** comes from **upstream** rules, not “gateway count + estimated response.” **Bytes vs tokens:** large JSON/base64 can hit **byte limits** before token limits. **Parity:** `tiktoken-go` *is* tiktoken-compatible; compare encodings (e.g. `o200k_base`) or Python goldens without bloating prod. **Heuristics:** prefer **structured** checks (payload bytes, `prompt + max_tokens ≤ window`, optional tools slack) over blind **2× tools** or **4–6×** on top of an already full-body count (**double-count risk**). |
+| **Gemini** | General API / ops advice | **(1) Chat template tax:** ~4–10 tokens per turn; Groq/Llama-style: ~**4 per message + 3** for final assistant priming; **Gemini:** use `countTokens` API instead of guessing. **(2) JSON vs 413:** treat **HTTP body size** (~**4 MB** Groq rule of thumb); cap **~3.5 MB** bytes. **(3) Local formula:** e.g. `(stringTokens × 1.05) + (messageCount × 8) + reserve`; **Llama 3–style tokenizer** for Groq; **tools × ~1.2**; always account for `max_tokens` as **reservation** against context; **~90%** of advertised limits as internal cap; **~12 tokens per** system/user/assistant block variant. |
+| **Grok** | Heuristic overlays | **Double-count encoded tools** (literal second pass on tool cost) — flagged as **too blunt** if the base already includes `tools` in full JSON. Later: **+4 tokens per message**; **+50–200** when assistant has `tool_calls`; **+3–5** per `role: tool` message; **+3** end assistant priming; **+10–20** request-level overhead — adopt **spirit** with **config**, but `tool_calls` should be **size-based**, not a flat 50–200. |
 | **Groq (`llama-3.3-70b-versatile`)** | Tool-heavy requests | Break down tool cost: **~5–10** tokens name+description; **~2–5** per parameter schema chunk; **~2–5** “between tools”; **~10–20** structured prefix. Proposed **multipliers on tool JSON token count:** **simple 2–3×**, **complex 4–6×**. Treat as **rough**; actual depends on **internal formatting**. |
 
 ### Repo tooling (added during this discussion)
 
-- **`make tokencount-file FILE=path/to/file`** — runs `go run ./cmd/claudia tokencount -f "$(FILE)"` and prints **byte size**, **`cl100k_base`**, and **`o200k_base`** token counts for that file (requires `FILE=…`; see `make help`).
-- Gateway **metrics / TPM admission** still use the **chat path** estimate (full marshalled body + **`cl100k_base`** via `internal/tokencount`), not the Makefile-only dual-encoding display.
+- `make tokencount-file FILE=path/to/file` — runs `go run ./cmd/claudia tokencount -f "$(FILE)"` and prints **byte size**, `cl100k_base`, and `o200k_base` token counts for that file (requires `FILE=…`; see `make help`).
+- Gateway **metrics / TPM admission** still use the **chat path** estimate (full marshalled body + `cl100k_base` via `internal/tokencount`), not the Makefile-only dual-encoding display.
 
 ---
 
@@ -30,7 +30,7 @@ This document summarizes a multi-turn discussion about how **Claudia Gateway** e
 
 **413 vs local estimate**  
 
-- Upstream uses **its own** tokenization and limits (**context**, **`max_tokens`**, internal tool rendering). A local **~5000** estimate can still **413** if their count is higher, **`max_tokens`** eats the rest of the window, or a **byte / proxy** limit fires first.
+- Upstream uses **its own** tokenization and limits (**context**, `max_tokens`, internal tool rendering). A local **~5000** estimate can still **413** if their count is higher, `max_tokens` eats the rest of the window, or a **byte / proxy** limit fires first.
 
 **Bytes vs tokens**  
 
@@ -38,13 +38,13 @@ This document summarizes a multi-turn discussion about how **Claudia Gateway** e
 
 **`cl100k_base` vs “tiktoken”**  
 
-- The repo uses **`github.com/pkoukk/tiktoken-go`**; **`cl100k_base`** is one encoding defined in that ecosystem. Comparisons are really **encoding vs encoding** (e.g. **`o200k_base`**) or **Go vs Python** goldens—not “tiktoken vs cl100k.”
+- The repo uses `github.com/pkoukk/tiktoken-go`; `cl100k_base` is one encoding defined in that ecosystem. Comparisons are really **encoding vs encoding** (e.g. `o200k_base`) or **Go vs Python** goldens—not “tiktoken vs cl100k.”
 
 **Critique of other models’ numbers**  
 
-- **Literal double-count or 4–6× on top of full-body tiktoken** risks **double-counting** the `tools` slice unless you **replace** that slice’s contribution or add only **`max(0, adjusted − raw_tools_tokens)`**.  
+- **Literal double-count or 4–6× on top of full-body tiktoken** risks **double-counting** the `tools` slice unless you **replace** that slice’s contribution or add only `max(0, adjusted − raw_tools_tokens)`.  
 - Flat **+50–200** for any `tool_calls` is too wide; prefer **size-linked** slack.  
-- Structured parsing of **`tools`** is **feasible**; combine **tiktoken on extracted strings** with **small configurable** template constants rather than treating chat-generated integers as specs.
+- Structured parsing of `tools` is **feasible**; combine **tiktoken on extracted strings** with **small configurable** template constants rather than treating chat-generated integers as specs.
 
 **Implementation ordering (suggested earlier in thread)**  
 
@@ -52,7 +52,7 @@ This document summarizes a multi-turn discussion about how **Claudia Gateway** e
 2. **`max_tokens` + context window** reserve (when context per model is known).  
 3. Per-message / tool **overhead** (YAML-tunable).  
 4. **Groq:** Llama-aligned tokenizer when maintainable.  
-5. **Gemini:** **`countTokens`** on the Gemini path.  
+5. **Gemini:** `countTokens` on the Gemini path.  
 6. Optional global fallback formula only if parsing is unavailable.
 
 ---
@@ -64,17 +64,17 @@ Gemini framed three **layers**:
 1. **Chat template “tax”**  
    - APIs wrap text in **special / role** tokens; encoding **raw strings only** under-counts by on the order of **~4–10 tokens per turn**.  
    - For **Groq / Llama-style** templates, one concrete pattern mentioned: **~4 tokens per message** plus **~3** for the **final assistant** priming segment.  
-   - For **Gemini itself**, it recommended **`countTokens`** (described as low-cost and accurate) instead of purely local guessing.
+   - For **Gemini itself**, it recommended `countTokens` (described as low-cost and accurate) instead of purely local guessing.
 
 2. **JSON payload vs token gap (especially 413)**  
    - Some **413** behavior is tied to **request / entity size in bytes**, not token math.  
-   - Rule of thumb: keep total JSON under about **4 MB** for Groq; optionally enforce a **~3.5 MB** safety cap using something equivalent to **`Buffer.byteLength(JSON.stringify(payload))`** in Node terms (in Go: **`len(jsonBytes)`** on the marshalled body).
+   - Rule of thumb: keep total JSON under about **4 MB** for Groq; optionally enforce a **~3.5 MB** safety cap using something equivalent to `Buffer.byteLength(JSON.stringify(payload))` in Node terms (in Go: `len(jsonBytes)` on the marshalled body).
 
 3. **Updated local strategy**  
    - Example weighted form: **Total ≈ (stringTokens × 1.05) + (messageCount × 8) + reserve**.  
-   - **Tokenizer:** consider **Llama 3–oriented** patterns for Groq instead of assuming **`cl100k_base`** matches server counts.  
+   - **Tokenizer:** consider **Llama 3–oriented** patterns for Groq instead of assuming `cl100k_base` matches server counts.  
    - **Tools:** token-count tool JSON and apply about **×1.2** for internal “flattening.”  
-   - **Completion reserve:** enforce **`prompt + max_tokens ≤ context_window`** mentally before trusting prompt size.  
+   - **Completion reserve:** enforce `prompt + max_tokens ≤ context_window` mentally before trusting prompt size.  
    - **Buffer:** use ~**90%** of advertised caps; add metadata padding (e.g. **~12 tokens per** system/user/assistant block in one variant); stress that **`max_tokens` reserves** capacity—it is not “free” on top of the prompt.
 
 **Cursor’s cross-cutting note:** Treat **(1)** and **(3)** as **design knobs**; treat **(2)** as **orthogonal byte enforcement**. If the base remains **full-body tiktoken**, additive template numbers may **overlap** JSON syntax already counted—tune so you do not stack redundant slack.
@@ -91,12 +91,12 @@ Gemini framed three **layers**:
 **Suggestion B — additive overlays**  
 
 - **+4 tokens per message** (template overhead).  
-- **+50–200** when an **assistant** message contains **`tool_calls`** (wide band).  
-- **+3–5** extra per **`role: "tool"`** message.  
+- **+50–200** when an **assistant** message contains `tool_calls` (wide band).  
+- **+3–5** extra per `role: "tool"` message.  
 - **+3** at the end for **final assistant priming**.  
 - **+10–20** request-level overhead.
 
-**Assessment (as discussed):** Per-message, end priming, and small request padding are **reasonable as configurable defaults** if aligned with your counting base. The **`tool_calls`** line should be **scaled by payload size** (or tiktoken on the `tool_calls` subtree), not a flat 50–200. Always clarify whether these sit **on top of full-body tiktoken** (overlap risk) or on top of a **narrower semantic base**.
+**Assessment (as discussed):** Per-message, end priming, and small request padding are **reasonable as configurable defaults** if aligned with your counting base. The `tool_calls` line should be **scaled by payload size** (or tiktoken on the `tool_calls` subtree), not a flat 50–200. Always clarify whether these sit **on top of full-body tiktoken** (overlap risk) or on top of a **narrower semantic base**.
 
 ---
 
@@ -119,18 +119,18 @@ It then proposed **multipliers on the tiktoken count of the tool’s JSON alone*
 
 **What is usable in code**  
 
-- You **can** parse **`tools[]`** (OpenAI-style `function` tools), walk **names, descriptions, and `parameters` JSON Schema** (with **depth / size caps**), and emit either:  
+- You **can** parse `tools[]` (OpenAI-style `function` tools), walk **names, descriptions, and `parameters` JSON Schema** (with **depth / size caps**), and emit either:  
   - **tiktoken on extracted fragments** + small constants, or  
   - **pure counting** (number of tools, properties, nested nodes) × **YAML-configured** tokens per node.
 
 **Caveats**  
 
 - The numeric ranges are **not derived from your JSON**; they are **prior guesses**.  
-- **4–6×** on top of an estimate that **already includes** the same tool JSON in a **full-body** string is **dangerous** unless you **subtract** the raw tools contribution first or only add **`max(0, k·T_tools − T_tools)`**.  
-- **Calibration** with real **`usage.prompt_tokens`** (when logged) beats adopting **2–6×** as a universal law.
+- **4–6×** on top of an estimate that **already includes** the same tool JSON in a **full-body** string is **dangerous** unless you **subtract** the raw tools contribution first or only add `max(0, k·T_tools − T_tools)`.  
+- **Calibration** with real `usage.prompt_tokens` (when logged) beats adopting **2–6×** as a universal law.
 
 ---
 
 ## One-line “where the repo is today”
 
-**Gateway:** `json.Marshal` → entire string → **`cl100k_base`** `EncodeOrdinary` → metrics + quota admission. **CLI / Make:** `make tokencount-file FILE=…` additionally prints **bytes** and **`o200k_base`** for file comparison—**not** wired into the proxy path unless you change `internal/chat`.
+**Gateway:** `json.Marshal` → entire string → `cl100k_base` `EncodeOrdinary` → metrics + quota admission. **CLI / Make:** `make tokencount-file FILE=…` additionally prints **bytes** and `o200k_base` for file comparison—**not** wired into the proxy path unless you change `internal/chat`.

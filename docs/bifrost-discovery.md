@@ -1,6 +1,6 @@
 # BiFrost discovery (Phase 0 archive)
 
-This document records **Phase 0** of [go-bifrost-migration-plan.md](go-bifrost-migration-plan.md): running **Maxim BiFrost** as the OpenAI-compatible upstream for Claudia. The gateway implementation is **Go** only; use **`claudia`** or **`claudia serve`** with a local **`bifrost-http`** binary (see [supervisor.md](supervisor.md)).
+This document records **Phase 0** of [go-bifrost-migration.plan.md](plans/go-bifrost-migration.plan.md): running **Maxim BiFrost** as the OpenAI-compatible upstream for Claudia. The gateway implementation is **Go** only; use `claudia` or `claudia serve` with a local `bifrost-http` binary (see [supervisor.md](supervisor.md)).
 
 **Operator verification (2026-04-03).** BiFrost was exercised with the repo configuration; **VS Code** (OpenAI-compatible client → **Claudia** at the gateway base URL) was used for real chat.
 
@@ -10,10 +10,10 @@ This document records **Phase 0** of [go-bifrost-migration-plan.md](go-bifrost-m
 
 | Item | Value |
 |------|--------|
-| **Binary** | **`bifrost-http`** — e.g. **`make claudia-install`** → **`./bin/bifrost-http`**; pins in **`deps.lock`**, or **`claudia serve`** supervises it |
-| **Listen** | Default **`127.0.0.1:8080`** (`claudia serve` flags: **`-bifrost-bind`**, **`-bifrost-port`**) |
+| **Binary** | `bifrost-http` — e.g. `make claudia-install` → `./bin/bifrost-http`; pins in `deps.lock`, or `claudia serve` supervises it |
+| **Listen** | Default `127.0.0.1:8080` (`claudia serve` flags: `-bifrost-bind`, `-bifrost-port`) |
 | **Health** | `GET http://127.0.0.1:8080/health` |
-| **Bootstrap config** | Repo **`config/bifrost.config.json`** — copied into BiFrost data dir as **`config.json`** when using **`claudia serve`** |
+| **Bootstrap config** | Repo `config/bifrost.config.json` — copied into BiFrost data dir as `config.json` when using `claudia serve` |
 
 **Minimal bring-up**
 
@@ -28,9 +28,9 @@ make claudia-serve        # or: make up
 
 ## Minimal BiFrost configuration
 
-1. **`config/bifrost.config.json`** — providers and **`env.VAR_NAME`** key references (no raw secrets in JSON).
-2. **Environment** — **`GROQ_API_KEY`**, **`GEMINI_API_KEY`**, etc., in the shell (or **`.env`**) when starting **`claudia`** / **`claudia serve`**.
-3. **Optional:** `./scripts/list-bifrost-models.sh` or `curl` **`/api/models?unfiltered=true&limit=500`** on BiFrost.
+1. `config/bifrost.config.json` — providers and `env.VAR_NAME` key references (no raw secrets in JSON).
+2. **Environment** — `GROQ_API_KEY`, `GEMINI_API_KEY`, etc., in the shell (or `.env`) when starting `claudia` / `claudia serve`.
+3. **Optional:** `./scripts/list-bifrost-models.sh` or `curl` `/api/models?unfiltered=true&limit=500` on BiFrost.
 
 ---
 
@@ -40,30 +40,30 @@ BiFrost does **not** treat every string in `config.json` as an environment refer
 
 | Location | Type in BiFrost | `"env.MY_VAR"` in JSON |
 |----------|-----------------|-------------------------|
-| **`providers.<name>.keys[].value`** | **`EnvVar`** | **Yes** — BiFrost records the reference and resolves **`MY_VAR`** from the process environment when it needs the secret (same idea as **`env.GROQ_API_KEY`**, **`env.GEMINI_API_KEY`**). |
-| **`providers.<name>.network_config.base_url`** | Plain **`string`** | **No** — the value is stored and used **literally**. A value like **`env.OLLAMA_BASE_URL`** is **not** looked up in the environment; the Ollama (and similar) code paths trim it and use it as the HTTP base URL, which breaks if you intended indirection. |
-| Other **`EnvVar`**-typed fields (Azure, Vertex, Bedrock, MCP `connection_string`, etc.) | **`EnvVar`** | **Yes**, per BiFrost’s rules for those structs. |
+| `providers.<name>.keys[].value` | `EnvVar` | **Yes** — BiFrost records the reference and resolves `MY_VAR` from the process environment when it needs the secret (same idea as `env.GROQ_API_KEY`, `env.GEMINI_API_KEY`). |
+| `providers.<name>.network_config.base_url` | Plain `string` | **No** — the value is stored and used **literally**. A value like `env.OLLAMA_BASE_URL` is **not** looked up in the environment; the Ollama (and similar) code paths trim it and use it as the HTTP base URL, which breaks if you intended indirection. |
+| Other `EnvVar`-typed fields (Azure, Vertex, Bedrock, MCP `connection_string`, etc.) | `EnvVar` | **Yes**, per BiFrost’s rules for those structs. |
 
-**Implications for Ollama:** set **`network_config.base_url`** to a real URL string (e.g. **`http://localhost:11434`**) in **`config/bifrost.config.json`**, unless you introduce your own preprocessing before BiFrost reads the file.
+**Implications for Ollama:** set `network_config.base_url` to a real URL string (e.g. `http://localhost:11434`) in `config/bifrost.config.json`, unless you introduce your own preprocessing before BiFrost reads the file.
 
-**Claudia today:** **`claudia serve`** copies **`config/bifrost.config.json`** into the BiFrost data directory as **`config.json`** without rewriting or expanding strings ([`CopyConfigJSON`](../internal/supervisor/bifrost.go)); environment variables from **`.env`** still apply to **key** values BiFrost resolves at runtime.
+**Claudia today:** `claudia serve` copies `config/bifrost.config.json` into the BiFrost data directory as `config.json` without rewriting or expanding strings ([`CopyConfigJSON`](../internal/supervisor/bifrost.go)); environment variables from `.env` still apply to **key** values BiFrost resolves at runtime.
 
-**`env.example`:** A variable such as **`OLLAMA_BASE_URL`** documents the URL you use for local Ollama; it does **not** by itself substitute into **`network_config.base_url`** in BiFrost (see table above).
+**`env.example`:** A variable such as `OLLAMA_BASE_URL` documents the URL you use for local Ollama; it does **not** by itself substitute into `network_config.base_url` in BiFrost (see table above).
 
-Upstream BiFrost has had requests to support **`env.*`** more broadly across arbitrary JSON strings (not only **`EnvVar`** fields); until that exists, **`base_url`** stays a literal string in the bootstrap file.
+Upstream BiFrost has had requests to support `env.*` more broadly across arbitrary JSON strings (not only `EnvVar` fields); until that exists, `base_url` stays a literal string in the bootstrap file.
 
 ---
 
 ## Gateway configuration — Claudia → BiFrost
 
-Gateway YAML uses **`upstream.*`** for the OpenAI-compatible hop (BiFrost or any compatible proxy). Legacy **`litellm`** / **`health.litellm_url`** keys are still accepted when the corresponding **`upstream`** / **`health.upstream_url`** fields are omitted.
+Gateway YAML uses `upstream.*` for the OpenAI-compatible hop (BiFrost or any compatible proxy). Legacy `litellm` / `health.litellm_url` keys are still accepted when the corresponding `upstream` / `health.upstream_url` fields are omitted.
 
 | Field | Role |
 |-------|------|
-| **`upstream.base_url`** | Upstream root. Local default **`http://127.0.0.1:8080`**. **`claudia serve`** overrides this to match the supervised BiFrost. |
-| **`upstream.api_key_env`** | Env var for **`Authorization: Bearer`** on upstream **`/v1/*`**. Default **`CLAUDIA_UPSTREAM_API_KEY`**. |
-| **`routing.fallback_chain`** | Ordered BiFrost model ids as **`provider/model`**. |
-| **`paths.tokens`** / **`paths.routing_policy`** | Gateway auth and routing policy. |
+| `upstream.base_url` | Upstream root. Local default `http://127.0.0.1:8080`. `claudia serve` overrides this to match the supervised BiFrost. |
+| `upstream.api_key_env` | Env var for `Authorization: Bearer` on upstream `/v1/*`. Default `CLAUDIA_UPSTREAM_API_KEY`. |
+| `routing.fallback_chain` | Ordered BiFrost model ids as `provider/model`. |
+| `paths.tokens` / `paths.routing_policy` | Gateway auth and routing policy. |
 
 ---
 
@@ -72,9 +72,9 @@ Gateway YAML uses **`upstream.*`** for the OpenAI-compatible hop (BiFrost or any
 | Area | Behavior |
 |------|----------|
 | **Chat** | `POST /v1/chat/completions`; streaming SSE pass-through |
-| **Model list** | Gateway prefers **`GET /api/models?unfiltered=true&limit=500`**, maps to **`provider/name`**, prepends **`Claudia-<semver>`** |
-| **Health** | **`GET {base_url}/health`** — JSON **`checks.upstream`** reflects upstream probe |
-| **Fallback** | **429** / selected **5xx** walk **`routing.fallback_chain`** |
+| **Model list** | Gateway prefers `GET /api/models?unfiltered=true&limit=500`, maps to `provider/name`, prepends `Claudia-<semver>` |
+| **Health** | `GET {base_url}/health` — JSON `checks.upstream` reflects upstream probe |
+| **Fallback** | **429** / selected **5xx** walk `routing.fallback_chain` |
 
 ---
 
@@ -82,5 +82,5 @@ Gateway YAML uses **`upstream.*`** for the OpenAI-compatible hop (BiFrost or any
 
 - [configuration.md](configuration.md)
 - [supervisor.md](supervisor.md)
-- [go-bifrost-migration-plan.md](go-bifrost-migration-plan.md)
+- [go-bifrost-migration.plan.md](plans/go-bifrost-migration.plan.md)
 - Upstream: [BiFrost docs](https://docs.getbifrost.ai/)

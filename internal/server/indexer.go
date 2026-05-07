@@ -11,7 +11,7 @@ import (
 )
 
 // handleIndexerConfig returns the effective RAG / indexer settings for the
-// authenticated tenant (per docs/version-v0.2.md "Indexer REST").
+// authenticated tenant (per docs/plans/version-v0.2.md "Indexer REST").
 func handleIndexerConfig(w http.ResponseWriter, r *http.Request, rt *Runtime, _ *slog.Logger) {
 	rt.Sync()
 	res, tokStore, _ := rt.Snapshot()

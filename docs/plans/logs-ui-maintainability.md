@@ -1,10 +1,34 @@
-# Logs UI — Maintainability, Clarity, and Testability Plan
+# Plan: Logs UI — Maintainability, Clarity, and Testability
+
+| Field | Value |
+|-------|-------|
+| **Doc kind** | `refactor-plan` |
+| **Owners / areas** | Gateway embed UI, operator logs |
+| **Status** | `active` |
+| **Targets** | Logs UI maintainability, clarity, and testability |
+| **Last updated** | See git history |
+| **Supersedes / superseded by** | Follows [`log-view-refactor.plan.md`](log-view-refactor.plan.md) |
+
+## At a glance
+
+Keep the operator log page easy to evolve. Make file names match what they do, shrink the big "do everything" script into focused modules, and grow tests that catch regressions without spinning up a browser. The goal is faster, safer changes for whoever (human or agent) edits the page next.
+
+| Phase | Outcome | Status |
+|-------|---------|--------|
+| [Workstream A — Documentation & naming](#workstream-a--documentation-and-naming-low-risk-high-leverage) | Developer map; honest file names; `models.js` actually loaded | `todo` |
+| [Workstream B — HTML clarity](#workstream-b--html-clarity) | Semantic regions and stable test hooks | `todo` |
+| [Workstream C — CSS clarity](#workstream-c--css-clarity) | Sectioned `logs.css` paired with a DOM map | `todo` |
+| [Workstream D — JavaScript architecture](#workstream-d--javascript-architecture-main-effort) | Split `logs_main.js` into focused modules with injectable deps | `active` |
+| [Workstream E — Testing strategy](#workstream-e--testing-strategy) | Goja coverage for new pure modules and view-mode logic | `active` |
+| [Workstream F — Server alignment](#workstream-f--server-alignment) | Document `servicelogs.Entry` for UI parsing assumptions | `todo` |
+
+---
 
 **Route:** `/ui/logs`  
 **Code:** `internal/server/embedui/logs.html`, `logs.css`, `logs.js`, `logs_bootstrap.js`, `embedui/logs/**`  
 **Server:** `internal/server/ui_logs.go`, `internal/server/ui_handlers.go` (embed + asset routes)
 
-This document is a **follow-on** to [`log-view-refactor-plan.md`](./log-view-refactor-plan.md). That plan drove extraction of CSS, a module folder, `derive/*`, and goja-based tests. **Most checklist items there are marked done**, but the UI is still hard to change safely because the **application shell** (`embedui/logs.js`, served as `/ui/assets/logs/main.js`) remains a large closed-over state machine. This plan focuses on **clarity** (where to edit what), **testability** (what to test without a browser), and **safe incremental refactors**.
+This document is a **follow-on** to [`log-view-refactor.plan.md`](./log-view-refactor.plan.md). That plan drove extraction of CSS, a module folder, `derive/*`, and goja-based tests. **Most checklist items there are marked done**, but the UI is still hard to change safely because the **application shell** (`embedui/logs.js`, served as `/ui/assets/logs/main.js`) remains a large closed-over state machine. This plan focuses on **clarity** (where to edit what), **testability** (what to test without a browser), and **safe incremental refactors**.
 
 ---
 
@@ -34,7 +58,7 @@ This document is a **follow-on** to [`log-view-refactor-plan.md`](./log-view-ref
 
 **What still hurts**
 
-1. **`embedui/logs.js` (~2.7k+ lines)** — Owns view-mode switching, summarized panel rebuild, structured table rows, metrics card HTML, focus/deep-link behavior, and wiring into `transport/streaming.js` via a large implicit **`ctx`**. Hard to test as a unit; easy to break edge cases.
+1. **`embedui/logs.js` (~2.7k+ lines)** — Owns view-mode switching, summarized panel rebuild, structured table rows, metrics card HTML, focus/deep-link behavior, and wiring into `transport/streaming.js` via a large implicit `ctx`. Hard to test as a unit; easy to break edge cases.
 2. **Confusing asset names** — On disk: `logs_bootstrap.js` → URL `/ui/assets/logs.js`; on disk: `logs.js` → URL `/ui/assets/logs/main.js`. Easy to edit the wrong file or search wrong symbols.
 3. **`models.js` exists but is not loaded** by `logs.html` — Typedefs drift from reality; agents do not discover them.
 4. **CSS** — Likely single flat file without section banners; selectors may not mirror DOM regions → hard to refactor layout safely.
@@ -151,7 +175,7 @@ Recommendation: finish **D2** with current global pattern if cost is lower; intr
 **E1 — Expand goja coverage (near-term)**
 
 - Any new pure module from D2 gets **fixture-based tests**: input JSON arrays → snapshot or structural assertions on HTML string or intermediate model.
-- Add tests for **`normalizeViewMode`** / URL persistence if extracted.
+- Add tests for `normalizeViewMode` / URL persistence if extracted.
 - Add tests for **dedupe / seq ordering** logic if lifted out of the monolith.
 
 **E2 — “Golden” derivation tests**  
@@ -168,7 +192,7 @@ If/when CI has Chromium: a single Playwright script that opens authenticated `/u
 ### Workstream F — Server alignment
 
 **F1 — Document `servicelogs.Entry` and UI expectations**  
-Short comment in `ui_logs.go` or README linking **`Entry`** fields to client parsing assumptions.
+Short comment in `ui_logs.go` or README linking `Entry` fields to client parsing assumptions.
 
 **F2 — Cors / auth / cache headers** — Leave as-is unless a test requires `Cache-Control: no-store` assertions (already used for JS).
 
@@ -194,14 +218,14 @@ Short comment in `ui_logs.go` or README linking **`Entry`** fields to client par
 - [ ] On-disk **main bundle** name matches its **role** (no `logs.js` vs `main.js` confusion).
 - [ ] **`logs_main.js` (or equivalent) &lt; ~800 lines** OR explicitly split into named modules with no single file &gt; 1k lines.
 - [ ] `models.js` (or successor) loaded; **app state + deps** typedef documented.
-- [ ] Every **`derive/*`** and **new pure module** has goja coverage or a documented exception.
-- [ ] Manual checklist from [`log-view-refactor-plan.md`](./log-view-refactor-plan.md) run on the last merging PR before closing the epic.
+- [ ] Every `derive/*` and **new pure module** has goja coverage or a documented exception.
+- [ ] Manual checklist from [`log-view-refactor.plan.md`](./log-view-refactor.plan.md) run on the last merging PR before closing the epic.
 
 ---
 
 ## 7. References
 
-- Historical phases + manual checklist: [`docs/log-view-refactor-plan.md`](./log-view-refactor-plan.md)
+- Historical phases + manual checklist: [`log-view-refactor.plan.md`](./log-view-refactor.plan.md)
 - Component/derive tests: `internal/server/logs_components_test.go`
 - API tests: `internal/server/ui_logs_test.go`, `internal/server/ui_metrics_test.go`
 - Asset registration: `internal/server/ui_handlers.go` (`serveLogsModuleAsset`, `/ui/assets/logs*`)

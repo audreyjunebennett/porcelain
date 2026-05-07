@@ -35,7 +35,7 @@ type Resolved struct {
 	// FilterFreeTierModels requests intersecting merged /v1/models with the allowlist when spec loaded.
 	FilterFreeTierModels bool
 	ProviderFreeTierSpec *providerfreetier.Spec
-	// Metrics (G6): SQLite under data/gateway; see docs/version-v0.1.1.md §3.6.
+	// Metrics (G6): SQLite under data/gateway; see docs/plans/version-v0.1.1.md §3.6.
 	MetricsEnabled       bool
 	MetricsSQLitePath    string // absolute path to metrics.sqlite
 	MetricsMigrationsDir string // absolute path to migrations/gateway directory
@@ -44,7 +44,7 @@ type Resolved struct {
 	ProviderLimitsPath string
 	ProviderLimitsSpec *providerlimits.Config
 	// RouterModels is an ordered list of upstream model ids used for the tool-router transformer
-	// (see docs/version-v0.1.1.md). Empty disables router calls.
+	// (see docs/plans/version-v0.1.1.md). Empty disables router calls.
 	RouterModels []string
 	// ToolRouterEnabled gates the tool-slimming transformer when RouterModels is non-empty.
 	// When RouterModels is empty, the transformer never runs regardless of this flag.

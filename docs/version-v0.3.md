@@ -1,0 +1,350 @@
+# Version 0.3 - peer backends, setup wizard, Chimera branding
+
+| Field | Value |
+|-------|-------|
+| **Doc kind** | `version-roadmap` |
+| **Owners / areas** | Gateway desktop, onboarding, peer backends, branding |
+| **Status** | `active` |
+| **Targets** | Gateway/desktop v0.3 |
+| **Last updated** | See git history |
+| **Supersedes / superseded by** | Builds on [`version-v0.2.md`](version-v0.2.md) |
+
+## At a glance
+
+Make the gateway easier to set up, friendlier to share between operators, and clearer about what it is. New operators get a guided wizard that walks them from provider keys through indexing to a ready-to-paste Continue config. Multiple operators can call each other's models. The product also adopts layered names — Porcelain (the suite), Chimera (this gateway), Locus (workspace clients) — so docs and UI stop overloading "Claudia."
+
+| Theme | Outcome | Status |
+|-------|---------|--------|
+| [Peer backends](#peer-backends) | Call another operator's OpenAI-compatible upstream (typically BiFrost) with credentials they issue over a host-routable URL | `todo` |
+| [First-run token handoff](#first-run-token-handoff) | Show, copy, and optionally save the gateway token; restart-friendly | `todo` |
+| [Setup wizard](#setup-wizard) | Guided keys -> local server -> test chat -> indexing -> integration | `todo` |
+| [Product naming](#product-naming) | Layered names in docs, UI, and startup logs; legacy `Claudia` strings documented | `todo` |
+| [Credential file naming](#credential-file-naming) | `api-keys.yaml` / `api_keys` / `secret`; reserve "token" for tokenizer counts | `todo` |
+
+---
+
+## What this version is
+
+This document is the **working plan for v0.3** for this repository (**Chimera**: intelligent routing and memory layer; see [Product naming](#product-naming)). It pulls forward the **peer-to-peer backend** scope from the master product plan ([`claudia-gateway.plan.md`](claudia-gateway.plan.md)) and adds **first-run / second-run onboarding** for the desktop application so new operators can configure and validate the gateway without hunting through docs. **v0.3** also targets **layered product naming**: **Porcelain** (creative system), **Chimera** (this gateway component), and **Locus** (workspace-side clients), plus legacy **Claudia** cleanup where appropriate. Naming and README wording in line with branch `origin/feat/chimera-branding` should be folded into this release unless superseded by a written decision.
+
+**Companion docs:** [`claudia-gateway.plan.md`](claudia-gateway.plan.md), [`configuration.md`](configuration.md), [`plans/indexer.md`](plans/indexer.md).
+
+Authoritative **architecture and numbered requirements** remain in [`claudia-gateway.plan.md`](claudia-gateway.plan.md) unless this plan explicitly revises them. **Indexer** milestones labeled “v0.3” in [`plans/indexer.md`](plans/indexer.md) (e.g. scoped overrides, headers) are **indexer product versions**, not necessarily the same shipping train as **gateway desktop v0.3**; cross-link when both touch the same API.
+
+---
+
+## Peer backends
+
+**Goal:** Let one operator route to another operator's published OpenAI-compatible upstream without chaining gateway-to-gateway.
+
+**Scope**
+
+This theme summarizes what [`claudia-gateway.plan.md`](claudia-gateway.plan.md) already assigns to **v0.3** so implementation and docs stay aligned.
+
+### Release-roadmap slice
+
+From the master **Release roadmap** table:
+
+- **Peer-to-peer model backends**: call **another operator’s BiFrost** (or compatible OpenAI proxy) over a **host-routable** URL and **published** port (not Compose-internal DNS from another machine).
+- **Proxy-issued credentials** (e.g. virtual keys where the upstream supports them) for **cross-host** authentication.
+- **Gateway / upstream configuration** and **operator documentation** for peer paths: *Peer topology · 1–3*, *Model selection and routing policy · 3* (peer as `base_url` / `api_base`), and *Deployment · 3* (cross-host publishing vs intra-stack DNS)—see [`claudia-gateway.plan.md`](claudia-gateway.plan.md).
+- **Per-key / usage observability** (*Resilience · 1*): track which key/backend was used and exposure to RPM/TPM-style limits where upstream headers exist.
+
+### Product rules
+
+- **Peer = their upstream (BiFrost / compatible proxy), not their Gateway** (*Peer topology · 2*): configure OpenAI-compatible `api_base` / `base_url` to the **peer’s published upstream** (e.g. Tailscale/LAN IP + **published** proxy port + `/v1`). Use credentials **they** issue (virtual keys or equivalent when supported). Do **not** chain **Gateway → peer Gateway** as the default integration (same bullet).
+- **Independent stacks** (*Peer topology · 1*): each operator has their own Chimera instance, client-auth secrets (`tokens.yaml` until the credential naming migration), and policy; no assumption that one gateway “owns” another’s RAG.
+- **Document ports per host** (*Peer topology · 3*): distinguish **Chimera** (IDE-facing OpenAI-compatible entry) vs **peer upstream** (`api_base` / `base_url` target); firewall/VPN expectations; TLS/mTLS deferred to **v0.7** unless operators add their own terminator.
+- **Cloud vs local policy** (*Model selection and routing policy · 3*): **Peer upstream** appears as a **remote-runner** entry in routing policy.
+- **Graceful degradation** (*Resilience · 2*): same fail-over / fail-fast behavior when a peer upstream is in the chain; **no** gateway queue until **v0.8**.
+- **Containers / networking**: from **v0.3**, compose/docs consider **LAN peer access** to published upstreams where enabled; TLS posture for peer URLs ships with **v0.7** (*Security · 2–5*).
+
+### Deliverables checklist
+
+- [ ] Configuration surfaces (and/or files) to add **peer upstream** backends with proxy-issued credentials where applicable and host-reachable base URLs.
+- [ ] Operator docs: cross-host topology, **published** ports, virtual keys, anti-patterns (Compose hostname of peer stack, gateway-on-gateway).
+- [ ] **Observability (*Resilience · 1*)**: per-key / per-backend usage signals where APIs expose limits or identifiers.
+
+**Acceptance**
+
+- Peer upstream configuration can target a host-routable OpenAI-compatible proxy URL with credentials issued by the peer operator.
+- Operator docs explain ports, network expectations, credential handoff, and the gateway-on-gateway anti-pattern.
+- Per-key or per-backend usage signals are visible where upstream APIs expose enough data.
+
+**Status:** `todo`
+
+---
+
+## First-run token handoff
+
+**Goal:** On the **first** run, the user obtains a **gateway API token**, optionally persists it, then **restarts** the app and supplies the token (UI or environment) so the second-run wizard can run authenticated.
+
+**Scope**
+
+### First screen
+
+1. The application displays an **API key** (gateway-issued token) that the user can **copy**.
+2. Below the key:
+   - Optional action: **Save key** — when pressed, **upsert** into a **dotenv** file (project/agreed path): if `CLAUDIA_GATEWAY_TOKEN` is **not** already defined, set it to this key; if already defined, do **not** overwrite without an explicit future “replace” flow (this plan: **only set when absent**).
+3. User guidance: copy and/or save, then **close** the application.
+4. On next launch, the user either:
+   - Pastes the key into the app when prompted, or  
+   - Relies on `CLAUDIA_GATEWAY_TOKEN` being read from the environment / dotenv load order as implemented.
+
+**Acceptance**
+
+- Token display must be compatible with whatever the gateway already uses for **tenant auth** (same token used for `Authorization: Bearer` elsewhere).
+- **Save** behavior must be safe on repeated launches (idempotent upsert, no silent clobber of user-set values).
+
+**Status:** `todo`
+
+---
+
+## Setup wizard
+
+**Goal:** After the token is available on second launch, walk through **configuration and testing** in **seven steps**, with **Skip setup** returning the user to the **normal multi-tab** UI.
+
+**Scope**
+
+**Global navigation**
+
+- **Step 1 (welcome):** Bottom-left **Skip** → main tab view. Bottom-right **Continue** → step 2.
+- **Steps 2–6:** Bottom-left **Back** (step 2 back goes to welcome). Bottom-right **Continue** / **Next** advances.
+- **Step 7:** Bottom-left **Back**. Bottom-right **Finish** → main multi-tab view.
+
+---
+
+### Step 1 — Welcome / overview
+
+- High-level overview of what will be configured.
+- Show **how many steps** the process has (seven).
+- **Skip** (bottom-left) → current main tab view.
+- **Continue** (bottom-right) → step 2.
+
+---
+
+### Step 2 — Provider keys (Groq, Gemini, …)
+
+- Collect **provider API keys** (at minimum the fields used today for Groq and Gemini).
+- **Validation UX:**
+  - When a key is **added** or **removed**, the system **immediately** validates against the upstream/provider and retrieves **model list**.
+  - Display a **count of models discovered** for that provider configuration.
+  - Whenever the **model count** changes, run **router generator** logic: regenerate **router file** and update the **fallback model list** to match the new union of models.
+- **Back** → welcome. **Continue** → step 3.
+
+---
+
+### Step 3 — Local OpenAI-compatible server (Ollama / LM Studio / custom)
+
+- Show **model count** from step 2; this count **updates live** as configuration changes on this page too.
+- **Autodetect** a local LLM server using **common ports** for **Ollama** and **LM Studio**. If found, **pre-fill** host/port/base path fields.
+- If **none** detected, leave fields empty; user **must** supply custom connection values before proceeding (or block **Continue** until valid).
+- Once a URL/base is **set or detected**, query the server for **models** and show **total model count**.
+- On **any model count change**, run **router generator** → update **router file** and **fallback model list** (same contract as step 2).
+- **Back** → step 2. **Next** → step 4.
+
+---
+
+### Step 4 — Test chat with a model
+
+- **Purpose:** Verify end-to-end **chat** through the gateway (or equivalent orchestrated path) using the models and routing available after steps 2–3.
+- **Prompt area:** A **ready-to-go** default prompt is shown with its text **selected / highlighted** so the user can **start typing** to immediately replace it with their own message.
+- **Send:** **Enter** or a **Send** control submits the prompt.
+- **Conversation panel:** The assistant **reply streams or appears live** in the same view, **after** the user’s message, as a **conversation chain** (user and assistant turns in order).
+- **Logs (below the conversation):** A **summarized conversation log** for this exchange—**openable and viewable the same way** as on the main **logs** page (same structure, expand/collapse, and detail as production logs for this session).
+- **Back** → step 3. **Next** → step 5.
+
+---
+
+### Step 5 — Indexing setup
+
+- Brief explanation of **why indexing matters** and that users should choose folders they want searchable.
+- **“Add a Folder”** control: placed **upper-right** (per spec).
+- **Embedding model** panel: **combobox** of **valid embedding models** derived from configured providers + local server (models suitable for `/embeddings` and gateway/Qdrant expectations).
+  - **Default selection:** `ollama/nomic-embed-text:latest` or the project’s agreed default that matches **Qdrant**, **chunking**, and **indexer** settings from config.
+- **No valid embedding models:**
+  - Show a clear **message** that no embedding-capable models are available.
+  - **Disable** “Add a Folder”.
+  - If the user attempts folder add (or focus the disabled control), **animate** the embedding panel to indicate it cannot be configured yet, show **warning** + instructions to go **back** to earlier steps and add a **local embedding-capable** model (e.g. **step 3** local server or **step 2** provider keys, as appropriate).
+- **When valid models exist:** user can **create, modify, and delete** indexes (folders / indexer entries per existing product behavior).
+- **Behavior:** index changes trigger **index creation** / updates as they do in the main app; embedding model changes re-point embedding configuration.
+- **Back** → step 4. **Next** → step 6.
+
+---
+
+### Step 6 — Test indexing (conditional)
+
+- **If the user defined no indexes in step 5:** this step is **disabled** or skipped (implementation choice: auto-skip vs greyed step with explanation—product should not pretend indexing can be tested).
+- **When indexes exist:**
+  - Explain how **embeddings** are used in practice.
+  - **Query panel:** text box; on **Enter** or **Query** button:
+    1. **Highlight** the query text (visual feedback).
+    2. Run search **across all workspaces** (same semantics as production search).
+    3. **Zero results:** show that explicitly; add **notes/warnings** based on indexer state (idle, error, no chunks, etc.).
+    4. **Multiple results:**  
+       - First block: **summary** — total hits across workspaces; **number of distinct workspaces** with a match.  
+       - Second block: **details** — file paths and **short excerpts**.
+  - Below: **indexer run log** view — **same content and live updates** as the dedicated **log** page in the app so users see progress and errors.
+- **Back** → step 5. **Next** → step 7.
+
+---
+
+### Step 7 — Integration (VS Code Continue)
+
+- Show the **Continue** integration panel (overview + actions consistent with the current UI).
+- Rename **“indexed folders”** to **“setup projects”** in this context.
+- Combo box lists **setup projects** (indexed-folder entries).
+- Add a distinct entry that generates a **VS Code Continue** snippet for the **global** location Continue expects (global `.continue/config.yaml` — **no** project or flavor headers in that variant).
+- Entries remain **copyable** and **creatable** like today; user selects an entry and uses **copy** and/or **create** when defined indexes exist as applicable.
+- **Back** → step 6. **Finish** → **main multi-tab** application view.
+
+---
+
+### Cross-cutting implementation notes
+
+- **Router generator** and **fallback model list** must be **shared** between the wizard and the main settings UI so wizard changes do not use a one-off code path.
+- **Second-run detection** should be robust (e.g. token present + first-time wizard flag in local state), so reinstalls and upgrades behave predictably—exact mechanics belong in implementation with UX review.
+- Peer-to-peer **upstream** configuration might surface in advanced settings in the same release or a follow-up; this plan does not require the **seven-step wizard** to cover peer URLs unless product wants it—default remains **operator docs + config files** from [Peer backends](#peer-backends).
+
+**Acceptance**
+
+- The seven-step wizard can be skipped, navigated with Back/Continue/Next/Finish, and returns to the normal multi-tab UI.
+- Provider and local-server model count changes trigger the shared router generator and update fallback model lists.
+- Chat, indexing, and Continue integration checks use the same logs and operator surfaces as the main application.
+
+**Status:** `todo`
+
+---
+
+## Product naming
+
+**Goal:** Align operator-visible language and implementation logging with the **layered architecture** introduced on `origin/feat/chimera-branding`, while retiring ambiguous “Claudia Gateway” wording where it meant “this binary / service.” Minimize breakage for existing operators (CLI names, env vars, virtual model strings, and URLs may stay compatible for one or more releases per explicit decisions).
+
+**Scope**
+
+### Architecture narrative
+
+These names are **roles**, not four separate shipping binaries unless noted:
+
+| Layer | Role |
+| ----- | ---- |
+| **Porcelain** | The **creative system** umbrella—the product story that contains workspace tooling, this gateway, and inference/RAG plumbing. |
+| **Chimera** | This repository’s **gateway**: the **intelligent routing and memory layer**—OpenAI-compatible façade in front of **BiFrost**, optional **Qdrant** RAG, indexer REST, routing policy, and admin UI. Bridges workspace-side traffic to inference + retrieval. |
+| **Locus** | **Workspace-side** context: docs describe **Locus clients** authenticating to Chimera (e.g. `Authorization: Bearer …`). Use where copy previously said “client” vs Chimera without naming the workspace tier. |
+| **BiFrost** | Upstream **inference** proxy; Chimera stays in front of BiFrost as today. README-style copy may spell out “BiFrost (inference)” and “Qdrant (vector search)” so roles stay clear. |
+
+**Canonical positioning sentence (README-level):** Chimera is **part of Porcelain**; it is not a separate unrelated product. Full-system context may live outside this repo (e.g. **Rebirth** repository `PORCELAIN.md`—update this plan’s pointer if the canonical doc moves).
+
+**Concrete deltas already modeled on `origin/feat/chimera-branding`:**
+
+- **README** title and lede: **“Chimera: Intelligent Routing & Memory Layer”**; first paragraph states membership in **Porcelain** and assigns Chimera (not “the gateway” generically) as the component that owns BiFrost-facing behavior, RAG, and `claudia serve` supervision wording where updated.
+- **Config table copy:** **Chimera** substitutes for “Claudia” where it describes **client auth** (`tokens.yaml`), `gateway.yaml` (“Chimera listen + upstream”), `.env` (Chimera↔BiFrost key line), and **desktop** install note (“admin UI for Chimera”).
+- **`cmd/claudia/gateway.go`:** structured startup logs use `Chimera (go) listening` (and bootstrap variant) instead of `claudia (go) listening`.
+
+**Intentionally unchanged on that branch (decide for v0.3):** binary name `claudia`, `make claudia-*` targets, `CLAUDIA_*` env vars, `claudia serve` stderr prefixes, virtual model `Claudia-<semver>`, and routing-policy references—so “Claudia” may remain as a **legacy technical identifier** until a later milestone.
+
+### Scope buckets
+
+- **Operator-facing branding** — Primary headings and overview docs should say **Chimera** for this service and **Porcelain** for the suite; use **Locus** where workspace clients are meant. Avoid presenting “Claudia Gateway” as the product name on first-run surfaces unless migration docs require it.
+- **Technical identifiers** — Separate **marketing names** from **interop strings**: renaming **`make` targets**, binary, module path, `CLAUDIA_*`, or Compose service labels may trail README/UI by one release; document aliases if env vars gain `CHIMERA_*` / `PORCELAIN_*` equivalents.
+- **HTTP / API ergonomics** — Custom headers (`X-Claudia-*` and similar), log fields, and claims should move toward agreed **Chimera-** or **Porcelain-** prefixes with **dual read** for deprecated names where indexer/IDE plugins still send old headers—exact matrix belongs in implementation and indexer docs.
+- **Repository naming** — GitHub org/repo or Go module path changes remain optional for v0.3; if deferred, checklist explicitly “no repo rename this train.”
+
+### Deliverables checklist
+
+- [ ] Written **naming decision**: when **Chimera** vs **Porcelain** appears (gateway-only vs suite), **Locus** copy guidelines, and whether legacy **Claudia** strings (virtual model, CLI) persist through v0.3.
+- [ ] UI, installer, about screens, and packaged artifacts match the layered story (**Chimera** gateway inside **Porcelain**).
+- [ ] Documentation set (README, onboarding, [`claudia-gateway.plan.md`](claudia-gateway.plan.md) release row when updated) reflects the architecture narrative; historical “Claudia Gateway” OK in release notes only when labeled historical.
+- [ ] Companion components (**indexer**, desktop app, Compose samples) updated for any new headers/env aliases called out above.
+
+**Acceptance**
+
+Treat this theme as satisfied when **first-touch** operator docs and UI consistently present **Chimera** + **Porcelain** + **Locus** as described above, startup logs match the Chimera wording where implemented, and any remaining **Claudia** identifiers are **documented** (either accepted legacy or scheduled removal). No silent breaks: migrations note dual-read periods for headers/env.
+
+**Status:** `todo`
+
+### Supervised-process shutdown
+
+`origin/feat/chimera-branding` also adjusts `claudia serve` so supervised **Qdrant**, **BiFrost**, and **indexer** children don’t hang after context cancel: wait with a **timeout**, then **kill** if needed, with structured `slog` diagnostics. When merging or reimplementing v0.3 desktop supervision, preserve this behavior so window-close / shutdown reliably tears down children.
+
+---
+
+## Credential file naming
+
+**Goal:** Stop overloading **token** for both **gateway client access** (Bearer / Continue `apiKey`) and **LLM usage** (tokenizer counts, `est_tokens`, context limits). Operators and docs should read **api key / secret** on the auth side and reserve **token** for model-token semantics.
+
+**Scope**
+
+### File names
+
+| Current | v0.3 target |
+|--------|-------------|
+| `config/tokens.example.yaml` | `config/api-keys.example.yaml` |
+| Operator copy / runtime file `tokens.yaml` (path from `gateway.yaml`) | `api-keys.yaml` (recommended default filename; operators may still use a custom path) |
+
+Comments in the example file should tell operators to copy to `api-keys.yaml` and to reload on mtime, matching today’s behavior.
+
+### YAML shape
+
+- **Top-level key:** `api_keys` — list of gateway-issued **client access** credentials (not LLM tokens).
+- **Per-entry credential field:** `secret` — the sensitive string the client sends (e.g. `Authorization: Bearer …`, Continue `apiKey`). **Do not** use the YAML key `token` for this value; that word stays aligned with upstream/model-token usage elsewhere in the stack.
+- **Unchanged fields on each row:** `label`, `tenant_id` (same semantics as today).
+
+Illustrative layout:
+
+```yaml
+api_keys:
+  - label: personal
+    secret: "replace-me-gateway-client-secret"
+    tenant_id: personal
+```
+
+### Gateway config path key
+
+In `gateway.yaml`, the path that points at this file should use `paths.api_keys` (replacing `paths.tokens`) so the operator-facing key matches the document (`api_keys`). Example: `api_keys: "./api-keys.yaml"` under `paths:`.
+
+### Implementation notes
+
+- **Code:** loader package names, struct fields, and log messages should prefer **api key** / **gateway client secret** language where they refer to this file; reserve **token** in logs and metrics for tokenizer / usage paths where applicable.
+- **Migration:** Decide whether v0.3 accepts **only** the new keys/filenames or supports a **transition** (read legacy `tokens:` / `token:` and old path key with deprecation warnings). Document the chosen behavior in [`configuration.md`](configuration.md) and operator migration notes when implemented.
+
+**Acceptance**
+
+- Example and runtime credential files use `api-keys.yaml`, `api_keys`, and `secret` where implemented.
+- `gateway.yaml` uses `paths.api_keys` or documents a compatibility period for the legacy `paths.tokens` key.
+- Docs and logs reserve "token" for tokenizer/model-token usage except where explicitly discussing legacy compatibility.
+
+**Status:** `todo`
+
+---
+
+## Explicitly not this version
+
+- Do not route Gateway -> peer Gateway as the default peer integration; peer routes target a host-routable upstream proxy.
+- Do not make TLS/mTLS or untrusted-network hardening a v0.3 requirement; that remains a later hardening release.
+- Do not add a gateway queue or priority scheduler; graceful degradation remains the v0.3 behavior.
+- Do not silently break legacy `claudia`, `CLAUDIA_*`, `X-Claudia-*`, or virtual model identifiers unless a migration decision explicitly says to.
+
+---
+
+## Verification
+
+| Area | Quick check |
+|------|-------------|
+| Peer backends | Peer upstream + credentials + docs meet the peer scope checklist. |
+| First-run token handoff | First launch shows a copyable gateway API key and optional safe dotenv save. |
+| Setup wizard | Seven steps navigate correctly, support skip/finish, and use shared router regeneration. |
+| Product naming | README, onboarding, UI copy, and startup logs reflect Porcelain / Chimera / Locus decisions. |
+| Credential naming | `api-keys.yaml`, `api_keys`, `secret`, and `paths.api_keys` are implemented or migration behavior is documented. |
+
+When this plan is implemented, update [`claudia-gateway.plan.md`](claudia-gateway.plan.md) **Release roadmap** row for v0.3 if the shipped scope differs (e.g. split peer backends vs onboarding into separate releases).
+
+---
+
+## See also
+
+- [`version-v0.2.md`](version-v0.2.md) - previous version
+- [`claudia-gateway.plan.md`](claudia-gateway.plan.md) - product roadmap and requirements
+- [`configuration.md`](configuration.md) - configuration reference
+- [`plans/indexer.md`](plans/indexer.md) - indexer milestones that may cross-link with this release
+- [`plans/_template.md`](plans/_template.md) - phase-level plan template

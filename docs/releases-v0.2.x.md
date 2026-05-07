@@ -1,42 +1,63 @@
-# Releases v0.2.0, v0.2.1, and v0.2.2
+# Releases v0.2.0, v0.2.1, v0.2.2 — operator summary
 
-This document is the **operator-oriented summary** of what shipped in the **0.2** line. The virtual model id remains **`Claudia-<gateway.semver>`** (set in `config/gateway.yaml`); the example config may still show an older patch while you bump semver locally.
+| Field | Value |
+|-------|-------|
+| **Doc kind** | `release-notes` |
+| **Owners / areas** | Gateway, indexer, logs UI |
+| **Status** | `shipped` |
+| **Targets** | Gateway v0.2.0-v0.2.2 |
+| **Last updated** | See git history |
+| **Supersedes / superseded by** | Summarizes [`version-v0.2.md`](version-v0.2.md) |
+
+## At a glance
+
+Operator-facing summary of the v0.2 line. v0.2.0 ships the indexer and retrieval pipeline that gives chat awareness of your code. v0.2.1 makes the operator log view tell a story instead of dumping JSON. v0.2.2 adds the desktop shell, supervised indexer, and dedicated admin pages.
+
+| Release | Outcome | Status |
+|---------|---------|--------|
+| [v0.2.0](#v020--rag-baseline-ingest-indexer-apis-claudia-index) | RAG baseline: ingest, retrieval, Qdrant, `claudia-index` | `done` |
+| [v0.2.1](#v021--logging-correlation-logs-ui-optional-conversation-merge) | Per-request correlation, richer logs UI, optional conversation merge | `done` |
+| [v0.2.2](#v022--desktop-shell-supervised-indexer-indexer--continue-operator-ui) | Desktop shell, supervised `claudia-index`, indexer and Continue admin pages | `done` |
+
+---
+
+This document is the **operator-oriented summary** of what shipped in the **0.2** line. The virtual model id remains `Claudia-<gateway.semver>` (set in `config/gateway.yaml`); the example config may still show an older patch while you bump semver locally.
 
 **Deeper references**
 
 - Capability and roadmap context: [version-v0.2.md](version-v0.2.md), [claudia-gateway.plan.md](claudia-gateway.plan.md)
-- Indexer product plan: [indexer.plan.md](indexer.plan.md), operator quick start: [indexer.md](indexer.md)
-- Log UI and correlation: [log-presentation-layer.plan.md](log-presentation-layer.plan.md), [log-presentation-acceptance.md](log-presentation-acceptance.md)
+- Indexer product plan: [plans/indexer.md](plans/indexer.md), operator quick start: [indexer.md](indexer.md)
+- Log UI and correlation: [plans/log-presentation-layer.md](plans/log-presentation-layer.md)
 
 ---
 
 ## v0.2.0 — RAG baseline, ingest, indexer APIs, `claudia-index`
 
-**Theme:** Gateway-mediated **retrieval-augmented generation** with **Qdrant**, **ingestion**, **indexer-facing REST**, and the **`claudia-index`** workspace indexer binary.
+**Theme:** Gateway-mediated **retrieval-augmented generation** with **Qdrant**, **ingestion**, **indexer-facing REST**, and the `claudia-index` workspace indexer binary.
 
 **Configuration (`config/gateway.yaml`)**
 
-- **`rag.enabled`** and **`rag.*`**: Qdrant URL (optional API key), embedding path/model/dimension, chunk size/overlap, retrieval **top_k** and score threshold, ingest size limits (including **`max_whole_file_bytes`** vs chunked session ingest).
+- `rag.enabled` and `rag.*`: Qdrant URL (optional API key), embedding path/model/dimension, chunk size/overlap, retrieval **top_k** and score threshold, ingest size limits (including `max_whole_file_bytes` vs chunked session ingest).
 
 **HTTP API**
 
-- **`POST /v1/ingest`** — document ingestion (multipart / JSON); server-side chunking, embedding, upsert into Qdrant.
-- **Chunked ingest session** for files larger than **`rag.ingest.max_whole_file_bytes`** (see indexer docs).
-- **Indexer REST** (Bearer-scoped): **`GET /v1/indexer/config`**, **`GET /v1/indexer/storage/health`**, **`GET /v1/indexer/storage/stats`**, **`GET /v1/indexer/corpus/inventory`** (paginated reconciliation).
-- **`GET /health`** — when RAG is enabled, includes a **Qdrant** probe (degraded behavior per implementation).
+- `POST /v1/ingest` — document ingestion (multipart / JSON); server-side chunking, embedding, upsert into Qdrant.
+- **Chunked ingest session** for files larger than `rag.ingest.max_whole_file_bytes` (see indexer docs).
+- **Indexer REST** (Bearer-scoped): `GET /v1/indexer/config`, `GET /v1/indexer/storage/health`, `GET /v1/indexer/storage/stats`, `GET /v1/indexer/corpus/inventory` (paginated reconciliation).
+- `GET /health` — when RAG is enabled, includes a **Qdrant** probe (degraded behavior per implementation).
 
 **Chat**
 
-- Virtual model **`Claudia-<semver>`**: when RAG is enabled, **query-time retrieval** and **prompt assembly** (retrieved context injected ahead of the conversation).
-- Tenant scoping via gateway tokens; **`X-Claudia-Project`** and **`X-Claudia-Flavor-Id`** select project/corpus (with token defaults).
+- Virtual model `Claudia-<semver>`: when RAG is enabled, **query-time retrieval** and **prompt assembly** (retrieved context injected ahead of the conversation).
+- Tenant scoping via gateway tokens; `X-Claudia-Project` and `X-Claudia-Flavor-Id` select project/corpus (with token defaults).
 
 **Indexer CLI**
 
-- **`claudia-index`** walks configured roots, respects ignore rules, hashes files, and calls **`POST /v1/ingest`** (or chunked session for large files). Build: **`make indexer-build`**.
+- `claudia-index` walks configured roots, respects ignore rules, hashes files, and calls `POST /v1/ingest` (or chunked session for large files). Build: `make indexer-build`.
 
 **Stack**
 
-- Continues to use **BiFrost** as the OpenAI-compatible upstream for chat and embeddings (embedding model configured under **`rag.embedding`**).
+- Continues to use **BiFrost** as the OpenAI-compatible upstream for chat and embeddings (embedding model configured under `rag.embedding`).
 
 ---
 
@@ -46,32 +67,32 @@ This document is the **operator-oriented summary** of what shipped in the **0.2*
 
 **Middleware and access logs**
 
-- **`requestid`** middleware: stable **`request_id`** on requests and responses.
-- Access / structured logs include **`service`** and **`request_id`** where applicable.
+- `requestid` middleware: stable `request_id` on requests and responses.
+- Access / structured logs include `service` and `request_id` where applicable.
 
 **Chat and RAG logging**
 
-- **`conversation_id`**: from header **`X-Claudia-Conversation-Id`** or generated by the gateway.
-- **`principal_id`** on chat logs where applicable.
-- Stable **`msg`** slugs on chat / RAG / ingest paths for filtering and dashboards (see log-presentation docs).
+- `conversation_id`: from header `X-Claudia-Conversation-Id` or generated by the gateway.
+- `principal_id` on chat logs where applicable.
+- Stable `msg` slugs on chat / RAG / ingest paths for filtering and dashboards (see log-presentation docs).
 
 **Ingest and indexer**
 
-- Ingest echoes **`index_run_id`**; indexer client sends the agreed header for correlation.
-- Indexer process logs use **`indexer.run.*`** style messages and attach **`index_run_id`** to structured stderr when JSON logging is enabled.
+- Ingest echoes `index_run_id`; indexer client sends the agreed header for correlation.
+- Indexer process logs use `indexer.run.*` style messages and attach `index_run_id` to structured stderr when JSON logging is enabled.
 
 **Logs UI (`/ui/logs`)**
 
-- Views: **Detailed**, **Summary**, **Conversations**, **Subsystems**; preferred view stored in **`localStorage`**.
-- **`wrapResponse`** logging fix so logged **statusCode** matches the handler outcome on early errors.
+- Views: **Detailed**, **Summary**, **Conversations**, **Subsystems**; preferred view stored in `localStorage`.
+- `wrapResponse` logging fix so logged **statusCode** matches the handler outcome on early errors.
 
 **Optional conversation merge (`conversation_merge` in `gateway.yaml`)**
 
-- When enabled (requires **gateway metrics** / SQLite migrations): merges chat turns into an existing session using **embedding similarity** and recent-window rules when **`X-Claudia-Conversation-Id`** is absent. Schema and defaults are documented in **`config/gateway.example.yaml`** and [configuration.md](configuration.md).
+- When enabled (requires **gateway metrics** / SQLite migrations): merges chat turns into an existing session using **embedding similarity** and recent-window rules when `X-Claudia-Conversation-Id` is absent. Schema and defaults are documented in `config/gateway.example.yaml` and [configuration.md](configuration.md).
 
 **Documentation added in-tree**
 
-- [log-presentation-layer.plan.md](log-presentation-layer.plan.md), [log-presentation-acceptance.md](log-presentation-acceptance.md).
+- [plans/log-presentation-layer.md](plans/log-presentation-layer.md).
 
 ---
 
@@ -81,23 +102,23 @@ This document is the **operator-oriented summary** of what shipped in the **0.2*
 
 **Supervisor**
 
-- When **`indexer.supervised.enabled`** is set (and RAG or **`start_when_rag_disabled`** conditions are met), **`claudia serve`** / desktop can start **`claudia-index`** as a child with **`CLAUDIA_GATEWAY_URL`**, merged **`--config`**, and optional **`--log-json`**. See [indexer.md](indexer.md) § Supervised mode and [supervisor.md](supervisor.md).
+- When `indexer.supervised.enabled` is set (and RAG or `start_when_rag_disabled` conditions are met), `claudia serve` / desktop can start `claudia-index` as a child with `CLAUDIA_GATEWAY_URL`, merged `--config`, and optional `--log-json`. See [indexer.md](indexer.md) § Supervised mode and [supervisor.md](supervisor.md).
 
 **Operator UI**
 
 - **Main** shell page: clearer status/summary for the local stack.
-- **`/ui/indexer`**: configure supervised indexer YAML (paths/roots), **`GET/PUT /api/ui/indexer/config`**, append roots (including desktop folder picker where supported).
-- **`/ui/continue`** (or embedded Continue flow): **copy-ready** VS Code **Continue** snippet and guidance aligned with **`vscode-continue/`**, including hooks for RAG headers and indexer-related setup.
+- `/ui/indexer`: configure supervised indexer YAML (paths/roots), `GET/PUT /api/ui/indexer/config`, append roots (including desktop folder picker where supported).
+- `/ui/continue` (or embedded Continue flow): **copy-ready** VS Code **Continue** snippet and guidance aligned with `vscode-continue/`, including hooks for RAG headers and indexer-related setup.
 - **Logs** view: improved tracking and presentation (subsystem filters, correlation with v0.2.1 fields).
-- Prior **Stats** metrics view consolidated into the logs/observability experience as shipped in this release (use **`/ui/metrics`** where still exposed for raw metrics JSON).
+- Prior **Stats** metrics view consolidated into the logs/observability experience as shipped in this release (use `/ui/metrics` where still exposed for raw metrics JSON).
 
 **Desktop**
 
-- Native **window icon** support on Windows (and stubs on other OSes); embedded assets under **`assets/`**.
+- Native **window icon** support on Windows (and stubs on other OSes); embedded assets under `assets/`.
 
 **Indexer runtime**
 
-- Additional structured events (**`internal/indexer/ops_events.go`**), skip reasons, supervised config wiring, and related tests — see git history for **`Version 0.2.2`** if you need file-level detail.
+- Additional structured events (`internal/indexer/ops_events.go`), skip reasons, supervised config wiring, and related tests — see git history for `Version 0.2.2` if you need file-level detail.
 
 ---
 
@@ -105,9 +126,9 @@ This document is the **operator-oriented summary** of what shipped in the **0.2*
 
 | Release | Quick check |
 |---------|-------------|
-| **0.2.0** | `rag.enabled: true`, **`GET /health`** shows Qdrant when configured; **`POST /v1/ingest`** and **`GET /v1/indexer/config`** succeed with a valid token; virtual-model chat includes retrieved context when collections exist. |
-| **0.2.1** | Logs show **`request_id`** and **`conversation_id`**; `/ui/logs` view modes persist; optional **`conversation_merge`** behaves per config when metrics DB is enabled. |
-| **0.2.2** | With **`indexer.supervised.enabled`**, **`claudia-index`** appears in supervisor logs and **`/ui/logs`** (source **indexer**); **`/ui/indexer`** and Continue snippet pages load after login. |
+| **0.2.0** | `rag.enabled: true`, `GET /health` shows Qdrant when configured; `POST /v1/ingest` and `GET /v1/indexer/config` succeed with a valid token; virtual-model chat includes retrieved context when collections exist. |
+| **0.2.1** | Logs show `request_id` and `conversation_id`; `/ui/logs` view modes persist; optional `conversation_merge` behaves per config when metrics DB is enabled. |
+| **0.2.2** | With `indexer.supervised.enabled`, `claudia-index` appears in supervisor logs and `/ui/logs` (source **indexer**); `/ui/indexer` and Continue snippet pages load after login. |
 
 ---
 

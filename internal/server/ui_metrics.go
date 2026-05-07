@@ -37,7 +37,7 @@ func (a *adminUI) handleMetricsGET(w http.ResponseWriter, r *http.Request) {
 		"now_utc":                now.Format(time.RFC3339),
 		"current_minute_utc":     minute,
 		"current_day_utc":        day,
-		"buckets_note":           "Minute and day buckets are UTC calendar boundaries (see docs/version-v0.1.1.md §3.6.4).",
+		"buckets_note":           "Minute and day buckets are UTC calendar boundaries (see docs/plans/version-v0.1.1.md §3.6.4).",
 		"estimator_note":         "est_tokens uses tiktoken cl100k_base on the proxied JSON body (same family as outgoingTokens logs).",
 	}
 	if res != nil {

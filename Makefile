@@ -1,4 +1,4 @@
-# Claudia Gateway — see docs/makefile-plan.md and README.md
+# Claudia Gateway — see docs/plans/makefile-plan.md and README.md
 #
 # clean:      removes ./claudia[.exe], claudia-desktop[.exe], dist/ only.
 # clean-all:  also removes bin/, packaging/qdrant-bundles/, packages/, node_modules/, .deps/, run/, logs/ (requires CONFIRM=1; runs clean first).
@@ -65,7 +65,7 @@ endif
 help:
 	@$(GITBASH) scripts/print-make-help.sh
 
-# --- Full stack onboarding (see docs/makefile-plan.md) ---
+# --- Full stack onboarding (see docs/plans/makefile-plan.md) ---
 up: configure install build desktop-run
 
 configure:
@@ -144,7 +144,7 @@ build:
 claudia-build:
 	go build -o claudia ./cmd/claudia
 
-# v0.2 workspace file indexer (see docs/indexer.plan.md). Builds claudia-index[.exe] in repo root.
+# v0.2 workspace file indexer (see docs/plans/indexer.plan.md). Builds claudia-index[.exe] in repo root.
 indexer-build:
 ifeq ($(OS),Windows_NT)
 	go build -o claudia-index.exe ./cmd/claudia-index

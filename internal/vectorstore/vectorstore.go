@@ -29,7 +29,7 @@ type Point struct {
 	Payload Payload
 }
 
-// Payload is the minimum set of fields stored per point (see version-v0.2.md
+// Payload is the minimum set of fields stored per point (see docs/plans/version-v0.2.md
 // "Qdrant payload (minimum)"). Extra fields may be added by callers but the
 // gateway only filters/reads on these names.
 type Payload struct {
@@ -88,7 +88,7 @@ type Store interface {
 
 // CollectionName derives a deterministic collection name from coords.
 //
-// Rules (per docs/version-v0.2.md): lowercase, slug-safe, hyphen-separated
+// Rules (per docs/plans/version-v0.2.md): lowercase, slug-safe, hyphen-separated
 // triple, with a deterministic short hash suffix to disambiguate inputs that
 // would otherwise collide after sanitization. Empty FlavorID is allowed.
 func CollectionName(c Coords) string {

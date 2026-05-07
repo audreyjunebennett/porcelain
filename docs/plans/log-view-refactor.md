@@ -1,4 +1,30 @@
-# Log View Refactor Plan (Claudia Gateway `/ui/logs`)
+# Plan: Log View Refactor (Claudia Gateway `/ui/logs`)
+
+| Field | Value |
+|-------|-------|
+| **Doc kind** | `refactor-plan` |
+| **Owners / areas** | Gateway embed UI, operator logs |
+| **Status** | `shipped` |
+| **Targets** | `/ui/logs` extraction and testability phases 0-7 |
+| **Last updated** | See git history |
+| **Supersedes / superseded by** | Followed by [`logs-ui-maintainability.plan.md`](logs-ui-maintainability.plan.md) |
+
+## At a glance
+
+Untangle the operator log page so future changes are safe. Split CSS, HTML, and JS into focused files, separate "what the metrics mean" from "how the page draws them," and ship the work in small, reviewable steps so nothing breaks along the way.
+
+| Phase | Outcome | Status |
+|-------|---------|--------|
+| [Phase 0 — Safety net & invariants](#phase-0--safety-net--invariants-no-refactor-yet) | Tests and a manual checklist before any code moves | `done` |
+| [Phase 1 — Extract CSS](#phase-1--extract-css-from-html) | `logs.css` served as its own asset | `done` |
+| [Phase 2 — Extract JS](#phase-2--extract-js-from-html) | `logs.js` served as its own asset | `done` |
+| [Phase 3 — Reusable components & models](#phase-3--create-reusable-ui-components--models-no-behavior-changes) | Pure components and JSDoc models, with tests | `done` |
+| [Phase 4 — Modularize `logs.js`](#phase-4--modularize-logsjs-into-focused-modules) | Util / parse / filter / transport / render modules | `done` |
+| [Phase 5 — Derivation vs rendering](#phase-5--separate-metrics-derivation-from-rendering-enables-correctness-work) | Pure `derive/*` view models with tests | `done` |
+| [Phase 6 — Metrics correctness pass](#phase-6--metrics-correctness-pass-scoped-fixes-with-tests) | Conversation, BiFrost, indexer, Qdrant, and gateway cards verified | `done` |
+| [Phase 7 — Cleanup & polish](#phase-7--cleanup--polish) | `StatusLine` component, dead code removed, escaping tightened | `done` |
+
+---
 
 **Scope**: `internal/server/embedui/logs.html` (currently monolithic: CSS + HTML + JS + metrics derivation + rendering + transport)
 
@@ -184,18 +210,18 @@ All components should be **pure** (no network, no timers, no storage, no DOM rea
 - a **DOM node** (better safety/maintainability; can be introduced later)
 
 ### “Foundational”
-- **`escapeHtml(text)`**: single source of truth for escaping.
-- **`Badge(model)`**: small label with consistent variant → class mapping.
-- **`MetricPillsRow(models[])`**: render pill strip consistently.
+- `escapeHtml(text)`: single source of truth for escaping.
+- `Badge(model)`: small label with consistent variant → class mapping.
+- `MetricPillsRow(models[])`: render pill strip consistently.
 
 ### “Layout”
-- **`Card(cardModel, bodyHtml)`**: the `<details class="sum-card">` pattern.
-- **`TimelineBar(segments)`**: consistent segment coloring rules across cards.
-- **`KeyValueGrid(extras[])`**: replacement for the “Details” inner grid/table.
+- `Card(cardModel, bodyHtml)`: the `<details class="sum-card">` pattern.
+- `TimelineBar(segments)`: consistent segment coloring rules across cards.
+- `KeyValueGrid(extras[])`: replacement for the “Details” inner grid/table.
 
 ### “Metrics”
-- **`MetricsTable(tableModel)`**: shared renderer for rollup tables + recent event tables.
-- **`StatusLine(model)`**: page-level status (`Live (SSE)`, `SSE reconnecting…`, etc.)
+- `MetricsTable(tableModel)`: shared renderer for rollup tables + recent event tables.
+- `StatusLine(model)`: page-level status (`Live (SSE)`, `SSE reconnecting…`, etc.)
 
 ---
 
