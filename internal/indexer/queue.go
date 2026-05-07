@@ -191,6 +191,44 @@ func (q *Queue) LenByTier() (bulk, write, interactive int) {
 	return len(q.tier1), len(q.tier2), len(q.tier3)
 }
 
+// HasPendingKey reports whether key is pending in any tier (mostly for ingest dedup keys).
+func (q *Queue) HasPendingKey(key string) bool {
+	if key == "" {
+		return false
+	}
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	_, ok := q.pending[key]
+	return ok
+}
+
+// TallyScopeQueues counts queued WorkIngest jobs and FanoutList candidate rows by ScopeKey(project, flavor).
+func (q *Queue) TallyScopeQueues(resolved Resolved) (ingestByScope map[string]int64, fanoutRowsByScope map[string]int64) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	ingestByScope = map[string]int64{}
+	fanoutRowsByScope = map[string]int64{}
+	walk := func(items []WorkItem) {
+		for _, w := range items {
+			switch w.Kind {
+			case WorkIngest:
+				p, f := resolved.IngestHeaders(w.Job.Root, w.Job.RelPath)
+				sk := ScopeKey(p, f)
+				ingestByScope[sk]++
+			case WorkFanoutList:
+				for _, tc := range w.Candidates {
+					sk := ScopeKey(tc.Project, tc.Flavor)
+					fanoutRowsByScope[sk]++
+				}
+			}
+		}
+	}
+	walk(q.tier3)
+	walk(q.tier2)
+	walk(q.tier1)
+	return ingestByScope, fanoutRowsByScope
+}
+
 // Cap returns the configured capacity (0 means unbounded).
 func (q *Queue) Cap() int {
 	q.mu.Lock()

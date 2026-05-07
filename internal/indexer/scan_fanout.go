@@ -82,7 +82,9 @@ func (ix *Indexer) runScanJob(ctx context.Context, scanID string) error {
 		if ix.hooks.OnSkip != nil {
 			ix.hooks.OnSkip(rel, reason)
 		}
-		ix.log.Debug("skip", "root", root.ID, "rel", rel, "reason", reason)
+		args := []any{"rel", rel, "reason", reason}
+		args = append(args, ix.logScopeFieldsForRootRel(root, rel)...)
+		ix.log.Debug("skip", args...)
 	}
 
 	for _, r := range ix.cfg.Roots {
@@ -118,6 +120,12 @@ func (ix *Indexer) runScanJob(ctx context.Context, scanID string) error {
 		}
 	}
 
+	ix.replaceWorkspaceTotalsFromDiscovery(perScopeWalk)
+
+	// Round-robin interleave by (project_id, flavor_id) so bulk fan-out and
+	// ingest ordering mix workspaces instead of processing entire roots serially.
+	all = interleaveTaggedCandidatesByScope(all)
+
 	scopeSet := map[string]struct{}{}
 	for sk := range perScopeWalk {
 		scopeSet[sk] = struct{}{}
@@ -143,8 +151,10 @@ func (ix *Indexer) runScanJob(ctx context.Context, scanID string) error {
 		"candidates_total", len(all),
 	)
 
+	tid := ix.tenantIDForLogs()
 	for sk, d := range perScopeWalk {
 		proj, flav := splitScopeKey(sk)
+		ik := IndexerKey(tid, proj, flav)
 		var paths []string
 		for _, tc := range all {
 			if ScopeKey(tc.Project, tc.Flavor) != sk {
@@ -161,8 +171,11 @@ func (ix *Indexer) runScanJob(ctx context.Context, scanID string) error {
 		ix.log.Info("discovery summary (scope)",
 			"msg", "indexer.discovery.summary.scope",
 			"scan_id", scanID,
+			"tenant_id", tid,
+			"project_id", proj,
 			"ingest_project", proj,
 			"flavor_id", flav,
+			"indexer_target_key", ik,
 			"candidates_discovered", d.Candidates,
 			"skipped_ignored", d.SkippedIgnoredByRules(),
 			"skipped_binary", d.SkippedBinary,
@@ -220,6 +233,45 @@ func (ix *Indexer) scopeKeyFor(root Root, rel string) string {
 	return ScopeKey(p, f)
 }
 
+// interleaveTaggedCandidatesByScope reorders candidates in round-robin order
+// across ScopeKey(project, flavor). Within each scope, walk order is preserved.
+// Scope keys are visited in sorted order each round so behavior is deterministic.
+func interleaveTaggedCandidatesByScope(cands []TaggedCandidate) []TaggedCandidate {
+	if len(cands) <= 1 {
+		return cands
+	}
+	buckets := make(map[string][]TaggedCandidate)
+	for _, tc := range cands {
+		sk := ScopeKey(tc.Project, tc.Flavor)
+		buckets[sk] = append(buckets[sk], tc)
+	}
+	if len(buckets) <= 1 {
+		return cands
+	}
+	keys := make([]string, 0, len(buckets))
+	for k := range buckets {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	out := make([]TaggedCandidate, 0, len(cands))
+	for {
+		var took int
+		for _, k := range keys {
+			q := buckets[k]
+			if len(q) == 0 {
+				continue
+			}
+			out = append(out, q[0])
+			buckets[k] = q[1:]
+			took++
+		}
+		if took == 0 {
+			break
+		}
+	}
+	return out
+}
+
 // enqueueFanoutWork shards candidates into one or more FanoutListJob entries.
 func (ix *Indexer) enqueueFanoutWork(cands []TaggedCandidate, meta FanoutMeta) bool {
 	if len(cands) == 0 {
@@ -240,10 +292,12 @@ func (ix *Indexer) enqueueFanoutWork(cands []TaggedCandidate, meta FanoutMeta) b
 			Meta:       meta,
 		}
 		if !ix.queue.Enqueue(w) {
-			ix.log.Error("failed to enqueue fan-out list job",
+			args := []any{
 				"msg", "indexer.fanout.enqueue_failed",
 				"candidates", len(slice),
-			)
+			}
+			args = append(args, ix.logScopeFieldsForTaggedSlice(slice)...)
+			ix.log.Error("failed to enqueue fan-out list job", args...)
 			return false
 		}
 	}
@@ -301,9 +355,11 @@ func (ix *Indexer) splitFanoutRemainder(remaining []TaggedCandidate, meta Fanout
 	if ix.queue.Enqueue(w) {
 		return nil
 	}
-	ix.log.Warn("queue full while retaining fan-out remainder; paths may be dropped until rescan",
+	args := []any{
 		"msg", "indexer.fanout.remainder_blocked",
 		"remainder_size", len(remaining),
-	)
+	}
+	args = append(args, ix.logScopeFieldsForTaggedSlice(remaining)...)
+	ix.log.Warn("queue full while retaining fan-out remainder; paths may be dropped until rescan", args...)
 	return nil
 }

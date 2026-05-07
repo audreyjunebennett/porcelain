@@ -1,6 +1,6 @@
 # Claudia Gateway — Version 0.3 plan
 
-This document is the **working plan for v0.3**. It pulls forward the **peer-to-peer backend** scope from the master product plan ([`claudia-gateway.plan.md`](claudia-gateway.plan.md)) and adds **first-run / second-run onboarding** for the desktop application so new operators can configure and validate the gateway without hunting through docs.
+This document is the **working plan for v0.3**. It pulls forward the **peer-to-peer backend** scope from the master product plan ([`claudia-gateway.plan.md`](claudia-gateway.plan.md)) and adds **first-run / second-run onboarding** for the desktop application so new operators can configure and validate the gateway without hunting through docs. **v0.3** also targets the **project rename from Claudia to Porcelain** (see §6).
 
 **Relationship to other docs**
 
@@ -171,5 +171,30 @@ From the master **Release roadmap** table:
 - [ ] Peer LiteLLM + virtual keys + docs (#24–27, #30, #9, #46) meet §1 checklist.
 - [ ] First-run token UX + optional `CLAUDIA_GATEWAY_TOKEN` dotenv upsert (§2).
 - [ ] Second-run wizard steps 1–7 (§3) with skip/finish navigation and shared router regeneration behavior.
+- [ ] **Porcelain rename** per §6 (branding + technical migration rules + docs/indexer parity).
 
 When this plan is implemented, update [`claudia-gateway.plan.md`](claudia-gateway.plan.md) **Release roadmap** row for v0.3 if the shipped scope differs (e.g. split peer backends vs onboarding into separate releases).
+
+---
+
+## 6. Project rename (Claudia → Porcelain)
+
+**Goal:** Ship **Porcelain** as the public product and repo identity, replacing **Claudia** in user-visible surfaces and in normative naming for new integrations, while minimizing breakage for existing operators.
+
+### 6.1 Scope (typical buckets)
+
+- **Operator-facing branding** — Application title, about screens, onboarding copy, and primary docs that refer to “Claudia” / “Claudia Gateway” should consistently use **Porcelain** (and agreed secondary wording, e.g. “Porcelain Gateway” vs a single-word product name—pick one spelling for UI and headings).
+- **Technical identifiers** — Align on renames where they affect interoperability: **`make` targets**, install paths, container image names, default Compose service labels in published samples, CLI flags/help text, and **environment-variable** prefixes (e.g. migrate `CLAUDIA_*` → `PORCELAIN_*` or keep documented aliases for one release per decision in implementation).
+- **HTTP / API ergonomics** — Custom headers (`X-Claudia-*` and similar), log fields, and token claims that encode the old name should get **Porcelain-prefixed** names with a **backward-compatible acceptance** period where clients (indexer, IDE plugins) might still send the old headers (**dual read**, single canonical write)—exact matrix belongs in implementation and indexer docs.
+- **Repository and module naming** — If the GitHub org/repo or Go module path changes, treat it as part of this milestone (or explicitly defer with a checklist note); importer URLs and docs must track the canonical location.
+
+### 6.2 Deliverables checklist
+
+- [ ] Written **rename decision**: canonical product string, migration rules for env vars and headers, and whether old names remain accepted (and until when).
+- [ ] UI, installer, and packaged artifacts use **Porcelain** branding throughout.
+- [ ] Documentation set (starting with docs linked from onboarding and [`claudia-gateway.plan.md`](claudia-gateway.plan.md)) updated so new operators never need to hear “Claudia” unless reading historical release notes.
+- [ ] Companion components (**indexer**, desktop app, Compose samples) updated in lockstep for any renamed env vars or headers called out above.
+
+### 6.3 Completion criteria linkage
+
+Treat §6 as satisfied when renaming is **consistent for v0.3 ship**—no dangling primary surfaces still saying “Claudia,” and no silent breaks for documented upgrade paths without a migration note.

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/gen2brain/dlgs"
+	"github.com/lynn/claudia-gateway/internal/platform"
 	webview "github.com/webview/webview_go"
 )
 
@@ -38,6 +39,17 @@ func runDesktopWebview(want bool, panelURL string, stopRoot context.CancelFunc, 
 		return path, nil
 	}); err != nil {
 		fmt.Fprintf(os.Stderr, "claudia desktop: claudiaPickFolder bind: %v\n", err)
+	}
+
+	if err := w.Bind("claudiaOpenExternalURL", func(raw string) (string, error) {
+		return "", platform.OpenURLInBrowser(raw)
+	}); err != nil {
+		fmt.Fprintf(os.Stderr, "claudia desktop: claudiaOpenExternalURL bind: %v\n", err)
+	}
+	if err := w.Bind("claudiaRevealProjectPath", func(rel string) (string, error) {
+		return "", platform.RevealProjectPath(rel)
+	}); err != nil {
+		fmt.Fprintf(os.Stderr, "claudia desktop: claudiaRevealProjectPath bind: %v\n", err)
 	}
 
 	w.SetTitle("Claudia")

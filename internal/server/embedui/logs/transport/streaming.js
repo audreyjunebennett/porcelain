@@ -1,5 +1,6 @@
 /**
- * Transport + cache: initial load, SSE streaming, poll fallback, backfill older entries.
+ * Transport + cache: initial HTTP tail load, SSE live stream, backfill older entries via fetch.
+ * Periodic polling is disabled — live updates come from EventSource only.
  *
  * Exports:
  * - ClaudiaLogs.Transport.init(ctx)
@@ -116,7 +117,7 @@ function fetchOlderLogs(ctx) {
       syncPollMeta(ctx, data);
       prependHistoricalEntries(ctx, data.lines || []);
       ctx.olderFetchBusyRef.value = false;
-      statusSet(ctx, prevStatus.indexOf("Live") >= 0 ? prevStatus : "Live (SSE)");
+      statusSet(ctx, prevStatus);
     })
     .catch(function () {
       ctx.olderFetchBusyRef.value = false;
@@ -226,47 +227,12 @@ function applyPollPayloadBatched(ctx, data, opts, startIdx, doneFn) {
 }
 
 function pollOnce(ctx) {
-  // Always poll in small batches to keep the UI responsive even if we fell behind.
-  fetch("/api/ui/logs?since=" + ctx.maxSeqRef.value + "&limit=220", { credentials: "same-origin" })
-    .then(function (r) {
-      if (!r.ok) throw new Error("HTTP " + r.status);
-      return r.json();
-    })
-    .then(function (data) {
-      syncPollMeta(ctx, data);
-      var lines = data.lines || [];
-      applyPollPayloadBatched(ctx, data, {}, 0, function () {
-        // Self-heal: if we're in poll fallback and the UI is still empty, prime once from the tail.
-        if ((!ctx.entryCache || ctx.entryCache.length === 0) && lines.length === 0 && !ctx._tailPrimed) {
-          ctx._tailPrimed = true;
-          fetch("/api/ui/logs?since=0&limit=" + ctx.INITIAL_TAIL_LIMIT, { credentials: "same-origin" })
-            .then(function (r2) {
-              if (!r2.ok) throw new Error("HTTP " + r2.status);
-              return r2.json();
-            })
-            .then(function (data2) {
-              applyPollPayloadBatched(ctx, data2, { rawPrimeScroll: true }, 0, function () {
-                ctx.fetchTokenLabels();
-              });
-            })
-            .catch(function () {});
-        }
-        statusSet(ctx, "Live (poll)", "");
-      });
-    })
-    .catch(function () {
-      statusSet(ctx, "Log API error — check session", "err");
-    });
+  /** Not used when polling is disabled (SSE-only live updates). */
 }
 
+/** Polling disabled intentionally — do not start interval or close the EventSource. */
 function startPolling(ctx) {
-  if (ctx.pollTimerRef.value) return;
-  if (ctx.esRef.value) {
-    try { ctx.esRef.value.close(); } catch (x) {}
-    ctx.esRef.value = null;
-  }
-  pollOnce(ctx);
-  ctx.pollTimerRef.value = setInterval(function () { pollOnce(ctx); }, 1500);
+  stopPolling(ctx);
 }
 
 function stopPolling(ctx) {
@@ -289,24 +255,37 @@ function startEventSource(ctx) {
 
   var sseFailed = window.setTimeout(function () {
     if (es && es.readyState === EventSource.OPEN) return;
-    startPolling(ctx);
+    try {
+      es.close();
+    } catch (x0) {}
+    if (ctx.esRef.value === es) ctx.esRef.value = null;
+    statusSet(ctx, "", "");
+    window.setTimeout(function () {
+      startEventSource(ctx);
+    }, 1500);
   }, 12000);
 
   es.onopen = function () {
     window.clearTimeout(sseFailed);
     stopPolling(ctx);
-    statusSet(ctx, "Live (SSE)", "");
+    statusSet(ctx, "", "");
   };
   es.onerror = function () {
     window.clearTimeout(sseFailed);
-    if (es && es.readyState === EventSource.CLOSED) {
-      startPolling(ctx);
-    } else {
-      statusSet(ctx, "SSE reconnecting…", "err");
+    if (ctx.esRef.value !== es) return;
+    if (es.readyState === EventSource.CLOSED) {
+      try {
+        es.close();
+      } catch (x1) {}
+      ctx.esRef.value = null;
+      statusSet(ctx, "", "");
       window.setTimeout(function () {
-        if (es && es.readyState !== EventSource.OPEN) startPolling(ctx);
-      }, 2000);
+        startEventSource(ctx);
+      }, 1500);
+      return;
     }
+    /** CONNECTING: browser reconnects automatically; keep status line clear of transport labels. */
+    statusSet(ctx, "", "");
   };
   es.onmessage = function (ev) {
     try {
@@ -367,11 +346,8 @@ function startStreaming(ctx) {
         statusSet(ctx, "Unauthorized — sign in from the shell", "err");
         return;
       }
-      // If the initial tail load flakes, fall back to polling (small batches) and
-      // retry the tail load; this keeps startup fast and consistent without blocking.
       ctx.setStarted(false);
       statusSet(ctx, "Log load failed — retrying…", "err");
-      startPolling(ctx);
       window.setTimeout(function () { startStreaming(ctx); }, 1500);
     });
 }
@@ -383,19 +359,16 @@ function init(ctx) {
     fetchOlderLogs(ctx);
   }, { passive: true });
 
-  /** Summarized mode scroll lives on #panel-summarized (body overflow hidden); load older chunks when user reaches top. */
-  var summarizedPanel = document.getElementById("panel-summarized");
-  if (summarizedPanel) {
-    summarizedPanel.addEventListener(
-      "scroll",
-      function () {
-        if (ctx.getViewMode() !== "summarized") return;
-        if (summarizedPanel.scrollTop > 260) return;
-        fetchOlderLogs(ctx);
-      },
-      { passive: true }
-    );
-  }
+  /** Summarized mode now uses the main page scrollbar; load older chunks when user reaches the top. */
+  window.addEventListener(
+    "scroll",
+    function () {
+      if (ctx.getViewMode() !== "summarized") return;
+      if (window.scrollY > 260) return;
+      fetchOlderLogs(ctx);
+    },
+    { passive: true }
+  );
 
   var rawTaAttach = document.getElementById("raw-logs-textarea");
   if (rawTaAttach) rawTaAttach.addEventListener("scroll", function (ev) {

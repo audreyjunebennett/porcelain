@@ -1,9 +1,11 @@
 package server
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -363,6 +365,7 @@ func TestLogsDerive_indexerPresent_histogramBucket(t *testing.T) {
 		{"indexer.run.start", "lifecycle"},
 		{"gateway.indexer.config", "config"},
 		{"indexer.retry.scheduled", "recovery"},
+		{"indexer.scope.status", "statestats"},
 		{"telemetry.other", "other"},
 	}
 	for _, tc := range tests {
@@ -411,8 +414,71 @@ func TestLogsDerive_indexerPresent_proseStateAndStats(t *testing.T) {
 		t.Fatal(err)
 	}
 	g := pg.String()
-	if !strings.Contains(g, "120") || !strings.Contains(g, "Qdrant") {
+	if !strings.Contains(g, "120") || !strings.Contains(g, "Indexed vectors") {
 		t.Fatalf("stats prose: %q", g)
+	}
+	scopeFlat := map[string]any{
+		"service": "indexer", "msg": "indexer.scope.status",
+		"workspace_files_total": 12, "queue_ingest_pending": 3, "queue_fanout_files_pending": 4,
+	}
+	ps2, err := proseFn(goja.Undefined(), vm.ToValue(scopeFlat))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ps2Str := ps2.String()
+	if !strings.Contains(ps2Str, "12") || !strings.Contains(ps2Str, "files in workspace") ||
+		!strings.Contains(ps2Str, "waiting to embed") || !strings.Contains(ps2Str, "discovery queue") {
+		t.Fatalf("scope status prose: %q", ps2Str)
+	}
+	failFlat := map[string]any{
+		"service": "indexer", "msg": "indexer.job.failed", "rel": "spotify/track.json",
+		"err": `/v1/ingest/session/df9a33cd774ef920acdb8c9562b01394/complete: status 404: {"error":{"message":"unknown or expired session"}}`,
+	}
+	pf, err := proseFn(goja.Undefined(), vm.ToValue(failFlat))
+	if err != nil {
+		t.Fatal(err)
+	}
+	fs := pf.String()
+	if strings.Contains(fs, "/v1/ingest/session") {
+		t.Fatalf("ingest failure prose should not repeat raw HTTP path: %q", fs)
+	}
+	if !strings.Contains(fs, "chunked upload session missing") {
+		t.Fatalf("ingest failure prose: %q", fs)
+	}
+}
+
+func TestLogsDerive_collectIndexerRunMeta_scopeStatus(t *testing.T) {
+	vm := goja.New()
+	evalJS(t, vm, logsUIPath(t, "testing", "loader.js"))
+	evalJS(t, vm, logsUIPath(t, "derive", "indexerPresent.js"))
+	evalJS(t, vm, logsUIPath(t, "derive", "indexerMetrics.js"))
+
+	rs := `[{"root_id":"r1","path":"/a","ingest_project":"p1","flavor_id":"","indexer_target_key":"ik_one"}]`
+	script := fmt.Sprintf(`
+		var evs = [
+			{ parsed: { rawFlat: {
+				service: "indexer", index_run_id: "runZ", msg: "indexer.run.start",
+				root_ids: "r1", watch_root_paths: ["/a"], root_scopes: %s
+			}}},
+			{ parsed: { rawFlat: {
+				service: "indexer", index_run_id: "runZ", msg: "indexer.scope.status",
+				indexer_target_key: "ik_one", workspace_files_total: 7,
+				queue_ingest_pending: 2, queue_fanout_files_pending: 3, pending_bulk_tier1: 1
+			}}}
+		];
+		function getFlat(p) { return (p && p.rawFlat) || {}; }
+		ClaudiaLogs.Derive.collectIndexerRunMeta("ik_one", evs, { getFlat: getFlat });
+	`, strconv.Quote(rs))
+	v, err := vm.RunString(script)
+	if err != nil {
+		t.Fatal(err)
+	}
+	o := v.ToObject(vm)
+	if n := o.Get("scopeWorkspaceTotal"); n == nil || n.Export() != int64(7) {
+		t.Fatalf("scopeWorkspaceTotal=%v", n)
+	}
+	if n := o.Get("scopeQueueIngestPending"); n == nil || n.Export() != int64(2) {
+		t.Fatalf("scopeQueueIngestPending=%v", n)
 	}
 }
 
@@ -424,6 +490,13 @@ func TestLogsDerive_indexerPresent_groupKey(t *testing.T) {
 	gfn, ok := goja.AssertFunction(derive.Get("indexerGroupKeyFromFlat"))
 	if !ok {
 		t.Fatal("missing indexerGroupKeyFromFlat")
+	}
+	vTgt, err := gfn(goja.Undefined(), vm.ToValue(map[string]any{"indexer_target_key": "ik_tgt", "indexer_key": "ik_abc", "index_run_id": "run-99"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if vTgt.String() != "ik_tgt" {
+		t.Fatalf("indexer_target_key priority got %q", vTgt.String())
 	}
 	v, err := gfn(goja.Undefined(), vm.ToValue(map[string]any{"indexer_key": "ik_abc", "index_run_id": "run-99"}))
 	if err != nil {

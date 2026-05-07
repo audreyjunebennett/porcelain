@@ -24,6 +24,15 @@ const MaxIndexerLinesPerSource = DefaultMaxLines / 4
 
 const sourceIndexer = "indexer"
 
+// mirrorTimeLayout is RFC3339-like UTC with a fixed six-digit fractional second so
+// mirrored disk lines (claudia-desktop.log) stay column-aligned; sub-microsecond
+// precision is truncated toward zero.
+const mirrorTimeLayout = "2006-01-02T15:04:05.000000Z07:00"
+
+func formatMirrorTimestamp(ts time.Time) string {
+	return ts.UTC().Truncate(time.Microsecond).Format(mirrorTimeLayout)
+}
+
 // Entry is one logical log line with a stable sequence number for polling.
 type Entry struct {
 	Seq    uint64    `json:"seq"`
@@ -113,7 +122,7 @@ func (s *Store) writeMirror(source, text string, ts time.Time) {
 	}
 	t := strings.ReplaceAll(text, "\t", " ")
 	t = strings.ReplaceAll(t, "\n", "\\n")
-	_, _ = fmt.Fprintf(w, "%s\t%s\t%s\n", ts.Format(time.RFC3339Nano), source, t)
+	_, _ = fmt.Fprintf(w, "%s\t%s\t%s\n", formatMirrorTimestamp(ts), source, t)
 }
 
 func (s *Store) broadcast(ent Entry) {

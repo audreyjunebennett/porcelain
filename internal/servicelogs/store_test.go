@@ -9,6 +9,22 @@ import (
 	"time"
 )
 
+func TestFormatMirrorTimestamp_fixedWidthMicroseconds(t *testing.T) {
+	ts := time.Date(2026, 5, 6, 17, 4, 43, 592559623, time.UTC) // would vary with RFC3339Nano
+	got := formatMirrorTimestamp(ts)
+	want := "2026-05-06T17:04:43.592559Z"
+	if got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+	if len(got) != len(want) {
+		t.Fatalf("length %d", len(got))
+	}
+	zero := formatMirrorTimestamp(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	if zero != "2026-01-01T00:00:00.000000Z" {
+		t.Fatalf("zero frac: %q", zero)
+	}
+}
+
 func TestSetMirror_writesTabSeparatedLines(t *testing.T) {
 	var b strings.Builder
 	s := New(10)

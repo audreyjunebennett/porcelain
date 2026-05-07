@@ -8,76 +8,13 @@
 </head>
 <body>
   <div id="status" class="status-line" aria-live="polite"></div>
-  <div id="panel-classic">
-  <div class="table-wrap">
-    <table id="log-table">
-      <colgroup>
-        <col class="outer-col-app" />
-        <col class="outer-col-dt" />
-        <col class="outer-col-dt-local" />
-        <col class="outer-col-lvl" />
-        <col class="outer-col-details" />
-      </colgroup>
-      <thead>
-        <tr>
-          <th scope="col">Application</th>
-          <th scope="col">UTC</th>
-          <th scope="col">Local</th>
-          <th scope="col">Level</th>
-          <th scope="col">Details</th>
-        </tr>
-      </thead>
-      <tbody id="log-body"></tbody>
-    </table>
-  </div>
-  </div>
-  <div id="panel-summarized" hidden></div>
-  <div id="panel-raw-logs" hidden>
-    <textarea id="raw-logs-textarea" readonly spellcheck="false" aria-label="Raw log lines"></textarea>
-  </div>
-  <div id="filters-bar" hidden>
-    <span class="filters-heading">Filters</span>
-    <div id="filters">
-      <label>Application
-        <select id="flt-app" title="Filter by process / writer name">
-          <option value="">All</option>
-        </select>
-      </label>
-      <label>Level
-        <select id="flt-level" title="Filter by log level when present">
-          <option value="">All</option>
-          <option value="(none)">(no level)</option>
-          <option value="DEBUG">DEBUG</option>
-          <option value="INFO">INFO</option>
-          <option value="WARN">WARN</option>
-          <option value="ERROR">ERROR</option>
-        </select>
-      </label>
-    </div>
-  </div>
-  <div id="raw-bottom-toolbar">
-    <label>View
-      <select id="view-mode" title="Log presentation mode">
-        <option value="summarized">Summarized</option>
-        <option value="raw">StructuredLogs</option>
-        <option value="raw_logs">Raw Logs</option>
-      </select>
-    </label>
-    <div class="raw-logs-copy-wrap">
-      <button type="button" id="raw-logs-copy-btn" title="Copy filtered log text to the clipboard">
-        Copy to clipboard
-      </button>
-      <span id="raw-logs-copy-status" class="muted" aria-live="polite"></span>
-    </div>
-  </div>
+  <div id="panel-summarized"></div>
   <script src="/ui/assets/logs/testing/loader.js" defer></script>
   <script src="/ui/assets/logs/util/escape.js" defer></script>
   <script src="/ui/assets/logs/util/hash.js" defer></script>
   <script src="/ui/assets/logs/util/time.js" defer></script>
   <script src="/ui/assets/logs/parse/parseLogText.js" defer></script>
-  <script src="/ui/assets/logs/filters/filters.js" defer></script>
   <script src="/ui/assets/logs/transport/streaming.js" defer></script>
-  <script src="/ui/assets/logs/render/rawTextarea.js" defer></script>
   <script src="/ui/assets/logs/derive/conversationMetrics.js" defer></script>
   <script src="/ui/assets/logs/derive/bifrostMetrics.js" defer></script>
   <script src="/ui/assets/logs/derive/qdrantRagMetrics.js" defer></script>

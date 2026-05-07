@@ -53,6 +53,20 @@ request_timeout_ms: 60000
 # Omit from YAML for ~2 minutes; set negative (e.g. -1) to disable periodic polls.
 # storage_stats_poll_ms: 120000
 
-# v0.4 — optional (defaults: sync state under .claudia/; whole-file limit from gateway only).
-# sync_state_path: ".claudia/indexer.sync-state.json"
-# max_whole_file_bytes: 2097152  # force chunked session when file is larger than this (must be < gateway max_ingest_bytes)
+# Per-scope live status for /ui/logs summarized cards (indexer.scope.status / active_file).
+# Omit for ~45s; set negative on scope_status_poll_ms to disable periodic scope status lines.
+# scope_status_poll_ms: 45000
+# scope_active_file_log_min_interval_ms: 2000
+
+# v0.4 — optional (defaults: with --config, sync state next to that YAML e.g. data/gateway/indexer.sync-state.json;
+# without --config, .claudia/indexer.sync-state.json under cwd; whole-file limit from gateway only).
+# sync_state_path: "data/gateway/indexer.sync-state.json"
+# Max body size for single POST /v1/ingest. Files larger than this use the chunked
+# ingest session API (when the gateway advertises it). Set below gateway max_ingest_bytes.
+max_whole_file_bytes: 512000  # 500 KiB
+
+# stderr minimum slog level for claudia-index (debug | info | warn | error). CLI --log-level overrides.
+# log_level: info
+
+# Per-file skip/upload verbosity: info | debug | off. Legacy verbose_job_logs (bool) maps when job_skip_log is unset.
+# job_skip_log: info

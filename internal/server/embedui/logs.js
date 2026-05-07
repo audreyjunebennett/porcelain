@@ -40,8 +40,11 @@ globalThis.ClaudiaLogs.Main = function () {
   var metricsCache = null;
   var metricsPollTimer = null;
   var METRICS_POLL_MS = 12000;
+  /** Latest indexer partition map from the last summarized panel render (hydrate ↔ supervised YAML roots). */
+  var lastIndexerSummarizeByRun = null;
+  var lastIndexerSummarizePartitionRegistry = null;
   var started = false;
-  /** Dedup live + historical loads (seq may overlap SSE vs poll). */
+  /** Dedup live + historical loads (seq may overlap SSE vs initial tail fetch). */
   var seenSeq = {};
   /** Match server ring + UI budget; trim oldest when exceeded. */
   var CLIENT_CACHE_MAX = 5500;
@@ -56,58 +59,10 @@ globalThis.ClaudiaLogs.Main = function () {
   var sseFlushScheduled = false;
   var levelOptionSet = { "": true, "(none)": true, DEBUG: true, INFO: true, WARN: true, ERROR: true };
 
-  function normalizeViewMode(v) {
-    if (v === "summarized" || v === "raw" || v === "raw_logs") return v;
-    /* Legacy URL / localStorage */
-    if (v === "detailed") return "raw";
-    if (v === "summary" || v === "conversations" || v === "subsystems" || v === "indexer-runs") return "summarized";
-    return "summarized";
-  }
-
-  function loadViewMode() {
-    try {
-      var pv = params.get("view");
-      if (pv) return normalizeViewMode(pv);
-      var v = localStorage.getItem(VIEW_LS);
-      if (v) return normalizeViewMode(v);
-    } catch (x) {}
-    return "summarized";
-  }
-  function saveViewMode(v) {
-    try {
-      localStorage.setItem(VIEW_LS, v);
-    } catch (x) {}
-  }
-
-  var viewMode = loadViewMode();
-  if (params.get("view")) saveViewMode(viewMode);
-  var viewModeEl = document.getElementById("view-mode");
-  var filtersBar = document.getElementById("filters-bar");
-
-  function syncViewSelects() {
-    if (viewModeEl) viewModeEl.value = viewMode;
-  }
-
-  function commitViewMode(nextVal) {
-    viewMode = normalizeViewMode(nextVal != null && nextVal !== "" ? nextVal : "summarized");
-    saveViewMode(viewMode);
-    try {
-      params = new URLSearchParams(window.location.search);
-      params.set("view", viewMode);
-      window.history.replaceState({}, "", window.location.pathname + "?" + params.toString());
-    } catch (x) {}
-    syncViewSelects();
-    applyViewLayout();
-    rebuildAllRows();
-    scheduleFocusTargets();
-  }
-
-  syncViewSelects();
-  if (viewModeEl) {
-    viewModeEl.addEventListener("change", function () {
-      commitViewMode(viewModeEl.value);
-    });
-  }
+  // Summarized-only logs UI (structured/raw modes removed).
+  var viewMode = "summarized";
+  var viewModeEl = null;
+  var filtersBar = null;
   function inferShape(flat, source, rawText) {
     if (!flat) {
       if (source === "qdrant" || source === "bifrost" || source === "indexer") return "service." + source;
@@ -352,59 +307,18 @@ globalThis.ClaudiaLogs.Main = function () {
     }
   }
 
-  function applyFilters() {
-    if (globalThis.ClaudiaLogs && globalThis.ClaudiaLogs.Filters) {
-      return globalThis.ClaudiaLogs.Filters.apply(filtersCtx);
-    }
-  }
-
-  if (globalThis.ClaudiaLogs && globalThis.ClaudiaLogs.Filters) {
-    globalThis.ClaudiaLogs.Filters.init(filtersCtx);
-    globalThis.ClaudiaLogs.Filters.syncFromStorage(filtersCtx);
-  }
-
-  var rawLogsCopyBtn = document.getElementById("raw-logs-copy-btn");
-  if (rawLogsCopyBtn) {
-    rawLogsCopyBtn.addEventListener("click", function () {
-      copyRawLogsToClipboard();
-    });
-  }
+  function applyFilters() {}
 
   function applyViewLayout() {
-    var classic = document.getElementById("panel-classic");
     var psu = document.getElementById("panel-summarized");
-    var prl = document.getElementById("panel-raw-logs");
-    if (!classic || !psu) return;
+    if (!psu) return;
     try {
-      document.body.classList.toggle("logs-raw", viewMode === "raw");
-      document.body.classList.toggle("logs-summarized", viewMode === "summarized");
-      document.body.classList.toggle("logs-raw-logs", viewMode === "raw_logs");
+      document.body.classList.toggle("logs-summarized", true);
+      document.body.classList.toggle("logs-raw", false);
+      document.body.classList.toggle("logs-raw-logs", false);
     } catch (x) {}
-    if (viewMode === "summarized") {
-      classic.hidden = true;
-      psu.hidden = false;
-      if (prl) prl.hidden = true;
-      if (filtersBar) filtersBar.hidden = true;
-      refreshSummarizedPanel();
-    } else if (viewMode === "raw_logs") {
-      classic.hidden = true;
-      psu.hidden = true;
-      if (prl) prl.hidden = false;
-      if (filtersBar) filtersBar.hidden = false;
-      // When the user enters Raw Logs, default to following the tail once.
-      // After that, follow behavior is controlled by nearBottomTextarea().
-      if (!focusSeq && !focusConv) {
-        window.requestAnimationFrame(function () {
-          var ta = document.getElementById("raw-logs-textarea");
-          if (ta) ta.scrollTop = ta.scrollHeight;
-        });
-      }
-    } else {
-      classic.hidden = false;
-      psu.hidden = true;
-      if (prl) prl.hidden = true;
-      if (filtersBar) filtersBar.hidden = false;
-    }
+    viewMode = "summarized";
+    refreshSummarizedPanel();
     syncMetricsPolling();
   }
 
@@ -720,7 +634,7 @@ globalThis.ClaudiaLogs.Main = function () {
     window.setTimeout(function () {
       if (focusSeq) {
         var fs = String(focusSeq).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-        var tr = tbody.querySelector("tr[data-log-seq=\"" + fs + '"]');
+        var tr = tbody ? tbody.querySelector("tr[data-log-seq=\"" + fs + '"]') : null;
         if (tr) {
           tr.scrollIntoView({ block: "center", behavior: "smooth" });
           tr.style.outline = "2px solid #0b57d0";
@@ -736,6 +650,7 @@ globalThis.ClaudiaLogs.Main = function () {
   }
 
   function rebuildAllRows() {
+    if (!tbody || !fltApp || !fltLevel) return;
     var rawTa = null;
     var rawWasAtBottom = false;
     if (viewMode === "raw_logs") {
@@ -779,24 +694,128 @@ globalThis.ClaudiaLogs.Main = function () {
     var prevScrollH = psu.scrollHeight;
     var nearPanelBottom =
       psu.scrollHeight - psu.scrollTop - psu.clientHeight <= stickPx;
-    var openIds = [];
+
+    var openDetailIds = [];
     try {
-      var openEls = psu.querySelectorAll("details.sum-card[open]");
-      for (var oi = 0; oi < openEls.length; oi++) {
-        var oid = openEls[oi].id;
-        if (oid) openIds.push(oid);
+      var dOpen = psu.querySelectorAll("details[open][id]");
+      for (var di = 0; di < dOpen.length; di++) {
+        if (dOpen[di].id) openDetailIds.push(dOpen[di].id);
       }
     } catch (e) {}
+
+    var storyScroll = {};
+    try {
+      var sps = psu.querySelectorAll(".story-panel");
+      for (var sj = 0; sj < sps.length; sj++) {
+        var cStory = sps[sj].closest("details[id]");
+        if (cStory && cStory.id) storyScroll[cStory.id] = sps[sj].scrollTop;
+      }
+    } catch (e1) {}
+
+    var fullLogScroll = {};
+    try {
+      var fls = psu.querySelectorAll(".sum-full-log");
+      for (var fk = 0; fk < fls.length; fk++) {
+        if (fls[fk] && fls[fk].id) fullLogScroll[fls[fk].id] = fls[fk].scrollTop;
+      }
+    } catch (e2) {}
+
+    var gatewayMetricsTableScroll = [];
+    try {
+      var gwCap = document.getElementById("gw-usage-metrics");
+      if (gwCap) {
+        var wrapsC = gwCap.querySelectorAll(".sum-metrics-table-wrap");
+        for (var wc = 0; wc < wrapsC.length; wc++) {
+          gatewayMetricsTableScroll.push({ left: wrapsC[wc].scrollLeft, top: wrapsC[wc].scrollTop });
+        }
+      }
+    } catch (e3) {}
+
     psu.innerHTML = renderSummarizedUnified();
-    for (var ri = 0; ri < openIds.length; ri++) {
-      var d = document.getElementById(openIds[ri]);
+
+    hydrateIndexerServiceSummaryFromApi();
+
+    for (var ri = 0; ri < openDetailIds.length; ri++) {
+      var d = document.getElementById(openDetailIds[ri]);
       if (d && d.tagName === "DETAILS") d.open = true;
     }
-    if (nearPanelBottom) {
-      psu.scrollTop = psu.scrollHeight;
-    } else if (prevScrollH > 0) {
-      var dh = psu.scrollHeight - prevScrollH;
-      psu.scrollTop = Math.max(0, prevScrollTop + dh);
+
+    /** Best-effort outer scroll before paint: avoids scrollTop 0 flash while content height is still settling. */
+    function applySummarizedOuterScrollSync() {
+      if (nearPanelBottom) {
+        psu.scrollTop = psu.scrollHeight;
+      } else {
+        var maxS = Math.max(0, psu.scrollHeight - psu.clientHeight);
+        psu.scrollTop = Math.min(prevScrollTop, maxS);
+      }
+    }
+
+    function restoreSummarizedNestedScrolls() {
+      var gwR = document.getElementById("gw-usage-metrics");
+      if (gwR && gatewayMetricsTableScroll.length) {
+        var wrapsR = gwR.querySelectorAll(".sum-metrics-table-wrap");
+        for (var mi = 0; mi < wrapsR.length && mi < gatewayMetricsTableScroll.length; mi++) {
+          wrapsR[mi].scrollLeft = gatewayMetricsTableScroll[mi].left;
+          wrapsR[mi].scrollTop = gatewayMetricsTableScroll[mi].top;
+        }
+      }
+      for (var cid in storyScroll) {
+        var cx = document.getElementById(cid);
+        if (!cx) continue;
+        var sp = cx.querySelector(".story-panel");
+        if (sp) sp.scrollTop = storyScroll[cid];
+      }
+      for (var cid2 in fullLogScroll) {
+        var fl = document.getElementById(cid2);
+        if (!fl) continue;
+        fl.scrollTop = fullLogScroll[cid2];
+      }
+    }
+
+    applySummarizedOuterScrollSync();
+    restoreSummarizedNestedScrolls();
+
+    function finalizeSummarizedScrollAfterLayout() {
+      restoreSummarizedNestedScrolls();
+      if (nearPanelBottom) {
+        psu.scrollTop = psu.scrollHeight;
+      } else if (prevScrollH > 0) {
+        var dh = psu.scrollHeight - prevScrollH;
+        psu.scrollTop = Math.max(0, prevScrollTop + dh);
+      }
+    }
+    window.requestAnimationFrame(finalizeSummarizedScrollAfterLayout);
+  }
+
+  /** Replace only the gateway metrics card so periodic /api/ui/metrics polls do not rebuild the whole feed. */
+  function patchGatewayUsageMetricsCard() {
+    if (viewMode !== "summarized") return;
+    var psu = document.getElementById("panel-summarized");
+    if (!psu) return;
+    var oldEl = document.getElementById("gw-usage-metrics");
+    if (!oldEl) {
+      refreshSummarizedPanel();
+      return;
+    }
+    var keepMainOpen = !!oldEl.open;
+    var wrapsOld = oldEl.querySelectorAll(".sum-metrics-table-wrap");
+    var tableScroll = [];
+    for (var wi = 0; wi < wrapsOld.length; wi++) {
+      tableScroll.push({ left: wrapsOld[wi].scrollLeft, top: wrapsOld[wi].scrollTop });
+    }
+
+    var wrap = document.createElement("div");
+    wrap.innerHTML = buildGatewayUsageCardHtml().trim();
+    var newEl = wrap.firstElementChild;
+    if (!newEl || newEl.id !== "gw-usage-metrics") return;
+
+    oldEl.parentNode.replaceChild(newEl, oldEl);
+
+    newEl.open = keepMainOpen;
+    var wrapsNew = newEl.querySelectorAll(".sum-metrics-table-wrap");
+    for (var wj = 0; wj < wrapsNew.length && wj < tableScroll.length; wj++) {
+      wrapsNew[wj].scrollLeft = tableScroll[wj].left;
+      wrapsNew[wj].scrollTop = tableScroll[wj].top;
     }
   }
 
@@ -966,14 +985,14 @@ globalThis.ClaudiaLogs.Main = function () {
       .then(function (data) {
         if (!data) return;
         metricsCache = data;
-        if (viewMode === "summarized") refreshSummarizedPanel();
+        if (viewMode === "summarized") patchGatewayUsageMetricsCard();
       })
       .catch(function (e) {
         metricsCache = {
           metrics_store_open: false,
           message: e && e.message ? String(e.message) : String(e)
         };
-        if (viewMode === "summarized") refreshSummarizedPanel();
+        if (viewMode === "summarized") patchGatewayUsageMetricsCard();
       });
   }
 
@@ -987,6 +1006,33 @@ globalThis.ClaudiaLogs.Main = function () {
     if (viewMode !== "summarized") return;
     fetchGatewayMetrics();
     metricsPollTimer = setInterval(fetchGatewayMetrics, METRICS_POLL_MS);
+  }
+
+  /** Explainer strip at top of the Gateway usage metrics card (/api/ui/metrics). */
+  function buildGatewayUsageIntroHtml() {
+    return (
+      '<div class="gw-usage-intro" id="gw-usage-intro">' +
+      '<p class="gw-usage-intro-lead">' +
+      "Shows which models ran, estimated token totals for the current UTC minute and calendar day, and the latest upstream calls." +
+      "</p>" +
+      '<p class="gw-usage-intro-follow">' +
+      "Together this is both a sanity check on load and input to limit handling: the gateway weighs these totals against your provider request and token ceilings so usage can soften before quotas hard-stop traffic. Treat the counts as estimates—each vendor measures and bills tokens in its own way." +
+      "</p>" +
+      '<ul class="gw-usage-intro-bullets">' +
+      "<li>" +
+      '<a class="sum-ext-link" href="https://console.groq.com/docs/rate-limits" rel="noopener noreferrer">Groq rate limits</a>' +
+      " and " +
+      '<a class="sum-ext-link" href="https://ai.google.dev/gemini-api/docs/pricing" rel="noopener noreferrer">Gemini pricing &amp; free tier</a>' +
+      " vendor pages that are scraped for the free-tier ceilings." +
+      "</li>" +
+      "<li>" +
+      "The gateway applies rollups against the limit tables in " +
+      '<a href="#" class="sum-proj-path" data-rel="config/provider-model-limits.yaml"><code>config/provider-model-limits.yaml</code></a>' +
+      "." +
+      "</li>" +
+      "</ul>" +
+      "</div>"
+    );
   }
 
   function buildGatewayUsageCardHtml() {
@@ -1031,18 +1077,19 @@ globalThis.ClaudiaLogs.Main = function () {
       dayPillHtml +
       "</span></span>";
 
-    var st = m && m.st ? m.st : loading ? { st: "…", cls: "sum-st-monitor" } : storeOpen ? { st: "live", cls: "sum-st-monitor" } : { st: "off", cls: "sum-st-error" };
+    var introHtml = buildGatewayUsageIntroHtml();
 
     var expandedInner = "";
     if (loading) {
-      expandedInner = '<p class="muted">Fetching /api/ui/metrics…</p>';
+      expandedInner = introHtml + '<p class="muted">Fetching /api/ui/metrics…</p>';
     } else if (!storeOpen) {
       expandedInner =
+        introHtml +
         '<p class="muted">' +
         escapeHtml((m && m.message) || (data && data.message) || "Metrics store is not available.") +
         "</p>";
     } else {
-      expandedInner = "";
+      expandedInner = introHtml;
       expandedInner +=
         '<div class="sum-section-label">CURRENT MINUTE · ' +
         escapeHtml(lblMinFmt || lblMin) +
@@ -1064,11 +1111,7 @@ globalThis.ClaudiaLogs.Main = function () {
       sub +
       "</span>" +
       metrics +
-      '<span class="sum-status ' +
-      st.cls +
-      '">' +
-      escapeHtml(st.st) +
-      '</span><span class="sum-chev"></span></summary>' +
+      '<span class="sum-chev"></span></summary>' +
       '<div class="sum-body">' +
       expandedInner +
       "</div></details>"
@@ -1257,6 +1300,23 @@ globalThis.ClaudiaLogs.Main = function () {
     return false;
   }
 
+  /** Shared with timelineBarHtml and indexer scope cards (same `.sum-timeline-bar` DOM). */
+  function timelineSegmentsHtml(segments) {
+    var html = '<div class="sum-timeline-bar">';
+    for (var i = 0; i < segments.length; i++) {
+      var pct = segments[i].pct;
+      var bg = segments[i].bg;
+      if (pct < 0.05) continue;
+      html +=
+        '<span class="sum-timeline-seg" style="width:' +
+        Number(pct).toFixed(1) +
+        "%;background:" +
+        bg +
+        '"></span>';
+    }
+    return html + "</div>";
+  }
+
   function timelineBarHtml(evList) {
     var counts = { web: 0, qdrant: 0, upstream: 0, indexer: 0, gateway: 0 };
     for (var i = 0; i < evList.length; i++) {
@@ -1269,20 +1329,40 @@ globalThis.ClaudiaLogs.Main = function () {
     }
     var total = counts.web + counts.qdrant + counts.upstream + counts.indexer + counts.gateway || 1;
     var cols = { web: "#42a5f5", qdrant: "#66bb6a", upstream: "#9575cd", indexer: "#ffa726", gateway: "#78909c" };
-    var html = '<div class="sum-timeline-bar">';
     var keys = ["web", "qdrant", "upstream", "indexer", "gateway"];
+    var segments = [];
     for (var k = 0; k < keys.length; k++) {
       var key = keys[k];
       var pct = (counts[key] / total) * 100;
       if (pct < 0.05) continue;
-      html +=
-        '<span class="sum-timeline-seg" style="width:' +
-        pct.toFixed(1) +
-        "%;background:" +
-        cols[key] +
-        '"></span>';
+      segments.push({ pct: pct, bg: cols[key] });
     }
-    return html + "</div>";
+    return timelineSegmentsHtml(segments);
+  }
+
+  /**
+   * Scope completion bar: indexer orange (#ffa726, same as timelineBarHtml) for all fills (no idle-green strip).
+   * Uses the same `.sum-timeline-bar` structure as timelineBarHtml.
+   */
+  function indexerScopeProgressTimelineBarHtml(pRem, qTot, doneSeen) {
+    var orange = "#ffa726";
+    if (doneSeen) {
+      return timelineSegmentsHtml([{ pct: 100, bg: orange }]);
+    }
+    if (pRem !== null && !isNaN(Number(pRem)) && Number(pRem) === 0 && qTot !== null && !isNaN(Number(qTot)) && Number(qTot) >= 0) {
+      return timelineSegmentsHtml([{ pct: 100, bg: orange }]);
+    }
+    if (qTot != null && !isNaN(Number(qTot)) && Number(qTot) > 0 && pRem != null && !isNaN(Number(pRem))) {
+      var q = Number(qTot);
+      var r = Number(pRem);
+      var done = q - r;
+      var pctDone = (done / q) * 100;
+      if (pctDone < 0) pctDone = 0;
+      if (pctDone > 100) pctDone = 100;
+      if (pctDone > 0 && pctDone < 0.05) pctDone = 0.05;
+      return timelineSegmentsHtml([{ pct: pctDone, bg: orange }]);
+    }
+    return timelineSegmentsHtml([]);
   }
 
   function serviceWindowMs(arr) {
@@ -1411,6 +1491,7 @@ globalThis.ClaudiaLogs.Main = function () {
   /** How long file-level indexer activity stays “fresh” for UI subtitle hints. */
   var INDEXER_IDLE_RECENCY_MS = 120000;
 
+  /** Human label for indexer.state code — canonical mapping lives in derive/indexerPresent.js (goja-tested). */
   function indexerHumanDeclaredState(code) {
     if (
       globalThis.ClaudiaLogs &&
@@ -1419,28 +1500,17 @@ globalThis.ClaudiaLogs.Main = function () {
     ) {
       return ClaudiaLogs.Derive.indexerDeclaredStateLabel(code);
     }
-    switch (String(code || "").trim()) {
-      case "watch_idle":
-        return "Waiting for file changes";
-      case "backlog":
-        return "Queued files to process";
-      case "uploading":
-        return "Uploading to gateway";
-      case "recovery":
-        return "Recovering (waiting for gateway / storage)";
-      case "initial_scanning":
-        return "Scanning workspace";
-      case "idle":
-        return "Idle";
-      default:
-        return code ? String(code) : "";
-    }
+    return code ? String(code) : "";
   }
 
   function indexerLastFileEventTime(evs) {
     for (var i = evs.length - 1; i >= 0; i--) {
       var f = getFlat(evs[i].parsed);
       var m = indexerFlatMsg(f);
+      if (m === "indexer.scope.active_file") {
+        var insA = entryInstant(evs[i]);
+        if (insA) return insA.getTime();
+      }
       if (
         m === "indexer.job.upload" ||
         m === "indexer.job.ingested" ||
@@ -1458,6 +1528,8 @@ globalThis.ClaudiaLogs.Main = function () {
   function indexerRelFromLatestFileLine(evs) {
     for (var i = evs.length - 1; i >= 0; i--) {
       var f = getFlat(evs[i].parsed);
+      var mEarly = indexerFlatMsg(f);
+      if (mEarly === "indexer.scope.active_file" && f.rel) return String(f.rel);
       if (!f.rel) continue;
       var m = indexerFlatMsg(f);
       if (
@@ -1483,24 +1555,15 @@ globalThis.ClaudiaLogs.Main = function () {
           : "—";
       stateLine = indexerRunProgressSubtitle(meta.lastProg, meta.doneSeen, cand);
     }
-    var qSnap = "",
-      qi = "",
-      mq = meta && meta.stateQueueDepth,
-      mf = meta && meta.stateIngestInflight;
-    if (mq != null && !isNaN(Number(mq))) qSnap = "queue " + formatInt(Math.round(Number(mq)));
-    if (mf != null && !isNaN(Number(mf))) qi = "inflight " + formatInt(Math.round(Number(mf)));
-    var qlive = "";
-    if (qSnap || qi) qlive = (qSnap && qi ? qSnap + " · " + qi : qSnap || qi);
 
-    var rp = indexerRelFromLatestFileLine(evs);
+    var rp = meta && meta.scopeLatestRel ? String(meta.scopeLatestRel).trim() : "";
+    if (!rp) rp = indexerRelFromLatestFileLine(evs);
     if (rp) {
       var recent = ft && Date.now() - ft <= INDEXER_IDLE_RECENCY_MS;
       var pathShow = recent ? rp : "last file: " + rp;
-      var line = stateLine ? stateLine + " — " + pathShow : pathShow;
-      return qlive ? line + " · " + qlive : line;
+      return stateLine ? stateLine + " — " + pathShow : pathShow;
     }
-    var out = stateLine || "—";
-    return qlive ? out + " · " + qlive : out;
+    return stateLine || "—";
   }
 
   var INDEXER_HIST_COLS = {
@@ -1599,93 +1662,6 @@ globalThis.ClaudiaLogs.Main = function () {
     return '<div class="indexer-mix-legend">' + parts.join("") + "</div>";
   }
 
-  function indexerLatestQueueSnapshotFromEvs(evs) {
-    for (var i = evs.length - 1; i >= 0; i--) {
-      var f = getFlat(evs[i].parsed);
-      if (indexerFlatMsg(f).indexOf("indexer.queue.snapshot") === 0) return f;
-    }
-    return null;
-  }
-
-  /** Discovery scope lines match meta.projectId / meta.flavorId when both sides present. */
-  function indexerDiscoveryScopeMatchesMeta(flat, meta) {
-    if (!meta) return true;
-    var wantP = meta.projectId && meta.projectId !== "—" ? String(meta.projectId).trim() : "";
-    var wantF = meta.flavorId && meta.flavorId !== "—" ? String(meta.flavorId).trim() : "";
-    if (!wantP && !wantF) return true;
-    var fp = flat.ingest_project != null ? String(flat.ingest_project).trim() : "";
-    var ff = flat.flavor_id != null ? String(flat.flavor_id).trim() : "";
-    if (wantP && fp !== "" && fp !== wantP) return false;
-    if (wantF && ff !== "" && ff !== wantF) return false;
-    return true;
-  }
-
-  /**
-   * Latest candidates_discovered for this project+flavor from indexer.discovery.summary.scope,
-   * else last aggregate indexer.discovery.summary in the window.
-   */
-  function indexerLatestCandidatesDiscoveredForScope(evs, meta) {
-    var agg = null;
-    for (var i = evs.length - 1; i >= 0; i--) {
-      var f = getFlat(evs[i].parsed);
-      var m = indexerFlatMsg(f);
-      if (m === "indexer.discovery.summary.scope" && indexerDiscoveryScopeMatchesMeta(f, meta)) {
-        var c = Number(f.candidates_discovered);
-        if (!isNaN(c)) return { kind: "scope", n: c };
-      }
-    }
-    for (var j = evs.length - 1; j >= 0; j--) {
-      var g = getFlat(evs[j].parsed);
-      if (indexerFlatMsg(g) === "indexer.discovery.summary") {
-        var c2 = Number(g.candidates_discovered);
-        if (!isNaN(c2)) return { kind: "aggregate", n: c2 };
-      }
-    }
-    return null;
-  }
-
-  /**
-   * Rough "work left" for this scope: current queue backlog plus interpretation of discovery counts.
-   * Uses indexer.queue.snapshot + discovery summaries (counts move as walk/enqueue/drain proceed).
-   */
-  function indexerRemainingEstimateBlockHtml(evs, meta) {
-    var snap = indexerLatestQueueSnapshotFromEvs(evs);
-    var disc = indexerLatestCandidatesDiscoveredForScope(evs, meta);
-    var qd = snap ? Number(snap.queue_depth) : NaN;
-    var lines = [];
-    if (!isNaN(qd)) {
-      lines.push(
-        '<div class="indexer-progress-caption"><strong>' +
-          escapeHtml(formatInt(Math.round(qd))) +
-          "</strong> jobs waiting in queue</div>"
-      );
-    }
-    if (disc != null && !isNaN(disc.n)) {
-      lines.push(
-        '<div class="indexer-progress-caption muted">' +
-          escapeHtml(
-            disc.kind === "scope"
-              ? "Discovery reports " +
-                  formatInt(Math.round(disc.n)) +
-                  " candidate files (updates while scanning)."
-              : "Discovery reports " +
-                  formatInt(Math.round(disc.n)) +
-                  " candidate files in this window (aggregate summary)."
-          ) +
-          "</div>"
-      );
-    }
-    lines.push(
-      '<div class="indexer-progress-caption muted">' +
-        escapeHtml(
-          "Completion is approximate: the queue count drops as jobs finish; discovery totals can rise until the walk completes."
-        ) +
-        "</div>"
-    );
-    if (!snap && disc == null) return "";
-    return '<div class="indexer-remaining-est">' + lines.join("") + "</div>";
-  }
-
   function badgeForIndexerRunLine(ent) {
     var src = (ent.source || "").toLowerCase();
     var f = getFlat(ent.parsed);
@@ -1729,6 +1705,64 @@ globalThis.ClaudiaLogs.Main = function () {
     return String(fl.msg != null ? fl.msg : fl.message != null ? fl.message : "")
       .toLowerCase()
       .trim();
+  }
+
+  /** True when flat is an indexer.state snapshot (slug or human title / structured fields). */
+  function isIndexerStateFlat(f) {
+    if (!f || typeof f !== "object") return false;
+    if (indexerFlatMsg(f) === "indexer.state") return true;
+    var raw = String(f.msg != null ? f.msg : f.message != null ? f.message : "")
+      .toLowerCase()
+      .trim();
+    if (
+      (raw === "indexer state" || raw === "indexer.state") &&
+      (f.queue_depth != null || f.ingest_inflight != null || f.state != null || typeof f.watch_mode === "boolean")
+    )
+      return true;
+    return false;
+  }
+
+  /** Latest process-wide queue depth / ingest inflight from the newest indexer.state in the log window. */
+  function latestIndexerStateQueueInflightFromEntries(arr) {
+    var qd = null,
+      inf = null;
+    if (!Array.isArray(arr)) return { queueDepth: qd, ingestInflight: inf };
+    for (var i = arr.length - 1; i >= 0; i--) {
+      var f = getFlat(arr[i].parsed);
+      if (!isIndexerStateFlat(f)) continue;
+      if (f.queue_depth != null) {
+        var n = Number(f.queue_depth);
+        if (!isNaN(n)) qd = n;
+      }
+      if (f.ingest_inflight != null) {
+        var n2 = Number(f.ingest_inflight);
+        if (!isNaN(n2)) inf = n2;
+      }
+      break;
+    }
+    return { queueDepth: qd, ingestInflight: inf };
+  }
+
+  /** Latest queue_cap and workers from the newest indexer.queue.snapshot in the log window. */
+  function latestIndexerQueueSnapshotMetaFromEntries(arr) {
+    var cap = null;
+    var workers = null;
+    if (!Array.isArray(arr)) return { queueCap: cap, workers: workers };
+    for (var i = arr.length - 1; i >= 0; i--) {
+      var f = getFlat(arr[i].parsed);
+      var m = indexerFlatMsg(f);
+      if (m !== "indexer.queue.snapshot" && m.indexOf("indexer.queue.snapshot") !== 0) continue;
+      if (f.queue_cap != null && f.queue_cap !== "") {
+        var c = Number(f.queue_cap);
+        if (!isNaN(c)) cap = c;
+      }
+      if (f.workers != null && f.workers !== "") {
+        var w = Number(f.workers);
+        if (!isNaN(w)) workers = w;
+      }
+      break;
+    }
+    return { queueCap: cap, workers: workers };
   }
 
   /** Per-file / operator slugs for expanded indexer Summary (service + run cards). */
@@ -1785,19 +1819,138 @@ globalThis.ClaudiaLogs.Main = function () {
 
   function indexerStructuredRollupMiniHtml(entries) {
     var r = indexerStructuredRollupCounts(entries);
-    var flow = formatInt(r.upload) + " · " + formatInt(r.ingested) + " · " + formatInt(r.skipped);
-    var errs = formatInt(r.failed) + " · " + formatInt(r.retry) + " · " + formatInt(r.paused);
+    var sk = formatInt(r.skipped);
+    var ig = formatInt(r.ingested);
+    var up = formatInt(r.upload);
+    var rt = formatInt(r.retry);
+    var fa = formatInt(r.failed);
+    var pu = formatInt(r.paused);
     return (
       '<div class="sum-mini-row">' +
-      '<div class="sum-mini-card">Started upload · successfully ingested · skipped (before upload)<strong>' +
-      escapeHtml(flow) +
-      '</strong><span class="sum-mini-sub">' +
-      escapeHtml(formatInt(r.uniqRel) + " distinct relative paths touched by those events") +
-      "</span></div>" +
-      '<div class="sum-mini-card">Failed · retries · worker pauses<strong>' +
-      escapeHtml(errs) +
+      '<div class="sum-mini-card">Skipped (before upload)<strong>' +
+      escapeHtml(sk) +
+      '</strong></div>' +
+      '<div class="sum-mini-card">Successfully ingested<strong>' +
+      escapeHtml(ig) +
+      '</strong></div>' +
+      '<div class="sum-mini-card">Started upload<strong>' +
+      escapeHtml(up) +
+      "</strong></div></div>" +
+      '<div class="sum-mini-row">' +
+      '<div class="sum-mini-card">Retries<strong>' +
+      escapeHtml(rt) +
+      '</strong></div>' +
+      '<div class="sum-mini-card">Failed<strong>' +
+      escapeHtml(fa) +
+      '</strong></div>' +
+      '<div class="sum-mini-card">Worker pauses<strong>' +
+      escapeHtml(pu) +
       "</strong></div></div>"
     );
+  }
+
+  /** Caption under aggregate indexer progress bar (sums scope rows across partitioned indexer cards). */
+  function indexerAggregateBacklogCaption(sumRem, sumTot) {
+    if (sumRem !== null && !isNaN(Number(sumRem)) && sumTot !== null && !isNaN(Number(sumTot)))
+      return (
+        formatInt(Math.round(Number(sumRem))) +
+        " remaining of " +
+        formatInt(Math.round(Number(sumTot))) +
+        " total"
+      );
+    if (sumRem !== null && !isNaN(Number(sumRem)))
+      return formatInt(Math.round(Number(sumRem))) + " remaining of — total";
+    if (sumTot !== null && !isNaN(Number(sumTot)))
+      return "— remaining of " + formatInt(Math.round(Number(sumTot))) + " total";
+    return "";
+  }
+
+  /** Explains aggregate scope bar while buffers warm up vs when metrics are live. */
+  function indexerAggregateProgressDetailText(agg) {
+    if (!agg || !agg.anyRun) {
+      return "No indexer scopes in the loaded log window — scroll for older lines or wait for indexer traffic.";
+    }
+    var hasRem = agg.sumRem !== null && !isNaN(Number(agg.sumRem));
+    var hasTot = agg.sumTot !== null && !isNaN(Number(agg.sumTot));
+    if (!hasRem && !hasTot && !agg.allDone) {
+      return "Waiting for indexer.scope.status heartbeats with queue and workspace file totals…";
+    }
+    if (agg.allDone) {
+      return "Tracked runs in view have finished; bar reflects combined scope status when present.";
+    }
+    if (hasRem && Number(agg.sumRem) === 0 && hasTot) {
+      return "No pending ingest or fan-out rows for scopes in view — totals match workspace file counts.";
+    }
+    return "Enqueued + fan-out backlog vs total workspace files.";
+  }
+
+  /**
+   * Sum pending ingest + fan-out rows and workspace file totals across indexer partition buckets
+   * (same metadata as each per-scope indexer card).
+   */
+  function rollupIndexerAggregateScopeProgress(byRun, partitionRegistry) {
+    var sumRem = 0;
+    var sumTot = 0;
+    var anyRem = false;
+    var anyTot = false;
+    var anyRun = false;
+    var allDone = true;
+    if (!byRun || typeof byRun !== "object") {
+      return { sumRem: null, sumTot: null, allDone: false, anyRun: false };
+    }
+    var keys = Object.keys(byRun);
+    for (var i = 0; i < keys.length; i++) {
+      var run = byRun[keys[i]];
+      if (!run || !run.events || !run.events.length) continue;
+      anyRun = true;
+      var pmeta = null;
+      if (
+        partitionRegistry &&
+        globalThis.ClaudiaLogs &&
+        ClaudiaLogs.Derive &&
+        typeof ClaudiaLogs.Derive.indexerPartitionMetaForRun === "function"
+      ) {
+        pmeta = ClaudiaLogs.Derive.indexerPartitionMetaForRun(
+          partitionRegistry,
+          run.id,
+          run.events,
+          getFlat
+        );
+      }
+      var meta = collectIndexerRunMeta(run.id, run.events, pmeta);
+      meta = mergePersistedIndexerWatchRoots(meta, run.events, run.id);
+      if (!meta.doneSeen) allDone = false;
+      var qIng =
+        meta.scopeQueueIngestPending != null && !isNaN(Number(meta.scopeQueueIngestPending))
+          ? Number(meta.scopeQueueIngestPending)
+          : null;
+      var qFan =
+        meta.scopeQueueFanoutPending != null && !isNaN(Number(meta.scopeQueueFanoutPending))
+          ? Number(meta.scopeQueueFanoutPending)
+          : null;
+      var pRem = null;
+      if (qIng != null || qFan != null) {
+        pRem = (qIng != null ? qIng : 0) + (qFan != null ? qFan : 0);
+      }
+      var qTot =
+        meta.scopeWorkspaceTotal != null && !isNaN(Number(meta.scopeWorkspaceTotal))
+          ? Math.round(Number(meta.scopeWorkspaceTotal))
+          : null;
+      if (pRem !== null) {
+        sumRem += pRem;
+        anyRem = true;
+      }
+      if (qTot !== null) {
+        sumTot += qTot;
+        anyTot = true;
+      }
+    }
+    return {
+      sumRem: anyRem ? sumRem : null,
+      sumTot: anyTot ? sumTot : null,
+      allDone: anyRun && allDone,
+      anyRun: anyRun
+    };
   }
 
   function gatewayServicePanelMiniHtml(arr) {
@@ -1928,6 +2081,104 @@ globalThis.ClaudiaLogs.Main = function () {
     return fl.chunks != null;
   }
 
+  function indexerRecentEvalStatusForFlat(f) {
+    var m = indexerFlatMsg(f);
+    var rel = f && f.rel != null ? String(f.rel).trim() : "";
+    if (!rel) return null;
+
+    if (m === "indexer.scope.active_file") {
+      return { rel: rel, st: "evaluating", cls: "sum-st-indexing", detail: "" };
+    }
+    if (m === "indexer.job.upload") {
+      return { rel: rel, st: "uploading", cls: "sum-st-indexing", detail: "" };
+    }
+    if (m === "indexer.job.ingested" || m === "ingested") {
+      var chunks = f && f.chunks != null && !isNaN(Number(f.chunks)) ? Math.round(Number(f.chunks)) : null;
+      return {
+        rel: rel,
+        st: "ingested",
+        cls: "sum-st-complete",
+        detail: chunks != null ? formatInt(chunks) + " chunks" : ""
+      };
+    }
+    if (m === "indexer.job.skipped") {
+      var why = f && f.reason != null ? String(f.reason).replace(/\s+/g, " ").trim() : "";
+      if (why.length > 80) why = why.slice(0, 78) + "…";
+      return { rel: rel, st: "skipped", cls: "sum-st-complete", detail: why };
+    }
+    if (m.indexOf("indexer.job.failed") === 0) {
+      var err = f && (f.err != null ? f.err : f.error != null ? f.error : "");
+      var es = err != null ? String(err).replace(/\s+/g, " ").trim() : "";
+      if (es.length > 80) es = es.slice(0, 78) + "…";
+      return { rel: rel, st: "failed", cls: "sum-st-error", detail: es };
+    }
+    if (m.indexOf("indexer.retry") === 0) {
+      return { rel: rel, st: "retrying", cls: "sum-st-monitor", detail: "" };
+    }
+    return null;
+  }
+
+  function buildIndexerRecentEvaluatedFilesHtml(evsScope, bucketId, maxItems) {
+    var evs = Array.isArray(evsScope) ? evsScope : [];
+    var seen = {};
+    var rows = [];
+    var want = maxItems != null && !isNaN(Number(maxItems)) ? Math.max(3, Math.min(60, Math.round(Number(maxItems)))) : 18;
+    for (var i = evs.length - 1; i >= 0; i--) {
+      var f = getFlat(evs[i].parsed);
+      var st = indexerRecentEvalStatusForFlat(f);
+      if (!st) continue;
+      if (seen[st.rel]) continue;
+      seen[st.rel] = true;
+      var t = formatLogDateTimeLocal(evs[i].ts);
+      rows.push({
+        t: t || "—",
+        rel: st.rel,
+        st: st.st,
+        cls: st.cls,
+        detail: st.detail || ""
+      });
+      if (rows.length >= want) break;
+    }
+
+    var sid = "ix-recent-" + strHash(String(bucketId || ""));
+    var html =
+      '<div class="sum-full-log indexer-recent-files" id="' + escapeHtml(sid) + '"><ul>';
+    if (!rows.length) {
+      html += '<li class="sum-ev-item muted">No file-level activity in the loaded window yet. Scroll up to load older lines.</li>';
+    } else {
+      for (var r = 0; r < rows.length; r++) {
+        var it = rows[r];
+        var lvlClass = "lvl-INFO";
+        if (it.st === "failed") lvlClass = "lvl-ERROR";
+        else if (it.st === "retrying" || it.st === "skipped") lvlClass = "lvl-WARN";
+        else if (it.st === "evaluating" || it.st === "uploading") lvlClass = "lvl-DEBUG";
+        html +=
+          '<li class="sum-ev-item indexer-recent-row">' +
+          '<span class="muted indexer-recent-time">' +
+          escapeHtml(it.t) +
+          "</span>" +
+          '<span class="log-line-sum__lvl indexer-recent-op ' +
+          escapeHtml(lvlClass) +
+          '">' +
+          escapeHtml(it.st) +
+          "</span>" +
+          '<code class="sum-mono-id indexer-recent-path">' +
+          escapeHtml(it.rel) +
+          "</code>" +
+          (it.detail
+            ? '<span class="muted indexer-recent-detail" title="' +
+              escapeHtml(it.detail) +
+              '">' +
+              escapeHtml(it.detail) +
+              "</span>"
+            : '<span class="muted indexer-recent-detail"></span>') +
+          "</li>";
+      }
+    }
+    html += "</ul></div>";
+    return html;
+  }
+
   /** Rolls up indexer.run.start / progress / done / job lines for summarized cards. */
   function collectIndexerRunMeta(runId, evs, partitionMeta) {
     if (globalThis.ClaudiaLogs && globalThis.ClaudiaLogs.Derive && globalThis.ClaudiaLogs.Derive.collectIndexerRunMeta) {
@@ -1957,8 +2208,8 @@ globalThis.ClaudiaLogs.Main = function () {
     var tenantId = "";
     for (var u = evs.length - 1; u >= 0; u--) {
       var fR = getFlat(evs[u].parsed);
-      if (!tenantId && (fR.principal_id || fR.tenant || fR.tenant_id))
-        tenantId = String(fR.principal_id || fR.tenant || fR.tenant_id || "").trim();
+      if (!tenantId && (fR.tenant_id || fR.tenant || fR.principal_id))
+        tenantId = String(fR.tenant_id || fR.tenant || fR.principal_id || "").trim();
       if (!lastProg && flatLooksLikeIndexerRunProgress(fR)) lastProg = fR;
       if (flatLooksLikeIndexerRunDone(fR)) {
         doneSeen = true;
@@ -2155,13 +2406,241 @@ globalThis.ClaudiaLogs.Main = function () {
     );
   }
 
-  function renderExpandedService(name, arr) {
+  /** Display label for a supervised YAML root (no directory path). */
+  function formatIndexerSupervisedRootLabel(row) {
+    if (!row || typeof row !== "object") return "—";
+    var proj = row.project_id != null ? String(row.project_id).trim() : "";
+    var ws = row.workspace_id != null ? String(row.workspace_id).trim() : "";
+    var flav = row.flavor_id != null ? String(row.flavor_id).trim() : "";
+    var bits = [];
+    if (proj) bits.push(proj);
+    if (flav) bits.push(flav);
+    if (ws) bits.push(ws);
+    return bits.join(" · ") || "—";
+  }
+
+  function indexerWorkspaceCardHref(bucketId) {
+    return "#ix-" + strHash(String(bucketId || ""));
+  }
+
+  function normalizeFlavorMatch(v) {
+    if (v == null || v === "—") return "";
+    return String(v).trim();
+  }
+
+  /** Match supervised YAML root row to a partitioned indexer bucket id (same scope as Indexers cards). */
+  function findIndexerBucketIdForSupervisedRoot(row, byRun, partitionRegistry) {
+    if (!row || !byRun || typeof byRun !== "object") return "";
+    var rp = row.project_id != null ? String(row.project_id).trim() : "";
+    var rf = row.flavor_id != null ? String(row.flavor_id).trim() : "";
+    var keys = Object.keys(byRun);
+    for (var i = 0; i < keys.length; i++) {
+      var run = byRun[keys[i]];
+      if (!run || !run.events || !run.events.length) continue;
+      var pmeta = null;
+      if (
+        partitionRegistry &&
+        globalThis.ClaudiaLogs &&
+        ClaudiaLogs.Derive &&
+        typeof ClaudiaLogs.Derive.indexerPartitionMetaForRun === "function"
+      ) {
+        pmeta = ClaudiaLogs.Derive.indexerPartitionMetaForRun(
+          partitionRegistry,
+          run.id,
+          run.events,
+          getFlat
+        );
+      }
+      var meta = collectIndexerRunMeta(run.id, run.events, pmeta);
+      meta = mergePersistedIndexerWatchRoots(meta, run.events, run.id);
+      var mp = meta.projectId && meta.projectId !== "—" ? String(meta.projectId).trim() : "";
+      var mf = normalizeFlavorMatch(meta.flavorId);
+      if (mp !== rp) continue;
+      if (mf !== rf) continue;
+      return run.id;
+    }
+    return "";
+  }
+
+  /** Alphabetical ordering for managed workspace rows (shared by log-derived list + API hydrate). */
+  function sortIndexerManagedWorkspaceRows(rows) {
+    if (!rows || !rows.length) return rows || [];
+    rows.sort(function (a, b) {
+      return String(a.label != null ? a.label : "").localeCompare(
+        String(b.label != null ? b.label : ""),
+        undefined,
+        { sensitivity: "base", numeric: true }
+      );
+    });
+    return rows;
+  }
+
+  function indexerManagedWorkspacesCommaLinksHtml(items) {
+    if (!items || !items.length) return '<span class="muted">—</span>';
+    var parts = [];
+    for (var j = 0; j < items.length; j++) {
+      var it = items[j];
+      var lab = it.label != null ? String(it.label) : "";
+      var bid = it.bucketId != null ? String(it.bucketId) : "";
+      if (!lab || lab === "—") continue;
+      if (bid) {
+        parts.push(
+          '<a class="sum-ext-link indexer-svc-ws-link" href="' +
+            escapeHtml(indexerWorkspaceCardHref(bid)) +
+            '">' +
+            escapeHtml(lab) +
+            "</a>"
+        );
+      } else {
+        parts.push('<span class="indexer-svc-ws-plain">' + escapeHtml(lab) + "</span>");
+      }
+    }
+    return parts.length ? parts.join(", ") : '<span class="muted">—</span>';
+  }
+
+  /**
+   * Distinct scopes from partitioned indexer runs with links to matching Indexers cards (fallback before API).
+   */
+  function aggregateIndexerManagedWorkspacesHtml(byRun, partitionRegistry) {
+    var seen = {};
+    var rows = [];
+    if (!byRun || typeof byRun !== "object") {
+      return '<span class="muted">—</span>';
+    }
+    var keys = Object.keys(byRun);
+    for (var i = 0; i < keys.length; i++) {
+      var run = byRun[keys[i]];
+      if (!run || !run.events || !run.events.length) continue;
+      var pmeta = null;
+      if (
+        partitionRegistry &&
+        globalThis.ClaudiaLogs &&
+        ClaudiaLogs.Derive &&
+        typeof ClaudiaLogs.Derive.indexerPartitionMetaForRun === "function"
+      ) {
+        pmeta = ClaudiaLogs.Derive.indexerPartitionMetaForRun(
+          partitionRegistry,
+          run.id,
+          run.events,
+          getFlat
+        );
+      }
+      var meta = collectIndexerRunMeta(run.id, run.events, pmeta);
+      meta = mergePersistedIndexerWatchRoots(meta, run.events, run.id);
+      var lab = indexerCardTitleSortLabel(meta);
+      if (!lab || lab === "—") continue;
+      if (seen[lab]) continue;
+      seen[lab] = true;
+      rows.push({ label: lab, bucketId: run.id });
+    }
+    sortIndexerManagedWorkspaceRows(rows);
+    return indexerManagedWorkspacesCommaLinksHtml(rows);
+  }
+
+  /**
+   * Supersedes workspace list with supervised YAML roots when available; sets config path from gateway.
+   */
+  function hydrateIndexerServiceSummaryFromApi() {
+    var wsEl = document.getElementById("svc-indexer-summary-workspaces");
+    var cfgEl = document.getElementById("svc-indexer-summary-config-path");
+    if (!cfgEl && !wsEl) return;
+    fetch("/api/ui/indexer/config", { credentials: "same-origin" })
+      .then(function (res) {
+        if (!res.ok) throw new Error("bad status");
+        return res.json();
+      })
+      .then(function (d) {
+        if (cfgEl) {
+          var pth = d.path != null ? String(d.path).trim() : "";
+          cfgEl.innerHTML = pth
+            ? "<code>" + escapeHtml(pth) + "</code>"
+            : '<span class="muted">—</span>';
+        }
+        if (wsEl && Array.isArray(d.roots) && d.roots.length > 0) {
+          var br = lastIndexerSummarizeByRun;
+          var preg = lastIndexerSummarizePartitionRegistry;
+          var rows = [];
+          for (var ri = 0; ri < d.roots.length; ri++) {
+            var rowR = d.roots[ri] || {};
+            var bidR = findIndexerBucketIdForSupervisedRoot(rowR, br, preg);
+            var labR = formatIndexerSupervisedRootLabel(rowR);
+            if (bidR && br && Object.prototype.hasOwnProperty.call(br, bidR)) {
+              var runM = br[bidR];
+              var pmM = null;
+              if (
+                preg &&
+                globalThis.ClaudiaLogs &&
+                ClaudiaLogs.Derive &&
+                typeof ClaudiaLogs.Derive.indexerPartitionMetaForRun === "function"
+              ) {
+                pmM = ClaudiaLogs.Derive.indexerPartitionMetaForRun(
+                  preg,
+                  bidR,
+                  runM.events,
+                  getFlat
+                );
+              }
+              var metaM = collectIndexerRunMeta(bidR, runM.events, pmM);
+              metaM = mergePersistedIndexerWatchRoots(metaM, runM.events, bidR);
+              labR = indexerCardTitleSortLabel(metaM);
+            }
+            rows.push({ label: labR, bucketId: bidR });
+          }
+          sortIndexerManagedWorkspaceRows(rows);
+          wsEl.innerHTML = indexerManagedWorkspacesCommaLinksHtml(rows);
+        }
+      })
+      .catch(function () {
+        if (cfgEl) {
+          cfgEl.innerHTML =
+            '<span class="muted">Not available (supervised indexer config path not set)</span>';
+        }
+      });
+  }
+
+  function renderExpandedService(name, arr, svcCtx) {
+    svcCtx = svcCtx || {};
     var isBifrost = name === "bifrost";
     var evConv = [];
     for (var j = 0; j < arr.length; j++) {
       evConv.push({ parsed: arr[j].parsed, text: arr[j].text, ts: arr[j].ts, source: arr[j].source });
     }
-    var bar = timelineBarHtml(evConv);
+    var timelineBlock = "";
+    if (name !== "indexer") {
+      timelineBlock = '<div class="sum-section-label">Request timeline</div>' + timelineBarHtml(evConv);
+    }
+    var aggregateIndexerProgressBlock = "";
+    if (name === "indexer") {
+      var aggIx = rollupIndexerAggregateScopeProgress(svcCtx.byRun, svcCtx.partitionRegistry);
+      var aggCap = indexerAggregateBacklogCaption(aggIx.sumRem, aggIx.sumTot);
+      var aggDetail = indexerAggregateProgressDetailText(aggIx);
+      var aggCaptionRow =
+        '<div class="indexer-aggregate-caption-row">' +
+        (aggCap !== ""
+          ? '<span class="indexer-scope-caption">' + escapeHtml(aggCap) + "</span>"
+          : "") +
+        '<span class="indexer-aggregate-progress-detail muted">' +
+        escapeHtml(aggDetail) +
+        "</span></div>";
+      aggregateIndexerProgressBlock =
+        '<div class="indexer-aggregate-progress-wrap">' +
+        '<div class="sum-section-label sum-section-label--indexer-progress">' +
+        escapeHtml("Progress (all indexers)") +
+        "</div>" +
+        '<div class="indexer-scope-progress indexer-scope-progress--aggregate" title="Sum of pending ingest + fan-out rows vs workspace files across all indexer scopes (from indexer.scope.status)">' +
+        indexerScopeProgressTimelineBarHtml(aggIx.sumRem, aggIx.sumTot, aggIx.allDone) +
+        aggCaptionRow +
+        "</div></div>";
+    }
+    var indexerSummaryKv = "";
+    if (name === "indexer") {
+      indexerSummaryKv =
+        '<dl class="indexer-run-kv indexer-run-kv--service-aggregate">' +
+        "<dt>Managed workspaces</dt><dd id=\"svc-indexer-summary-workspaces\">" +
+        aggregateIndexerManagedWorkspacesHtml(svcCtx.byRun, svcCtx.partitionRegistry) +
+        '</dd><dt>Indexer config file</dt><dd id="svc-indexer-summary-config-path"><span class="muted">Loading…</span></dd>' +
+        "</dl>";
+    }
     var wms = serviceWindowMs(arr);
     var mini;
     if (isBifrost) {
@@ -2248,15 +2727,19 @@ globalThis.ClaudiaLogs.Main = function () {
           buildDetailsColumn(ent2.parsed, ent2.ts, ent2.text, bd2) +
           "</li>";
       } else {
-        full += '<li class="sum-ev-item">' + logSummaryHtml(ev2, bd2) + "</li>";
+        full +=
+          '<li class="sum-ev-item">' +
+          logSummaryHtml(ev2, bd2, name === "indexer" ? { suppressIndexerBadge: true } : undefined) +
+          "</li>";
       }
     }
     full += "</ul></div>";
     return (
       '<div class="sum-body">' +
-      '<div class="sum-section-label">Request timeline</div>' +
-      bar +
+      timelineBlock +
       '<div class="sum-section-label">Summary</div>' +
+      indexerSummaryKv +
+      aggregateIndexerProgressBlock +
       mini +
       '<div class="sum-section-label">Full event log</div>' +
       full +
@@ -2294,7 +2777,8 @@ globalThis.ClaudiaLogs.Main = function () {
     }
   }
 
-  function buildServiceCard(name, arr) {
+  function buildServiceCard(name, arr, svcCtx) {
+    svcCtx = svcCtx || {};
     var httpN = 0;
     var sumMs = 0;
     for (var k = 0; k < arr.length; k++) {
@@ -2317,7 +2801,9 @@ globalThis.ClaudiaLogs.Main = function () {
     var sid = "svc-" + strHash(name);
     var ini = serviceAvatarInitials(name);
     var av = serviceAvatarClass(name);
-    var title = escapeHtml(isBifrost ? "bifrost" : name);
+    /** Single outer .sum-title only — avoid nesting .sum-title (was hiding pills / breaking layout). */
+    var titleClass = "sum-title";
+    var titleBlock = escapeHtml(name === "indexer" ? "indexer" : isBifrost ? "bifrost" : name);
     var wms = serviceWindowMs(arr);
     var metrics;
     if (isBifrost) {
@@ -2355,6 +2841,33 @@ globalThis.ClaudiaLogs.Main = function () {
         '</span><span class="sum-metric">' +
         escapeHtml(formatInt(arr.length) + " lines") +
         "</span></span>";
+    } else if (name === "indexer") {
+      var qiIx = latestIndexerStateQueueInflightFromEntries(arr);
+      var snapIx = latestIndexerQueueSnapshotMetaFromEntries(arr);
+      var ixPills = "";
+      if (qiIx.queueDepth != null && !isNaN(Number(qiIx.queueDepth))) {
+        var qCur = formatInt(Math.round(Number(qiIx.queueDepth)));
+        var qMax =
+          snapIx.queueCap != null && !isNaN(Number(snapIx.queueCap))
+            ? formatInt(Math.round(Number(snapIx.queueCap)))
+            : "—";
+        ixPills +=
+          '<span class="sum-metric" title="Queue depth vs max (queue_depth / queue_cap)">' +
+          escapeHtml("Queue " + qCur + " / " + qMax) +
+          "</span>";
+      }
+      if (qiIx.ingestInflight != null && !isNaN(Number(qiIx.ingestInflight))) {
+        var iCur = formatInt(Math.round(Number(qiIx.ingestInflight)));
+        var iWorkers =
+          snapIx.workers != null && !isNaN(Number(snapIx.workers))
+            ? formatInt(Math.round(Number(snapIx.workers)))
+            : "—";
+        ixPills +=
+          '<span class="sum-metric" title="In-flight ingests vs worker pool (ingest_inflight / workers)">' +
+          escapeHtml(iCur + " inflight / " + iWorkers + " workers") +
+          "</span>";
+      }
+      metrics = '<span class="sum-metrics">' + ixPills + "</span>";
     } else {
       metrics =
         '<span class="sum-metrics">' +
@@ -2374,8 +2887,10 @@ globalThis.ClaudiaLogs.Main = function () {
       '">' +
       escapeHtml(ini) +
       "</span>" +
-      '<span class="sum-main"><span class="sum-title">' +
-      title +
+      '<span class="sum-main"><span class="' +
+      titleClass +
+      '">' +
+      titleBlock +
       '</span><span class="sum-sub sum-sub--clamp">' +
       escapeHtml(lastMsg) +
       "</span></span>" +
@@ -2386,56 +2901,63 @@ globalThis.ClaudiaLogs.Main = function () {
       escapeHtml(st.st) +
       "</span>" +
       '<span class="sum-chev"></span></summary>' +
-      renderExpandedService(name, arr) +
+      renderExpandedService(name, arr, svcCtx) +
       "</details>"
     );
   }
 
-  function renderExpandedIndexer(run, evs, meta) {
-    var qProg = indexerRemainingEstimateBlockHtml(evs, meta);
-    var jobRollup = indexerStructuredRollupMiniHtml(evs);
+  function renderExpandedIndexer(run, evs, meta, partitionRegistry) {
     var pathsBlock =
       meta.watchRootPaths && meta.watchRootPaths.length
         ? "<pre class=\"indexer-paths-pre\">" +
           escapeHtml(meta.watchRootPaths.join("\n")) +
           "</pre>"
         : '<span class="muted">—</span>';
-    var ignLine =
-      meta.filesExcludedByIgnores != null && !isNaN(meta.filesExcludedByIgnores)
-        ? "<dt>Paths excluded by ignore rules</dt><dd>" +
-          escapeHtml(formatInt(Math.round(meta.filesExcludedByIgnores))) +
-          " (files + skipped dirs during walk)</dd>"
-        : "";
+    var wsDd =
+      meta.scopeWorkspaceTotal != null && !isNaN(Number(meta.scopeWorkspaceTotal))
+        ? "<dt>Workspace files</dt><dd>" +
+          escapeHtml(formatInt(Math.round(Number(meta.scopeWorkspaceTotal)))) +
+          "</dd>"
+        : '<dt>Workspace files</dt><dd><span class="muted">—</span></dd>';
     var sumU = meta.userLabel && meta.userLabel !== "—" ? String(meta.userLabel).trim() : "—";
     var sumP = meta.projectId && meta.projectId !== "—" ? String(meta.projectId).trim() : "—";
-    var sumF = meta.flavorId && meta.flavorId !== "—" ? String(meta.flavorId).trim() : "—";
+    var sumF = meta.flavorId && meta.flavorId !== "—" ? String(meta.flavorId).trim() : "";
+    var summaryOneLine = sumF !== "" ? sumU + " · " + sumP + " · " + sumF : sumU + " · " + sumP;
     var summaryRows =
       '<div class="indexer-run-summary-line">' +
-      escapeHtml(sumU + " · " + sumP + " · " + sumF) +
+      escapeHtml(summaryOneLine) +
       "</div>" +
       '<dl class="indexer-run-kv">' +
-      ignLine +
       "<dt>Watched paths</dt><dd>" +
       pathsBlock +
-      "</dd></dl>";
-    var full = '<div class="sum-full-log"><ul>';
-    for (var u = evs.length - 1; u >= 0; u--) {
-      var ent2 = evs[u];
-      var ev2 = { parsed: ent2.parsed, text: ent2.text, ts: ent2.ts, source: ent2.source };
-      var bd2 = badgeForIndexerRunLine(ent2);
+      "</dd>" +
+      wsDd +
+      "</dl>";
+    var evsFull = filterEventsForIndexerScopeFullLog(evs, run.id, partitionRegistry || {});
+    var recentFiles = buildIndexerRecentEvaluatedFilesHtml(evsFull, run.id, 18);
+    var fullId = "ix-full-" + strHash(run.id);
+    var full = '<div class="sum-full-log" id="' + escapeHtml(fullId) + '"><ul>';
+    if (!evsFull.length) {
       full +=
-        '<li class="sum-ev-item">' +
-        logSummaryHtml(ev2, bd2, { suppressIndexerBadge: true }) +
-        "</li>";
+        '<li class="sum-ev-item muted">No scope-specific lines in the loaded window (shared lines appear under Services → Indexer).</li>';
+    } else {
+      for (var u = evsFull.length - 1; u >= 0; u--) {
+        var ent2 = evsFull[u];
+        var ev2 = { parsed: ent2.parsed, text: ent2.text, ts: ent2.ts, source: ent2.source };
+        var bd2 = badgeForIndexerRunLine(ent2);
+        full +=
+          '<li class="sum-ev-item">' +
+          logSummaryHtml(ev2, bd2, { suppressIndexerBadge: true }) +
+          "</li>";
+      }
     }
     full += "</ul></div>";
     return (
       '<div class="sum-body">' +
       '<div class="sum-section-label">Summary</div>' +
       summaryRows +
-      (qProg ? '<div class="sum-section-label">Estimated remaining</div>' + qProg : "") +
-      '<div class="sum-section-label">Indexer jobs</div>' +
-      jobRollup +
+      '<div class="sum-section-label">Recently evaluated files</div>' +
+      recentFiles +
       '<div class="sum-section-label">Full event log</div>' +
       full +
       "</div>"
@@ -2522,6 +3044,20 @@ globalThis.ClaudiaLogs.Main = function () {
     return userLine + "\0" + prLine + "\0" + flavLine;
   }
 
+  /** Same headline as indexer cards; used for stable alphabetical ordering in the Indexers section. */
+  function indexerCardTitleSortLabel(o) {
+    if (!o) return "—";
+    var userLine =
+      o.userLabel && o.userLabel !== "—" ? String(o.userLabel).trim() : "—";
+    var prLine =
+      o.projectId && o.projectId !== "—" ? String(o.projectId).trim() : "—";
+    var flavLine =
+      o.flavorId && o.flavorId !== "—" ? String(o.flavorId).trim() : "";
+    return flavLine !== ""
+      ? userLine + " — " + prLine + " — " + flavLine
+      : userLine + " — " + prLine;
+  }
+
   function persistIndexerWatchRoots(paths, indexRunId, scopeKey, bucketId) {
     if (!paths || !paths.length) return;
     var store = loadIndexerWatchRootsStore();
@@ -2588,7 +3124,9 @@ globalThis.ClaudiaLogs.Main = function () {
           escapeHtml(snap.paths.join("\n")) +
           "</pre>"
         : '<span class="muted">—</span>';
-    var sumLine = escapeHtml(userLine + " · " + prLine + " · " + (flavLine || "—"));
+    var sumLine = escapeHtml(
+      flavLine !== "" ? userLine + " · " + prLine + " · " + flavLine : userLine + " · " + prLine
+    );
     var iid = "ix-stale-" + strHash(bucketId);
     return (
       '<details class="sum-card sum-card--indexer-stale" id="' +
@@ -2601,19 +3139,19 @@ globalThis.ClaudiaLogs.Main = function () {
       escapeHtml(titleText) +
       "</span>" +
       '</span><span class="sum-sub sum-sub--clamp muted">' +
-      escapeHtml("No lines in current window — last known scope") +
+      escapeHtml("Waiting on status update from an indexer worker") +
       "</span></span>" +
-      '<span class="sum-metrics"><span class="sum-metric">—</span></span>' +
-      '<span class="sum-status sum-st-complete">idle</span>' +
       '<span class="sum-chev"></span></summary>' +
       '<div class="sum-body">' +
       '<div class="sum-section-label">Summary</div>' +
       '<div class="indexer-run-summary-line">' +
       sumLine +
       "</div>" +
-      '<dl class="indexer-run-kv"><dt>Watched paths</dt><dd>' +
+      '<dl class="indexer-run-kv">' +
+      "<dt>Watched paths</dt><dd>" +
       pathsBlock +
-      "</dd></dl>" +
+      '</dd><dt>Workspace files</dt><dd><span class="muted">—</span></dd>' +
+      "</dl>" +
       "</div></details>"
     );
   }
@@ -2671,19 +3209,43 @@ globalThis.ClaudiaLogs.Main = function () {
     var lastProg = meta.lastProg;
     var doneSeen = meta.doneSeen;
     var errRecent = countErrorSignalsInEntries(sliceRecent(evs, RECENT_CARD_STATUS_N));
-    var prog = indexerBuildCardSubtitle(meta, evs);
     var declared = meta.lastDeclaredState ? String(meta.lastDeclaredState).trim() : "";
-    var sub = '<span class="sum-sub sum-sub--clamp">' + escapeHtml(prog) + "</span>";
+
+    var qIng =
+      meta.scopeQueueIngestPending != null && !isNaN(Number(meta.scopeQueueIngestPending))
+        ? Number(meta.scopeQueueIngestPending)
+        : null;
+    var qFan =
+      meta.scopeQueueFanoutPending != null && !isNaN(Number(meta.scopeQueueFanoutPending))
+        ? Number(meta.scopeQueueFanoutPending)
+        : null;
+    var pRem = null;
+    if (qIng != null || qFan != null) {
+      pRem = (qIng != null ? qIng : 0) + (qFan != null ? qFan : 0);
+    }
+    var qTot =
+      meta.scopeWorkspaceTotal != null && !isNaN(Number(meta.scopeWorkspaceTotal))
+        ? Math.round(Number(meta.scopeWorkspaceTotal))
+        : null;
+
     var st =
       errRecent > 0
         ? { st: "error", cls: "sum-st-error" }
         : doneSeen
           ? { st: "complete", cls: "sum-st-complete" }
-          : declared === "watch_idle" || declared === "idle"
-            ? { st: "waiting", cls: "sum-st-complete" }
-            : declared === "recovery"
-              ? { st: "recovery", cls: "sum-st-monitor" }
-              : { st: "indexing", cls: "sum-st-indexing" };
+          : declared === "recovery"
+            ? { st: "recovery", cls: "sum-st-monitor" }
+            : pRem !== null && pRem === 0
+              ? { st: "idle", cls: "sum-st-complete" }
+              : declared === "watch_idle" || declared === "idle"
+                ? { st: "waiting", cls: "sum-st-complete" }
+                : { st: "indexing", cls: "sum-st-indexing" };
+    var indexerCollapsedIdle = st.st === "idle";
+
+    var prog = indexerBuildCardSubtitle(meta, evs);
+    var sub = indexerCollapsedIdle
+      ? ""
+      : '<span class="sum-sub sum-sub--clamp">' + escapeHtml(prog) + "</span>";
     var userLine =
       meta.userLabel && meta.userLabel !== "—" ? String(meta.userLabel).trim() : "—";
     var prLine =
@@ -2696,32 +3258,52 @@ globalThis.ClaudiaLogs.Main = function () {
       '<span class="sum-title-indexer-head">' +
       escapeHtml(titleText) +
       "</span>";
-    var okfPill = formatInt(meta.okCount) + " ok | " + formatInt(meta.failCount) + " err";
-    var metrics =
-      '<span class="sum-metrics">' +
-      '<span class="sum-metric">' +
-      escapeHtml(okfPill) +
-      "</span></span>";
+    var backlogLine = "";
+    if (pRem !== null && !isNaN(Number(pRem)) && Number(pRem) === 0) {
+      backlogLine = "";
+    } else if (pRem != null && qTot != null) {
+      backlogLine =
+        formatInt(Math.round(pRem)) + " remaining of " + formatInt(qTot) + " total";
+    } else if (pRem != null) {
+      backlogLine = formatInt(Math.round(pRem)) + " remaining of — total";
+    } else if (qTot != null) {
+      backlogLine = "— remaining of " + formatInt(qTot) + " total";
+    } else {
+      backlogLine = "—";
+    }
+    var progressBarHtml = indexerScopeProgressTimelineBarHtml(pRem, qTot, doneSeen);
+    var captionSpan =
+      backlogLine !== ""
+        ? '<span class="indexer-scope-caption">' + escapeHtml(backlogLine) + "</span>"
+        : "";
+    var progressStack = indexerCollapsedIdle
+      ? ""
+      : '<div class="indexer-scope-progress" title="Scoped: ingest queue + fan-out file rows pending vs workspace files (from indexer.scope.status)">' +
+        progressBarHtml +
+        captionSpan +
+        "</div>";
+    var avatarIndexer = indexerCollapsedIdle
+      ? '<span class="sum-avatar sum-av-c sum-av-indexer-idle" aria-hidden="true">\u2713</span>'
+      : '<span class="sum-avatar sum-av-c">IX</span>';
+    var statusSpan = indexerCollapsedIdle
+      ? ""
+      : '<span class="sum-status ' + st.cls + '">' + escapeHtml(st.st) + "</span>";
     var iid = "ix-" + strHash(run.id);
     rememberIndexerCardSnapshot(run.id, meta);
     return (
       '<details class="sum-card" id="' +
       escapeHtml(iid) +
       '"><summary>' +
-      '<span class="sum-avatar sum-av-c">IX</span>' +
+      avatarIndexer +
       '<span class="sum-main"><span class="sum-title">' +
       titleInner +
       '</span>' +
       sub +
+      progressStack +
       "</span>" +
-      metrics +
-      '<span class="sum-status ' +
-      st.cls +
-      '">' +
-      escapeHtml(st.st) +
-      "</span>" +
+      statusSpan +
       '<span class="sum-chev"></span></summary>' +
-      renderExpandedIndexer(run, evs, meta) +
+      renderExpandedIndexer(run, evs, meta, partitionRegistry) +
       "</details>"
     );
   }
@@ -2815,6 +3397,93 @@ globalThis.ClaudiaLogs.Main = function () {
     );
   }
 
+  /** Structured indexer stderr lines sometimes omit service=indexer; still bucket under Services → Indexer. */
+  function entryIsIndexerLine(ent) {
+    var f = getFlat(ent.parsed);
+    if (String(f.service || "").toLowerCase() === "indexer") return true;
+    if (ent && String(ent.source || "").toLowerCase() === "indexer") return true;
+    var rawMsg = f.msg != null ? f.msg : f.message != null ? f.message : "";
+    var msg = String(rawMsg).toLowerCase().trim();
+    if (msg.indexOf("indexer.") === 0) return true;
+    if (msg.indexOf("gateway.indexer") === 0) return true;
+    return false;
+  }
+
+  /**
+   * Per-scope indexer cards: Full event log lists only lines attributable to that scope.
+   * Lines attributed to every scope (multi-bucket fan-out) stay in Services → Indexer only.
+   */
+  function indexerScopeFullLogInclude(ent, bucketId, partitionRegistry) {
+    bucketId = bucketId != null ? String(bucketId).trim() : "";
+    if (!bucketId) return true;
+
+    var rawFlat = getFlat(ent.parsed);
+    var f = rawFlat;
+    if (
+      globalThis.ClaudiaLogs &&
+      ClaudiaLogs.Derive &&
+      typeof ClaudiaLogs.Derive.indexerAugmentFlat === "function"
+    ) {
+      f = ClaudiaLogs.Derive.indexerAugmentFlat(ent, rawFlat);
+    }
+
+    var rid = f.index_run_id != null ? String(f.index_run_id).trim() : "";
+    var st = rid && partitionRegistry && partitionRegistry[rid] ? partitionRegistry[rid] : null;
+
+    if (
+      globalThis.ClaudiaLogs &&
+      ClaudiaLogs.Derive &&
+      typeof ClaudiaLogs.Derive.indexerBucketGidsForLine === "function" &&
+      st &&
+      st.keys &&
+      st.keys.length > 0
+    ) {
+      var gids = ClaudiaLogs.Derive.indexerBucketGidsForLine(f, st);
+      if (gids && gids.length === 1) {
+        return String(gids[0]).trim() === bucketId;
+      }
+      if (gids && gids.length > 1) {
+        return false;
+      }
+    }
+
+    var itk = f.indexer_target_key != null ? String(f.indexer_target_key).trim() : "";
+    if (itk && itk === bucketId) return true;
+
+    if (
+      globalThis.ClaudiaLogs &&
+      ClaudiaLogs.Derive &&
+      typeof ClaudiaLogs.Derive.indexerGroupKeyFromFlat === "function"
+    ) {
+      var gk = ClaudiaLogs.Derive.indexerGroupKeyFromFlat(f);
+      if (gk != null && String(gk).trim() === bucketId) return true;
+    }
+
+    if (bucketId.indexOf("ig\u001e") === 0) {
+      var parts = bucketId.split("\u001e");
+      if (parts.length >= 4) {
+        var wantP = parts[2] || "";
+        var wantF = parts[3] || "";
+        var fp = String(f.project_id != null ? f.project_id : f.ingest_project != null ? f.ingest_project : "").trim();
+        var ff = String(f.flavor_id != null ? f.flavor_id : "").trim();
+        if (fp === wantP && ff === wantF) return true;
+      }
+    }
+
+    if (rid && rid === bucketId) return true;
+
+    return false;
+  }
+
+  function filterEventsForIndexerScopeFullLog(evs, bucketId, partitionRegistry) {
+    var out = [];
+    if (!Array.isArray(evs)) return out;
+    for (var i = 0; i < evs.length; i++) {
+      if (indexerScopeFullLogInclude(evs[i], bucketId, partitionRegistry)) out.push(evs[i]);
+    }
+    return out;
+  }
+
   /** Gateway logs upstream relay with service=gateway; bucket those lines under bifrost so the card updates with chat traffic. */
   function entryIsGatewayUpstreamRelay(ent) {
     var f = getFlat(ent.parsed);
@@ -2842,10 +3511,14 @@ globalThis.ClaudiaLogs.Main = function () {
       var gx = ClaudiaLogs.Derive.indexerGroupKeyFromFlat(fR);
       if (gx != null && String(gx).trim() !== "") return String(gx).trim();
     }
+    var itk =
+      fR.indexer_target_key != null && String(fR.indexer_target_key).trim() !== ""
+        ? String(fR.indexer_target_key).trim()
+        : "";
     var ik =
       fR.indexer_key != null && String(fR.indexer_key).trim() !== "" ? String(fR.indexer_key).trim() : "";
     var rid = fR.index_run_id != null && fR.index_run_id !== "" ? String(fR.index_run_id) : "";
-    return ik || rid || "";
+    return itk || ik || rid || "";
   }
 
   function renderSummarizedUnified() {
@@ -2870,6 +3543,7 @@ globalThis.ClaudiaLogs.Main = function () {
       var fB = getFlat(pB);
       var svc = fB.service ? String(fB.service) : "";
       if (entryIsGatewayUpstreamRelay(entB)) svc = "bifrost";
+      else if (entryIsIndexerLine(entB)) svc = "indexer";
       else if (!buckets[svc]) {
         svc = entB.source || "gateway";
         if (!buckets[svc]) svc = "gateway";
@@ -2906,6 +3580,8 @@ globalThis.ClaudiaLogs.Main = function () {
         byRun[normK] = { id: normK, events: arrN };
       }
     }
+    lastIndexerSummarizeByRun = byRun;
+    lastIndexerSummarizePartitionRegistry = partitionRegistry;
     var convClusterGapMs = 42 * 60 * 1000;
     var mergedConv = clusterConversationGroupsByTime(groups, convClusterGapMs);
     var convTimeline = [];
@@ -2922,7 +3598,7 @@ globalThis.ClaudiaLogs.Main = function () {
       var nm = order[oi];
       var arr = buckets[nm];
       if (!arr || !arr.length) continue;
-      svcHtml += buildServiceCard(nm, arr);
+      svcHtml += buildServiceCard(nm, arr, { byRun: byRun, partitionRegistry: partitionRegistry });
     }
     var idxTimeline = [];
     var seenIndexerBuckets = {};
@@ -2948,12 +3624,8 @@ globalThis.ClaudiaLogs.Main = function () {
       var metaLive = collectIndexerRunMeta(run.id, run.events, pmetaLive);
       metaLive = mergePersistedIndexerWatchRoots(metaLive, run.events, run.id);
       liveIndexerIdentities[indexerCardIdentityKey(metaLive)] = true;
-      var mx = 0;
-      for (var ue = 0; ue < run.events.length; ue++) {
-        var tt = entryInstant(run.events[ue]);
-        if (tt) mx = Math.max(mx, tt.getTime());
-      }
-      idxTimeline.push({ sort: mx, html: buildIndexerCard(run, partitionRegistry) });
+      var sortLabel = indexerCardTitleSortLabel(metaLive) + "\u0001" + String(run.id || "");
+      idxTimeline.push({ sortKey: sortLabel, html: buildIndexerCard(run, partitionRegistry) });
     }
     var snapStore = loadIndexerWatchRootsStore();
     if (snapStore.snapshots) {
@@ -2963,13 +3635,15 @@ globalThis.ClaudiaLogs.Main = function () {
         var sn = snapStore.snapshots[sbi];
         if (liveIndexerIdentities[indexerCardIdentityKeyFromSnap(sn)]) continue;
         idxTimeline.push({
-          sort: sn.t || 0,
+          sortKey: indexerCardTitleSortLabel(sn) + "\u0001" + String(sbi),
           html: buildIndexerStaleSnapshotCard(sbi, sn)
         });
       }
     }
     idxTimeline.sort(function (a, b) {
-      return b.sort - a.sort;
+      var ka = a.sortKey != null ? String(a.sortKey) : "";
+      var kb = b.sortKey != null ? String(b.sortKey) : "";
+      return ka.localeCompare(kb, undefined, { sensitivity: "base", numeric: true });
     });
     var body = buildGatewayUsageFeedSection();
     if (convTimeline.length) {
@@ -3074,12 +3748,12 @@ globalThis.ClaudiaLogs.Main = function () {
     /** Raw logs: coalesce DOM refresh to one rAF per frame (see streaming.js scheduleRawLogsDomFlush). */
     rawLogsRafPending: false,
     rawLogsFlushFollow: false,
-    getViewMode: function () { return viewMode; },
-    setViewMode: function (next) { viewMode = normalizeViewMode(next); saveViewMode(viewMode); syncViewSelects(); },
+    getViewMode: function () { return "summarized"; },
+    setViewMode: function (_next) { viewMode = "summarized"; },
     getEmbedded: function () { return embedded; },
     getStarted: function () { return started; },
     setStarted: function (v) { started = !!v; },
-    onViewModeChanged: function () { applyViewLayout(); rebuildAllRows(); },
+    onViewModeChanged: function () { applyViewLayout(); },
     statusEl: statusEl,
     statusLine: statusLine,
     nearBottom: nearBottom,
@@ -3099,16 +3773,62 @@ globalThis.ClaudiaLogs.Main = function () {
     rebuildAllRows: rebuildAllRows,
     rebuildRawLogsTextarea: rebuildRawLogsTextarea,
     appendRawLineToTextarea: appendRawLineToTextarea,
-    appendTableRow: appendTableRow,
-    applyFilters: applyFilters,
-    ensureAppOption: ensureAppOption,
-    ensureLevelOption: ensureLevelOption,
-    entryMatchesFilters: entryMatchesFilters,
+    appendTableRow: function () {},
+    applyFilters: function () {},
+    ensureAppOption: function () {},
+    ensureLevelOption: function () {},
+    entryMatchesFilters: function () { return true; },
     fetchTokenLabels: fetchTokenLabels,
     startingRef: { value: false },
     esRef: { value: es },
     pollTimerRef: { value: pollTimer }
   };
+
+  (function wireLogsChromeLinks() {
+    document.body.addEventListener(
+      "click",
+      function (ev) {
+        var t = ev.target;
+        if (!t || typeof t.closest !== "function") return;
+        var ext = t.closest("a.sum-ext-link");
+        if (ext) {
+          var href = ext.getAttribute("href") || "";
+          if (/^https?:\/\//i.test(href)) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            if (typeof globalThis.claudiaOpenExternalURL === "function") {
+              try {
+                var ret = globalThis.claudiaOpenExternalURL(href);
+                if (ret && typeof ret.then === "function") ret.catch(function () {});
+              } catch (x) {}
+            } else {
+              try {
+                window.open(href, "_blank", "noopener,noreferrer");
+              } catch (x2) {}
+            }
+          }
+          return;
+        }
+        var proj = t.closest("a.sum-proj-path");
+        if (proj) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          var rel = proj.getAttribute("data-rel") || "";
+          if (!rel) rel = proj.textContent || "";
+          rel = String(rel).replace(/\s+/g, " ").trim();
+          if (!rel) return;
+          if (typeof globalThis.claudiaRevealProjectPath === "function") {
+            try {
+              var ret2 = globalThis.claudiaRevealProjectPath(rel);
+              if (ret2 && typeof ret2.then === "function") ret2.catch(function () {});
+            } catch (x3) {}
+          }
+          return;
+        }
+      },
+      true
+    );
+  })();
 
   fetchTokenLabels();
   applyViewLayout();

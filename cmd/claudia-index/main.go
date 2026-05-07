@@ -69,19 +69,7 @@ func drainReloadSignals(ch <-chan struct{}) {
 	}
 }
 
-func runOneShot(parentCtx context.Context, wd string, cfgPath string, gatewayURL string, roots rootList, logJSON bool, baseLog *slog.Logger) error {
-	fc, err := indexer.LoadLayeredConfig(wd, cfgPath)
-	if err != nil {
-		return err
-	}
-	cfg, err := indexer.Resolve(fc, os.Getenv, indexer.Overrides{
-		GatewayURL: gatewayURL,
-		Roots:      roots,
-	})
-	if err != nil {
-		return err
-	}
-
+func runOneShot(parentCtx context.Context, cfg indexer.Resolved, logJSON bool, baseLog *slog.Logger) error {
 	runID := uuid.NewString()
 	log := attachSessionLogger(logJSON, baseLog, runID)
 	client := indexer.NewGatewayClient(cfg.GatewayURL, cfg.Token, cfg.RequestTimeout)
@@ -123,33 +111,32 @@ func runOneShot(parentCtx context.Context, wd string, cfgPath string, gatewayURL
 }
 
 func attachSessionLogger(logJSON bool, baseLog *slog.Logger, runID string) *slog.Logger {
-	if baseLog != nil {
-		return baseLog.With("index_run_id", runID, "service", "indexer")
+	if baseLog == nil {
+		baseLog = indexer.StderrLogger(logJSON, slog.LevelInfo)
 	}
-	var handler slog.Handler
-	if logJSON {
-		handler = slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})
-	} else {
-		handler = slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})
-	}
-	return slog.New(handler).With("index_run_id", runID, "service", "indexer")
+	return baseLog.With("index_run_id", runID, "service", "indexer")
 }
 
-func runWatchSession(sessionCtx context.Context, wd string, cfgPath string, gatewayURL string, roots rootList, logJSON bool, baseLog *slog.Logger, hotReloadCount int) error {
+func runWatchSession(sessionCtx context.Context, wd string, cfgPath string, gatewayURL string, roots rootList, logJSON bool, logLevel string, hotReloadCount int) error {
 	fc, err := indexer.LoadLayeredConfig(wd, cfgPath)
 	if err != nil {
 		return err
 	}
-	cfg, err := indexer.Resolve(fc, os.Getenv, indexer.Overrides{
-		GatewayURL: gatewayURL,
-		Roots:      roots,
-	})
+	ov := indexer.Overrides{GatewayURL: gatewayURL, Roots: roots}
+	if strings.TrimSpace(cfgPath) != "" {
+		ov.ExplicitConfigPath = cfgPath
+	}
+	cfg, err := indexer.Resolve(fc, os.Getenv, ov)
 	if err != nil {
 		return err
 	}
+	if strings.TrimSpace(logLevel) != "" {
+		cfg.LogLevel = indexer.ParseLogLevel(logLevel)
+	}
 
 	runID := uuid.NewString()
-	log := attachSessionLogger(logJSON, baseLog, runID)
+	sessionBase := indexer.StderrLogger(logJSON, cfg.LogLevel)
+	log := attachSessionLogger(logJSON, sessionBase, runID)
 	client := indexer.NewGatewayClient(cfg.GatewayURL, cfg.Token, cfg.RequestTimeout)
 	client.IndexRunID = runID
 
@@ -200,7 +187,7 @@ func runWatchSession(sessionCtx context.Context, wd string, cfgPath string, gate
 	return nil
 }
 
-func runWatchWithHotReload(ctx context.Context, wd string, absSupervisedCfg string, cfgFlag string, gatewayURL string, roots rootList, logJSON bool, baseLog *slog.Logger) error {
+func runWatchWithHotReload(ctx context.Context, wd string, absSupervisedCfg string, cfgFlag string, gatewayURL string, roots rootList, logJSON bool, logLevel string, baseLog *slog.Logger) error {
 	reloadCh := make(chan struct{}, 1)
 	signalReload := func() {
 		select {
@@ -241,7 +228,7 @@ func runWatchWithHotReload(ctx context.Context, wd string, absSupervisedCfg stri
 
 		sessDone := make(chan error, 1)
 		go func() {
-			sessDone <- runWatchSession(sessionCtx, wd, cfgFlag, gatewayURL, roots, logJSON, baseLog, hotN)
+			sessDone <- runWatchSession(sessionCtx, wd, cfgFlag, gatewayURL, roots, logJSON, logLevel, hotN)
 		}()
 
 		select {
@@ -279,6 +266,7 @@ func run() error {
 		oneShot     bool
 		showVersion bool
 		logJSON     bool
+		logLevel    string
 	)
 	flag.StringVar(&cfgPath, "config", "", "optional indexer YAML merged after ~/.claudia/indexer.config.yaml and ./.claudia/indexer.config.yaml")
 	flag.StringVar(&gatewayURL, "gateway-url", "", "override gateway URL (env "+indexer.EnvGatewayURL+")")
@@ -286,6 +274,7 @@ func run() error {
 	flag.BoolVar(&oneShot, "one-shot", false, "perform a single scan + ingest pass and exit")
 	flag.BoolVar(&showVersion, "version", false, "print version and exit")
 	flag.BoolVar(&logJSON, "log-json", false, "emit structured JSON logs on stderr (v0.5 supervised / operator UI)")
+	flag.StringVar(&logLevel, "log-level", "", "override indexer log_level (debug, info, warn, error)")
 	flag.Parse()
 
 	if showVersion {
@@ -301,16 +290,26 @@ func run() error {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	var baseLog *slog.Logger
-	if logJSON {
-		baseLog = slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	} else {
-		baseLog = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	fc, err := indexer.LoadLayeredConfig(wd, cfgPath)
+	if err != nil {
+		return err
 	}
+	ov := indexer.Overrides{GatewayURL: gatewayURL, Roots: roots}
+	if strings.TrimSpace(cfgPath) != "" {
+		ov.ExplicitConfigPath = cfgPath
+	}
+	cfg, err := indexer.Resolve(fc, os.Getenv, ov)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(logLevel) != "" {
+		cfg.LogLevel = indexer.ParseLogLevel(logLevel)
+	}
+	baseLog := indexer.StderrLogger(logJSON, cfg.LogLevel)
 
 	explicitConfigLayer := strings.TrimSpace(cfgPath) != ""
 	if oneShot {
-		return runOneShot(ctx, wd, cfgPath, gatewayURL, roots, logJSON, baseLog)
+		return runOneShot(ctx, cfg, logJSON, baseLog)
 	}
 
 	if explicitConfigLayer {
@@ -318,8 +317,8 @@ func run() error {
 		if errPath != nil {
 			return fmt.Errorf("indexer supervised config path: %w", errPath)
 		}
-		return runWatchWithHotReload(ctx, wd, absCfg, cfgPath, gatewayURL, roots, logJSON, baseLog)
+		return runWatchWithHotReload(ctx, wd, absCfg, cfgPath, gatewayURL, roots, logJSON, logLevel, baseLog)
 	}
 
-	return runWatchSession(ctx, wd, cfgPath, gatewayURL, roots, logJSON, baseLog, 0)
+	return runWatchSession(ctx, wd, cfgPath, gatewayURL, roots, logJSON, logLevel, 0)
 }

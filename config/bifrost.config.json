@@ -10,5 +10,13 @@
     "drop_excess_requests": false
   },
   "providers": {
+    "ollama": {
+      "name": "ollama",
+      "keys": [],
+      "network_config": {
+        "base_url": "http://127.0.0.1:11434",
+        "default_request_timeout_in_seconds": 60
+      }
+    }
   }
 }

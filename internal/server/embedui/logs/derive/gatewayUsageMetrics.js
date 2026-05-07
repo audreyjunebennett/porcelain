@@ -27,8 +27,6 @@ function gatewayUsageCardModel(data, aggregateRollupRows, bifrostShortModelLabel
   var lblMin = data && data.current_minute_utc ? String(data.current_minute_utc) : "";
   var lblDay = data && data.current_day_utc ? String(data.current_day_utc) : "";
 
-  var st = loading ? { st: "…", cls: "sum-st-monitor" } : storeOpen ? { st: "live", cls: "sum-st-monitor" } : { st: "off", cls: "sum-st-error" };
-
   return {
     loading: loading,
     storeOpen: storeOpen,
@@ -38,7 +36,6 @@ function gatewayUsageCardModel(data, aggregateRollupRows, bifrostShortModelLabel
     lblDay: lblDay,
     minAgg: minAgg,
     dayAgg: dayAgg,
-    st: st,
     message: data && data.message ? String(data.message) : ""
   };
 }

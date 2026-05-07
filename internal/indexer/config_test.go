@@ -2,6 +2,7 @@ package indexer
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,6 +19,54 @@ func TestResolve_RequiresURLAndToken(t *testing.T) {
 	_, err = Resolve(FileConfig{Roots: FlexibleRoots{{Path: dir}}, GatewayURL: "http://x"}, env, Overrides{})
 	if err == nil || !strings.Contains(err.Error(), "token") {
 		t.Fatalf("expected token error, got %v", err)
+	}
+}
+
+func TestResolve_SyncStateDefaultNextToExplicitConfig(t *testing.T) {
+	tmp := t.TempDir()
+	sub := filepath.Join(tmp, "data", "gateway")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfgFile := filepath.Join(sub, "indexer.supervised.yaml")
+	fc := FileConfig{
+		GatewayURL: "http://127.0.0.1:3000",
+		Roots:      FlexibleRoots{{Path: tmp}},
+	}
+	env := func(k string) string {
+		if k == EnvGatewayToken {
+			return "tok"
+		}
+		return ""
+	}
+	r, err := Resolve(fc, env, Overrides{ExplicitConfigPath: cfgFile})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(sub, "indexer.sync-state.json")
+	if r.SyncStatePath != want {
+		t.Fatalf("SyncStatePath=%q want %q", r.SyncStatePath, want)
+	}
+}
+
+func TestResolve_SyncStateDefaultDotClaudiaWithoutExplicitConfig(t *testing.T) {
+	tmp := t.TempDir()
+	fc := FileConfig{
+		GatewayURL: "http://127.0.0.1:3000",
+		Roots:      FlexibleRoots{{Path: tmp}},
+	}
+	env := func(k string) string {
+		if k == EnvGatewayToken {
+			return "tok"
+		}
+		return ""
+	}
+	r, err := Resolve(fc, env, Overrides{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := r.SyncStatePath; got != filepath.Join(".claudia", "indexer.sync-state.json") {
+		t.Fatalf("SyncStatePath=%q want .claudia/indexer.sync-state.json", got)
 	}
 }
 
@@ -88,12 +137,15 @@ func TestResolve_AppliesDefaults(t *testing.T) {
 	if !r.RecoveryIncludeRootHealth {
 		t.Fatal("expected RecoveryIncludeRootHealth default true")
 	}
-	if !r.VerboseJobLogs {
-		t.Fatal("expected VerboseJobLogs default true")
+	if r.JobSkipLog != JobSkipLogInfo {
+		t.Fatal("expected JobSkipLog default info")
+	}
+	if r.LogLevel != slog.LevelInfo {
+		t.Fatal("expected LogLevel default info")
 	}
 }
 
-func TestResolve_VerboseJobLogsFalse(t *testing.T) {
+func TestResolve_LegacyVerboseJobLogsFalse(t *testing.T) {
 	dir := t.TempDir()
 	env := func(k string) string {
 		if k == EnvGatewayToken {
@@ -110,8 +162,50 @@ func TestResolve_VerboseJobLogsFalse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.VerboseJobLogs {
-		t.Fatal("expected VerboseJobLogs false from YAML")
+	if r.JobSkipLog != JobSkipLogDebug {
+		t.Fatal("expected legacy verbose_job_logs false → job_skip_log debug")
+	}
+}
+
+func TestResolve_JobSkipLogOff(t *testing.T) {
+	dir := t.TempDir()
+	env := func(k string) string {
+		if k == EnvGatewayToken {
+			return "tok"
+		}
+		return ""
+	}
+	r, err := Resolve(FileConfig{
+		GatewayURL: "http://x",
+		Roots:      FlexibleRoots{{Path: dir}},
+		JobSkipLog: "off",
+	}, env, Overrides{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.JobSkipLog != JobSkipLogOff {
+		t.Fatal("expected JobSkipLog off")
+	}
+}
+
+func TestResolve_LogLevelDebugYAML(t *testing.T) {
+	dir := t.TempDir()
+	env := func(k string) string {
+		if k == EnvGatewayToken {
+			return "tok"
+		}
+		return ""
+	}
+	r, err := Resolve(FileConfig{
+		GatewayURL: "http://x",
+		Roots:      FlexibleRoots{{Path: dir}},
+		LogLevel:   "debug",
+	}, env, Overrides{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.LogLevel != slog.LevelDebug {
+		t.Fatalf("expected debug log level, got %v", r.LogLevel)
 	}
 }
 

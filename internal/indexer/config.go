@@ -12,6 +12,7 @@ package indexer
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,7 +35,9 @@ const (
 	defaultMaxFileBytes   = int64(8 * 1024 * 1024)
 	defaultRequestTimeout = 60 * time.Second
 
-	defaultStorageStatsPoll = 2 * time.Minute
+	defaultStorageStatsPoll     = 2 * time.Minute
+	defaultScopeStatusPoll      = 45 * time.Second
+	defaultScopeActiveFileMinMs = 2000
 )
 
 // EnvGatewayURL and EnvGatewayToken are the v0.2 environment variables for
@@ -132,10 +135,18 @@ type FileConfig struct {
 	SyncStatePath     string `yaml:"sync_state_path"`
 	MaxWholeFileBytes int64  `yaml:"max_whole_file_bytes"` // 0 = use gateway max_whole_file_bytes only
 
-	// VerboseJobLogs, when non-nil after merge, controls per-file INFO lines
-	// (indexer.job.skipped, indexer.job.upload). When absent from all merged
-	// files, Resolve defaults to true so supervised /ui/logs shows progress.
+	// VerboseJobLogs is deprecated; prefer job_skip_log (info | debug | off).
+	// When job_skip_log is unset and VerboseJobLogs is non-nil after merge:
+	// true → info, false → debug.
 	VerboseJobLogs *bool `yaml:"verbose_job_logs"`
+
+	// LogLevel is stderr minimum level for claudia-index (debug, info, warn, error).
+	// Empty defaults to info.
+	LogLevel string `yaml:"log_level"`
+
+	// JobSkipLog selects per-file skip / upload verbosity: info (default),
+	// debug (DEBUG indexer.skip.* only), or off (no skip/upload INFO lines).
+	JobSkipLog string `yaml:"job_skip_log"`
 
 	// StorageStatsPollMS sets GET /v1/indexer/storage/stats polling. Zero = default (~2 min).
 	// Negative = disable polling entirely.
@@ -144,6 +155,13 @@ type FileConfig struct {
 	// QueueFanoutHWMPercent is p×100 for fair-share bulk fan-out (default 75 → p=0.75).
 	// Valid range 1–100; zero/absent resolves to 75.
 	QueueFanoutHWMPercent int `yaml:"queue_fanout_high_water_mark_percent"`
+
+	// ScopeStatusPollMS emits periodic indexer.scope.status lines (per project+flavor scope).
+	// Zero uses default (~45s); negative disables.
+	ScopeStatusPollMS int `yaml:"scope_status_poll_ms"`
+
+	// ScopeActiveFileLogMinIntervalMS rate-limits indexer.scope.active_file per scope (default 2000).
+	ScopeActiveFileLogMinIntervalMS int `yaml:"scope_active_file_log_min_interval_ms"`
 }
 
 // Resolved is the runtime indexer configuration after merging YAML, env vars,
@@ -177,9 +195,11 @@ type Resolved struct {
 	// are paused after exhausting ingest retries (defaults true when unset in YAML).
 	RecoveryIncludeRootHealth bool
 
-	// VerboseJobLogs emits per-file INFO (skips, upload start) for /ui/logs.
-	// Defaults true when unset in YAML; set false to reduce volume.
-	VerboseJobLogs bool
+	// LogLevel is the minimum slog level for indexer stderr output.
+	LogLevel slog.Level
+
+	// JobSkipLog controls per-file skip / pre-upload lines (see ParseJobSkipLog).
+	JobSkipLog JobSkipLogMode
 
 	// StorageStatsPoll is how often to call GET /v1/indexer/storage/stats and
 	// emit indexer.state / storage stats logs. Zero disables polling.
@@ -188,6 +208,12 @@ type Resolved struct {
 	// QueueFanoutHWMPercent is the percentage of queue capacity reserved across
 	// all bulk scopes for fair-share fan-out (default 75).
 	QueueFanoutHWMPercent int
+
+	// ScopeStatusPoll cadence for indexer.scope.status. Zero only when YAML sets scope_status_poll_ms < 0.
+	ScopeStatusPoll time.Duration
+
+	// ScopeActiveFileLogMinInterval rate-limits indexer.scope.active_file lines per scope.
+	ScopeActiveFileLogMinInterval time.Duration
 }
 
 // Root is a watched directory and its stable, slug-form identifier used in
@@ -239,12 +265,18 @@ func LoadFile(path string) (FileConfig, error) {
 type Overrides struct {
 	GatewayURL string
 	Roots      []string
+	// ExplicitConfigPath is the --config path when the operator passes one (including
+	// supervised desktop). When sync_state_path is unset in merged YAML, Resolve
+	// defaults sync state to filepath.Join(filepath.Dir(absExplicit), "indexer.sync-state.json").
+	ExplicitConfigPath string
 }
 
 // Resolve produces a Resolved config from merged YAML (see LoadLayeredConfig),
 // environment lookup, and CLI overrides. Gateway URL: merged YAML <
 // CLAUDIA_GATEWAY_URL < --gateway-url. Roots: merged YAML < --root (when any
 // --root is set). Token is only from CLAUDIA_GATEWAY_TOKEN (no token-in-YAML).
+// When sync_state_path is empty, default is indexer.sync-state.json next to
+// Overrides.ExplicitConfigPath when set, else .claudia/indexer.sync-state.json.
 func Resolve(fc FileConfig, env func(string) string, ov Overrides) (Resolved, error) {
 	if env == nil {
 		env = os.Getenv
@@ -265,10 +297,24 @@ func Resolve(fc FileConfig, env func(string) string, ov Overrides) (Resolved, er
 		BinaryNullByteRatio:  fc.BinaryNullByteRatio,
 		SyncStatePath:        strings.TrimSpace(fc.SyncStatePath),
 		MaxWholeFileBytes:    fc.MaxWholeFileBytes,
-		VerboseJobLogs:       true,
+		LogLevel:             slog.LevelInfo,
+		JobSkipLog:           JobSkipLogInfo,
 	}
-	if fc.VerboseJobLogs != nil {
-		r.VerboseJobLogs = *fc.VerboseJobLogs
+	if strings.TrimSpace(fc.LogLevel) != "" {
+		r.LogLevel = ParseLogLevel(fc.LogLevel)
+	}
+	if js := strings.TrimSpace(fc.JobSkipLog); js != "" {
+		m, err := ParseJobSkipLog(js)
+		if err != nil {
+			return Resolved{}, err
+		}
+		r.JobSkipLog = m
+	} else if fc.VerboseJobLogs != nil {
+		if *fc.VerboseJobLogs {
+			r.JobSkipLog = JobSkipLogInfo
+		} else {
+			r.JobSkipLog = JobSkipLogDebug
+		}
 	}
 	switch {
 	case fc.StorageStatsPollMS < 0:
@@ -277,6 +323,22 @@ func Resolve(fc FileConfig, env func(string) string, ov Overrides) (Resolved, er
 		r.StorageStatsPoll = time.Duration(fc.StorageStatsPollMS) * time.Millisecond
 	default:
 		r.StorageStatsPoll = defaultStorageStatsPoll
+	}
+	switch {
+	case fc.ScopeStatusPollMS < 0:
+		r.ScopeStatusPoll = 0
+	case fc.ScopeStatusPollMS > 0:
+		r.ScopeStatusPoll = time.Duration(fc.ScopeStatusPollMS) * time.Millisecond
+	default:
+		r.ScopeStatusPoll = defaultScopeStatusPoll
+	}
+	switch {
+	case fc.ScopeActiveFileLogMinIntervalMS < 0:
+		r.ScopeActiveFileLogMinInterval = 0
+	case fc.ScopeActiveFileLogMinIntervalMS > 0:
+		r.ScopeActiveFileLogMinInterval = time.Duration(fc.ScopeActiveFileLogMinIntervalMS) * time.Millisecond
+	default:
+		r.ScopeActiveFileLogMinInterval = time.Duration(defaultScopeActiveFileMinMs) * time.Millisecond
 	}
 	switch {
 	case fc.QueueFanoutHWMPercent >= 1 && fc.QueueFanoutHWMPercent <= 100:
@@ -382,7 +444,16 @@ func Resolve(fc FileConfig, env func(string) string, ov Overrides) (Resolved, er
 		return r, errors.New("at least one watch root is required (config roots or --root)")
 	}
 	if r.SyncStatePath == "" {
-		r.SyncStatePath = filepath.Join(".claudia", "indexer.sync-state.json")
+		if p := strings.TrimSpace(ov.ExplicitConfigPath); p != "" {
+			abs, err := filepath.Abs(p)
+			if err != nil {
+				r.SyncStatePath = filepath.Join(".claudia", "indexer.sync-state.json")
+			} else {
+				r.SyncStatePath = filepath.Join(filepath.Dir(abs), "indexer.sync-state.json")
+			}
+		} else {
+			r.SyncStatePath = filepath.Join(".claudia", "indexer.sync-state.json")
+		}
 	}
 	if fc.RecoveryIncludeRootHealth != nil {
 		r.RecoveryIncludeRootHealth = *fc.RecoveryIncludeRootHealth
@@ -528,8 +599,20 @@ func MergeFileConfig(base, overlay FileConfig) FileConfig {
 		v := *overlay.VerboseJobLogs
 		out.VerboseJobLogs = &v
 	}
+	if strings.TrimSpace(overlay.LogLevel) != "" {
+		out.LogLevel = overlay.LogLevel
+	}
+	if strings.TrimSpace(overlay.JobSkipLog) != "" {
+		out.JobSkipLog = overlay.JobSkipLog
+	}
 	if overlay.QueueFanoutHWMPercent >= 1 && overlay.QueueFanoutHWMPercent <= 100 {
 		out.QueueFanoutHWMPercent = overlay.QueueFanoutHWMPercent
+	}
+	if overlay.ScopeStatusPollMS != 0 {
+		out.ScopeStatusPollMS = overlay.ScopeStatusPollMS
+	}
+	if overlay.ScopeActiveFileLogMinIntervalMS != 0 {
+		out.ScopeActiveFileLogMinIntervalMS = overlay.ScopeActiveFileLogMinIntervalMS
 	}
 	return out
 }

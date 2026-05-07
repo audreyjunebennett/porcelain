@@ -52,6 +52,13 @@ type Indexer struct {
 	// pendingBulkByScope counts tier-1 bulk ingest jobs queued from fan-out (fair-share).
 	pendingBulkMu      sync.Mutex
 	pendingBulkByScope map[string]int64
+
+	// workspaceFilesByScope approximates tracked files per (project, flavor) after scans (+/- watchers).
+	workspaceFilesMu      sync.Mutex
+	workspaceFilesByScope map[string]int64
+	activeFileLogMu       sync.Mutex
+	lastActiveFilePath    map[string]string
+	lastActiveFileEmit    map[string]time.Time
 }
 
 // Hooks is an optional set of callbacks tests can install to observe and
@@ -239,6 +246,21 @@ func (ix *Indexer) RunWorkers(ctx context.Context) {
 			}
 		}
 	}()
+	if ix.cfg.ScopeStatusPoll > 0 {
+		go func() {
+			t := time.NewTicker(ix.cfg.ScopeStatusPoll)
+			defer t.Stop()
+			ix.EmitScopeStatus("startup")
+			for {
+				select {
+				case <-tickCtx.Done():
+					return
+				case <-t.C:
+					ix.EmitScopeStatus("heartbeat")
+				}
+			}
+		}()
+	}
 	var wg sync.WaitGroup
 	for i := 0; i < ix.cfg.Workers; i++ {
 		wg.Add(1)
@@ -254,17 +276,21 @@ func (ix *Indexer) RunWorkers(ctx context.Context) {
 				if wi.Kind == WorkIngest && wi.FromFanout && wi.BulkScopeKey != "" {
 					ix.decPendingBulk(wi.BulkScopeKey)
 				}
-				if err := ix.processWorkItem(ctx, wi, rng); err != nil {
+				if err := ix.processWorkItem(ctx, wi, rng, id); err != nil {
 					if errors.Is(err, ErrPaused) {
 						rel := ""
 						if wi.Kind == WorkIngest {
 							rel = wi.Job.RelPath
 						}
-						ix.log.Warn("worker paused; awaiting health recovery",
+						args := []any{
 							"msg", "indexer.worker.paused",
 							"worker", id, "rel", rel,
 							"work_kind", wi.Kind,
-						)
+						}
+						if wi.Kind == WorkIngest {
+							args = append(args, ix.logScopeFieldsForJob(wi.Job)...)
+						}
+						ix.log.Warn("worker paused; awaiting health recovery", args...)
 						ix.LogQueueSnapshot("worker_paused_before_recovery")
 						if perr := ix.waitForRecovery(ctx); perr != nil {
 							return
@@ -278,13 +304,21 @@ func (ix *Indexer) RunWorkers(ctx context.Context) {
 					}
 					if wi.Kind == WorkIngest {
 						atomic.AddInt64(&ix.opsIngestFail, 1)
-						ix.log.Error("ingest failed (dropped)",
+						args := []any{
 							"msg", "indexer.job.failed",
-							"worker", id, "rel", wi.Job.RelPath, "err", err)
+							"worker", id, "rel", wi.Job.RelPath, "err", err,
+						}
+						args = append(args, ix.logScopeFieldsForJob(wi.Job)...)
+						ix.log.Error("ingest failed (dropped)", args...)
 					} else {
-						ix.log.Error("work item failed (dropped)",
+						args := []any{
 							"msg", "indexer.work.failed",
-							"worker", id, "kind", wi.Kind, "err", err)
+							"worker", id, "kind", wi.Kind, "err", err,
+						}
+						if wi.Kind == WorkFanoutList && len(wi.Candidates) > 0 {
+							args = append(args, ix.logScopeFieldsForTaggedSlice(wi.Candidates)...)
+						}
+						ix.log.Error("work item failed (dropped)", args...)
 					}
 				}
 			}
@@ -294,15 +328,36 @@ func (ix *Indexer) RunWorkers(ctx context.Context) {
 	ix.LogQueueSnapshot("run_workers_exit")
 }
 
+// emitSkippedFile logs a per-file skip using JobSkipLog (info / debug / off).
+func (ix *Indexer) emitSkippedFile(j Job, skipReason, debugSlug, debugHuman string) {
+	if ix.log == nil || ix.cfg.JobSkipLog == JobSkipLogOff {
+		return
+	}
+	switch ix.cfg.JobSkipLog {
+	case JobSkipLogInfo:
+		args := []any{
+			"msg", "indexer.job.skipped",
+			"rel", j.RelPath,
+			"skip_reason", skipReason,
+		}
+		args = append(args, ix.logScopeFieldsForJob(j)...)
+		ix.log.Info("job skipped", args...)
+	case JobSkipLogDebug:
+		args := []any{"msg", debugSlug, "rel", j.RelPath}
+		args = append(args, ix.logScopeFieldsForJob(j)...)
+		ix.log.Debug(debugHuman, args...)
+	}
+}
+
 // processWorkItem dispatches scan, fan-out, or ingest work.
-func (ix *Indexer) processWorkItem(ctx context.Context, wi WorkItem, rng *rand.Rand) error {
+func (ix *Indexer) processWorkItem(ctx context.Context, wi WorkItem, rng *rand.Rand, workerID int) error {
 	switch wi.Kind {
 	case WorkScan:
 		return ix.runScanJob(ctx, wi.ScanID)
 	case WorkFanoutList:
 		return ix.runFanoutList(ctx, wi)
 	case WorkIngest:
-		return ix.processIngestWithRetries(ctx, wi, rng)
+		return ix.processIngestWithRetries(ctx, wi, rng, workerID)
 	default:
 		return nil
 	}
@@ -310,9 +365,10 @@ func (ix *Indexer) processWorkItem(ctx context.Context, wi WorkItem, rng *rand.R
 
 // processIngestWithRetries runs ingestOne with backoff. Returns ErrPaused if
 // retries are exhausted while errors remain retryable.
-func (ix *Indexer) processIngestWithRetries(ctx context.Context, wi WorkItem, rng *rand.Rand) error {
+func (ix *Indexer) processIngestWithRetries(ctx context.Context, wi WorkItem, rng *rand.Rand, workerID int) error {
 	j := wi.Job
 	for attempt := 0; attempt < ix.cfg.RetryMaxAttempts; attempt++ {
+		ix.emitScopeActiveFileIfDue(workerID, j)
 		ix.ingestInflight.Add(1)
 		err := ix.ingestOne(ctx, j)
 		ix.ingestInflight.Add(-1)
@@ -327,14 +383,16 @@ func (ix *Indexer) processIngestWithRetries(ctx context.Context, wi WorkItem, rn
 		}
 		d := Backoff(attempt, ix.cfg.RetryBaseDelay, ix.cfg.RetryMaxDelay, rng)
 		atomic.AddInt64(&ix.opsRetry, 1)
-		ix.log.Warn("ingest retry",
+		args := []any{
 			"msg", "indexer.retry.scheduled",
 			"rel", j.RelPath,
-			"attempt", attempt+1,
+			"attempt", attempt + 1,
 			"max_attempts", ix.cfg.RetryMaxAttempts,
 			"delay_ms", d.Milliseconds(),
 			"err", err,
-		)
+		}
+		args = append(args, ix.logScopeFieldsForJob(j)...)
+		ix.log.Warn("ingest retry", args...)
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -357,18 +415,7 @@ func (ix *Indexer) ingestOne(ctx context.Context, j Job) error {
 		return fmt.Errorf("read %s: %w", j.RelPath, err)
 	}
 	if noText {
-		if ix.log != nil {
-			if ix.cfg.VerboseJobLogs {
-				ix.log.Info("job skipped",
-					"msg", "indexer.job.skipped",
-					"root", j.Root.ID,
-					"rel", j.RelPath,
-					"skip_reason", "empty_or_whitespace",
-				)
-			} else {
-				ix.log.Debug("skip ingest: empty or whitespace-only document", "rel", j.RelPath)
-			}
-		}
+		ix.emitSkippedFile(j, "empty_or_whitespace", "indexer.skip.empty_or_whitespace", "skip ingest: empty or whitespace-only document")
 		return nil
 	}
 	hash, _, err := HashFile(j.AbsPath)
@@ -379,35 +426,13 @@ func (ix *Indexer) ingestOne(ctx context.Context, j Job) error {
 		if row, ok := ix.remoteInv[j.RelPath]; ok {
 			if row.ClientContentHash != "" && row.ClientContentHash == hash {
 				atomic.AddInt64(&ix.opsSkipCorpusClientHash, 1)
-				if ix.log != nil {
-					if ix.cfg.VerboseJobLogs {
-						ix.log.Info("job skipped",
-							"msg", "indexer.job.skipped",
-							"root", j.Root.ID,
-							"rel", j.RelPath,
-							"skip_reason", "unchanged_corpus_client_hash",
-						)
-					} else {
-						ix.log.Debug("skip unchanged (corpus inventory)", "rel", j.RelPath)
-					}
-				}
+				ix.emitSkippedFile(j, "unchanged_corpus_client_hash", "indexer.skip.unchanged_corpus_client_hash", "skip unchanged (corpus inventory)")
 				return nil
 			}
 			if row.ClientContentHash == "" && ix.syncState != nil {
 				if ent, ok := ix.syncState.Get(j.Key()); ok && ent.ServerSHA == row.ContentSHA256 && ent.ClientSHA == hash {
 					atomic.AddInt64(&ix.opsSkipCorpusSyncMatch, 1)
-					if ix.log != nil {
-						if ix.cfg.VerboseJobLogs {
-							ix.log.Info("job skipped",
-								"msg", "indexer.job.skipped",
-								"root", j.Root.ID,
-								"rel", j.RelPath,
-								"skip_reason", "unchanged_corpus_sync",
-							)
-						} else {
-							ix.log.Debug("skip unchanged (corpus inventory + sync state)", "rel", j.RelPath)
-						}
-					}
+					ix.emitSkippedFile(j, "unchanged_corpus_sync", "indexer.skip.unchanged_corpus_sync", "skip unchanged (corpus inventory + sync state)")
 					return nil
 				}
 			}
@@ -416,18 +441,7 @@ func (ix *Indexer) ingestOne(ctx context.Context, j Job) error {
 	if ix.syncState != nil {
 		if ent, ok := ix.syncState.Get(j.Key()); ok && ent.ClientSHA == hash {
 			atomic.AddInt64(&ix.opsSkipLocalSync, 1)
-			if ix.log != nil {
-				if ix.cfg.VerboseJobLogs {
-					ix.log.Info("job skipped",
-						"msg", "indexer.job.skipped",
-						"root", j.Root.ID,
-						"rel", j.RelPath,
-						"skip_reason", "unchanged_local_sync",
-					)
-				} else {
-					ix.log.Debug("skip unchanged (sync state)", "rel", j.RelPath)
-				}
-			}
+			ix.emitSkippedFile(j, "unchanged_local_sync", "indexer.skip.unchanged_local_sync", "skip unchanged (sync state)")
 			return nil
 		}
 	}
@@ -446,20 +460,19 @@ func (ix *Indexer) ingestOne(ctx context.Context, j Job) error {
 	useChunked := gw != nil && strings.TrimSpace(gw.IngestSessionPath) != "" &&
 		wholeLimit < maxIngest && st.Size() > wholeLimit
 
-	if ix.log != nil && ix.cfg.VerboseJobLogs {
+	if ix.log != nil && ix.cfg.JobSkipLog == JobSkipLogInfo {
 		transport := "whole"
 		if useChunked {
 			transport = "chunked"
 		}
-		ix.log.Info("job upload",
+		args := []any{
 			"msg", "indexer.job.upload",
-			"root", j.Root.ID,
 			"rel", j.RelPath,
 			"bytes", st.Size(),
 			"transport", transport,
-			"ingest_project", proj,
-			"flavor_id", flav,
-		)
+		}
+		args = append(args, ix.logScopeFieldsForJob(j)...)
+		ix.log.Info("job upload", args...)
 	}
 
 	var res *IngestResponse
@@ -499,7 +512,12 @@ func (ix *Indexer) ingestOne(ctx context.Context, j Job) error {
 	}
 	if ix.syncState != nil && serverSHA != "" {
 		if err := ix.syncState.Put(j.Key(), SyncEntry{ClientSHA: hash, ServerSHA: serverSHA}); err != nil {
-			ix.log.Warn("sync state write failed", "rel", j.RelPath, "err", err)
+			args := []any{
+				"msg", "indexer.sync_state.write_failed",
+				"rel", j.RelPath, "err", err,
+			}
+			args = append(args, ix.logScopeFieldsForJob(j)...)
+			ix.log.Warn("sync state write failed", args...)
 		}
 	}
 	mode := "whole"
@@ -507,17 +525,16 @@ func (ix *Indexer) ingestOne(ctx context.Context, j Job) error {
 		mode = "chunked"
 	}
 	atomic.AddInt64(&ix.opsIngestOK, 1)
-	ix.log.Info("ingested",
+	args := []any{
 		"msg", "indexer.job.ingested",
-		"root", j.Root.ID,
 		"rel", j.RelPath,
 		"mode", mode,
 		"chunks", res.Chunks,
 		"collection", res.Collection,
 		"content_sha256", serverSHA,
-		"ingest_project", proj,
-		"flavor_id", flav,
-	)
+	}
+	args = append(args, ix.logScopeFieldsForJob(j)...)
+	ix.log.Info("ingested", args...)
 	if ix.hooks.AfterIngest != nil {
 		ix.hooks.AfterIngest(j, res)
 	}
@@ -648,8 +665,14 @@ func (ix *Indexer) RunWatchers(ctx context.Context) error {
 		if err != nil || bin {
 			return
 		}
-		w := IngestEnqueue(Job{Root: root, RelPath: rel, AbsPath: absPath}, tier, false, "")
-		_ = ix.queue.Enqueue(w)
+		job := Job{Root: root, RelPath: rel, AbsPath: absPath}
+		wasPending := ix.queue.HasPendingKey(job.Key())
+		w := IngestEnqueue(job, tier, false, "")
+		if ix.queue.Enqueue(w) {
+			if tier == TierInteractive && !wasPending {
+				ix.bumpWorkspaceFileCount(root, rel)
+			}
+		}
 	})
 	defer debouncer.Close()
 
@@ -667,6 +690,9 @@ func (ix *Indexer) RunWatchers(ctx context.Context) error {
 					tier = TierInteractive
 				}
 				debouncer.Trigger(ev.Name, tier)
+			}
+			if ev.Op&fsnotify.Remove != 0 {
+				ix.onWatchedPathRemoved(ev.Name)
 			}
 			if ev.Op&fsnotify.Create != 0 {
 				if st, err := os.Stat(ev.Name); err == nil && st.IsDir() {
@@ -704,4 +730,15 @@ func (ix *Indexer) matchAbs(abs string) (Root, string, bool) {
 		}
 	}
 	return Root{}, "", false
+}
+
+func (ix *Indexer) onWatchedPathRemoved(absPath string) {
+	root, rel, ok := ix.matchAbs(absPath)
+	if !ok {
+		return
+	}
+	if st, err := os.Stat(absPath); err == nil && st.IsDir() {
+		return
+	}
+	ix.decrementWorkspaceFileCount(root, rel)
 }

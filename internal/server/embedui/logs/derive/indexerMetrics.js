@@ -81,10 +81,12 @@ function collectIndexerRunMeta(runId, evs, opts) {
     filesExcludedByIgnores = null;
   for (var u = evs.length - 1; u >= 0; u--) {
     var fR = getFlat(evs[u].parsed);
-    if (!tenantId && (fR.principal_id || fR.tenant || fR.tenant_id))
-      tenantId = String(fR.principal_id || fR.tenant || fR.tenant_id || "").trim();
+    if (!tenantId && (fR.tenant_id || fR.tenant || fR.principal_id))
+      tenantId = String(fR.tenant_id || fR.tenant || fR.principal_id || "").trim();
     if (!userLabelDirect && fR.user_label && String(fR.user_label).trim() !== "")
       userLabelDirect = String(fR.user_label).trim();
+    var itkSnap = fR.indexer_target_key != null && String(fR.indexer_target_key).trim() !== "";
+    if (!indexerKey && itkSnap) indexerKey = String(fR.indexer_target_key).trim();
     if (!indexerKey && fR.indexer_key && String(fR.indexer_key).trim() !== "")
       indexerKey = String(fR.indexer_key).trim();
     if (!lastProg && flatLooksLikeIndexerRunProgress(fR)) lastProg = fR;
@@ -166,6 +168,7 @@ function collectIndexerRunMeta(runId, evs, opts) {
     var mb = indexerFlatMsg(fb);
     if (!ws && fb.scope_workspace_id) ws = String(fb.scope_workspace_id).trim();
     if (!sp && fb.scope_project_id) sp = String(fb.scope_project_id).trim();
+    if (!ip && fb.project_id) ip = String(fb.project_id).trim();
     if (!ip && fb.ingest_project) ip = String(fb.ingest_project).trim();
     if (!flavor && fb.flavor_id) flavor = String(fb.flavor_id).trim();
     if (mb === "gateway.indexer.config") {
@@ -214,6 +217,72 @@ function collectIndexerRunMeta(runId, evs, opts) {
 
   var startRunId =
     start && start.index_run_id != null ? String(start.index_run_id).trim() : "";
+
+  function indexerFlatMatchesBucket(fl, bucketId) {
+    if (!fl || typeof fl !== "object") return false;
+    var bk = String(bucketId || "").trim();
+    if (!bk) return false;
+    var itkFl = String(fl.indexer_target_key || "").trim();
+    if (itkFl && itkFl === bk) return true;
+    var ridFl = fl.index_run_id != null ? String(fl.index_run_id).trim() : "";
+    if (ridFl && ridFl === bk) return true;
+    if (startRunId && bk === String(startRunId).trim()) return ridFl === String(startRunId).trim();
+    if (bk.indexOf("ig\u001e") !== 0) return false;
+    var parts = bk.split("\u001e");
+    if (parts.length < 4) return false;
+    var pj = String(fl.project_id != null ? fl.project_id : fl.ingest_project != null ? fl.ingest_project : "").trim();
+    var fv = String(fl.flavor_id != null ? fl.flavor_id : "").trim();
+    return pj === (parts[2] || "") && fv === (parts[3] || "");
+  }
+
+  var discoveryCandidatesForBucket = null,
+    lastScopeStatusFlat = null,
+    lastScopeActiveFlat = null;
+  for (var sc = evs.length - 1; sc >= 0; sc--) {
+    var fSc = getFlat(evs[sc].parsed);
+    var mSc = indexerFlatMsg(fSc);
+    if (
+      discoveryCandidatesForBucket == null &&
+      mSc === "indexer.discovery.summary.scope" &&
+      indexerFlatMatchesBucket(fSc, bucketGid)
+    ) {
+      var cdi = Number(fSc.candidates_discovered);
+      if (!isNaN(cdi)) discoveryCandidatesForBucket = cdi;
+    }
+  }
+  for (var sc2 = evs.length - 1; sc2 >= 0; sc2--) {
+    var fSb = getFlat(evs[sc2].parsed);
+    var mSb = indexerFlatMsg(fSb);
+    if (!lastScopeStatusFlat && mSb === "indexer.scope.status" && indexerFlatMatchesBucket(fSb, bucketGid))
+      lastScopeStatusFlat = fSb;
+    if (!lastScopeActiveFlat && mSb === "indexer.scope.active_file" && indexerFlatMatchesBucket(fSb, bucketGid))
+      lastScopeActiveFlat = fSb;
+    if (lastScopeStatusFlat && lastScopeActiveFlat) break;
+  }
+
+  var scopeWorkspaceTotal = null,
+    scopeQueueIngestPending = null,
+    scopeQueueFanoutPending = null,
+    scopePendingBulkTier1 = null,
+    scopeLatestRel = null,
+    scopeLatestRoot = null;
+  if (lastScopeStatusFlat) {
+    scopeWorkspaceTotal = Number(lastScopeStatusFlat.workspace_files_total);
+    if (isNaN(scopeWorkspaceTotal)) scopeWorkspaceTotal = null;
+    scopeQueueIngestPending = Number(lastScopeStatusFlat.queue_ingest_pending);
+    if (isNaN(scopeQueueIngestPending)) scopeQueueIngestPending = null;
+    scopeQueueFanoutPending = Number(lastScopeStatusFlat.queue_fanout_files_pending);
+    if (isNaN(scopeQueueFanoutPending)) scopeQueueFanoutPending = null;
+    scopePendingBulkTier1 = Number(lastScopeStatusFlat.pending_bulk_tier1);
+    if (isNaN(scopePendingBulkTier1)) scopePendingBulkTier1 = null;
+  }
+  if (scopeWorkspaceTotal == null && discoveryCandidatesForBucket != null) {
+    scopeWorkspaceTotal = discoveryCandidatesForBucket;
+  }
+  if (lastScopeActiveFlat) {
+    scopeLatestRel = lastScopeActiveFlat.rel != null ? String(lastScopeActiveFlat.rel).trim() : "";
+    scopeLatestRoot = lastScopeActiveFlat.root != null ? String(lastScopeActiveFlat.root).trim() : "";
+  }
 
   /** Match root_scopes row to card bucket: target UUID, synthetic ig\x1e… id, or index_run_id bucket. */
   function indexerRowMatchesBucket(row, bucketId) {
@@ -319,7 +388,15 @@ function collectIndexerRunMeta(runId, evs, opts) {
     stateQueueDepth: stateQueueDepth,
     stateIngestInflight: stateIngestInflight,
     qdrantPointsLive: qdrantPointsLive,
-    filesExcludedByIgnores: filesExcludedByIgnores
+    filesExcludedByIgnores: filesExcludedByIgnores,
+    scopeWorkspaceTotal: scopeWorkspaceTotal,
+    scopeQueueIngestPending: scopeQueueIngestPending,
+    scopeQueueFanoutPending: scopeQueueFanoutPending,
+    scopePendingBulkTier1: scopePendingBulkTier1,
+    scopeLatestRel: scopeLatestRel,
+    scopeLatestRoot: scopeLatestRoot,
+    scopeStatusFlat: lastScopeStatusFlat,
+    scopeActiveFlat: lastScopeActiveFlat
   };
 }
 

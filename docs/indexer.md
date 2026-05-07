@@ -49,24 +49,44 @@ After a successful **`GET /v1/indexer/config`**, the logger adds **`tenant_id`**
 | `indexer.discovery.summary` | After initial walk of all roots | `candidates_*`, **`files_excluded_by_ignore_rules`** (same count as **`skipped_ignored`**), **`skipped_ignored_files`**, **`skipped_ignored_dirs`**, other `skipped_*` |
 | `indexer.queue.snapshot` | Run workers start/exit, after initial scan, pause/resume, **`phase`=`worker_drain_tick`** (immediate once + every 30s while draining) | `queue_depth`, `queue_cap`, `workers`, counters below |
 | `indexer.run.progress` | Milestone (unchanged) | e.g. `phase`=`initial_scan`, `candidates_enqueued` |
-| `indexer.retry.scheduled` | Before backoff sleep | `rel`, `attempt`, `max_attempts`, `delay_ms`, `err` |
+| `indexer.retry.scheduled` | Before backoff sleep | `rel`, `attempt`, `max_attempts`, `delay_ms`, `err`, plus scope: **`tenant_id`**, **`project_id`**, **`ingest_project`**, **`flavor_id`**, **`indexer_target_key`**, **`root`** |
 | `indexer.recovery.poll` | Each recovery poll tick | `poll_n`, `interval_ms`, `storage_ok`, `rag_disabled`, optional `root_health_ok` |
 | `indexer.recovery.resumed` | Storage (and root health if enabled) OK again | (human line; pairs with recovery polls) |
-| `indexer.worker.paused` | Worker entering recovery | `worker`, `rel` |
-| `indexer.job.skipped` | Skipped before upload (unchanged / empty text) | `root`, `rel`, `skip_reason` — one of `empty_or_whitespace`, `unchanged_corpus_client_hash`, `unchanged_corpus_sync`, `unchanged_local_sync` |
-| `indexer.job.upload` | About to call gateway ingest (whole or chunked) | `root`, `rel`, `bytes`, `transport` (`whole` \| `chunked`), `ingest_project`, `flavor_id` |
-| `indexer.job.ingested` | Successful ingest | `root`, `rel`, `mode`, `chunks`, `collection`, `ingest_project`, `flavor_id`, … |
-| `indexer.job.failed` | Dropped after non-pause failure | `worker`, `rel`, `err` |
+| `indexer.worker.paused` | Worker entering recovery | `worker`, `rel`, `work_kind`, plus scope: **`tenant_id`**, **`project_id`**, **`ingest_project`**, **`flavor_id`**, **`indexer_target_key`**, **`root`** (ingest only) |
+| `indexer.job.skipped` | Skipped before upload (unchanged / empty text) | `rel`, `skip_reason` — one of `empty_or_whitespace`, `unchanged_corpus_client_hash`, `unchanged_corpus_sync`, `unchanged_local_sync`, plus the same **scope** fields as `indexer.retry.scheduled` |
+| `indexer.job.upload` | About to call gateway ingest (whole or chunked) | `rel`, `bytes`, `transport` (`whole` \| `chunked`), plus the same **scope** fields (includes `ingest_project`, `flavor_id`, `root`, …) |
+| `indexer.job.ingested` | Successful ingest | `rel`, `mode`, `chunks`, `collection`, `content_sha256`, plus the same **scope** fields |
+| `indexer.job.failed` | Dropped after non-pause failure | `worker`, `rel`, `err`, plus the same **scope** fields |
+| `indexer.sync_state.write_failed` | Local sync-state DB write failed after ingest | `rel`, `err`, plus the same **scope** fields |
+| `indexer.skip.empty_or_whitespace` | DEBUG only when **`job_skip_log: debug`** (or legacy **`verbose_job_logs: false`**) — empty file skipped | `rel`, plus scope fields (same as **`indexer.job.skipped`** with **`skip_reason`**=`empty_or_whitespace`) |
+| `indexer.skip.unchanged_corpus_client_hash` | DEBUG, unchanged vs corpus client hash | `rel`, plus scope fields |
+| `indexer.skip.unchanged_corpus_sync` | DEBUG, unchanged vs corpus + local sync | `rel`, plus scope fields |
+| `indexer.skip.unchanged_local_sync` | DEBUG, unchanged vs local sync state only | `rel`, plus scope fields |
+| `indexer.fanout.enqueue_failed` | Fan-out chunk could not be queued | `candidates` (chunk size); one scope: same **scope** fields; **multi-scope** chunk: **`indexer_multi_scope_chunk`**, **`distinct_scope_count`**, **`indexer_target_keys`** (comma-separated) |
+| `indexer.fanout.remainder_blocked` | Queue full requeueing fan-out remainder | `remainder_size`; scope fields as for `indexer.fanout.enqueue_failed` |
+| `indexer.work.failed` | Non-ingest work dropped (e.g. fan-out) | `worker`, `kind`, `err`; for **fan-out** list items, same multi-scope **scope** fields as `indexer.fanout.enqueue_failed` when candidates are present |
 | `indexer.run.done` | One-shot or watch exit | `mode`, `ingest_completed`, `ingest_failed_dropped`, `retry_events`, `jobs_dequeued`, `skip_unchanged_*` |
 
-### Per-file lines (`verbose_job_logs`)
+### Stderr level (`log_level`)
 
-Indexer YAML may set **`verbose_job_logs`** (bool). When **unset** in all merged
-files, it defaults to **`true`**: each skipped file emits **`indexer.job.skipped`**
-and each file that reaches the gateway emits **`indexer.job.upload`** (then
-**`indexer.job.ingested`** or an error/retry path). Set **`verbose_job_logs:
-false`** to keep only queue snapshots / ingest outcomes and DEBUG skip lines
-(useful when the ring buffer is noisy).
+Indexer YAML may set **`log_level`** to **`debug`**, **`info`**, **`warn`**, or **`error`**
+(minimum level for **stderr** `slog` output from **`claudia-index`**). When unset, it
+defaults to **`info`**. **`claudia-index --log-level …`** overrides YAML for the
+process (same values).
+
+### Per-file skip / upload lines (`job_skip_log`)
+
+Indexer YAML may set **`job_skip_log`** to **`info`**, **`debug`**, or **`off`**:
+
+| Value | Effect |
+|-------|--------|
+| **`info`** (default) | **`indexer.job.skipped`** (INFO) for skips; **`indexer.job.upload`** (INFO) before ingest; DEBUG **`indexer.skip.*`** lines still apply when the process log level is DEBUG. |
+| **`debug`** | No INFO **`indexer.job.skipped`** / **`indexer.job.upload`**; DEBUG **`indexer.skip.*`** only (same as legacy **`verbose_job_logs: false`**). |
+| **`off`** | No per-file skip or pre-upload INFO lines (queue snapshots and **`indexer.job.ingested`** / errors unchanged). |
+
+**Legacy:** **`verbose_job_logs`** (bool) is deprecated. When **`job_skip_log`** is
+unset after merge: **`true` → info**, **`false` → debug** (matching the old default
+where absent meant verbose INFO lines).
 
 - **Desktop folder picker:** the native shell binds **`window.claudiaPickFolder`**
   (WebView + **`dlgs`** folder dialog); the Indexer tab calls it from **`/ui/indexer`**
@@ -109,7 +129,7 @@ at [`config/indexer.example.yaml`](../config/indexer.example.yaml).
 
 After merged YAML: **environment** (`CLAUDIA_GATEWAY_URL`) overrides
 `gateway_url`; **CLI** `--gateway-url` and `--root` override merged YAML for
-those fields. **`CLAUDIA_GATEWAY_TOKEN`** is always from the environment (never
+those fields; **`--log-level`** overrides **`log_level`**. **`CLAUDIA_GATEWAY_TOKEN`** is always from the environment (never
 YAML).
 
 ```yaml
@@ -134,8 +154,11 @@ Continue `config.yaml` project/flavor fields) as chat so RAG queries the same
 Qdrant collection the indexer wrote to.
 
 **v0.4:** Successful ingests record **client** and **server** SHA-256 digests under
-`sync_state_path` (default `.claudia/indexer.sync-state.json`). If a file’s
-client hash matches the last recorded value, the indexer **skips** re-upload.
+`sync_state_path`. When omitted: **`indexer.sync-state.json` next to the `--config`
+file** if you pass `--config` (e.g. supervised **`data/gateway/indexer.sync-state.json`**
+alongside `indexer.supervised.yaml`), otherwise **`.claudia/indexer.sync-state.json`**
+under the process working directory. If a file’s client hash matches the last
+recorded value, the indexer **skips** re-upload.
 Gateway responses include **`content_sha256`** (authoritative over UTF-8 text
 bytes ingested). Optional YAML: `max_whole_file_bytes` (caps whole-body mode
 when lower than the gateway), `sync_state_path`.

@@ -162,8 +162,14 @@ function indexerSyntheticRunTargetsFromJobs(entryCache, getFlat) {
     var rid = f.index_run_id != null && String(f.index_run_id).trim() !== "" ? String(f.index_run_id).trim() : "";
     if (!rid) continue;
     var m = indexerFlatMsgLocal(f);
-    if (m.indexOf("indexer.job.") !== 0 && m !== "ingested") continue;
-    var ip = String(f.ingest_project != null ? f.ingest_project : "").trim();
+    if (
+      m.indexOf("indexer.job.") !== 0 &&
+      m !== "ingested" &&
+      m !== "indexer.scope.status" &&
+      m !== "indexer.scope.active_file"
+    )
+      continue;
+    var ip = String(f.project_id != null ? f.project_id : f.ingest_project != null ? f.ingest_project : "").trim();
     if (!ip) continue;
     var tid = String(f.tenant_id || f.principal_id || f.tenant || "").trim();
     var fv = String(f.flavor_id != null ? f.flavor_id : "").trim();
@@ -199,10 +205,12 @@ function indexerMergeSyntheticTargets(targetState, entryCache, getFlat) {
 
 function indexerBucketGidsForLine(flat, st) {
   if (!st || !st.keys || st.keys.length === 0) return [];
+  var itkLine = flat && flat.indexer_target_key != null ? String(flat.indexer_target_key).trim() : "";
+  if (itkLine && st.keys.indexOf(itkLine) >= 0) return [itkLine];
   if (st.keys.length === 1) return [st.keys[0]];
   var rk = flat.root != null ? String(flat.root).trim() : "";
   if (rk && st.rootToKey[rk]) return [st.rootToKey[rk]];
-  var ip = String(flat.ingest_project != null ? flat.ingest_project : "").trim();
+  var ip = String(flat.project_id != null ? flat.project_id : flat.ingest_project != null ? flat.ingest_project : "").trim();
   var fav = String(flat.flavor_id != null ? flat.flavor_id : "").trim();
   if (ip !== "") {
     var i;
@@ -337,8 +345,14 @@ function indexerPartitionMetaForRun(partitionMetaRegistry, gid, sampleEvs, getFl
   for (i = 0; i < sampleEvs.length; i++) {
     var fj = indexerAugmentFlat(sampleEvs[i], getFlat(sampleEvs[i].parsed));
     var m = indexerFlatMsgLocal(fj);
-    if (m.indexOf("indexer.job.") !== 0 && m !== "ingested") continue;
-    var ip = String(fj.ingest_project != null ? fj.ingest_project : "").trim();
+    if (
+      m.indexOf("indexer.job.") !== 0 &&
+      m !== "ingested" &&
+      m !== "indexer.scope.status" &&
+      m !== "indexer.scope.active_file"
+    )
+      continue;
+    var ip = String(fj.project_id != null ? fj.project_id : fj.ingest_project != null ? fj.ingest_project : "").trim();
     if (!ip) continue;
     var tid = String(fj.tenant_id || fj.principal_id || fj.tenant || "").trim();
     var fv = String(fj.flavor_id != null ? fj.flavor_id : "").trim();

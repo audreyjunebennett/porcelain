@@ -188,7 +188,7 @@ Aligned with [`cli-tool.plan.md`](cli-tool.plan.md) where applicable.
 - Optional `ignore_extra`: list of glob patterns added to `.claudiaignore` semantics
 - **Backoff / recovery** — optional overrides for [§ Failure handling (normative)](#failure-handling-normative): `retry_max_attempts`, `retry_base_delay_ms`, `retry_max_delay_ms`, `recovery_poll_interval_ms`, optional **`recovery_include_root_health`** (default **true**: recovery also waits on **`GET /health`**)
 - **Operational:** `debounce_ms`, `workers`, `queue_depth`, `max_file_bytes`, `request_timeout_ms`, optional `binary_null_byte_sample_bytes` / `binary_null_byte_ratio`
-- **v0.4 additions:** `sync_state_path` (default **`.claudia/indexer.sync-state.json`**), `max_whole_file_bytes`
+- **v0.4 additions:** `sync_state_path` (default: next to `--config` when set, else **`.claudia/indexer.sync-state.json`**), `max_whole_file_bytes`
 
 **v0.3 — scoped overrides**
 
@@ -366,7 +366,7 @@ On **every startup** (and periodically during long runs), the indexer **SHOULD**
 **Indexer v0.4**
 
 - [x] **Dual-mode ingest:** whole-file (Mode A) + session chunk path (Mode B); threshold from YAML and/or **`GET /v1/indexer/config`**.
-- [x] Parse **ingest response** **`content_sha256`**; persist client + server digests in **`sync_state_path`** (default **`.claudia/indexer.sync-state.json`**) for skip-if-unchanged.
+- [x] Parse **ingest response** **`content_sha256`**; persist client + server digests in **`sync_state_path`** (default next to `--config` when set, else **`.claudia/indexer.sync-state.json`**) for skip-if-unchanged.
 - [x] **`--one-shot`** scan mode and **`--version`**.
 - [x] **Mid-session HTTP retries:** each Mode B step (**POST** session start, **PUT** chunk, **POST** complete) uses bounded exponential backoff (`retry_*` fields) before the worker exhausts attempts and pauses.
 
