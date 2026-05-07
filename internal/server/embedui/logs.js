@@ -1016,7 +1016,7 @@ globalThis.ClaudiaLogs.Main = function () {
       "Shows which models ran, estimated token totals for the current UTC minute and calendar day, and the latest upstream calls." +
       "</p>" +
       '<p class="gw-usage-intro-follow">' +
-      "Together this is both a sanity check on load and input to limit handling: the gateway weighs these totals against your provider request and token ceilings so usage can soften before quotas hard-stop traffic. Treat the counts as estimates—each vendor measures and bills tokens in its own way." +
+      "Together this is a load check and input to limit handling: the gateway weighs these totals against your provider request and token ceilings so usage can soften before quotas hard-stop traffic. Treat the counts as estimates—each vendor measures and bills tokens in its own way." +
       "</p>" +
       '<ul class="gw-usage-intro-bullets">' +
       "<li>" +
@@ -3054,8 +3054,8 @@ globalThis.ClaudiaLogs.Main = function () {
     var flavLine =
       o.flavorId && o.flavorId !== "—" ? String(o.flavorId).trim() : "";
     return flavLine !== ""
-      ? userLine + " — " + prLine + " — " + flavLine
-      : userLine + " — " + prLine;
+      ? userLine + ":" + prLine + ":" + flavLine
+      : userLine + ":" + prLine;
   }
 
   function persistIndexerWatchRoots(paths, indexRunId, scopeKey, bucketId) {
