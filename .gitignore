@@ -1,5 +1,7 @@
 # Mac OSX
 .DS_Store
+# Windows Custom Icons
+desktop.ini
 
 # Global environment variables and secrets
 .env
