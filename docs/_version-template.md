@@ -15,9 +15,9 @@ One to three short sentences that explain the value of this version for the oper
 
 | Theme | Outcome | Status |
 |-------|---------|--------|
-| [Short title](#theme-1-short-title) | One-line user-facing outcome | `todo` |
-| [Short title](#theme-2-short-title) | One-line user-facing outcome | `todo` |
-| [Short title](#theme-3-short-title) | One-line user-facing outcome | `todo` |
+| [Short title 1](#short-title-1) | One-line user-facing outcome | `todo` |
+| [Short title 2](#short-title-2) | One-line user-facing outcome | `todo` |
+| [Short title 3](#short-title-3) | One-line user-facing outcome | `todo` |
 
 ---
 
