@@ -15,7 +15,7 @@ start "Claudia Receiver" cmd /k py -3.14 "D:\Rebirth\Moto X\receiver.py"
 timeout /t 3 /nobreak >nul
 
 :: Gateway - claudia-desktop.exe opens its own native window (no terminal)
-:: Supervises Bifrost + Qdrant internally; keep BiFrost on 8090 so the PWA can stay on 8080
+:: Supervises Bifrost + Qdrant internally; Bifrost on 8080, PWA on 8081
 start "" /d "D:\Rebirth\claudia-gateway" claudia-desktop.exe desktop ^
   --bifrost-bin "bin\bifrost-http.exe" ^
   --bifrost-config "config\bifrost.config.json" ^
@@ -44,8 +44,8 @@ echo  All services started.
 echo.
 echo  Gateway panel:                              http://localhost:3000/ui/panel
 echo  Original PWA (with sidebar/conversations):  https://localhost:11435/web
-echo  PWA shell + APIs (optional):                http://localhost:8080
-echo  Legacy tabbed app (optional):               http://localhost:8080/legacy-app
+echo  PWA shell + APIs (optional):                http://localhost:8081
+echo  Legacy tabbed app (optional):               http://localhost:8081/legacy-app
 echo  iPhone: use Tailscale IP shown in PWA window.
 echo.
 pause

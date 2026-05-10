@@ -5,10 +5,10 @@ Requirements: pip install fastapi uvicorn httpx
 Run:
   python D:/Rebirth/pwa/server.py
 
-Access (default port 8080; set CLAUDIA_PWA_PORT to override):
-  PC:     http://localhost:8080
-  iPhone: http://<tailscale-ip>:8080
-  Quick capture: http://<tailscale-ip>:8080/capture
+Access (default port 8081; set CLAUDIA_PWA_PORT to override):
+  PC:     http://localhost:8081
+  iPhone: http://<tailscale-ip>:8081
+  Quick capture: http://<tailscale-ip>:8081/capture
 """
 import json
 import os
@@ -37,7 +37,7 @@ NOTES_DIR       = Path(os.environ.get("CLAUDIA_NOTES_DIR",       r"D:\Notes"))
 TRANSCRIPTS_DIR = Path(os.environ.get("CLAUDIA_TRANSCRIPTS_DIR", r"D:\Rebirth\Moto X\claudia_motoxaudio_data\conversations"))
 FILES_ROOT      = Path(os.environ.get("CLAUDIA_FILES_ROOT",      r"D:\\"))
 ASSETS_DIR      = Path(os.environ.get("CLAUDIA_ASSETS_DIR",      r"D:\Rebirth\assets"))
-PORT            = int(os.environ.get("CLAUDIA_PWA_PORT",          "8080"))
+PORT            = int(os.environ.get("CLAUDIA_PWA_PORT",          "8081"))
 BEE_ICON_PATH   = ASSETS_DIR / "bee" / "bee-svgrepo-com.svg"
 CANONICAL_ICON_PATH = ASSETS_DIR / "Canonical Icons" / "icon.svg"
 
@@ -195,7 +195,7 @@ h1{{color:#D89AA8;font-size:22px;margin:0 0 6px;}}
 .note{{font-size:12px;color:#9B8FA0;margin-top:6px;}}
 </style></head><body>
 <h1>✨ Claudia · pwa server</h1>
-<p class="sub">port {PORT} — file / notes / code APIs only. See your routes:</p>
+<p class="sub">port {PORT} — file / notes / code APIs only (8080 reserved for Bifrost). See your routes:</p>
 
 <div class="card">
   <h2>Original PWA (sidebar, conversations, sign-in)</h2>
