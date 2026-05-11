@@ -29,6 +29,128 @@ import (
 
 const maxBodyBytes = 25 * 1024 * 1024
 
+func shouldRunEnsemble(res *config.Resolved, clientModel string, stream bool, lastUser string) bool {
+	if res == nil || !res.EnsembleEnabled || clientModel != res.VirtualModelID || stream {
+		return false
+	}
+	lu := strings.TrimSpace(lastUser)
+	if lu == "" {
+		return false
+	}
+	if trig := strings.TrimSpace(res.EnsembleManualTrigger); trig != "" && strings.Contains(lu, trig) {
+		return true
+	}
+	if res.EnsembleAutoTriggerEnabled && len([]rune(lu)) >= res.EnsembleAutoTriggerMinUserChars {
+		return true
+	}
+	return false
+}
+
+func stripEnsembleManualTrigger(raw map[string]json.RawMessage, trigger string) map[string]json.RawMessage {
+	trigger = strings.TrimSpace(trigger)
+	if trigger == "" || raw == nil || raw["messages"] == nil {
+		return raw
+	}
+	var msgs []map[string]any
+	if err := json.Unmarshal(raw["messages"], &msgs); err != nil {
+		return raw
+	}
+	for i := len(msgs) - 1; i >= 0; i-- {
+		role, _ := msgs[i]["role"].(string)
+		if role != "user" {
+			continue
+		}
+		if c, ok := msgs[i]["content"].(string); ok {
+			msgs[i]["content"] = strings.TrimSpace(strings.ReplaceAll(c, trigger, ""))
+		}
+		break
+	}
+	b, err := json.Marshal(msgs)
+	if err != nil {
+		return raw
+	}
+	out := chatCloneRawMap(raw)
+	out["messages"] = b
+	return out
+}
+
+func chatCloneRawMap(m map[string]json.RawMessage) map[string]json.RawMessage {
+	out := make(map[string]json.RawMessage, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
+}
+
+func extractAssistantTextFromResponse(jsonBody []byte) string {
+	var payload map[string]any
+	if err := json.Unmarshal(jsonBody, &payload); err != nil {
+		return ""
+	}
+	choices, _ := payload["choices"].([]any)
+	if len(choices) == 0 {
+		return ""
+	}
+	c0, _ := choices[0].(map[string]any)
+	if c0 == nil {
+		return ""
+	}
+	msg, _ := c0["message"].(map[string]any)
+	if msg == nil {
+		return ""
+	}
+	txt, _ := msg["content"].(string)
+	return strings.TrimSpace(txt)
+}
+
+func ensembleDraftModels(initial string, chain []string, n int) []string {
+	if n < 1 {
+		n = 1
+	}
+	start := 0
+	for i, m := range chain {
+		if m == initial {
+			start = i
+			break
+		}
+	}
+	out := make([]string, 0, n)
+	seen := map[string]struct{}{}
+	for i := start; i < len(chain) && len(out) < n; i++ {
+		m := strings.TrimSpace(chain[i])
+		if m == "" {
+			continue
+		}
+		if _, ok := seen[m]; ok {
+			continue
+		}
+		seen[m] = struct{}{}
+		out = append(out, m)
+	}
+	return out
+}
+
+func buildEnsembleSynthesisMessages(lastUser string, drafts []string) []map[string]string {
+	var b strings.Builder
+	b.WriteString("User request:\n")
+	b.WriteString(strings.TrimSpace(lastUser))
+	b.WriteString("\n\nCandidate drafts:\n")
+	for i, d := range drafts {
+		b.WriteString(fmt.Sprintf("\nDraft %d:\n%s\n", i+1, strings.TrimSpace(d)))
+	}
+	return []map[string]string{
+		{
+			"role": "system",
+			"content": "You are synthesizing multiple model drafts into one final answer. " +
+				"Choose the most accurate points, resolve disagreements conservatively, and return one clear response.",
+		},
+		{
+			"role":    "user",
+			"content": b.String(),
+		},
+	}
+}
+
 // publicGatewayURL is a browser-friendly base URL for this gateway (loopback when listening on all interfaces).
 func publicGatewayURL(res *config.Resolved, overlay *StatusOverlay) string {
 	if res == nil {
@@ -720,6 +842,86 @@ func handleV1Chat(w http.ResponseWriter, r *http.Request, rt *Runtime, log *slog
 				},
 			})
 			return
+		}
+		if shouldRunEnsemble(res, clientModel, stream, lastUser) {
+			ensRaw := stripEnsembleManualTrigger(raw, res.EnsembleManualTrigger)
+			n := res.EnsembleDrafts
+			if n < 1 {
+				n = 1
+			}
+			if res.EnsembleMaxDrafts > 0 && n > res.EnsembleMaxDrafts {
+				n = res.EnsembleMaxDrafts
+			}
+			draftModels := ensembleDraftModels(initial, res.FallbackChain, n)
+			if len(draftModels) > 0 {
+				if routeLog != nil {
+					routeLog.Info("ensemble.start", "msg", "ensemble.start", "draftCount", len(draftModels), "mode", res.EnsembleMode)
+				}
+				draftTexts := make([]string, 0, len(draftModels))
+				for i, dm := range draftModels {
+					if routeLog != nil {
+						routeLog.Info("ensemble.draft.request", "msg", "ensemble.draft.request", "index", i+1, "model", dm)
+					}
+					pr := chat.ProxyChatCompletion(ctx, w, res.UpstreamBaseURL, apiKey, dm, false, ensRaw, chatTimeout(res), routeLog, rt.Metrics(), rt.LimitsGuard(), nil)
+					if pr.ErrMessage != "" || pr.Status < 200 || pr.Status >= 300 {
+						if routeLog != nil {
+							routeLog.Warn("ensemble.draft.result", "msg", "ensemble.draft.result", "index", i+1, "model", dm, "status", pr.Status, "error", pr.ErrMessage)
+						}
+						continue
+					}
+					txt := extractAssistantTextFromResponse(pr.JSONBody)
+					if txt == "" {
+						if routeLog != nil {
+							routeLog.Warn("ensemble.draft.result", "msg", "ensemble.draft.result", "index", i+1, "model", dm, "status", pr.Status, "error", "empty assistant text")
+						}
+						continue
+					}
+					draftTexts = append(draftTexts, txt)
+				}
+				if len(draftTexts) > 0 {
+					if !res.EnsembleSynthesisEnabled {
+						// Return best-effort first successful draft when synthesis is disabled.
+						first := draftTexts[0]
+						out := map[string]any{
+							"id":      "chatcmpl-ensemble-draft",
+							"object":  "chat.completion",
+							"created": time.Now().Unix(),
+							"model":   draftModels[0],
+							"choices": []map[string]any{{"index": 0, "message": map[string]any{"role": "assistant", "content": first}, "finish_reason": "stop"}},
+						}
+						w.Header().Set("Content-Type", "application/json")
+						w.WriteHeader(http.StatusOK)
+						_ = json.NewEncoder(w).Encode(out)
+						return
+					}
+					synthModel := initial
+					if strings.TrimSpace(res.EnsembleSynthesisModel) != "" {
+						synthModel = strings.TrimSpace(res.EnsembleSynthesisModel)
+					}
+					synthMsgs := buildEnsembleSynthesisMessages(lastUser, draftTexts)
+					synthRaw := chatCloneRawMap(ensRaw)
+					if b, err := json.Marshal(synthMsgs); err == nil {
+						synthRaw["messages"] = b
+					}
+					if routeLog != nil {
+						routeLog.Info("ensemble.synthesis.request", "msg", "ensemble.synthesis.request", "model", synthModel, "draftCount", len(draftTexts))
+					}
+					pr := chat.ProxyChatCompletion(ctx, w, res.UpstreamBaseURL, apiKey, synthModel, false, synthRaw, chatTimeout(res), routeLog, rt.Metrics(), rt.LimitsGuard(), chatOpts)
+					if pr.ErrMessage == "" && pr.Status >= 200 && pr.Status < 300 {
+						if routeLog != nil {
+							routeLog.Info("ensemble.synthesis.result", "msg", "ensemble.synthesis.result", "status", pr.Status)
+						}
+						w.Header().Set("Content-Type", "application/json")
+						w.WriteHeader(pr.Status)
+						_, _ = w.Write(pr.JSONBody)
+						return
+					}
+					if routeLog != nil {
+						routeLog.Warn("ensemble.error", "msg", "ensemble.error", "status", pr.Status, "error", pr.ErrMessage)
+					}
+				}
+			}
+			// Degrade safely to existing virtual-model fallback path when ensemble cannot complete.
 		}
 		chat.WithVirtualModelFallback(ctx, w, initial, res.FallbackChain, res.UpstreamBaseURL, apiKey, stream, raw, chatTimeout(res), routeLog, rt.Metrics(), rt.LimitsGuard(), chatOpts)
 		return

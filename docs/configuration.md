@@ -179,6 +179,12 @@ Admin UI API (authenticated session):
 
 This endpoint updates `gateway.yaml`, validates config reload, and returns the current `ensemble_enabled` value.
 
+Current MVP behavior:
+
+- Ensemble is applied for virtual-model, non-streaming requests.
+- Triggered by `ensemble.manual_trigger` (default `//deep`) or optional auto-trigger.
+- If ensemble fails, gateway degrades to the existing virtual-model fallback chain.
+
 **Per-key `models`:** In BiFrost, an **empty** or **omitted** `models` list means the key may be used for **any** model for that provider (minus `blacklisted_models` if set). **`"models": ["*"]` is not a wildcard** — it is treated as the literal model name `*`, so chat requests for real model ids will fail with *no keys found that support model*. Use no `models` field (or `[]`) when you want full catalog access without enumerating models.
 
 ## Logging semantics
