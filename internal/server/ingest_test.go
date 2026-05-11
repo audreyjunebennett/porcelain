@@ -8,11 +8,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -140,11 +142,21 @@ func (e stubEmbedder) EmbedOne(ctx context.Context, s string) ([]float32, error)
 }
 func (e stubEmbedder) Model() string { return "test-embed" }
 
-// setupRAGServer wires NewRuntime + a fake RAG service so handler tests run
-// without external services. Returns the Runtime, the in-memory store, and a
-// running httptest server.
-func setupRAGServer(t *testing.T) (*Runtime, *inMemoryStore, *httptest.Server) {
+func testRepoOperatorMigrationsDir(t *testing.T) string {
 	t.Helper()
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller")
+	}
+	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "migrations", "operator"))
+}
+
+// setupRAGServerWithLog wires NewRuntime + fake RAG like setupRAGServer; if lg is nil, uses testLog().
+func setupRAGServerWithLog(t *testing.T, lg *slog.Logger) (*Runtime, *inMemoryStore, *httptest.Server) {
+	t.Helper()
+	if lg == nil {
+		lg = testLog()
+	}
 	t.Setenv("CLAUDIA_UPSTREAM_API_KEY", "ukey")
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/health" {
@@ -155,16 +167,29 @@ func setupRAGServer(t *testing.T) (*Runtime, *inMemoryStore, *httptest.Server) {
 	}))
 	t.Cleanup(upstream.Close)
 
-	dir := t.TempDir()
-	gwPath := filepath.Join(dir, "gateway.yaml")
+	root := t.TempDir()
+	cfgDir := filepath.Join(root, "config")
+	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	gwPath := filepath.Join(cfgDir, "gateway.yaml")
 	writeGatewayWithRAG(t, gwPath, upstream.URL, []string{"m"}, "http://127.0.0.1:1")
-	tokPath := filepath.Join(dir, "tokens.yaml")
+	opMig := testRepoOperatorMigrationsDir(t)
+	opAppend := "\noperator:\n  migrations_dir: \"" + strings.ReplaceAll(filepath.ToSlash(opMig), `\`, `/`) + "\"\n"
+	gwBytes, err := os.ReadFile(gwPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(gwPath, append(gwBytes, []byte(opAppend)...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tokPath := filepath.Join(cfgDir, "tokens.yaml")
 	writeTokens(t, tokPath, "ingest-tok", "tenantA")
-	routePath := filepath.Join(dir, "routing-policy.yaml")
+	routePath := filepath.Join(cfgDir, "routing-policy.yaml")
 	if err := os.WriteFile(routePath, []byte("rules: []\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	rt, err := NewRuntime(gwPath, testLog())
+	rt, err := NewRuntime(gwPath, lg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -176,16 +201,26 @@ func setupRAGServer(t *testing.T) (*Runtime, *inMemoryStore, *httptest.Server) {
 		ChunkOverlap: 32,
 		TopK:         4,
 		EmbeddingDim: 8,
-		Log:          testLog(),
+		Log:          lg,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	rt.SetRAGForTest(svc)
 
-	srv := httptest.NewServer(NewMux(rt, testLog(), nil, nil))
+	t.Cleanup(func() {
+		rt.CloseOperator()
+		rt.CloseMetrics()
+	})
+
+	srv := httptest.NewServer(NewMux(rt, lg, nil, nil))
 	t.Cleanup(srv.Close)
 	return rt, store, srv
+}
+
+func setupRAGServer(t *testing.T) (*Runtime, *inMemoryStore, *httptest.Server) {
+	t.Helper()
+	return setupRAGServerWithLog(t, nil)
 }
 
 func writeGatewayWithRAG(t *testing.T, path, upstream string, chain []string, qdrantURL string) {
@@ -440,5 +475,33 @@ func TestIngest_ChunkedSession(t *testing.T) {
 	want := "sha256:" + hex.EncodeToString(sum[:])
 	if doc["content_sha256"] != want || doc["content_hash"] != want {
 		t.Fatalf("hashes: %+v want %s", doc, want)
+	}
+}
+
+func TestIngest_JSON_logsConversationIDWhenHeaderPresent(t *testing.T) {
+	var buf strings.Builder
+	lg := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	_, _, srv := setupRAGServerWithLog(t, lg)
+	body := `{"source":"docs/corr.md","text":"` + strings.Repeat("alpha ", 50) + `"}`
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/v1/ingest", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer ingest-tok")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(headerProject, "myproj")
+	req.Header.Set(headerConversationID, "ingest-linked-conv-1")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(res.Body)
+		t.Fatalf("status %d body %s", res.StatusCode, b)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "conversation_id=ingest-linked-conv-1") {
+		t.Fatalf("expected conversation_id in ingest logs:\n%s", out)
+	}
+	if !strings.Contains(out, "msg=ingest.complete") {
+		t.Fatalf("expected ingest.complete:\n%s", out)
 	}
 }

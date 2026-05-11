@@ -24,6 +24,8 @@ type QdrantConfig struct {
 	HTTPPort int
 	// GRPCPort is QDRANT__SERVICE__GRPC_PORT (default 6334).
 	GRPCPort int
+	// LogLevel sets QDRANT__LOGGER__LOG_LEVEL when non-empty (e.g. DEBUG, INFO).
+	LogLevel string
 	// RawExec runs Bin with Args only (tests).
 	RawExec bool
 	Args    []string
@@ -63,12 +65,18 @@ func StartQdrant(ctx context.Context, cfg QdrantConfig, log *slog.Logger) (*exec
 		cmd.Env = os.Environ()
 	} else {
 		cmd.Dir = absStorage
-		cmd.Env = MergeEnv(map[string]string{
+		envOverrides := map[string]string{
 			"QDRANT__STORAGE__STORAGE_PATH": absStorage,
 			"QDRANT__SERVICE__HOST":         cfg.BindHost,
 			"QDRANT__SERVICE__HTTP_PORT":    strconv.Itoa(cfg.HTTPPort),
 			"QDRANT__SERVICE__GRPC_PORT":    strconv.Itoa(cfg.GRPCPort),
-		})
+			// One JSON object per line on stdout/stderr — see https://qdrant.tech/documentation/ops-configuration/configuration/
+			"QDRANT__LOGGER__FORMAT": "json",
+		}
+		if ll := strings.TrimSpace(cfg.LogLevel); ll != "" {
+			envOverrides["QDRANT__LOGGER__LOG_LEVEL"] = strings.ToUpper(strings.ToLower(ll))
+		}
+		cmd.Env = MergeEnv(envOverrides)
 	}
 	out := cfg.Stdout
 	if out == nil {
@@ -83,9 +91,9 @@ func StartQdrant(ctx context.Context, cfg QdrantConfig, log *slog.Logger) (*exec
 	applyNoConsoleWindow(cmd)
 	if log != nil {
 		if cfg.RawExec {
-			log.Info("starting qdrant subprocess", "bin", bin, "raw", true)
+			log.Info("starting qdrant subprocess", "msg", "gateway.supervisor.qdrant.starting", "bin", bin, "raw", true)
 		} else {
-			log.Info("starting qdrant subprocess", "bin", bin, "storage", absStorage, "http_port", cfg.HTTPPort, "grpc_port", cfg.GRPCPort, "host", cfg.BindHost)
+			log.Info("starting qdrant subprocess", "msg", "gateway.supervisor.qdrant.starting", "bin", bin, "storage", absStorage, "http_port", cfg.HTTPPort, "grpc_port", cfg.GRPCPort, "host", cfg.BindHost)
 		}
 	}
 	if err := cmd.Start(); err != nil {

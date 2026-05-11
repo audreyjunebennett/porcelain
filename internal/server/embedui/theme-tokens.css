@@ -1,0 +1,260 @@
+/*
+ * Canonical design tokens for the gateway embed UI (summarized logs, tables, chips).
+ * Default theme matches the current neutral palette in logs.css.
+ * Optional html[data-theme="porcelain"] overrides for alternate iteration (see temp/theme/sample.html).
+ *
+ * Naming: --embed-* keeps tokens grep-friendly and distinct from third-party --sum-* sizing vars in logs.css.
+ * Phase 3: logs.css @imports this file and replaces literals with var(--embed-*).
+ */
+
+:root {
+  /* --- Surfaces --- */
+  --embed-surface-page: #fff;
+  --embed-surface-muted: #fafafa;
+  --embed-surface-muted-2: #f5f5f5;
+  --embed-surface-elevated: #fff;
+  --embed-surface-row-alt: #f0f0f0;
+  --embed-surface-row-hover: #e0e8f0;
+  --embed-surface-toolbar: rgba(236, 239, 241, 0.55);
+  --embed-surface-toolbar-border: rgba(96, 125, 139, 0.22);
+  --embed-surface-chip: #e3f2fd;
+  --embed-surface-chip-border: #90caf9;
+  --embed-surface-table-header: #e8e8e8;
+  --embed-surface-table-header-alt: #f4f4f4;
+  --embed-surface-prop-name: #f4f6fa;
+  --embed-surface-shape-badge: #e8eaf6;
+  --embed-surface-timeline-track: #e8e8e8;
+
+  /* --- Text --- */
+  --embed-text-primary: #1a1a1a;
+  --embed-text-secondary: #333;
+  --embed-text-tertiary: #444;
+  --embed-text-heading: #222;
+  --embed-text-muted: #888;
+  --embed-text-faint: #666;
+  --embed-text-link: #0b57d0;
+  --embed-text-mono-dt: #5c4033;
+  --embed-text-toolbar-title: #78909c;
+  --embed-text-timeline-legend: #546e7a;
+
+  /* --- Borders --- */
+  --embed-border-default: #ccc;
+  --embed-border-medium: #ddd;
+  --embed-border-strong: #bbb;
+  --embed-border-heavy: #bbb;
+  --embed-border-subtle: #eee;
+  --embed-border-table-head: #bbb;
+  --embed-focus-ring: #90caf9;
+
+  /* --- Semantic (alerts, HTTP pills, log levels, status) --- */
+  --embed-semantic-success-bg: #e8f5e9;
+  --embed-semantic-success-fg: #1b5e20;
+  --embed-semantic-warn-bg: #fff8e1;
+  --embed-semantic-warn-fg: #b45309;
+  --embed-semantic-error-bg: #ffebee;
+  --embed-semantic-error-fg: #b71c1c;
+  --embed-semantic-error-strong: #c62828;
+  --embed-semantic-info-bg: #e3f2fd;
+  --embed-semantic-info-fg: #0d47a1;
+  --embed-semantic-neutral-bg: #f0f0f0;
+  --embed-semantic-neutral-fg: #555;
+  --embed-semantic-debug-bg: #f0f0f0;
+  --embed-semantic-debug-fg: #666;
+
+  /* --- Service badges (outline) --- */
+  --embed-svc-web-border: #1976d2;
+  --embed-svc-web-fg: #1565c0;
+  --embed-svc-qdrant-border: #2e7d32;
+  --embed-svc-qdrant-fg: #1b5e20;
+  --embed-svc-upstream-border: #7e57c2;
+  --embed-svc-upstream-fg: #5e35b1;
+  --embed-svc-indexer-border: #f57c00;
+  --embed-svc-indexer-fg: #e65100;
+  --embed-svc-gateway-border: #607d8b;
+  --embed-svc-gateway-fg: #455a64;
+
+  /* --- Service badges (filled) --- */
+  --embed-svc-upstream-filled-bg: #7e57c2;
+  --embed-svc-upstream-filled-fg: #fff;
+  --embed-svc-indexer-filled-bg: #f57c00;
+  --embed-svc-indexer-filled-fg: #1a1208;
+  --embed-svc-qdrant-filled-bg: #26a69a;
+  --embed-svc-qdrant-filled-fg: #fff;
+
+  /* --- Shape / misc accents --- */
+  --embed-shape-badge-fg: #3949ab;
+  --embed-path-em-bg: #f0f4ff;
+
+  /* --- Phase 3: logs.css (status, lifecycle, links, misc) — defaults match pre-token literals --- */
+  --embed-text-on-inverse: #fff;
+  --embed-text-strong: #111;
+  --embed-text-stronger: #000;
+  --embed-text-caption: #505050;
+  --embed-text-subtle-777: #777;
+  --embed-text-bluegrey-537: #37474f;
+  --embed-text-bluegrey-455: #455a64;
+  --embed-text-bluegrey-546: #546e7a;
+  --embed-text-bluegrey-607: #607d8b;
+  --embed-text-dark-brown: #1a1208;
+  --embed-text-near-black: #0d1e2e;
+  --embed-raw-btn-hover-bg: #f0f4fa;
+  --embed-raw-btn-active-bg: #e3f2fd;
+  --embed-btn-primary: #0b57d0;
+  --embed-btn-primary-hover: #0842a0;
+  --embed-sum-card-border: #d0d0d0;
+  --embed-sum-card-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  --embed-border-summary-open: #e8e8e8;
+  --embed-border-e0: #e0e0e0;
+  --embed-chip-bg: #e3f2fd;
+  --embed-chip-fg: #1565c0;
+  --embed-chip-strip-bg: #eceff1;
+  --embed-chip-strip-fg: #263238;
+  --embed-chip-strip-border: #b0bec5;
+  --embed-indexer-legacy-card-border: #7e57c2;
+  --embed-indexer-legacy-card-bg: #faf8ff;
+  --embed-conv-ingest-dash: #cfd8dc;
+  --embed-conv-tier-border: #90a4ae;
+  --embed-conv-chip-border: #b2dfdb;
+  --embed-conv-chip-bg: #e0f2f1;
+  --embed-conv-chip-fg: #00695c;
+  --embed-mini-card-bg: #f8f9fa;
+  --embed-mini-card-error-border: #e57373;
+  --embed-principal-bg: #f8f9fc;
+  --embed-err-head-bg: #fff5f5;
+  --embed-err-head-border: #c62828;
+  --embed-status-pulse-dot: #a5d6a7;
+  --embed-status-complete-bg: #c8e6c9;
+  --embed-status-retrieved-bg: #e3f2fd;
+  --embed-status-indexing-bg: #ffe0b2;
+  --embed-status-error-bg: #ffcdd2;
+  --embed-status-monitor-bg: #eceff1;
+  --embed-status-monitor-fg: #37474f;
+  --embed-status-monitor-border: #cfd8dc;
+  --embed-link-accent: #1565c0;
+  --embed-lifecycle-label: #455a64;
+  --embed-lifecycle-seg-border: #d0d0d0;
+  --embed-lifecycle-pending: #ffca28;
+  --embed-lifecycle-done: #66bb6a;
+  --embed-lifecycle-skipped: #bdbdbd;
+  --embed-lifecycle-failed: #ef5350;
+  --embed-strip-up: #2e7d32;
+  --embed-strip-down: #c62828;
+  --embed-strip-warn: #ef6c00;
+  --embed-strip-unknown: #757575;
+  --embed-strip-inflight: #5e35b1;
+  --embed-tier-ingest-border: #ffcc80;
+  --embed-tier-ingest-bg: #fff3e0;
+  --embed-tier-ingest-fg: #e65100;
+  --embed-tier-inferred-border: #ce93d8;
+  --embed-tier-inferred-bg: #f3e5f5;
+  --embed-tier-inferred-fg: #4a148c;
+  --embed-tier-anchored-border: #80cbc4;
+  --embed-tier-anchored-bg: #e0f7fa;
+  --embed-tier-anchored-fg: #006064;
+  --embed-avatar-ink: #111;
+  --embed-avatar-a: #7ec8e3;
+  --embed-avatar-b: #f48fb1;
+  --embed-avatar-c: #ffb74d;
+  --embed-avatar-d: #90caf9;
+  --embed-avatar-e: #b0bec5;
+  --embed-avatar-f: #ce93d8;
+  --embed-avatar-svc-gw-bg: #64b5f6;
+  --embed-avatar-svc-gw-fg: #0d1e2e;
+  --embed-avatar-svc-bf-bg: #7e57c2;
+  --embed-avatar-svc-qd-bg: #26a69a;
+  --embed-avatar-svc-ix-bg: #f57c00;
+  --embed-chev-hover-a: #0277bd;
+  --embed-chev-hover-b: #c2185b;
+  --embed-chev-hover-c: #e65100;
+  --embed-chev-hover-d: #1565c0;
+  --embed-chev-hover-e: #455a64;
+  --embed-chev-hover-f: #7b1fa2;
+  --embed-chev-hover-svc-gw: #1565c0;
+  --embed-chev-hover-svc-bf: #5e35b1;
+  --embed-chev-hover-svc-qd: #00695c;
+  --embed-chev-hover-svc-ix: #e65100;
+  --embed-body-tint-a: #e5f6fb;
+  --embed-body-tint-b: #fcecf2;
+  --embed-body-tint-c: #fff4e6;
+  --embed-body-tint-d: #e8f4fd;
+  --embed-body-tint-e: #eceff1;
+  --embed-body-tint-f: #f6edf9;
+  --embed-body-tint-svc-gw: #e3f2fd;
+  --embed-body-tint-svc-bf: #ede7f6;
+  --embed-body-tint-svc-qd: #e0f2f1;
+  --embed-body-tint-svc-ix: #fff0e0;
+  --embed-toolbar-input-accent: #42a5f5;
+}
+
+/* Alternate palette for theme iteration (not yet wired into logs.css). */
+html[data-theme="porcelain"] {
+  --embed-surface-page: #f8f7f5;
+  --embed-surface-muted: #f5f7fa;
+  --embed-surface-muted-2: #f5f7fa;
+  --embed-surface-elevated: #fff;
+  --embed-surface-row-alt: #eef0f3;
+  --embed-surface-row-hover: #e3efea;
+  --embed-surface-toolbar: rgba(227, 239, 234, 0.65);
+  --embed-surface-toolbar-border: #d4d6d9;
+  --embed-surface-chip: #f5f7fa;
+  --embed-surface-chip-border: #7bae9f;
+  --embed-surface-table-header: #e6e8eb;
+  --embed-surface-table-header-alt: #e6e8eb;
+  --embed-surface-prop-name: #f5f7fa;
+  --embed-surface-shape-badge: #e3efea;
+  --embed-surface-timeline-track: #e6e8eb;
+
+  --embed-text-primary: #2a2a2c;
+  --embed-text-secondary: #3b3e45;
+  --embed-text-tertiary: #3b3e45;
+  --embed-text-heading: #1f1f22;
+  --embed-text-muted: #9a9ca1;
+  --embed-text-faint: #6d7178;
+  --embed-text-link: #2f4da0;
+  --embed-text-mono-dt: #2c3a34;
+  --embed-text-toolbar-title: #6d7a74;
+  --embed-text-timeline-legend: #3b3e45;
+
+  --embed-border-default: #d4d6d9;
+  --embed-border-medium: #d4d6d9;
+  --embed-border-strong: #c8b8a6;
+  --embed-border-heavy: #c8b8a6;
+  --embed-border-subtle: #e6e8eb;
+  --embed-border-table-head: #c8b8a6;
+  --embed-focus-ring: #7bae9f;
+
+  --embed-semantic-success-bg: #e3efea;
+  --embed-semantic-success-fg: #1b5e20;
+  --embed-semantic-warn-bg: #fff8e1;
+  --embed-semantic-warn-fg: #b45309;
+  --embed-semantic-error-bg: #ffebee;
+  --embed-semantic-error-fg: #b71c1c;
+  --embed-semantic-error-strong: #b71c1c;
+  --embed-semantic-info-bg: #f5f7fa;
+  --embed-semantic-info-fg: #1a2e5c;
+  --embed-semantic-neutral-bg: #eef0f3;
+  --embed-semantic-neutral-fg: #3b3e45;
+  --embed-semantic-debug-bg: #eef0f3;
+  --embed-semantic-debug-fg: #6d7178;
+
+  --embed-svc-web-border: #2f4da0;
+  --embed-svc-web-fg: #1a2e5c;
+  --embed-svc-qdrant-border: #2e7d32;
+  --embed-svc-qdrant-fg: #1b5e20;
+  --embed-svc-upstream-border: #7e57c2;
+  --embed-svc-upstream-fg: #5e35b1;
+  --embed-svc-indexer-border: #c8b8a6;
+  --embed-svc-indexer-fg: #5c4033;
+  --embed-svc-gateway-border: #6d7a74;
+  --embed-svc-gateway-fg: #2c3a34;
+
+  --embed-svc-upstream-filled-bg: #7e57c2;
+  --embed-svc-upstream-filled-fg: #fff;
+  --embed-svc-indexer-filled-bg: #c8b8a6;
+  --embed-svc-indexer-filled-fg: #1f1f22;
+  --embed-svc-qdrant-filled-bg: #7bae9f;
+  --embed-svc-qdrant-filled-fg: #1f1f22;
+
+  --embed-shape-badge-fg: #2f4da0;
+  --embed-path-em-bg: #f5f7fa;
+}

@@ -302,6 +302,23 @@ func (ix *Indexer) RunWorkers(ctx context.Context) {
 						ix.LogQueueSnapshot("worker_resumed_after_recovery")
 						continue
 					}
+					// When the session context was cancelled (controlled reload or shutdown),
+					// dropped jobs are expected — the new session will re-process them via
+					// initial scan. Log at WARN, not ERROR, to avoid alarming noise.
+					if ctx.Err() != nil {
+						if wi.Kind == WorkIngest {
+							atomic.AddInt64(&ix.opsIngestFail, 1)
+							args := []any{
+								"msg", "indexer.job.cancelled",
+								"type", "indexer.job.cancelled",
+								"worker", id, "rel", wi.Job.RelPath, "err", err,
+								"reload_drop", true,
+							}
+							args = append(args, ix.logScopeFieldsForJob(wi.Job)...)
+							ix.log.Warn("ingest dropped (session restarting; will re-process)", args...)
+						}
+						return
+					}
 					if wi.Kind == WorkIngest {
 						atomic.AddInt64(&ix.opsIngestFail, 1)
 						args := []any{

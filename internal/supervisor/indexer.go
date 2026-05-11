@@ -71,7 +71,7 @@ func StartIndexer(ctx context.Context, cfg IndexerConfig, log *slog.Logger) (*ex
 			return nil, fmt.Errorf("indexer start: %w", err)
 		}
 		if log != nil {
-			log.Info("indexer supervised (raw exec)", "bin", bin, "args", cfg.Args)
+			log.Debug("indexer supervised (raw exec)", "msg", "gateway.supervisor.indexer.raw_exec", "bin", bin, "args", cfg.Args)
 		}
 		return cmd, nil
 	}
@@ -130,7 +130,7 @@ func StartIndexer(ctx context.Context, cfg IndexerConfig, log *slog.Logger) (*ex
 		return nil, fmt.Errorf("indexer start: %w", err)
 	}
 	if log != nil {
-		log.Info("indexer supervised", "bin", bin, "config", cfgPath, "workdir", workDir, "log_json", cfg.LogJSON)
+		log.Info("indexer supervised", "msg", "gateway.supervisor.indexer.starting", "bin", bin, "config", cfgPath, "workdir", workDir, "log_json", cfg.LogJSON)
 	}
 	return cmd, nil
 }

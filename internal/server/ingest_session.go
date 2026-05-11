@@ -29,16 +29,17 @@ type ingestSessionStore struct {
 }
 
 type ingestSession struct {
-	tenantID   string
-	coords     vectorstore.Coords
-	source     string
-	clientHash string
-	indexRunID string
-	buf        bytes.Buffer
-	nextChunk  int
-	maxTotal   int64
-	maxChunk   int64
-	createdAt  time.Time
+	tenantID       string
+	coords         vectorstore.Coords
+	source         string
+	clientHash     string
+	indexRunID     string
+	conversationID string
+	buf            bytes.Buffer
+	nextChunk      int
+	maxTotal       int64
+	maxChunk       int64
+	createdAt      time.Time
 }
 
 func newIngestSessionStore() *ingestSessionStore {
@@ -120,14 +121,16 @@ func handleV1IngestSessionStart(w http.ResponseWriter, r *http.Request, rt *Runt
 	if indexRun != "" && !requestid.Valid(indexRun) {
 		indexRun = ""
 	}
+	convID := optionalConversationIDFromHeader(r)
 	rec := &ingestSession{
-		tenantID:   sess.TenantID,
-		source:     source,
-		clientHash: strings.TrimSpace(body.ContentHash),
-		indexRunID: indexRun,
-		maxTotal:   maxTotal,
-		maxChunk:   maxChunk,
-		createdAt:  time.Now(),
+		tenantID:       sess.TenantID,
+		source:         source,
+		clientHash:     strings.TrimSpace(body.ContentHash),
+		indexRunID:     indexRun,
+		conversationID: convID,
+		maxTotal:       maxTotal,
+		maxChunk:       maxChunk,
+		createdAt:      time.Now(),
 		coords: vectorstore.Coords{
 			TenantID:  sess.TenantID,
 			ProjectID: resolveProject(r.Header.Get(headerProject), res.RAG.DefaultProject),
@@ -304,17 +307,19 @@ func handleIngestSessionComplete(w http.ResponseWriter, r *http.Request, rt *Run
 	clientHash := rec.clientHash
 	coords := rec.coords
 	indexRunID := rec.indexRunID
+	convID := rec.conversationID
 	delete(store.sessions, id)
 	store.mu.Unlock()
 
 	rid := requestid.FromContext(r.Context())
 	result, err := rt.RAG().Ingest(r.Context(), rag.IngestRequest{
-		Coords:      coords,
-		Source:      source,
-		Text:        text,
-		ContentHash: clientHash,
-		RequestID:   rid,
-		IndexRunID:  indexRunID,
+		Coords:         coords,
+		Source:         source,
+		Text:           text,
+		ContentHash:    clientHash,
+		RequestID:      rid,
+		IndexRunID:     indexRunID,
+		ConversationID: convID,
 	})
 	if err != nil {
 		if log != nil {
@@ -322,12 +327,16 @@ func handleIngestSessionComplete(w http.ResponseWriter, r *http.Request, rt *Run
 				"msg", "ingest.chunked.error",
 				"tenant", sess.TenantID, "source", source, "err", err,
 				"service", "gateway", "principal_id", sess.TenantID,
+				"timeline_kind", "indexer",
 			}
 			if rid != "" {
 				args = append(args, "request_id", rid)
 			}
 			if indexRunID != "" {
 				args = append(args, "index_run_id", indexRunID)
+			}
+			if convID != "" {
+				args = append(args, "conversation_id", convID)
 			}
 			log.Error("chunked ingest failed", args...)
 		}
@@ -355,12 +364,16 @@ func handleIngestSessionComplete(w http.ResponseWriter, r *http.Request, rt *Run
 			"msg", "ingest.complete",
 			"tenant", sess.TenantID, "source", source, "chunks", result.Chunks,
 			"service", "gateway", "principal_id", sess.TenantID,
+			"timeline_kind", "indexer",
 		}
 		if rid != "" {
 			args = append(args, "request_id", rid)
 		}
 		if indexRunID != "" {
 			args = append(args, "index_run_id", indexRunID)
+		}
+		if convID != "" {
+			args = append(args, "conversation_id", convID)
 		}
 		log.Info("ingest complete", args...)
 	}

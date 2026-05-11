@@ -8,7 +8,7 @@ Phase 3 of [go-bifrost-migration.plan.md](plans/go-bifrost-migration.plan.md): o
 |-------|------|
 | **Parent** | Go `claudia serve` — HTTP gateway (`config/gateway.yaml`, tokens, routing). |
 | **Child (optional)** | **Qdrant** native binary — `QDRANT__STORAGE__STORAGE_PATH`, `QDRANT__SERVICE__HOST`, `QDRANT__SERVICE__HTTP_PORT`, `QDRANT__SERVICE__GRPC_PORT` (defaults **6333** / **6334**), plus `QDRANT__LOGGER__FORMAT=json` so subprocess logs are **one JSON object per line** (easier to pipe into the operator UI buffer). Before lines hit `servicelogs`, **`internal/servicelogs/qdrantline`** rewrites each complete line into gateway-style JSON with stable **`msg`** slugs (`qdrant.*`), **`service":"qdrant"`**, and structured fields (`collection`, `http_status`, …) — see [`docs/plans/log-qdrant.md`](plans/log-qdrant.md). Readiness: `GET /readyz`. Omit by leaving `-qdrant-bin` empty. When `rag.enabled` is **true**, the gateway uses Qdrant for RAG; supervise Qdrant for a full local stack. |
-| **Child** | BiFrost HTTP binary (`bifrost-http`) — started with `-app-dir`, `-host`, `-port`, `-log-level`, `-log-style`. `APP_HOST` / `APP_PORT` are also set for compatibility. Working directory = **data dir**. |
+| **Child** | BiFrost HTTP binary (`bifrost-http`) — started with `-app-dir`, `-host`, `-port`, `-log-level`, `-log-style` (empty → **`json`**, one zerolog JSON object per line). `APP_HOST` / `APP_PORT` are also set for compatibility. Working directory = **data dir**. Before lines hit `servicelogs`, **`internal/servicelogs/bifrostline`** rewrites each complete stdout/stderr line into gateway-style JSON with stable **`msg`** slugs (`bifrost.*`), **`service":"bifrost"`**, and structured fields for the operator UI — see [`docs/plans/log-bifrost.md`](plans/log-bifrost.md). |
 | **Child (optional)** | `claudia-index` — started when `indexer.supervised` is configured in `gateway.yaml` (see [indexer.md](indexer.md) supervised mode). Receives `CLAUDIA_GATEWAY_URL` and a merged `--config` file; stderr can be structured JSON (`--log-json`). |
 | **Config copy** | Your `bifrost.config.json` is copied to `<bifrost-data-dir>/config.json` on each start. |
 
@@ -22,7 +22,7 @@ The repository does **not** vendor BiFrost. Install per [BiFrost documentation](
 
 ### Build from pinned sources (recommended)
 
-**Install from `deps.lock`** (clone under `.deps/`, build BiFrost, fetch Qdrant → `./bin/`):
+**Install from `deps.lock`** (clone BiFrost + Qdrant source under `.deps/`, build BiFrost, fetch Qdrant release binary → `./bin/`):
 
 ```bash
 make claudia-install

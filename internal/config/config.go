@@ -19,6 +19,7 @@ type Resolved struct {
 	ListenPort        int
 	ListenHost        string
 	LogLevel          string
+	BifrostLogLevel   string // supervised bifrost-http -log-level (upstream.bifrost_log_level); `-bifrost-log-level` overrides when non-empty.
 	UpstreamBaseURL   string
 	UpstreamAPIKeyEnv string
 	// UpstreamAPIKey is the Bearer token from gateway.yaml (upstream.api_key). Non-empty process env named by UpstreamAPIKeyEnv overrides at runtime.
@@ -26,10 +27,14 @@ type Resolved struct {
 	HealthUpstreamURL string
 	HealthTimeoutMs   int
 	ChatTimeoutMs     int
-	TokensPath        string
-	RoutingPolicyPath string
-	FallbackChain     []string
-	GatewayYAMLPath   string
+	// AvailableModelsPollMs is the period for the BiFrost `/v1/models` catalog poller that
+	// drives the Provider health strip and future routing/embedding/router-model auditors.
+	// 0 disables polling (one-shot startup refresh only). See internal/server/availablemodels.go.
+	AvailableModelsPollMs int
+	TokensPath            string
+	RoutingPolicyPath     string
+	FallbackChain         []string
+	GatewayYAMLPath       string
 	// ProviderFreeTierPath is the resolved filesystem path to provider-free-tier.yaml.
 	ProviderFreeTierPath string
 	// FilterFreeTierModels requests intersecting merged /v1/models with the allowlist when spec loaded.
@@ -39,6 +44,9 @@ type Resolved struct {
 	MetricsEnabled       bool
 	MetricsSQLitePath    string // absolute path to metrics.sqlite
 	MetricsMigrationsDir string // absolute path to migrations/gateway directory
+	// Operator SQLite: workspaces for supervised indexer (separate from metrics).
+	OperatorSQLitePath    string
+	OperatorMigrationsDir string
 	// Provider/model limits (G5 / §3.7). Path is always resolved; Spec is non-nil (empty when
 	// file is missing or blank).
 	ProviderLimitsPath string
@@ -65,12 +73,47 @@ type Resolved struct {
 	// ConversationMerge joins chat requests into one logical conversation_id per tenant
 	// and RAG scope using embeddings + similarity (requires metrics SQLite + embeddings API).
 	ConversationMerge ConversationMerge
+
+	// WitnessSampleMaxChars caps head/tail runes for conversation.payload.sample (Phase 8).
+	// When zero, defaults to 256 in WitnessSampleMaxRunes().
+	WitnessSampleMaxChars int
+	// WitnessSampleForceAtDebug enables payload samples at debug log level (still redacted).
+	// Trace log level always enables payload samples when the gateway logger is configured for trace.
+	WitnessSampleForceAtDebug bool
+}
+
+// ShouldEmitPayloadSample reports whether conversation.payload.sample may be emitted
+// (trace log level, or debug with WitnessSampleForceAtDebug).
+func (r *Resolved) ShouldEmitPayloadSample() bool {
+	if r == nil {
+		return false
+	}
+	ll := strings.ToLower(strings.TrimSpace(r.LogLevel))
+	if ll == "trace" {
+		return true
+	}
+	return r.WitnessSampleForceAtDebug && (ll == "debug" || ll == "trace")
+}
+
+// WitnessSampleMaxRunes returns the configured max runes per head/tail for payload samples.
+func (r *Resolved) WitnessSampleMaxRunes() int {
+	if r == nil || r.WitnessSampleMaxChars <= 0 {
+		return 256
+	}
+	if r.WitnessSampleMaxChars > 4096 {
+		return 4096
+	}
+	if r.WitnessSampleMaxChars < 32 {
+		return 32
+	}
+	return r.WitnessSampleMaxChars
 }
 
 type upstreamBlock struct {
-	BaseURL   string `yaml:"base_url"`
-	APIKeyEnv string `yaml:"api_key_env"`
-	APIKey    string `yaml:"api_key"`
+	BaseURL         string `yaml:"base_url"`
+	APIKeyEnv       string `yaml:"api_key_env"`
+	APIKey          string `yaml:"api_key"`
+	BifrostLogLevel string `yaml:"bifrost_log_level"`
 }
 
 type gatewayDoc struct {
@@ -79,14 +122,19 @@ type gatewayDoc struct {
 		ListenPort int    `yaml:"listen_port"`
 		ListenHost string `yaml:"listen_host"`
 		LogLevel   string `yaml:"log_level"`
+		LogWitness struct {
+			PayloadSampleMaxChars     *int  `yaml:"payload_sample_max_chars"`
+			ForcePayloadSampleAtDebug *bool `yaml:"force_payload_sample_at_debug"`
+		} `yaml:"log_witness"`
 	} `yaml:"gateway"`
 	Upstream upstreamBlock `yaml:"upstream"`
 	Litellm  upstreamBlock `yaml:"litellm"` // deprecated: prefer upstream (historical LiteLLM-shaped config)
 	Health   struct {
-		UpstreamURL string `yaml:"upstream_url"`
-		LitellmURL  string `yaml:"litellm_url"` // deprecated: prefer health.upstream_url
-		TimeoutMs   int    `yaml:"timeout_ms"`
-		ChatMs      int    `yaml:"chat_timeout_ms"`
+		UpstreamURL           string `yaml:"upstream_url"`
+		LitellmURL            string `yaml:"litellm_url"` // deprecated: prefer health.upstream_url
+		TimeoutMs             int    `yaml:"timeout_ms"`
+		ChatMs                int    `yaml:"chat_timeout_ms"`
+		AvailableModelsPollMs int    `yaml:"available_models_poll_ms"`
 	} `yaml:"health"`
 	Paths struct {
 		Tokens              string `yaml:"tokens"`
@@ -108,6 +156,10 @@ type gatewayDoc struct {
 		SQLitePath    string `yaml:"sqlite_path"`
 		MigrationsDir string `yaml:"migrations_dir"`
 	} `yaml:"metrics"`
+	Operator struct {
+		SQLitePath    string `yaml:"sqlite_path"`
+		MigrationsDir string `yaml:"migrations_dir"`
+	} `yaml:"operator"`
 	RAG ragDoc `yaml:"rag"`
 
 	Indexer struct {
@@ -132,6 +184,9 @@ const (
 	defaultAPIKeyEnv       = "CLAUDIA_UPSTREAM_API_KEY"
 	defaultHealthTimeoutMs = 5000
 	defaultChatTimeoutMs   = 300_000
+	// defaultAvailableModelsPollMs polls BiFrost `/v1/models` every 30s. Set to 0 in
+	// gateway.yaml (`health.available_models_poll_ms`) to disable periodic polling.
+	defaultAvailableModelsPollMs = 30_000
 )
 
 // LoadGatewayYAML reads and parses gateway.yaml at filePath (absolute or cwd-relative).
@@ -210,13 +265,13 @@ func LoadGatewayYAML(filePath string, log *slog.Logger) (*Resolved, error) {
 		s, err := providerfreetier.Load(ftPath)
 		if err != nil {
 			if log != nil {
-				log.Error("provider free tier yaml invalid", "path", ftPath, "err", err)
+				log.Error("provider free tier yaml invalid", "msg", "chat.provider_limits.config_invalid", "path", ftPath, "err", err)
 			}
 		} else {
 			ftSpec = s
 		}
 	} else if err != nil && !os.IsNotExist(err) && log != nil {
-		log.Warn("provider free tier path not stat-able", "path", ftPath, "err", err)
+		log.Warn("provider free tier path not stat-able", "msg", "chat.provider_limits.config_missing", "path", ftPath, "err", err)
 	}
 
 	limitsRel := strings.TrimSpace(doc.Paths.ProviderModelLimits)
@@ -230,7 +285,7 @@ func LoadGatewayYAML(filePath string, log *slog.Logger) (*Resolved, error) {
 	limitsSpec, err := providerlimits.LoadOrEmpty(limitsPath)
 	if err != nil {
 		if log != nil {
-			log.Error("provider-model-limits.yaml invalid; using empty spec (no enforcement)", "path", limitsPath, "err", err)
+			log.Error("provider-model-limits.yaml invalid; using empty spec (no enforcement)", "msg", "chat.provider_limits.config_invalid", "path", limitsPath, "err", err)
 		}
 		limitsSpec = &providerlimits.Config{}
 	}
@@ -240,7 +295,7 @@ func LoadGatewayYAML(filePath string, log *slog.Logger) (*Resolved, error) {
 		filterFT = *doc.Routing.FilterFreeTierModels
 	}
 	if filterFT && ftSpec == nil && log != nil {
-		log.Warn("routing.filter_free_tier_models is true but provider-free-tier.yaml missing or invalid; skipping catalog filter")
+		log.Warn("routing.filter_free_tier_models is true but provider-free-tier.yaml missing or invalid; skipping catalog filter", "msg", "chat.provider_limits.config_missing")
 	}
 
 	listenPort := doc.Gateway.ListenPort
@@ -260,13 +315,22 @@ func LoadGatewayYAML(filePath string, log *slog.Logger) (*Resolved, error) {
 	if ct == 0 {
 		ct = defaultChatTimeoutMs
 	}
+	// Negative explicitly disables; zero falls through to the default. The poller treats <=0
+	// as "no periodic refresh" (one-shot startup only).
+	availPoll := doc.Health.AvailableModelsPollMs
+	if availPoll == 0 {
+		availPoll = defaultAvailableModelsPollMs
+	}
+	if availPoll < 0 {
+		availPoll = 0
+	}
 
 	chain := doc.Routing.FallbackChain
 	if chain == nil {
 		chain = []string{}
 	}
 	if len(chain) == 0 && log != nil {
-		log.Warn("routing.fallback_chain is empty or missing; virtual model requests will fail until configured")
+		log.Warn("routing.fallback_chain is empty or missing; virtual model requests will fail until configured", "msg", "routing.fallback_chain.empty")
 	}
 
 	routerModels := doc.Routing.RouterModels
@@ -303,15 +367,42 @@ func LoadGatewayYAML(filePath string, log *slog.Logger) (*Resolved, error) {
 		metricsMig = migRel
 	}
 
+	opSqliteRel := strings.TrimSpace(doc.Operator.SQLitePath)
+	if opSqliteRel == "" {
+		opSqliteRel = filepath.Join("..", "data", "gateway", "operator.sqlite")
+	}
+	operatorSQLite := filepath.Join(baseDir, opSqliteRel)
+	if filepath.IsAbs(opSqliteRel) {
+		operatorSQLite = opSqliteRel
+	}
+	opMigRel := strings.TrimSpace(doc.Operator.MigrationsDir)
+	if opMigRel == "" {
+		opMigRel = filepath.Join("..", "migrations", "operator")
+	}
+	operatorMig := filepath.Join(baseDir, opMigRel)
+	if filepath.IsAbs(opMigRel) {
+		operatorMig = opMigRel
+	}
+
 	logLevel := doc.Gateway.LogLevel
 	if logLevel == "" {
 		logLevel = defaultLogLevel
+	}
+	bifrostLogLevel := strings.TrimSpace(doc.Upstream.BifrostLogLevel)
+
+	witnessMax := 256
+	if doc.Gateway.LogWitness.PayloadSampleMaxChars != nil && *doc.Gateway.LogWitness.PayloadSampleMaxChars > 0 {
+		witnessMax = *doc.Gateway.LogWitness.PayloadSampleMaxChars
+	}
+	witnessForceDebug := false
+	if doc.Gateway.LogWitness.ForcePayloadSampleAtDebug != nil {
+		witnessForceDebug = *doc.Gateway.LogWitness.ForcePayloadSampleAtDebug
 	}
 
 	rag := doc.RAG.effective()
 	if err := rag.Validate(); err != nil {
 		if log != nil {
-			log.Error("rag config invalid; disabling RAG", "err", err)
+			log.Error("rag config invalid; disabling RAG", "msg", "rag.config.invalid", "err", err)
 		}
 		rag = RAG{Enabled: false}
 	}
@@ -319,7 +410,7 @@ func LoadGatewayYAML(filePath string, log *slog.Logger) (*Resolved, error) {
 	mergeCfg := conversationMergeEffective(doc.ConversationMerge)
 	if mergeCfg.Enabled && !metricsEnabled {
 		if log != nil {
-			log.Warn("conversation_merge.enabled requires metrics.enabled; disabling conversation merge")
+			log.Warn("conversation_merge.enabled requires metrics.enabled; disabling conversation merge", "msg", "conversation.merge.disabled_no_metrics")
 		}
 		mergeCfg.Enabled = false
 	}
@@ -338,7 +429,8 @@ func LoadGatewayYAML(filePath string, log *slog.Logger) (*Resolved, error) {
 	}
 
 	if log != nil {
-		log.Debug("resolved gateway config paths", "filePath", filePath, "tokensPath", tokensPath, "routingPolicyPath", routingPath)
+		log.Info("gateway config resolved", "msg", "gateway.startup.config_resolved",
+			"filePath", filePath, "api_keys_path", tokensPath, "tokens_path", tokensPath, "routingPolicyPath", routingPath)
 	}
 
 	return &Resolved{
@@ -347,12 +439,14 @@ func LoadGatewayYAML(filePath string, log *slog.Logger) (*Resolved, error) {
 		ListenPort:                            listenPort,
 		ListenHost:                            listenHost,
 		LogLevel:                              logLevel,
+		BifrostLogLevel:                       bifrostLogLevel,
 		UpstreamBaseURL:                       upBase,
 		UpstreamAPIKeyEnv:                     apiKeyEnv,
 		UpstreamAPIKey:                        apiKey,
 		HealthUpstreamURL:                     healthURL,
 		HealthTimeoutMs:                       ht,
 		ChatTimeoutMs:                         ct,
+		AvailableModelsPollMs:                 availPoll,
 		TokensPath:                            tokensPath,
 		RoutingPolicyPath:                     routingPath,
 		FallbackChain:                         chain,
@@ -363,6 +457,8 @@ func LoadGatewayYAML(filePath string, log *slog.Logger) (*Resolved, error) {
 		MetricsEnabled:                        metricsEnabled,
 		MetricsSQLitePath:                     metricsSQLite,
 		MetricsMigrationsDir:                  metricsMig,
+		OperatorSQLitePath:                    operatorSQLite,
+		OperatorMigrationsDir:                 operatorMig,
 		ProviderLimitsPath:                    limitsPath,
 		ProviderLimitsSpec:                    limitsSpec,
 		RouterModels:                          routerModels,
@@ -370,6 +466,8 @@ func LoadGatewayYAML(filePath string, log *slog.Logger) (*Resolved, error) {
 		ToolRouterConfidenceThreshold:         toolThresh,
 		RAG:                                   rag,
 		ConversationMerge:                     mergeCfg,
+		WitnessSampleMaxChars:                 witnessMax,
+		WitnessSampleForceAtDebug:             witnessForceDebug,
 		IndexerSupervisedEnabled:              idxSupEnabled,
 		IndexerSupervisedBin:                  strings.TrimSpace(doc.Indexer.Supervised.Bin),
 		IndexerSupervisedConfigPath:           idxCfgPath,

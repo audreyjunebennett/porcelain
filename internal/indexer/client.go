@@ -20,7 +20,7 @@ import (
 )
 
 // GatewayClient talks to the Claudia Gateway indexer-facing surface:
-// GET /v1/indexer/config, POST /v1/ingest, chunked /v1/ingest/session/*,
+// GET /v1/indexer/config, GET /v1/indexer/workspaces, POST /v1/ingest, chunked /v1/ingest/session/*,
 // GET /v1/indexer/storage/health, and optionally GET /health.
 type GatewayClient struct {
 	BaseURL string

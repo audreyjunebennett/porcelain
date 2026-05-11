@@ -23,13 +23,17 @@ ingest can authenticate.
 
 - **Single config file:** `indexer.supervised.config_path` (default:
   `../data/gateway/indexer.supervised.yaml` relative to `gateway.yaml`) is
-  passed as `--config` (highest merge layer). The operator UI exposes it at
-  `/ui/indexer` (session cookie) with **GET/PUT `/api/ui/indexer/config`** and
-  **POST `/api/ui/indexer/append-root`**. When that file changes on disk, the
-  supervised **`claudia-index` process detects the edit** (debounced), stops the
-  current watcher session, and **starts a new session** loaded from YAML—**no full
-  desktop restart**. If the indexer binary is stale, or other gateway settings
+  passed as `--config` (highest merge layer). The file holds **indexer tuning
+  only** (timeouts, workers, ignores, and so on). **Watch directories** are
+  **not** read from YAML `roots:` in supervised mode; they come from the
+  gateway **`GET /v1/indexer/workspaces`** (operator SQLite), managed in the
+  logs UI. When the supervised file changes on disk, the supervised
+  **`claudia-index` process detects the edit** (debounced), stops the
+  current watcher session, and **starts a new session**—**no full desktop
+  restart**. If the indexer binary is stale, or other gateway settings
   change, you still restart **`claudia serve`/desktop**.
+- **Standalone `claudia-index`** (no `--config`): unchanged—roots come from
+  merged YAML and optional `--root` as before.
 - **Logs:** stderr/stdout are teed into the same ring buffer as BiFrost/Qdrant;
   open `/ui/logs` and filter source `indexer`.
 - **Structured stderr:** enable `indexer.supervised.log_json: true` to add

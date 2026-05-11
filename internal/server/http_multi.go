@@ -23,7 +23,7 @@ func StartHTTPListeners(handler http.Handler, addrs []string, log *slog.Logger) 
 		if lerr != nil {
 			if IsIPv6LoopbackAddr(addr) {
 				if log != nil {
-					log.Warn("listen skipped", "addr", addr, "err", lerr)
+					log.Warn("listen skipped", "msg", "gateway.listen.skipped", "addr", addr, "err", lerr)
 				}
 				continue
 			}
@@ -50,7 +50,7 @@ func StartHTTPListeners(handler http.Handler, addrs []string, log *slog.Logger) 
 		go func(s *http.Server, l net.Listener) {
 			defer wg.Done()
 			if err := s.Serve(l); err != nil && err != http.ErrServerClosed && log != nil {
-				log.Debug("http serve exit", "err", err)
+				log.Debug("http serve exit", "msg", "gateway.http.server_error", "err", err)
 			}
 		}(srv, ln)
 	}

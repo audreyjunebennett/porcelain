@@ -150,9 +150,9 @@ func StartBifrost(ctx context.Context, cfg BifrostConfig, log *slog.Logger) (*ex
 	applyNoConsoleWindow(cmd)
 	if log != nil {
 		if cfg.RawExec {
-			log.Info("starting bifrost subprocess", "bin", bin, "dir", cfg.DataDir, "raw", true)
+			log.Info("starting bifrost subprocess", "msg", "gateway.supervisor.bifrost.starting", "bin", bin, "dir", cfg.DataDir, "raw", true)
 		} else {
-			log.Info("starting bifrost subprocess", "bin", bin, "app_dir", absAppDir, "host", cfg.BindHost, "port", cfg.Port)
+			log.Info("starting bifrost subprocess", "msg", "gateway.supervisor.bifrost.starting", "bin", bin, "app_dir", absAppDir, "host", cfg.BindHost, "port", cfg.Port)
 		}
 	}
 	if err := cmd.Start(); err != nil {
@@ -162,7 +162,8 @@ func StartBifrost(ctx context.Context, cfg BifrostConfig, log *slog.Logger) (*ex
 }
 
 // WaitHealthy polls GET healthURL until 2xx or ctx done / timeout.
-func WaitHealthy(ctx context.Context, healthURL string, timeout time.Duration, log *slog.Logger) error {
+// child is "qdrant" or "bifrost" (or empty to skip the success log line).
+func WaitHealthy(ctx context.Context, healthURL string, timeout time.Duration, log *slog.Logger, child string) error {
 	deadline := time.Now().Add(timeout)
 	client := &http.Client{Timeout: 2 * time.Second}
 	interval := 200 * time.Millisecond
@@ -185,7 +186,12 @@ func WaitHealthy(ctx context.Context, healthURL string, timeout time.Duration, l
 			res.Body.Close()
 			if res.StatusCode >= 200 && res.StatusCode < 300 {
 				if log != nil {
-					log.Info("bifrost health OK", "url", healthURL)
+					switch child {
+					case "qdrant":
+						log.Info("qdrant health OK", "msg", "gateway.supervisor.qdrant.ready", "url", healthURL)
+					case "bifrost":
+						log.Info("bifrost health OK", "msg", "gateway.supervisor.bifrost.ready", "url", healthURL)
+					}
 				}
 				return nil
 			}

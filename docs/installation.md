@@ -8,7 +8,7 @@ From a clean clone you typically need:
 
 1. **Language runtimes and build driver** on your machine — **Go** (to build this repo and BiFrost’s Go code), **Node.js** (BiFrost’s UI is built with `npm`; `make claudia-install` runs that step), **Git** (clone BiFrost), **GNU Make**, and a **C compiler for CGO** (`gcc` or `clang` on `PATH`) because BiFrost’s `bifrost-http` binary is built with **CGO** enabled.
 2. **BiFrost** — a checkout under `.deps/bifrost` and a compiled `bifrost-http` binary copied to `./bin/bifrost-http`. The gateway talks to BiFrost over HTTP (upstream URL in `gateway.yaml` when you configure it later).
-3. **Qdrant** (optional for the full local stack) — a prebuilt `./bin/qdrant` binary downloaded from GitHub releases, matching the version pinned in `deps.lock`.
+3. **Qdrant** (optional for the full local stack) — a prebuilt `./bin/qdrant` binary downloaded from GitHub releases, matching the version pinned in `deps.lock`, plus a **source tree** under `.deps/qdrant` at the same pin (for local reference only; the supervised process still uses `./bin/qdrant`).
 
 Pinned versions live in repo-root `deps.lock` (single place to bump them). The important keys are `BIFROST_GIT_URL`, `BIFROST_GIT_REF` (commit, tag, or branch), and `QDRANT_RELEASE`. `scripts/install.sh` (via `make claudia-install`) and `scripts/deps-lock.sh` read that file; always treat `deps.lock` as the source of truth for exact pins.
 
@@ -106,11 +106,13 @@ For a full local desktop dev environment (same as `make up` prerequisites), use 
    - Creates `.deps/bifrost` if needed, **clones** BiFrost from `BIFROST_GIT_URL`, **checks out** `BIFROST_GIT_REF`, runs BiFrost’s `make setup-workspace` and `make build LOCAL=1` (may run `npm ci` in BiFrost’s UI — several minutes first time).
    - Copies `tmp/bifrost-http` (or `.exe` on Windows) into `./bin/`.
    - Runs `scripts/qdrant-from-release.sh` for your OS (Linux **tar.gz**, macOS **tar.gz**, Windows **zip** under Git Bash / MSYS).
+   - Creates `.deps/qdrant` if needed, **clones** [github.com/qdrant/qdrant](https://github.com/qdrant/qdrant), and **checks out** `QDRANT_RELEASE` from `deps.lock` (same pin as the prebuilt binary).
 
 ### Re-runs and disk layout
 
 - If `.deps/bifrost` already exists, the script **reuses** it, fetches updates, and checks out the pinned ref again.
-- Expect a **large** `.deps/bifrost` directory. `./bin` holds `bifrost-http` and `qdrant` (with `.exe` suffixes on Windows where applicable).
+- If `.deps/qdrant` already exists, it is **reused** the same way and reset to `QDRANT_RELEASE`.
+- Expect **large** `.deps/bifrost` and `.deps/qdrant` directories. `./bin` holds `bifrost-http` and `qdrant` (with `.exe` suffixes on Windows where applicable).
 
 ### Common failures
 

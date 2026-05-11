@@ -72,23 +72,29 @@ func handleV1Ingest(w http.ResponseWriter, r *http.Request, rt *Runtime, log *sl
 		indexRun = ""
 	}
 
+	convID := optionalConversationIDFromHeader(r)
+
 	rid := requestid.FromContext(r.Context())
 	result, err := rt.RAG().Ingest(r.Context(), rag.IngestRequest{
-		Coords:      coords,
-		Source:      source,
-		Text:        text,
-		ContentHash: contentHash,
-		RequestID:   rid,
-		IndexRunID:  indexRun,
+		Coords:         coords,
+		Source:         source,
+		Text:           text,
+		ContentHash:    contentHash,
+		RequestID:      rid,
+		IndexRunID:     indexRun,
+		ConversationID: convID,
 	})
 	if err != nil {
 		if log != nil {
-			args := []any{"tenant", sess.TenantID, "source", source, "err", err, "service", "gateway", "principal_id", sess.TenantID}
+			args := []any{"msg", "ingest.failed", "tenant", sess.TenantID, "source", source, "err", err, "service", "gateway", "principal_id", sess.TenantID, "timeline_kind", "indexer"}
 			if rid != "" {
 				args = append(args, "request_id", rid)
 			}
 			if indexRun != "" {
 				args = append(args, "index_run_id", indexRun)
+			}
+			if convID != "" {
+				args = append(args, "conversation_id", convID)
 			}
 			log.Error("ingest failed", args...)
 		}
@@ -116,12 +122,16 @@ func handleV1Ingest(w http.ResponseWriter, r *http.Request, rt *Runtime, log *sl
 			"msg", "ingest.complete",
 			"tenant", sess.TenantID, "source", source, "chunks", result.Chunks,
 			"service", "gateway", "principal_id", sess.TenantID,
+			"timeline_kind", "indexer",
 		}
 		if rid != "" {
 			args = append(args, "request_id", rid)
 		}
 		if indexRun != "" {
 			args = append(args, "index_run_id", indexRun)
+		}
+		if convID != "" {
+			args = append(args, "conversation_id", convID)
 		}
 		log.Info("ingest complete", args...)
 	}

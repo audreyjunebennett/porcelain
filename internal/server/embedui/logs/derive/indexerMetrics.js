@@ -77,7 +77,47 @@ function collectIndexerRunMeta(runId, evs, opts) {
     lastDeclaredState = "",
     stateQueueDepth = null,
     stateIngestInflight = null,
-    qdrantPointsLive = null,
+    qdrantPointsLive = (function () {
+      var idxLatestState = -1;
+      for (var u = evs.length - 1; u >= 0; u--) {
+        var fs = getFlat(evs[u].parsed);
+        if (indexerFlatMsg(fs) === "indexer.state") {
+          idxLatestState = u;
+          break;
+        }
+      }
+      if (idxLatestState >= 0) {
+        var sum = 0;
+        var any = false;
+        for (var k = idxLatestState - 1; k >= 0; k--) {
+          var fK = getFlat(evs[k].parsed);
+          if (indexerFlatMsg(fK) !== "indexer.storage.stats") break;
+          if (fK.qdrant_points != null) {
+            var qp = Number(fK.qdrant_points);
+            if (!isNaN(qp)) {
+              sum += qp;
+              any = true;
+            }
+          }
+        }
+        if (any) return sum;
+        return null;
+      }
+      var sum2 = 0;
+      var any2 = false;
+      for (var u2 = evs.length - 1; u2 >= 0; u2--) {
+        var f2 = getFlat(evs[u2].parsed);
+        if (indexerFlatMsg(f2) !== "indexer.storage.stats") break;
+        if (f2.qdrant_points != null) {
+          var qp2 = Number(f2.qdrant_points);
+          if (!isNaN(qp2)) {
+            sum2 += qp2;
+            any2 = true;
+          }
+        }
+      }
+      return any2 ? sum2 : null;
+    })(),
     filesExcludedByIgnores = null;
   for (var u = evs.length - 1; u >= 0; u--) {
     var fR = getFlat(evs[u].parsed);
@@ -105,10 +145,6 @@ function collectIndexerRunMeta(runId, evs, opts) {
         var inf = Number(fR.ingest_inflight);
         if (!isNaN(inf)) stateIngestInflight = inf;
       }
-    }
-    if (qdrantPointsLive == null && mR === "indexer.storage.stats" && fR.qdrant_points != null) {
-      var qp = Number(fR.qdrant_points);
-      if (!isNaN(qp)) qdrantPointsLive = qp;
     }
   }
   for (var di = 0; di < evs.length; di++) {

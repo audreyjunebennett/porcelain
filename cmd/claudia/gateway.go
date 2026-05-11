@@ -15,6 +15,7 @@ import (
 	"github.com/lynn/claudia-gateway/internal/platform"
 	"github.com/lynn/claudia-gateway/internal/server"
 	"github.com/lynn/claudia-gateway/internal/servicelogs"
+	"github.com/lynn/claudia-gateway/internal/upstream"
 )
 
 func runGateway(args []string) {
@@ -35,9 +36,9 @@ func runGateway(args []string) {
 
 	logStore := servicelogs.New(servicelogs.DefaultMaxLines)
 	gwSink := logStore.Writer("gateway")
-	// Ensure the operator UI log buffer is never empty, even in GUI builds.
-	_, _ = fmt.Fprintln(gwSink, "claudia.start")
 	log := buildLoggerTo(platform.StdoutTee(gwSink), path)
+	// Ensure the operator UI log buffer is never empty, even in GUI builds.
+	log.Info("gateway startup seed", "msg", "gateway.startup.seed")
 	rt, err := server.NewRuntime(path, log)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "claudia: load gateway config: %v\n", err)
@@ -64,7 +65,8 @@ func runGateway(args []string) {
 			os.Exit(1)
 		}
 		overlay.EffectiveListen = prim.String()
-		log.Info("claudia (go) listening (bootstrap)", "addr", prim.String(), "upstream", res.UpstreamBaseURL, "config", path)
+		log.Info("gateway listening", "msg", "gateway.startup.listening",
+			"bootstrap", true, "addr", prim.String(), "upstream", res.UpstreamBaseURL, "config", path)
 		rootCtx, stopRoot := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stopRoot()
 		go func() {
@@ -72,7 +74,7 @@ func runGateway(args []string) {
 			shCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			defer cancel()
 			if err := shut(shCtx); err != nil && log != nil {
-				log.Warn("http shutdown", "err", err)
+				log.Info("http shutdown", "msg", "gateway.shutdown.http", "err", err)
 			}
 		}()
 		<-stopped
@@ -80,9 +82,22 @@ func runGateway(args []string) {
 	}
 
 	h := server.NewMux(rt, log, overlay, uiOpts)
-	log.Info("claudia (go) listening", "addr", addr, "upstream", res.UpstreamBaseURL, "config", path)
+	log.Info("gateway listening", "msg", "gateway.startup.listening", "addr", addr, "upstream", res.UpstreamBaseURL, "config", path)
+	rootCtx := context.Background()
+	upstream.RunGatewayUpstreamHealthMonitor(rootCtx, log, 15*time.Second, 30*time.Second,
+		func(pctx context.Context) (string, string, time.Duration, bool) {
+			r, _, _ := rt.Snapshot()
+			if r == nil || strings.TrimSpace(r.HealthUpstreamURL) == "" {
+				return "", "", 0, false
+			}
+			to := time.Duration(r.HealthTimeoutMs) * time.Millisecond
+			if to <= 0 {
+				to = 5 * time.Second
+			}
+			return r.HealthUpstreamURL, rt.UpstreamAPIKey(), to, true
+		})
 	if err := http.ListenAndServe(addr, h); err != nil {
-		log.Error("server exit", "err", err)
+		log.Error("server exit", "msg", "gateway.http.server_error", "err", err)
 		os.Exit(1)
 	}
 }

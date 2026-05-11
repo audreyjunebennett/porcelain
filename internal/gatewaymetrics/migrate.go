@@ -85,7 +85,7 @@ func ApplyMigrations(db *sql.DB, migrationsDir string, log *slog.Logger) error {
 			return fmt.Errorf("commit migration %s: %w", name, err)
 		}
 		if log != nil {
-			log.Info("gateway metrics migration applied", "version", v, "file", name)
+			log.Info("gateway metrics migration applied", "msg", "gateway.metrics.migration_applied", "version", v, "file", name)
 		}
 		applied[v] = struct{}{}
 	}

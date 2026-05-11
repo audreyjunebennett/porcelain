@@ -5,6 +5,7 @@ package rag
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -23,6 +24,15 @@ import (
 // queryPreviewMax bounds the query/text excerpt included in DEBUG logs so we
 // don't echo entire prompts into the log stream.
 const queryPreviewMax = 160
+
+// conversationRAGSpanWindowMS is the default tier-4b UI join window (see log-conversations.md Phase 1).
+const conversationRAGSpanWindowMS = 10000
+
+func newSpanID() string {
+	b := make([]byte, 8)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
+}
 
 // Service orchestrates ingest + retrieval against a single vector store +
 // embedding client.
@@ -155,7 +165,9 @@ func (s *Service) Ingest(ctx context.Context, req IngestRequest) (IngestResult, 
 	// Re-ingest is upsert: delete old points for this source first, then
 	// upsert. Errors from delete on a fresh collection are tolerated.
 	if err := s.store.DeleteBySource(ctx, collection, res.Source); err != nil && s.log != nil {
-		s.log.Debug("delete-by-source pre-ingest failed (likely empty collection)", "source", res.Source, "err", err, "service", "gateway")
+		args := []any{"msg", "rag.ingest.delete_pre_failed", "source", res.Source, "err", err}
+		args = appendGatewayCorrelation(args, req.RequestID, req.ConversationID, req.IndexRunID, req.Coords.TenantID)
+		s.log.Debug("delete-by-source pre-ingest failed (likely empty collection)", args...)
 	}
 
 	sum := sha256.Sum256([]byte(req.Text))
@@ -201,7 +213,7 @@ func (s *Service) Ingest(ctx context.Context, req IngestRequest) (IngestResult, 
 			"embed_model", s.embedder.Model(),
 			"text_bytes", len(req.Text),
 		}
-		args = appendGatewayCorrelation(args, req.RequestID, req.ConversationID, req.IndexRunID)
+		args = appendGatewayCorrelation(args, req.RequestID, req.ConversationID, req.IndexRunID, req.Coords.TenantID)
 		s.log.Log(ctx, platform.LevelTrace, "rag ingest", args...)
 	}
 	return res, nil
@@ -215,6 +227,10 @@ type RetrieveRequest struct {
 	// Optional correlation from the gateway chat handler.
 	RequestID      string
 	ConversationID string
+	// TurnIndex is the 1-based chat turn for lifecycle logs (default 1 when unset).
+	TurnIndex int
+	// LifecycleLog receives conversation.rag.span before outbound embedding / search when non-nil.
+	LifecycleLog *slog.Logger
 }
 
 // Retrieve embeds the query then runs a top-k search filtered by coords.
@@ -230,6 +246,28 @@ func (s *Service) Retrieve(ctx context.Context, req RetrieveRequest) ([]vectorst
 		k = s.topK
 	}
 	collection := vectorstore.CollectionName(req.Coords)
+	ti := req.TurnIndex
+	if ti <= 0 {
+		ti = 1
+	}
+	spanLog := req.LifecycleLog
+	if spanLog == nil {
+		spanLog = s.log
+	}
+	if spanLog != nil {
+		args := []any{
+			"msg", "conversation.rag.span",
+			"collection", collection,
+			"span_id", newSpanID(),
+			"window_ms", conversationRAGSpanWindowMS,
+			"turn_index", ti,
+			"timeline_kind", "qdrant",
+		}
+		if req.LifecycleLog == nil {
+			args = appendGatewayCorrelation(args, req.RequestID, req.ConversationID, "", req.Coords.TenantID)
+		}
+		spanLog.Info("conversation RAG span", args...)
+	}
 	if s.log != nil {
 		args := []any{
 			"msg", "rag.query",
@@ -242,7 +280,8 @@ func (s *Service) Retrieve(ctx context.Context, req RetrieveRequest) ([]vectorst
 			"query_bytes", len(req.Query),
 			"query", previewText(req.Query),
 		}
-		args = appendGatewayCorrelation(args, req.RequestID, req.ConversationID, "")
+		args = appendGatewayCorrelation(args, req.RequestID, req.ConversationID, "", req.Coords.TenantID)
+		args = append(args, "timeline_kind", "qdrant")
 		s.log.Debug("rag search query", args...)
 	}
 	embedStart := time.Now()
@@ -261,7 +300,8 @@ func (s *Service) Retrieve(ctx context.Context, req RetrieveRequest) ([]vectorst
 			"embed_model", s.embedder.Model(),
 			"elapsed_ms", time.Since(embedStart).Milliseconds(),
 		}
-		args = appendGatewayCorrelation(args, req.RequestID, req.ConversationID, "")
+		args = appendGatewayCorrelation(args, req.RequestID, req.ConversationID, "", req.Coords.TenantID)
+		args = append(args, "timeline_kind", "qdrant")
 		s.log.Debug("rag embedding retrieved", args...)
 	}
 	hits, err := s.store.Search(ctx, collection, vec, k, s.scoreFloor, &req.Coords)
@@ -285,19 +325,23 @@ func (s *Service) Retrieve(ctx context.Context, req RetrieveRequest) ([]vectorst
 				"source", h.Payload.Source,
 				"text", previewText(h.Payload.Text),
 			}
-			args = appendGatewayCorrelation(args, req.RequestID, req.ConversationID, "")
+			args = appendGatewayCorrelation(args, req.RequestID, req.ConversationID, "", req.Coords.TenantID)
+			args = append(args, "timeline_kind", "qdrant")
 			s.log.Debug("rag comparison", args...)
 		}
 	}
 	return hits, nil
 }
 
-func appendGatewayCorrelation(args []any, requestID, conversationID, indexRunID string) []any {
+func appendGatewayCorrelation(args []any, requestID, conversationID, indexRunID, principalID string) []any {
 	if requestID != "" {
 		args = append(args, "request_id", requestID)
 	}
 	if conversationID != "" {
 		args = append(args, "conversation_id", conversationID)
+	}
+	if principalID != "" {
+		args = append(args, "principal_id", principalID)
 	}
 	if indexRunID != "" {
 		args = append(args, "index_run_id", indexRunID)

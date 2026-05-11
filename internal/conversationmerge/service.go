@@ -14,6 +14,22 @@ import (
 
 const dedupRetention = 24 * time.Hour
 
+// mergeCorrelationAttrs returns structured log fields for gateway chat correlation
+// (request_id, conversation_id, principal_id, service) when values are non-empty.
+func mergeCorrelationAttrs(in ResolveInput, conversationID string) []any {
+	out := []any{"service", "gateway"}
+	if in.RequestID != "" {
+		out = append(out, "request_id", in.RequestID)
+	}
+	if in.TenantID != "" {
+		out = append(out, "principal_id", in.TenantID)
+	}
+	if conversationID != "" {
+		out = append(out, "conversation_id", conversationID)
+	}
+	return out
+}
+
 // Service performs semantic conversation resolution and persistence.
 type Service struct {
 	cfg    config.ConversationMerge
@@ -39,7 +55,7 @@ func NewService(cfg config.ConversationMerge, db *sql.DB, upstreamBaseURL, upstr
 	url := rag.EmbeddingURL(upstreamBaseURL)
 	if url == "" || upstreamAPIKey == "" {
 		if log != nil {
-			log.Warn("conversation merge disabled: missing embedding URL or upstream API key")
+			log.Info("conversation merge disabled: missing embedding URL or upstream API key", "msg", "conversation.merge.disabled")
 		}
 		return nil
 	}
@@ -65,12 +81,19 @@ type ResolveInput struct {
 	LastUserText         string
 	IncomingFingerprint  string
 	ClientConversationID string // from X-Claudia-Conversation-Id when present (already validated)
+	// RequestID is the gateway HTTP request id (Phase 2 correlation for merge logs).
+	RequestID string
+	// NextTurnIndex, when set, supplies turn_index for lifecycle logs (dedup_hit, merged) and
+	// increments the per-conversation turn counter in the gateway runtime.
+	NextTurnIndex func(conversationID string) int
 }
 
 // ResolveOutcome is the result of semantic resolution.
 type ResolveOutcome struct {
 	ConversationID string
 	DedupJSON      []byte // when non-nil, handler should write this body and skip upstream
+	// TurnIndex is the 1-based turn assigned when NextTurnIndex was invoked for merge lifecycle logs (dedup or merged).
+	TurnIndex int
 }
 
 // Resolve picks a canonical conversation id using embeddings + scoring.
@@ -96,14 +119,16 @@ func (s *Service) Resolve(ctx context.Context, in ResolveInput) (ResolveOutcome,
 	vec, err := s.embed.EmbedOne(ctx, last)
 	if err != nil {
 		if s.log != nil {
-			s.log.Warn("conversation merge: embed failed; using fresh conversation id", "err", err)
+			s.log.Warn("conversation merge: embed failed; using fresh conversation id",
+				append([]any{"msg", "conversation.merge.embed_failed", "err", err}, mergeCorrelationAttrs(in, out.ConversationID)...)...)
 		}
 		return out, nil
 	}
 	if len(vec) != s.expDim {
 		if s.log != nil {
 			s.log.Warn("conversation merge: embedding dim mismatch; using fresh id",
-				"got", len(vec), "want", s.expDim)
+				append([]any{"msg", "conversation.merge.embed_dim_mismatch",
+					"got", len(vec), "want", s.expDim}, mergeCorrelationAttrs(in, out.ConversationID)...)...)
 		}
 		return out, nil
 	}
@@ -117,7 +142,8 @@ func (s *Service) Resolve(ctx context.Context, in ResolveInput) (ResolveOutcome,
 	candidates, err := s.store.ListCandidates(ctx, in.TenantID, in.ProjectID, in.FlavorID, minTime, s.cfg.CandidateLimit)
 	if err != nil {
 		if s.log != nil {
-			s.log.Warn("conversation merge: list candidates failed", "err", err)
+			s.log.Warn("conversation merge: list candidates failed",
+				append([]any{"msg", "conversation.merge.list_candidates_failed", "err", err}, mergeCorrelationAttrs(in, out.ConversationID)...)...)
 		}
 		return out, nil
 	}
@@ -144,6 +170,7 @@ func (s *Service) Resolve(ctx context.Context, in ResolveInput) (ResolveOutcome,
 		}
 	}
 
+	preStickyScore := bestScore
 	bestID, bestScore = maybeStickyReassign(s.cfg, candidates, now, vec, last, bestID, bestScore)
 
 	if bestID == "" || bestScore < s.cfg.MatchThreshold {
@@ -155,12 +182,47 @@ func (s *Service) Resolve(ctx context.Context, in ResolveInput) (ResolveOutcome,
 	dk := DedupKey(bestID, in.IncomingFingerprint, userNorm)
 	body, hit, err := s.store.GetDedup(ctx, dk)
 	if err != nil && s.log != nil {
-		s.log.Debug("conversation merge: dedup read failed", "err", err)
+		cid := out.ConversationID
+		if bestID != "" {
+			cid = bestID
+		}
+		s.log.Debug("conversation merge: dedup read failed",
+			append([]any{"msg", "conversation.merge.dedup_read_failed", "err", err}, mergeCorrelationAttrs(in, cid)...)...)
 	}
 	if hit && len(body) > 0 {
 		out.ConversationID = bestID
 		out.DedupJSON = body
+		if in.NextTurnIndex != nil {
+			out.TurnIndex = in.NextTurnIndex(bestID)
+		}
+		if s.log != nil {
+			args := append([]any{"msg", "conversation.dedup_hit", "dedup_bytes", len(body)}, mergeCorrelationAttrs(in, bestID)...)
+			if out.TurnIndex != 0 {
+				args = append(args, "turn_index", out.TurnIndex)
+			}
+			s.log.Info("conversation dedup hit", args...)
+		}
 		return out, nil
+	}
+
+	mergeReason := "semantic"
+	if preStickyScore < s.cfg.MatchThreshold && bestScore >= s.cfg.MatchThreshold {
+		mergeReason = "sticky"
+	}
+	if in.NextTurnIndex != nil {
+		out.TurnIndex = in.NextTurnIndex(bestID)
+	}
+	if s.log != nil {
+		args := append([]any{
+			"msg", "conversation.merged",
+			"match_score", bestScore,
+			"candidate_count", len(candidates),
+			"merge_reason", mergeReason,
+		}, mergeCorrelationAttrs(in, bestID)...)
+		if out.TurnIndex != 0 {
+			args = append(args, "turn_index", out.TurnIndex)
+		}
+		s.log.Info("conversation matched", args...)
 	}
 
 	out.ConversationID = bestID
@@ -169,8 +231,9 @@ func (s *Service) Resolve(ctx context.Context, in ResolveInput) (ResolveOutcome,
 }
 
 // RecordTurn updates SQLite after a successful JSON completion (non-streaming).
+// requestID is the gateway HTTP request id for structured logs (may be empty in tests).
 func (s *Service) RecordTurn(ctx context.Context, tenantID, projectID, flavorID, conversationID string,
-	lastUserRaw string, completionJSON []byte, now time.Time) string {
+	lastUserRaw string, completionJSON []byte, now time.Time, requestID string) string {
 	if s == nil || s.store == nil || s.embed == nil {
 		return ""
 	}
@@ -193,12 +256,14 @@ func (s *Service) RecordTurn(ctx context.Context, tenantID, projectID, flavorID,
 	fp := RollingFingerprint(prevFP, userNorm, modelNorm)
 
 	if err := s.store.UpsertConversation(ctx, tenantID, projectID, flavorID, conversationID, vec, userNorm, modelNorm, fp, now); err != nil && s.log != nil {
-		s.log.Warn("conversation merge: upsert failed", "err", err)
+		s.log.Warn("conversation merge: upsert failed",
+			append([]any{"msg", "conversation.merge.upsert_failed", "err", err}, mergeCorrelationAttrs(ResolveInput{TenantID: tenantID, RequestID: requestID}, conversationID)...)...)
 	}
 
 	dk := DedupKey(conversationID, prevFP, userNorm)
 	if err := s.store.PutDedup(ctx, dk, completionJSON, now, dedupRetention); err != nil && s.log != nil {
-		s.log.Debug("conversation merge: dedup cache write failed", "err", err)
+		s.log.Debug("conversation merge: dedup cache write failed",
+			append([]any{"msg", "conversation.merge.dedup_cache_write_failed", "err", err}, mergeCorrelationAttrs(ResolveInput{TenantID: tenantID, RequestID: requestID}, conversationID)...)...)
 	}
 	return fp
 }
@@ -218,7 +283,8 @@ func (s *Service) persistUserSnapshot(ctx context.Context, in ResolveInput, conv
 		return
 	}
 	if err := s.store.UpsertUserSnapshotAtResolve(ctx, in.TenantID, in.ProjectID, in.FlavorID, conversationID, vec, userNorm, at); err != nil && s.log != nil {
-		s.log.Warn("conversation merge: resolve snapshot upsert failed", "err", err, "conversation_id", conversationID)
+		s.log.Warn("conversation merge: resolve snapshot upsert failed",
+			append([]any{"msg", "conversation.merge.snapshot_upsert_failed", "err", err}, mergeCorrelationAttrs(in, conversationID)...)...)
 	}
 }
 

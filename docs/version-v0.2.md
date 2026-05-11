@@ -42,9 +42,9 @@ The **chat path** records **tiktoken-compatible `cl100k_base`** estimates on the
 | [Chat robustness](#themes-chat-robustness)                                             | Virtual-model **429/5xx** fallback chain; **413** skip-to-next on virtual path; **tool-router** slimming; **gateway_provider_limits** **429** | `done` |
 | [Catalog & limits tooling (Make)](#themes-catalog-and-limits-tooling-make)             | `**catalog-free`**, `**catalog-available**`, `**config-provider-free-tier**`; snapshots inform `**provider-model-limits.yaml**` maintenance   | `done` |
 | [Qdrant log classification](#theme--qdrant-log-classification)                         | Normalize supervised Qdrant JSON into stable `qdrant.*` slugs and operator-friendly card summaries                                            | `done` |
-| [Gateway log classification](#theme--gateway-log-classification)                       | Make gateway logs uniformly slugged (`msg`) and operator-meaningful for `/ui/logs`                                                            | `todo` |
-| [Conversation log classification](#theme--conversation-log-classification)             | Conversation cards show lifecycle state and fan-out from gateway/BiFrost/Qdrant via correlation                                               | `todo` |
-| [BiFrost log classification](#theme--bifrost-log-classification)                       | Normalize supervised BiFrost JSON into stable `bifrost.*` slugs and richer BiFrost service card                                               | `todo` |
+| [Gateway log classification](#theme--gateway-log-classification)                       | Make gateway logs uniformly slugged (`msg`) and operator-meaningful for `/ui/logs`                                                            | `done` |
+| [Conversation log classification](#theme--conversation-log-classification)             | Conversation cards show lifecycle state and fan-out from gateway/BiFrost/Qdrant via correlation                                               | `done` |
+| [BiFrost log classification](#theme--bifrost-log-classification)                       | Normalize supervised BiFrost JSON into stable `bifrost.*` slugs and richer BiFrost service card                                               | `done` |
 
 
 ---
@@ -206,7 +206,7 @@ Qdrant subprocess output is becoming **JSON lines** only; the operator log view 
 **Goal:** The gateway emits uniformly slugged, correctly-leveled structured logs so the default Info stream tells the operator story and the gateway service card can summarize real gateway state.
 
 **Summary (from `[plans/log-gateway.md](plans/log-gateway.md)` — At a glance):**
-Gateway logs already drive key cards via a few dotted slugs, but many lines still ship **without `msg`**, several are at the wrong level, and the gateway card shows generic counters instead of operator state. The plan defines a stable `gateway.*` taxonomy (plus tightened existing domains), reclassifies levels, and adds structured lifecycle/health objects the UI needs.
+Gateway parent-process logs use a stable `gateway.*` taxonomy (plus tightened existing domains), operator-appropriate levels, and structured lifecycle/health objects; the `/ui/logs` gateway card derives KV and counters from those slugs (`internal/server/embedui/logs/derive/gatewayCardModel.js`). See the plan for the full slug table and phase notes.
 
 **Scope**
 
@@ -220,7 +220,7 @@ Gateway logs already drive key cards via a few dotted slugs, but many lines stil
 - With `LOG_LEVEL=info`, cold start produces a compact operator narrative (config resolved, tokens loaded, listening, upstream/Qdrant/BiFrost supervised status).
 - `/ui/logs` Gateway card KV row populates (listening/upstream/config/tokens/routing/supervised children) without expanding individual rows.
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 
@@ -229,7 +229,7 @@ Gateway logs already drive key cards via a few dotted slugs, but many lines stil
 **Goal:** Conversation cards show lifecycle state (received → routed → RAG → upstream → delivered) and can include the right supporting lines via correlation fan-out, not just “whatever already had `conversation_id`”.
 
 **Summary (from `[plans/log-conversations.md](plans/log-conversations.md)` — At a glance):**
-Conversation cards are currently incomplete because they only group lines that already carry `conversation_id`; BiFrost/Qdrant subprocess lines and some gateway lines never appear even when relevant. The plan defines a routing/fan-out model (via `conversation_id`/`request_id`/`index_run_id` plus collection/time heuristics), a `conversation.*` lifecycle taxonomy, and a UI contract for pills/KV/progress.
+Conversation cards join gateway, relay, RAG, tool, and inferred subprocess lines via correlation tiers, a `conversation.*` lifecycle, per-turn indexing, and witness events (Phases 1–8 in the plan). Subprocess linkage remains conditional on echoed correlation where the upstream platform allows it.
 
 **Scope**
 
@@ -242,7 +242,7 @@ Conversation cards are currently incomplete because they only group lines that a
 - Conversation cards display a state pill, lifecycle progress, and accurate BiFrost/Qdrant/fallback counts derived from slugs.
 - A conversation’s expanded view shows the relevant gateway-emitted lifecycle events even when subprocess lines are missing correlation.
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 
@@ -251,7 +251,7 @@ Conversation cards are currently incomplete because they only group lines that a
 **Goal:** The supervised BiFrost subprocess log stream is classified into stable `bifrost.*` slugs and the BiFrost service card reflects both gateway relay events and subprocess health/config signals.
 
 **Summary (from `[plans/log-bifrost.md](plans/log-bifrost.md)` — At a glance):**
-BiFrost (`bifrost-http`) writes JSON lines, but they reach the operator UI **unclassified**; the BiFrost card mostly reflects gateway-emitted relay lines and ignores subprocess signals about providers/keys/MCP/governance/rate limits. The plan defines a stable `bifrost.*` taxonomy, a normalization boundary (`internal/servicelogs/bifrostline`), and a concrete UI contract for the BiFrost card.
+Supervised BiFrost stdout/stderr is normalized in `internal/servicelogs/bifrostline` to stable `bifrost.*` slugs; the BiFrost service card combines subprocess rows with gateway relay lines (`chat.bifrost.*`, routing, provider limits) per the plan’s UI contract.
 
 **Scope**
 
@@ -264,7 +264,7 @@ BiFrost (`bifrost-http`) writes JSON lines, but they reach the operator UI **unc
 - `/ui/logs` BiFrost card shows version/port/auth/providers up/total and separates rate-limits vs other failures.
 - BiFrost subprocess lines are queryable by `bifrost.*` slugs (with `bifrost.unparsed` only for truly unknown lines).
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 

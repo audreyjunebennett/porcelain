@@ -6,8 +6,9 @@ import (
 	"time"
 )
 
-// RunObservationLoop periodically pulls GET /v1/indexer/storage/stats (Qdrant
-// point counts) and emits indexer.state snapshots for operators and /ui/logs.
+// RunObservationLoop periodically pulls GET /v1/indexer/storage/stats once per
+// distinct effective ingest scope (deduped watched roots) and emits indexer.state
+// snapshots for operators and /ui/logs.
 func (ix *Indexer) RunObservationLoop(ctx context.Context, watchMode bool) {
 	if ix.cfg.StorageStatsPoll <= 0 {
 		return
@@ -31,23 +32,46 @@ func (ix *Indexer) EmitStorageStatsAndState(ctx context.Context, watchMode bool)
 	if ix.log == nil {
 		return
 	}
-	hdrs := ix.cfg.DefaultIndexerHeaders()
-	stats, err := ix.client.FetchStorageStats(ctx, hdrs)
-	if err != nil {
-		ix.log.Warn("storage stats fetch failed",
-			"msg", "indexer.storage.stats",
-			"available", false,
-			"err", err.Error())
+	gw := ix.lastGW.Load()
+	scopes := DistinctEffectiveStorageStatsScopes(ix.cfg, gw)
+	if len(scopes) == 0 {
+		ix.qdrantPoints.Store(0)
 	} else {
-		ix.qdrantPoints.Store(stats.Points)
-		ix.log.Info("indexer storage stats sync",
-			"msg", "indexer.storage.stats",
-			"collection", stats.Collection,
-			"qdrant_points", stats.Points,
-			"vector_dim", stats.VectorDim,
-			"available", stats.Available,
-			"detail", stats.Detail,
-		)
+		var total int64
+		tenant := ""
+		if gw != nil {
+			tenant = strings.TrimSpace(gw.TenantID)
+		}
+		for _, sc := range scopes {
+			hdrs := StorageStatsRequestHeaders(sc)
+			stats, err := ix.client.FetchStorageStats(ctx, hdrs)
+			proj := strings.TrimSpace(sc.ProjectID)
+			flav := strings.TrimSpace(sc.FlavorID)
+			itk := IndexerKey(tenant, proj, flav)
+			if err != nil {
+				ix.log.Warn("storage stats fetch failed",
+					"msg", "indexer.storage.stats",
+					"indexer_target_key", itk,
+					"ingest_project", proj,
+					"flavor_id", flav,
+					"available", false,
+					"err", err.Error())
+				continue
+			}
+			total += stats.Points
+			ix.log.Info("indexer storage stats sync",
+				"msg", "indexer.storage.stats",
+				"indexer_target_key", itk,
+				"ingest_project", proj,
+				"flavor_id", flav,
+				"collection", stats.Collection,
+				"qdrant_points", stats.Points,
+				"vector_dim", stats.VectorDim,
+				"available", stats.Available,
+				"detail", stats.Detail,
+			)
+		}
+		ix.qdrantPoints.Store(total)
 	}
 
 	state := ix.computeDeclarativeState(watchMode)

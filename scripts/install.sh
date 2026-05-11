@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Idempotent: verify toolchain (auto-install git/make/go/node/gcc when possible), then install-bootstrap.sh (BiFrost + Qdrant from deps.lock).
+# Idempotent: verify toolchain (auto-install git/make/go/node/gcc when possible), then install-bootstrap.sh (BiFrost + Qdrant binary + Qdrant source under .deps/qdrant).
 # Skip auto-install: SKIP_AUTO_GIT, SKIP_AUTO_MAKE, SKIP_AUTO_GO, SKIP_AUTO_NODE, SKIP_AUTO_GCC (see scripts/install-toolchain-deps.sh, install-gcc.sh).
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"

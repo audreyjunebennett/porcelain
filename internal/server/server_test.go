@@ -148,9 +148,6 @@ func TestUILoginAndState(t *testing.T) {
 	if gw["virtual_model_id"] != "Claudia-0.1.0" {
 		t.Fatalf("gateway: %+v", gw)
 	}
-	if gw["continue_gateway_token"] != "gw-ui-secret" {
-		t.Fatalf("continue_gateway_token: %+v", gw["continue_gateway_token"])
-	}
 	prov, _ := st["providers"].(map[string]any)
 	groq, _ := prov["groq"].(map[string]any)
 	if groq["ok"] != true {

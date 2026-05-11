@@ -25,6 +25,25 @@
     }
     #tabs button:hover { background: #e5e5e5; }
     #tabs button.active { border-bottom-color: #0b57d0; font-weight: 600; color: #0b57d0; }
+    #tabs .spacer { flex: 1 1 auto; }
+    #tabs #btn-reload {
+      margin-left: 0.25rem;
+      padding: 0.35rem 0.6rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #333;
+      border-bottom: 2px solid transparent;
+    }
+    #tabs #btn-reload:hover { background: #e5e5e5; }
+    #tabs #btn-reload .reload-icon {
+      display: block;
+      width: 18px;
+      height: 18px;
+      background-color: currentColor;
+      -webkit-mask: url("/ui/assets/reload.svg") center / contain no-repeat;
+      mask: url("/ui/assets/reload.svg") center / contain no-repeat;
+    }
     #frame-wrap {
       flex: 1 1 auto;
       min-height: 0;
@@ -55,27 +74,28 @@
 <body>
   <nav id="tabs" role="tablist">
     <button type="button" role="tab" data-tab="main" class="active" aria-selected="true">Main</button>
-    <button type="button" role="tab" data-tab="indexer" aria-selected="false">Indexer</button>
-    <button type="button" role="tab" data-tab="continue" aria-selected="false">VS Code Continue</button>
     <button type="button" role="tab" data-tab="logs" aria-selected="false">Logs</button>
     <button type="button" role="tab" data-tab="admin" aria-selected="false">Admin</button>
+    <span class="spacer" aria-hidden="true"></span>
+    <button type="button" id="btn-reload" title="Reload (Shift+Click: reset cache)" aria-label="Reload (Shift+Click: reset cache)">
+      <span class="reload-icon" aria-hidden="true"></span>
+    </button>
   </nav>
   <div id="frame-wrap">
     <iframe id="f-main" class="visible" title="Gateway main" src="/"></iframe>
     <!-- Lazy src: defer loading until first shown so embeds are not laid out at 0×0 while hidden. -->
-    <iframe id="f-indexer" title="Indexer" data-lazy-src="/ui/indexer"></iframe>
-    <iframe id="f-continue" title="VS Code Continue" data-lazy-src="/ui/continue"></iframe>
     <iframe id="f-logs" title="Logs" data-lazy-src="/ui/logs?embed=1"></iframe>
     <iframe id="f-admin" title="Admin" data-lazy-src="/ui/panel"></iframe>
   </div>
   <script>
 (function () {
   var origin = window.location.origin;
-  var tabs = document.querySelectorAll("#tabs button");
+  var ACTIVE_TAB_LS = "claudia.shell.activeTab.v1";
+  /* Exclude #btn-reload — it has no data-tab; treating it as a tab called show(null) and hid every iframe. */
+  var tabs = document.querySelectorAll("#tabs button[data-tab]");
+  var reloadBtn = document.getElementById("btn-reload");
   var frames = {
     main: document.getElementById("f-main"),
-    indexer: document.getElementById("f-indexer"),
-    continue: document.getElementById("f-continue"),
     logs: document.getElementById("f-logs"),
     admin: document.getElementById("f-admin")
   };
@@ -100,6 +120,7 @@
     fr.src = lazy;
   }
   function show(name) {
+    try { localStorage.setItem(ACTIVE_TAB_LS, String(name || "")); } catch (_e) {}
     if (name === "main") {
       /* Always show gateway root (same origin → e.g. http://127.0.0.1:3000/) */
       frames.main.src = "/";
@@ -136,6 +157,113 @@
       show(tabName);
     });
   });
+
+  function currentTabName() {
+    for (var i = 0; i < tabs.length; i++) {
+      if (tabs[i].classList.contains("active")) return tabs[i].getAttribute("data-tab") || "main";
+    }
+    return "main";
+  }
+
+  function currentFrame() {
+    var n = currentTabName();
+    return frames[n] || frames.main;
+  }
+
+  function cacheBustedSrc(src) {
+    var s = String(src || "");
+    if (!s || s === "about:blank") return s;
+    // Keep hash; bump query.
+    var hash = "";
+    var hIdx = s.indexOf("#");
+    if (hIdx >= 0) { hash = s.slice(hIdx); s = s.slice(0, hIdx); }
+    var q = s.indexOf("?") >= 0 ? "&" : "?";
+    return s + q + "__reload=" + Date.now() + hash;
+  }
+
+  async function resetWebviewCacheBestEffort() {
+    // UI-level reset: clear local/session storage + cache storage + service workers + indexedDB.
+    // This does not guarantee clearing the browser engine HTTP cache; it’s the best available from JS.
+    try { sessionStorage.clear(); } catch (_e) {}
+    try {
+      // Prefer targeted deletes (keeps login/session cookies unaffected).
+      var keys = [];
+      for (var i = 0; i < localStorage.length; i++) keys.push(localStorage.key(i));
+      for (var j = 0; j < keys.length; j++) {
+        var k = keys[j] || "";
+        if (k.indexOf("claudia.") === 0 || k.indexOf("claudia_") === 0 || k.indexOf("claudiaLogs") === 0 || k.indexOf("claudia_logs_") === 0) {
+          try { localStorage.removeItem(k); } catch (_e2) {}
+        }
+      }
+    } catch (_e3) {}
+    try {
+      if (globalThis.caches && caches.keys) {
+        var cks = await caches.keys();
+        for (var ck = 0; ck < cks.length; ck++) {
+          try { await caches.delete(cks[ck]); } catch (_e4) {}
+        }
+      }
+    } catch (_e5) {}
+    try {
+      if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+        var regs = await navigator.serviceWorker.getRegistrations();
+        for (var r = 0; r < regs.length; r++) {
+          try { await regs[r].unregister(); } catch (_e6) {}
+        }
+      }
+    } catch (_e7) {}
+    try {
+      if (globalThis.indexedDB && indexedDB.databases && indexedDB.deleteDatabase) {
+        var dbs = await indexedDB.databases();
+        for (var d = 0; d < dbs.length; d++) {
+          var nm = dbs[d] && dbs[d].name ? String(dbs[d].name) : "";
+          if (!nm) continue;
+          try { indexedDB.deleteDatabase(nm); } catch (_e8) {}
+        }
+      }
+    } catch (_e9) {}
+  }
+
+  function reloadCurrent(ev) {
+    var fr = currentFrame();
+    var tabName = currentTabName();
+    // Ensure we don't switch tabs; just reload content of the current iframe.
+    try { localStorage.setItem(ACTIVE_TAB_LS, String(tabName || "")); } catch (_e) {}
+
+    var wantReset = !!(ev && ev.shiftKey);
+    if (!wantReset) {
+      try {
+        // Prefer true reload when possible.
+        if (fr && fr.contentWindow && fr.contentWindow.location && fr.contentWindow.location.reload) {
+          fr.contentWindow.location.reload();
+          return;
+        }
+      } catch (_e2) {}
+      // Fallback: bump src.
+      try { fr.src = cacheBustedSrc(fr.getAttribute("src") || fr.src); } catch (_e3) {}
+      return;
+    }
+
+    // Shift+Click: clear caches (best-effort) then force reload with cache-busted URL.
+    Promise.resolve()
+      .then(function () { return resetWebviewCacheBestEffort(); })
+      .then(function () {
+        try { fr.src = cacheBustedSrc(fr.getAttribute("src") || fr.src); } catch (_e4) {}
+      });
+  }
+
+  if (reloadBtn) {
+    reloadBtn.addEventListener("click", function (ev) {
+      reloadCurrent(ev);
+    });
+  }
+
+  // Restore last tab on full shell reloads (Indexer tab removed — open Logs instead).
+  try {
+    var last = localStorage.getItem(ACTIVE_TAB_LS);
+    if (last === "indexer") last = "logs";
+    if (last && frames[last]) show(last);
+  } catch (_e10) {}
 })();
   </script>
 </body>

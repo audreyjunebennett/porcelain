@@ -40,6 +40,16 @@ type Config struct {
 	OnAttempt func(routerModel string, err error)
 }
 
+// ToolRouterSummary captures one ApplyToolRouter pass for conversation.tool.router (Phase 7).
+type ToolRouterSummary struct {
+	Ran         bool // enabled, router models configured, and a non-null tools key was present
+	ToolsBefore int  // tools array length when parsed; 0 if unparsed or empty
+	ToolsAfter  int  // tools array length on the returned body
+	RouterModel string
+	Err         error // scoring / network / parse failure; nil when slimming succeeded or was a no-op
+	Applied     bool  // tools list was reduced (subset kept)
+}
+
 type toolScore struct {
 	Name       string  `json:"name"`
 	Confidence float64 `json:"confidence"`
@@ -47,12 +57,13 @@ type toolScore struct {
 
 // ApplyToolRouter returns a shallow copy of body with tools possibly replaced. On any failure
 // or when disabled, returns body unchanged (fail-open: full tool list upstream).
-func ApplyToolRouter(ctx context.Context, body map[string]json.RawMessage, cfg Config) map[string]json.RawMessage {
+func ApplyToolRouter(ctx context.Context, body map[string]json.RawMessage, cfg Config) (map[string]json.RawMessage, ToolRouterSummary) {
+	var sum ToolRouterSummary
 	if body == nil {
-		return nil
+		return nil, sum
 	}
 	if !cfg.Enabled || len(cfg.RouterModels) == 0 {
-		return body
+		return body, sum
 	}
 	th := cfg.Threshold
 	if th < 0 {
@@ -64,12 +75,20 @@ func ApplyToolRouter(ctx context.Context, body map[string]json.RawMessage, cfg C
 	cfg.Threshold = th
 	toolsRaw, ok := body["tools"]
 	if !ok || len(toolsRaw) == 0 || string(toolsRaw) == "null" {
-		return body
+		return body, sum
 	}
+	sum.Ran = true
 	var toolsArr []json.RawMessage
-	if err := json.Unmarshal(toolsRaw, &toolsArr); err != nil || len(toolsArr) == 0 {
-		return body
+	if err := json.Unmarshal(toolsRaw, &toolsArr); err != nil {
+		sum.Err = err
+		return body, sum
 	}
+	if len(toolsArr) == 0 {
+		sum.Err = errors.New("empty tools array")
+		return body, sum
+	}
+	sum.ToolsBefore = len(toolsArr)
+	sum.ToolsAfter = len(toolsArr)
 	toolNames := make([]string, 0, len(toolsArr))
 	for _, t := range toolsArr {
 		var meta struct {
@@ -77,7 +96,7 @@ func ApplyToolRouter(ctx context.Context, body map[string]json.RawMessage, cfg C
 			Function json.RawMessage `json:"function"`
 		}
 		if err := json.Unmarshal(t, &meta); err != nil {
-			return body
+			return body, sum
 		}
 		name := ""
 		if meta.Type == "function" && len(meta.Function) > 0 {
@@ -89,13 +108,13 @@ func ApplyToolRouter(ctx context.Context, body map[string]json.RawMessage, cfg C
 		}
 		if name == "" {
 			// Unknown tool shape; do not risk dropping tools.
-			return body
+			return body, sum
 		}
 		toolNames = append(toolNames, name)
 	}
 	msgs, ok := body["messages"]
 	if !ok || len(msgs) == 0 {
-		return body
+		return body, sum
 	}
 	userText := lastUserMessageText(msgs)
 	if userText == "" {
@@ -104,29 +123,34 @@ func ApplyToolRouter(ctx context.Context, body map[string]json.RawMessage, cfg C
 	scores, usedModel, err := callRouterModels(ctx, cfg, string(toolsRaw), userText)
 	if err != nil || len(scores) == 0 {
 		if cfg.Log != nil {
-			cfg.Log.Debug("tool router skipped or failed; passing all tools", "err", err)
+			cfg.Log.Debug("tool router skipped or failed; passing all tools", "msg", "chat.tool_router.skipped", "err", err)
 		}
-		return body
+		sum.Err = err
+		return body, sum
 	}
 	kept := filterToolsByConfidence(toolsArr, toolNames, scores, cfg.Threshold)
 	if len(kept) == 0 || len(kept) == len(toolsArr) {
-		return body
+		return body, sum
 	}
 	out := cloneRawMap(body)
 	b, err := json.Marshal(kept)
 	if err != nil {
-		return body
+		sum.Err = err
+		return body, sum
 	}
 	out["tools"] = json.RawMessage(b)
+	sum.ToolsAfter = len(kept)
+	sum.RouterModel = usedModel
+	sum.Applied = true
 	if cfg.Log != nil {
-		cfg.Log.Info("tool router slimmed tools",
+		cfg.Log.Debug("tool router slimmed tools", "msg", "chat.tool_router.applied",
 			"routerModel", usedModel,
 			"before", len(toolsArr),
 			"after", len(kept),
 			"threshold", cfg.Threshold,
 		)
 	}
-	return out
+	return out, sum
 }
 
 func cloneRawMap(m map[string]json.RawMessage) map[string]json.RawMessage {
@@ -183,7 +207,7 @@ func callRouterModels(ctx context.Context, cfg Config, toolsJSON, userText strin
 				cfg.OnAttempt(model, err)
 			}
 			if cfg.Log != nil {
-				cfg.Log.Debug("tool router model attempt failed", "routerModel", model, "err", err)
+				cfg.Log.Debug("tool router model attempt failed", "msg", "chat.tool_router.model_attempt_failed", "routerModel", model, "err", err)
 			}
 			continue
 		}

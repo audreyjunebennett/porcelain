@@ -8,6 +8,7 @@ import (
 // SupervisedConfigTemplate is the initial single-file YAML when the supervised
 // indexer config path does not exist yet (v0.5).
 const SupervisedConfigTemplate = `# claudia-index supervised config (single --config file; highest merge precedence).
+# Watch directories are managed in the gateway operator store (logs UI); this file is indexer tuning only.
 # Token: set CLAUDIA_GATEWAY_TOKEN in the environment (same as gateway / Continue).
 gateway_url: "http://127.0.0.1:3000"
 roots: []

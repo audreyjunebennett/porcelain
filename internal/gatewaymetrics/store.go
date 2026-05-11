@@ -134,7 +134,7 @@ func (s *Store) disable(err error, step string) {
 		return
 	}
 	if s.log != nil {
-		s.log.Error("gateway metrics disabled after write error", "step", step, "err", err)
+		s.log.Error("gateway metrics disabled after write error", "msg", "gateway.metrics.disabled_after_error", "step", step, "err", err)
 	}
 }
 

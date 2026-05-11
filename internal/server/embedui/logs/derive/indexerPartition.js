@@ -374,3 +374,4 @@ globalThis.ClaudiaLogs.Derive.indexerBucketsFromCache = indexerBucketsFromCache;
 globalThis.ClaudiaLogs.Derive.indexerPartitionMetaForRun = indexerPartitionMetaForRun;
 globalThis.ClaudiaLogs.Derive.indexerAugmentFlat = indexerAugmentFlat;
 globalThis.ClaudiaLogs.Derive.indexerInferIsIndexerLine = indexerInferIsIndexerLine;
+globalThis.ClaudiaLogs.Derive.parseIgSyntheticGid = parseIgSyntheticGid;

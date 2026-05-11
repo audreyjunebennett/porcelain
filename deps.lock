@@ -3,7 +3,7 @@
 # Lines starting with # and blank lines are ignored.
 # Bump versions only here; scripts read this file (repository root).
 
-# Qdrant release tag (https://github.com/qdrant/qdrant/releases)
+# Qdrant release tag or commit SHA — prebuilt binary from releases + source checkout under .deps/qdrant
 QDRANT_RELEASE=v1.14.1
 
 # BiFrost source — full git ref: tag, branch, or 40-char commit SHA

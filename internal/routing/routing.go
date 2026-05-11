@@ -57,7 +57,7 @@ func (p *Policy) ReloadIfStale() {
 	st, err := os.Stat(p.path)
 	if err != nil {
 		if p.log != nil {
-			p.log.Error("routing policy file missing", "path", p.path, "err", err)
+			p.log.Error("routing policy file missing", "msg", "routing.policy.missing", "path", p.path, "err", err)
 		}
 		p.rules = nil
 		p.ambiguousDefault = ""
@@ -73,21 +73,21 @@ func (p *Policy) ReloadIfStale() {
 	raw, err := os.ReadFile(p.path)
 	if err != nil {
 		if p.log != nil {
-			p.log.Error("read routing policy", "path", p.path, "err", err)
+			p.log.Error("read routing policy", "msg", "routing.policy.read_failed", "path", p.path, "err", err)
 		}
 		return
 	}
 	ambiguous, rules, err := parsePolicyDocument(raw)
 	if err != nil {
 		if p.log != nil {
-			p.log.Error("failed to parse routing policy yaml", "path", p.path, "err", err)
+			p.log.Error("failed to parse routing policy yaml", "msg", "routing.policy.parse_failed", "path", p.path, "err", err)
 		}
 		return
 	}
 	p.ambiguousDefault = ambiguous
 	p.rules = rules
 	if p.log != nil {
-		p.log.Info("reloaded routing policy", "path", p.path, "rules", len(p.rules))
+		p.log.Info("reloaded routing policy", "msg", "routing.policy.reloaded", "path", p.path, "rules", len(p.rules))
 	}
 }
 
@@ -139,14 +139,14 @@ func pickFromRules(ambiguousDefault string, rules []policyRule, lastUser int, fa
 			continue
 		}
 		if log != nil {
-			log.Debug("routing rule matched", "rule", rule.name, "initialModel", rule.models[0], "lastUserChars", lastUser)
+			log.Debug("routing rule matched", "msg", "routing.rule.matched", "rule", rule.name, "initialModel", rule.models[0], "lastUserChars", lastUser)
 		}
 		return rule.models[0], ViaRule
 	}
 
 	if ambiguousDefault != "" {
 		if log != nil {
-			log.Debug("routing: no rule matched, using ambiguous_default_model", "initialModel", ambiguousDefault, "lastUserChars", lastUser)
+			log.Debug("routing: no rule matched, using ambiguous_default_model", "msg", "routing.rule.no_match.ambiguous_default", "initialModel", ambiguousDefault, "lastUserChars", lastUser)
 		}
 		return ambiguousDefault, ViaAmbiguousDefault
 	}
@@ -156,7 +156,7 @@ func pickFromRules(ambiguousDefault string, rules []policyRule, lastUser int, fa
 		first = fallbackChain[0]
 	}
 	if log != nil {
-		log.Debug("routing: no policy default; using first fallback_chain entry", "initialModel", first, "lastUserChars", lastUser)
+		log.Debug("routing: no policy default; using first fallback_chain entry", "msg", "routing.rule.no_match.first_fallback", "initialModel", first, "lastUserChars", lastUser)
 	}
 	return first, ViaChainOnly
 }

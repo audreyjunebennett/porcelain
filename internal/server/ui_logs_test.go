@@ -432,10 +432,15 @@ func TestUILogsPage_servesLogsHTMLWhenAuthed(t *testing.T) {
 		`src="/ui/assets/logs/parse/parseLogText.js"`,
 		`src="/ui/assets/logs/transport/streaming.js"`,
 		`src="/ui/assets/logs/derive/conversationMetrics.js"`,
+		`src="/ui/assets/logs/derive/conversationBifrost.js"`,
 		`src="/ui/assets/logs/derive/bifrostMetrics.js"`,
+		`src="/ui/assets/logs/derive/sha1.js"`,
 		`src="/ui/assets/logs/derive/qdrantRagMetrics.js"`,
+		`src="/ui/assets/logs/derive/qdrantCollection.js"`,
 		`src="/ui/assets/logs/derive/indexerMetrics.js"`,
 		`src="/ui/assets/logs/derive/gatewayUsageMetrics.js"`,
+		`src="/ui/assets/logs/derive/gatewayCardModel.js"`,
+		`src="/ui/assets/logs/derive/conversationCardModel.js"`,
 		`src="/ui/assets/logs/components/StatusLine.js"`,
 		`src="/ui/assets/logs/components/KeyValueGrid.js"`,
 		`src="/ui/assets/logs/components/Badge.js"`,
@@ -516,6 +521,64 @@ func TestUILogsAssets_servesLogsJSWhenAuthed(t *testing.T) {
 	}
 }
 
+func TestUILogsAssets_logsMainContainsBifrostServiceSummary(t *testing.T) {
+	t.Setenv("CLAUDIA_UPSTREAM_API_KEY", "ukey")
+	up := bifrostStubForUILogs(t)
+	t.Cleanup(up.Close)
+
+	rt := runtimeForUILogs(t, up.URL)
+	ui := NewUIOptions()
+	ui.LogStore = servicelogs.New(10)
+	front := httptest.NewServer(NewMux(rt, testLog(), nil, ui))
+	t.Cleanup(front.Close)
+
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{Jar: jar}
+	if _, err := client.Post(front.URL+"/api/ui/login", "application/json", strings.NewReader(`{"token":"gw-ui-secret"}`)); err != nil {
+		t.Fatal(err)
+	}
+	res, err := client.Get(front.URL + "/ui/assets/logs/main.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status %d", res.StatusCode)
+	}
+	b, err := io.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(b)
+	if !strings.Contains(body, "indexer-run-kv--bifrost-summary") {
+		t.Fatal("expected BiFrost service card KV class in logs main bundle")
+	}
+	if !strings.Contains(body, "sum-mini-row--bifrost-deck") {
+		t.Fatal("expected BiFrost summary deck layout class in logs main bundle")
+	}
+	if !strings.Contains(body, "Provider health") {
+		t.Fatal("expected BiFrost provider-health section label in logs main bundle")
+	}
+	if !strings.Contains(body, "Relay outcomes") {
+		t.Fatal("expected BiFrost relay-outcome section label in logs main bundle")
+	}
+	if !strings.Contains(body, "sum-bf-prov-health-root") {
+		t.Fatal("expected provider-health strip root class in logs main bundle")
+	}
+	if !strings.Contains(body, "sum-timeline-bar--relay-outcome") {
+		t.Fatal("expected relay-outcome strip class in logs main bundle")
+	}
+	if !strings.Contains(body, "/api/ui/bifrost/providers") {
+		t.Fatal("expected logs main bundle to fetch live BiFrost provider snapshot")
+	}
+	if !strings.Contains(body, "bifrost-provider-health-strip") {
+		t.Fatal("expected stable id wrapper for BiFrost provider-health strip patching")
+	}
+}
+
 func TestUILogsAssets_servesLogsModuleWhenAuthed(t *testing.T) {
 	t.Setenv("CLAUDIA_UPSTREAM_API_KEY", "ukey")
 	up := bifrostStubForUILogs(t)
@@ -593,5 +656,45 @@ func TestUIDesktopPage_servesShellWhenAuthed(t *testing.T) {
 	}
 	if strings.Contains(page, "f-stats") || strings.Contains(page, `data-tab="stats"`) {
 		t.Fatal("desktop shell should not include a Stats tab (metrics live under /ui/logs summarized view)")
+	}
+	if strings.Contains(page, `data-tab="indexer"`) || strings.Contains(page, "f-indexer") {
+		t.Fatal("desktop shell should not include Indexer tab (workspaces live under Logs)")
+	}
+}
+
+func TestUIIndexer_redirectsToLogsWhenAuthed(t *testing.T) {
+	t.Setenv("CLAUDIA_UPSTREAM_API_KEY", "ukey")
+	up := bifrostStubForUILogs(t)
+	t.Cleanup(up.Close)
+
+	rt := runtimeForUILogs(t, up.URL)
+	ui := NewUIOptions()
+	ui.LogStore = servicelogs.New(10)
+	front := httptest.NewServer(NewMux(rt, testLog(), nil, ui))
+	t.Cleanup(front.Close)
+
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{
+		Jar: jar,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	if _, err := client.Post(front.URL+"/api/ui/login", "application/json", strings.NewReader(`{"token":"gw-ui-secret"}`)); err != nil {
+		t.Fatal(err)
+	}
+	res, err := client.Get(front.URL + "/ui/indexer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusFound {
+		t.Fatalf("status %d want %d", res.StatusCode, http.StatusFound)
+	}
+	if loc := res.Header.Get("Location"); loc != "/ui/logs" {
+		t.Fatalf("Location %q want %q", loc, "/ui/logs")
 	}
 }

@@ -19,6 +19,8 @@ func CloneResolved(r *Resolved) *Resolved {
 	n.FilterFreeTierModels = r.FilterFreeTierModels
 	n.ProviderFreeTierPath = r.ProviderFreeTierPath
 	n.ProviderFreeTierSpec = r.ProviderFreeTierSpec
+	n.WitnessSampleMaxChars = r.WitnessSampleMaxChars
+	n.WitnessSampleForceAtDebug = r.WitnessSampleForceAtDebug
 	return &n
 }
 

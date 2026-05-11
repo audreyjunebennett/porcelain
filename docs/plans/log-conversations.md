@@ -1,313 +1,428 @@
-# Plan: Operator-facing Conversation log classification
+# Plan: Operator-facing conversation logs and full request lifecycle
 
 | Field | Value |
 |-------|-------|
 | **Doc kind** | `feature-plan` |
-| **Owners / areas** | Gateway core (`internal/server`, `internal/chat`, `internal/rag`, `internal/conversationmerge`), supervised subprocesses (`internal/servicelogs/qdrantline`, planned `internal/servicelogs/bifrostline`), logs UI (`internal/server/embedui/logs`), parse/derive (`internal/server/embedui/logs/parse`, `derive/conversationMetrics.js`) |
-| **Status** | `draft` |
-| **Targets** | Conversation card + per-conversation timeline in the operator log view |
-| **Last updated** | 2026-05-07 |
+| **Owners / areas** | Gateway core (`internal/server`, `internal/chat`, `internal/rag`, `internal/conversationmerge`, `internal/transform`, `internal/upstream`), supervised subprocess ingest (`internal/servicelogs/qdrantline`, `internal/servicelogs/bifrostline`), logs UI (`internal/server/embedui/logs`), parse/derive (`internal/server/embedui/logs/parse`, `derive/conversationMetrics.js`, `derive/conversationBifrost.js`, `derive/gatewayCardModel.js`, `derive/qdrantCollection.js`, additional derive modules as needed) |
+| **Status** | `done` |
+| **Targets** | Conversation card and per-conversation timeline in the operator log view; correlation and slugs sufficient to reconstruct each chat turn end-to-end (routing, RAG, tools, upstream, delivery) without stopping at heuristics alone |
+| **Last updated** | 2026-05-09 |
+| **Supersedes / superseded by** | None |
 
 ## At a glance
 
-A conversation card today is **incomplete**: it groups only lines that already carry `conversation_id`, which means BiFrost subprocess output, Qdrant subprocess output, and many gateway lifecycle lines never appear in the conversation timeline even when they belong to a specific user turn. Token / vector counters are best-effort scrapes from the last few lines, not a model of the conversation. This plan captures:
+Operators need a single conversation timeline that tells the **whole story of each user turn**: how the request entered the gateway, how it was merged or deduped, how routing chose a model, whether RAG and vector search ran, what tools ran and whether they succeeded, what went upstream to the model provider, and how the response left the gateway. Phases **1–8** shipped correlation tiers, a **`conversation.*`** lifecycle, **per-turn indexing**, **tool round-trip slugs**, **Qdrant** joins where the gateway can anchor them, **subprocess linkage** when platforms echo correlation headers, and a **payload witness policy** without logging secrets. This document remains the normative spec for that behavior.
 
-1. A **fan-out routing model**: lines from **bifrost**, **qdrant**, and supervised **indexer** subprocesses are joined to the right conversation card via shared `conversation_id` / `request_id` / `index_run_id` (plus collection-name fallback) — same projection idea as the qdrant→indexer fan-out in [`log-qdrant.md`](log-qdrant.md), now applied to conversations.
-2. A **conversation event taxonomy** (`conversation.*`) that names the lifecycle states the operator wants to see — received, routed, RAG-attached, upstream-started, upstream-completed, fallback-attempted, delivered, merged, deduped — so the conversation card can show **state**, not just chronology.
-3. **UI contract** for the conversation card: pills (BiFrost · Qdrant · indexer · fallback · error counts), KV summary fields (model · tenant/principal · merge state · context size), and a **progress bar** driven by lifecycle events (received → routed → upstream → delivered).
-
-**Related docs:** [`log-presentation-layer.md`](log-presentation-layer.md) (especially §3 conversation view and §5 unified tagging), [`log-qdrant.md`](log-qdrant.md), [`log-bifrost.md`](log-bifrost.md), [`log-gateway.md`](log-gateway.md).
+**Related docs:** [`log-presentation-layer.md`](log-presentation-layer.md) (conversation view and unified tagging). Classification / routing foundations: [`log-qdrant.md`](log-qdrant.md) (shipped), [`log-bifrost.md`](log-bifrost.md) (shipped), [`log-gateway.md`](log-gateway.md) (shipped — parent-process taxonomy, `msg` everywhere, gateway card derive). Those three define stable `msg` shapes, ingest normalization, service-card derive modules, and rules this plan extends — see [Alignment with shipped classification](#alignment-with-shipped-classification). [`log-view-indexer.md`](log-view-indexer.md).
 
 | Phase | Outcome | Status |
 |-------|---------|--------|
-| [P1 — Spec](#p1--spec) | This doc + frozen `conversation.*` list and routing rules | `todo` |
-| [P2 — Correlation propagation](#p2--correlation-propagation) | Every gateway line that touches a request carries `conversation_id` + `request_id`; ingest carries `index_run_id`; subprocesses inherit via headers when feasible | `todo` |
-| [P3 — Lifecycle events](#p3--lifecycle-events) | Gateway emits the new `conversation.*` lifecycle slugs at well-defined points | `todo` |
-| [P4 — UI fan-out & conversation card](#p4--ui-fan-out--conversation-card) | Conversation card pulls fan-out lines from bifrost / qdrant / indexer buckets; pills and progress derived from the new slugs | `todo` |
-| [P5 — Subprocess linkage hardening](#p5--subprocess-linkage-hardening) | Bifrost / Qdrant subprocess lines carry conversation tags when the upstream call originated inside a conversation (best-effort header propagation) | `todo` |
+| [Phase 1 — Spec, fixtures, and frozen taxonomies](#phase-1--spec-fixtures-and-frozen-taxonomies) | Frozen slug lists, routing rules, payload policy, and fixture set agreed | `done` |
+| [Phase 2 — Correlation propagation](#phase-2--correlation-propagation) | Every gateway line that touches a chat request carries `conversation_id`, `request_id`, and `principal_id` where known; ingest lines carry `index_run_id` and optional `conversation_id` from `X-Claudia-Conversation-Id` | `done` |
+| [Phase 3 — Lifecycle events](#phase-3--lifecycle-events) | Gateway emits the full `conversation.*` lifecycle at named call sites | `done` |
+| [Phase 4 — User interface fan-out and conversation card](#phase-4--user-interface-fan-out-and-conversation-card) | Conversation card uses tiers 1–4, tier 3 for ingest, pills, progress bar, and inferred-line labeling | `done` |
+| [Phase 5 — Subprocess linkage hardening](#phase-5--subprocess-linkage-hardening) | Gateway sets upstream `X-Request-Id`, BiFrost subprocess joins only when the platform exposes it, and Qdrant rows join by gateway RAG spans | `done` |
+| [Phase 6 — Turn identity and timeline grouping](#phase-6--turn-identity-and-timeline-grouping) | Each turn is explicitly numbered and the expanded timeline can group by turn | `done` |
+| [Phase 7 — Tool execution logging](#phase-7--tool-execution-logging) | Each tool round-trip is visible with correlation, outcome, and timing | `done` |
+| [Phase 8 — Request and response witness](#phase-8--request-and-response-witness) | Operator-safe summaries and gated payload samples complete the story without logging secrets | `done` |
 
 ---
 
 ## Background
 
-- The conversation card in the logs UI is built by `renderSummarizedUnified()` in [`internal/server/embedui/logs.js`](../../internal/server/embedui/logs.js):
-  - Group key is `principal_id + "\0" + conversation_id`.
-  - **Only** entries with both `principal_id` (or `tenant`) **and** `conversation_id` are eligible (`if (!cid) continue;`).
-  - Token / vector counts come from `derive/conversationMetrics.js` — heuristic scrape over `usageTotalTokens`, `usagePromptTokens`, `usageCompletionTokens`, `rag_hits`, `hits`, `chunks`, `response_tokens_est`, `tokens`, `outgoingTokens`.
-  - Card state is binary: `error` if any recent event has Warn/Error level, otherwise `active`.
-  - Status pills currently shown are **only** Duration / Tokens / Vectors — there is no state indicator for **routing**, **fallback**, **merge**, or **delivery**.
-- Today, conversation correlation reaches:
-  - **Chat handler** (`internal/server/server.go`): adds `request_id`, `conversation_id`, `service:"gateway"`, `principal_id` via `routeLog.With(...)` → covers `chat.request`, `rag.retrieve.error`, `rag.retrieve.ok`.
-  - **Upstream relay** (`internal/chat/chat.go`): inherits the With-context — `chat.bifrost.request`, `chat.bifrost.error`, `chat.routing.fallback`, plus the Info `upstream chat response` and `virtual model fallback attempt`.
-  - **RAG pipeline** (`internal/rag/service.go`): explicitly carries `request_id`, `conversation_id`, optional `index_run_id` via `appendGatewayCorrelation`.
-  - **Conversation merge** (`internal/conversationmerge/service.go`): emits a few Warn/Debug lines on merge failure, but **without** `conversation_id` on the failure path before the id is resolved.
-- Today, conversation correlation does **not** reach:
-  - **Bifrost subprocess** lines (raw bifrost-http output — no conversation hook because it terminates the upstream call).
-  - **Qdrant subprocess** lines (HTTP access JSON has the collection in the path, but no conversation header). The qdrant→indexer fan-out in `log-qdrant.md` is **collection-keyed**, not conversation-keyed.
-  - **Supervised indexer** lines (per-run, not per-conversation; correctly out of scope for conversation join).
-  - Some **gateway** lines that fire **outside** the chat handler scope (e.g. periodic upstream health probes, conversation merge resolve failures before the id is known).
+The conversation card is built in [`internal/server/embedui/logs.js`](../../internal/server/embedui/logs.js) (`renderSummarizedUnified`, `sortConversationGroupsByRecency`, `buildConvCard`, `renderExpandedConv`). The group key is `principal_id` (or `tenant`) plus `conversation_id` — **each pair is its own card**; the UI must not roll up different `conversation_id` values for one principal into a single card. Related lines join the card via **correlation tiers** (relay, request-id mapping, ingest, RAG spans, collection/time heuristics for Qdrant, and optional subprocess linkage when echoed headers exist) — see Phase 4 and [`conversationMetrics.js`](../../internal/server/embedui/logs/derive/conversationMetrics.js).
+
+Correlation reaches the chat handler, upstream relay, RAG pipeline, conversation merge, and derive-time fan-out described in Phases 2–6. BiFrost **relay** rows merge by **`conversation_id`** (tier 1) or **`request_id`** (tier 2) via [`conversationBifrost.js`](../../internal/server/embedui/logs/derive/conversationBifrost.js). **Subprocess** `bifrost.*` lines can surface on the conversation card when tier-5 linkage applies ([`log-bifrost.md`](log-bifrost.md)). Qdrant **`qdrant.*`** lines join by tier 4 / 4b using the same collection naming as [`qdrantCollection.js`](../../internal/server/embedui/logs/derive/qdrantCollection.js).
+
+Parent-process gateway logs use the frozen dotted **`msg`** taxonomy ([`log-gateway.md`](log-gateway.md)): **`gateway.auth.*`**, **`gateway.http.access`**, **`conversation.merge.*`**, **`rag.retrieve.source`**, **`chat.tool_router.*`**, and the **lifecycle** slugs in [Phase 1](#lifecycle-conversation--gateway-emitted) (`conversation.received`, `conversation.rag.span`, …) as implemented in Phases 3–8.
+
+Heavy taxonomy tables and routing tiers live under Phase 1 as the single spec source.
+
+### Alignment with shipped classification
+
+| Area | Shipped structures to reuse when routing or labeling conversation logs |
+|------|-------------------------------------------------------------------------|
+| **Gateway (parent)** | Every gateway `slog` line carries **`msg`**; HTTP rows use **`gateway.http.access`** (`inferShape` still aliases legacy `http response`). Service card summarize path uses **`gatewayCardModel`** in [`gatewayCardModel.js`](../../internal/server/embedui/logs/derive/gatewayCardModel.js). Upstream / catalog / health slugs live under **`upstream.*`**, **`chat.bifrost.available_models`**, **`gateway.supervisor.*`**, **`gateway.health.*`** (see [`log-gateway.md`](log-gateway.md)). Merge failures today emit **`conversation.merge.resolve_failed`** (and related **`conversation.merge.*`**) — align any new **`conversation.merge.failed`** naming with that doc’s compatibility rules. |
+| **BiFrost (subprocess)** | Stdout is normalized in **`internal/servicelogs/bifrostline`** to stable **`bifrost.*`** slugs. Counter windows reset on **`bifrost.startup.banner`**. Summarized headlines use **`bifrostOperatorLine`** in [`bifrostMetrics.js`](../../internal/server/embedui/logs/derive/bifrostMetrics.js). Conversation **BiFrost · N** chip uses **`conversationBifrostRelayCount`** / **`conversationBifrostTimelineFlat`** ([`conversationBifrost.js`](../../internal/server/embedui/logs/derive/conversationBifrost.js)). Tier 5 conversation join for subprocess rows remains conditional on echoed **`X-Claudia-Conversation-Id`** / **`X-Claudia-Request-Id`** in normalized payloads ([`log-bifrost.md`](log-bifrost.md)). |
+| **Qdrant (subprocess)** | Stdout is normalized in **`internal/servicelogs/qdrantline`** to **`qdrant.*`**. Collection names for UI routing match indexer / gateway rules (**`qdrantCollectionName`** in [`qdrantCollection.js`](../../internal/server/embedui/logs/derive/qdrantCollection.js), parity with `internal/vectorstore`). Counter windows reset on **`qdrant.version`**. Global Qdrant card metrics use **`qdrantCardModel`** (same module). Tier 4 joins from this plan should use the **same collection string** as that derive path so conversation RAG subsection stays consistent with Qdrant and indexer cards. |
 
 ---
 
-## Locked decisions (proposed — confirm during P1)
+## Phase 1 — Spec, fixtures, and frozen taxonomies
+
+**Goal.** Lock slug names, routing tiers, turn and tool fields, and the payload witness policy so later phases implement against a fixed contract.
+
+**Deliverables**
+
+- This document as the authority for conversation logging (aligned with [`_template.md`](_template.md)).
+- Frozen **`conversation.*`** lifecycle list (table below) plus extensions for **turn**, **tool**, and **witness** slugs (tables below).
+- Frozen **routing tiers** (tiers 1–5) and **tier 4b** (gateway-anchored Qdrant window); default window constants documented with rationale.
+- Reference captures under repo-root **`temp/sessions`** (gitignored; operators drop exports there): single-turn chat, multi-turn merge, fallback chain, chat plus ingest, **multi-turn with tools**, **streamed completion** (if applicable). Example layout: `temp/sessions/<timestamp>_<git-sha>/data/gateway/claudia-desktop.log` plus `comment.txt`.
+- A short **fixture map** (spreadsheet or markdown table) listing each fixture and which slugs and tiers it must exercise.
+- Cross-check with [`log-gateway.md`](log-gateway.md) and [`log-bifrost.md`](log-bifrost.md): no duplicate intent under conflicting names; renames go through those docs’ compatibility rules.
+
+**Acceptance**
+
+- Reviewer can map every line in every fixture to a tier and a slug (or `*.unparsed` for subprocess).
+- Reviewer signs off on **payload witness defaults** (what is always Info vs Trace-only) and on **turn_index** reset semantics (process-local).
+- **Phase 1 fixture map:** [below](#phase-1-fixture-map).
+
+**Status:** `done`
+
+### Phase 1 fixture map
+
+Captures live under `temp/sessions/` (not committed). Map each export you add or refresh against the slugs and tiers it is meant to exercise.
+
+| Fixture folder (example) | Intent | Slugs / behavior to cover |
+|--------------------------|--------|---------------------------|
+| `20260509-*_5cbf00e` (three time slices, same git sha) | Desktop gateway tail during dev | Tier **1** (`principal_id` + `conversation_id` on `chat.request`, `rag.*`, `chat.routing.*`); tier **2** BiFrost relay lines joined by `request_id`; streaming (`stream=true`); RAG path (`rag.query`, `rag.retrieve.error` / success variants when present). |
+| *(add)* `single-turn` | Happy path, no merge | `chat.request` → routing → upstream → delivery; optional `rag.retrieve.source`. |
+| *(add)* `multi-turn-merge` | Sticky / semantic merge | `conversation.merge.*` or future `conversation.merged`; same `conversation_id` across HTTP turns. |
+| *(add)* `fallback-chain` | Virtual model fallback | `chat.routing.attempt`, `chat.routing.fallback`, `chat.bifrost.*` errors then success. |
+| *(add)* `chat-plus-ingest` | Tier 3 | `ingest.complete` with `index_run_id` and chat `conversation_id` when applicable. |
+| *(add)* `tools` | Phase 7 prep | `chat.tool_router.*` and future `conversation.tool.*`. |
+| *(add)* `streamed` | Streaming aggregate | Witness / completion when Phase 8 lands. |
+
+### Phase 1 — merge failure naming (cross-check)
+
+- **Shipped:** `conversation.merge.resolve_failed` (and other `conversation.merge.*` diagnostics) per [`log-gateway.md`](log-gateway.md). **No second emitted slug** for the same intent.
+- **Lifecycle table** row `conversation.merge.failed` is a **logical umbrella** for operator docs and future UI filters: group by prefix `conversation.merge.` — do not fork a conflicting `msg` value in the gateway until an explicit rename window is agreed in `log-gateway.md`.
+
+### Phase 1 — payload witness defaults (sign-off)
+
+- **Info:** counts, sizes, models, ids, cheap hashes only — per lifecycle / witness tables above.
+- **Trace:** `conversation.payload.sample` only at trace (or dedicated flag); **256** chars max per `head` / `tail` after redaction unless config overrides.
+- **Never:** full bodies at Info; never raw tool arguments at Info (size fields only).
+
+### Phase 1 — `turn_index` and dedup (**locked**)
+
+A dedup cache hit that does **not** call upstream is still a new inbound HTTP chat completion request: **`turn_index` increments** (same rules as a non-dedup turn for that `conversation_id` once Phase 6 implements the counter). Documented in fixtures when dedup fixtures exist.
+
+### Product decisions (confirm in Phase 1 review)
 
 | Topic | Decision |
-|-------|-----------|
-| Slug prefix | **`conversation.*`** for lifecycle events the gateway emits at named points in the request flow. |
-| Group key | **`principal_id + "\0" + conversation_id`** (unchanged); falls back to `tenant + "\0" + conversation_id` when `principal_id` is missing (already implemented). |
-| Eligibility | A line joins a conversation card when **either** `conversation_id` is present **or** `request_id` is present **and** matches a request seen on that conversation **or** `index_run_id` is present **and** matches an indexer run already tied to a conversation by `ingest.complete`. |
-| Subprocess fan-out | Bifrost subprocess lines join a conversation **only** when they carry an outgoing correlation field (`conversation_id` or `request_id`). Otherwise they stay bifrost-only. Qdrant lines join via **collection name** matching the conversation's RAG coords (project+flavor+tenant) and timestamp window — same approach as `log-qdrant.md` collection→indexer fan-out, but scoped to ±N seconds around the chat request. |
-| Counter window | Conversation cards are bounded by the existing 42-minute cluster window (`convClusterGapMs` in `logs.js`). Gateway restart clears the buffer (already true). |
-| Progress | Conversation progress = **received → routed → (rag-attached?) → upstream-started → upstream-completed → delivered**. Each transition is a distinct slug; the UI maps them to a 5-step progress bar. |
+|-------|----------|
+| Slug prefix | **`conversation.*`** for lifecycle, turn, tool, and witness events the gateway emits at named points in the request flow. |
+| Group key | **`principal_id + "\0" + conversation_id`** with fallback to **`tenant + "\0" + conversation_id`** when `principal_id` is absent. |
+| Eligibility | A line joins a conversation card when it matches **tier 1–5** (see Routing rules). |
+| Subprocess fan-out | BiFrost subprocess lines join only when normalized rows carry `request_id` from upstream `X-Request-Id` (**Phase 5**). Clients are not expected to send Claudia correlation headers, and gateway relay slugs remain canonical for the turn when BiFrost cannot expose request ids. |
+| Qdrant join | **Tier 4** uses collection plus time; **tier 4b** uses a gateway-emitted anchor line (**Phase 5**) so the window is tied to `request_id`, not only to `rag.query` timestamps. |
+| Log UI conversation cards | **One card per** `principal_id` + `conversation_id` (see [`sortConversationGroupsByRecency`](../../internal/server/embedui/logs.js)); never merge distinct `conversation_id` values by wall-clock gap. |
+| Counter window | **Tier 4** (Qdrant inferred join): default **±5 s** from anchor (`rag.query` / `rag.embed` time) unless `conversation.rag.span` supplies **`window_ms`** (default **10000** ms for tier 4b). Gateway process restart clears in-memory UI buffers. |
+| Progress bar | **received → routed → (rag) → upstream → delivered**; each step maps to a distinct `conversation.*` slug (see Phase 3). |
+| Locale | English-only operator headlines and pill tooltips. |
 
-### Code references
+### Lifecycle (`conversation.*`) — gateway-emitted
 
-- Routing (today): [`internal/server/embedui/logs.js`](../../internal/server/embedui/logs.js) (`renderSummarizedUnified`, `clusterConversationGroupsByTime`, `buildConvCard`, `renderExpandedConv`).
-- Metrics scrape: [`internal/server/embedui/logs/derive/conversationMetrics.js`](../../internal/server/embedui/logs/derive/conversationMetrics.js).
-- Gateway emission sites to extend: [`internal/server/server.go`](../../internal/server/server.go) (`handleChatCompletions`), [`internal/chat/chat.go`](../../internal/chat/chat.go), [`internal/conversationmerge/service.go`](../../internal/conversationmerge/service.go), [`internal/rag/service.go`](../../internal/rag/service.go), [`internal/server/ingest.go`](../../internal/server/ingest.go), [`internal/server/ingest_session.go`](../../internal/server/ingest_session.go).
-- Headers in flight: `headerConversationID` (`X-Claudia-Conversation-Id`), `headerRequestFingerprint`, `headerRollingFingerprint`, `headerProject`, `headerFlavor` — defined in `internal/server/server.go`.
-
-## Reference samples (local dev)
-
-Capture during P1 to repo-root **`temp/`** (gitignored):
-
-| Artifact | Path | Purpose |
-|----------|------|---------|
-| Single-conversation chat | `temp/conversation-single-turn.log` | One `/v1/chat/completions` end-to-end (received → delivered) including RAG inject and one Qdrant query |
-| Multi-turn chat with merge | `temp/conversation-merge.log` | Two consecutive turns where the second triggers `conversationmerge.Resolve` to find the first as a candidate |
-| Fallback chain | `temp/conversation-fallback.log` | Initial 429 / 5xx triggers `chat.routing.fallback`; conversation eventually delivered by second model |
-| Conversation with ingest | `temp/conversation-with-ingest.log` | A `/v1/embeddings` ingest near the same time so `index_run_id`-keyed events can be linked |
-
----
-
-## Canonical `msg` taxonomy
-
-Stable dotted slugs for conversation lifecycle events. Every line is emitted by the gateway and **must** carry `request_id`, `conversation_id`, `principal_id` (after they are known), and `service:"gateway"`.
-
-### Lifecycle (`conversation.*`)
+Every line in this table is emitted by the gateway and **must** carry `request_id`, `conversation_id`, `principal_id` (once known), `service:"gateway"`, and **`turn_index`** after Phase 6 lands (Phase 2–3 may introduce `turn_index` incrementally; Phase 6 makes it mandatory on chat-scoped lines).
 
 | `msg` | Emit point | Level | Headline | Required KV |
 |-------|------------|-------|----------|-------------|
-| `conversation.received` | `internal/server/server.go` `handleChatCompletions` after `cid` is resolved (whether from header, merge, or freshly minted) | Info | "conversation received" | `conversation_id`, `request_id`, `principal_id`, `clientModel`, `stream`, `tenant`, `project`, `flavor`, `cid_source` (`header` / `merge` / `generated`) |
-| `conversation.merged` | `internal/conversationmerge/service.go` `Resolve` when an existing candidate matches | Info | "conversation matched" | `conversation_id`, `request_id`, `principal_id`, `match_score`, `candidate_count`, `merge_reason` (`semantic` / `sticky`) |
-| `conversation.dedup_hit` | `internal/conversationmerge/service.go` `Resolve` when dedup cache returns the previous body | Info | "conversation dedup hit" | `conversation_id`, `request_id`, `principal_id`, `dedup_bytes` |
-| `conversation.routing.resolved` | `internal/chat/chat.go` `WithVirtualModelFallback` after the model that will be tried is decided | Info | "conversation routed" | `conversation_id`, `request_id`, `upstreamModel`, `attempt`, `chainLen`, `stream` |
-| `conversation.rag.attached` | `internal/server/server.go` after `rag.InjectSystemMessage` | Info | "conversation RAG attached" | `conversation_id`, `request_id`, `tenant`, `project`, `flavor`, `hits`, `collection` |
-| `conversation.rag.skipped` | `internal/server/server.go` when RAG is enabled but `q == ""` or hits == 0 | Debug | "conversation RAG skipped" | `conversation_id`, `request_id`, `reason` (`empty_query` / `no_hits` / `disabled`) |
-| `conversation.upstream.started` | `internal/chat/chat.go` `proxyChatCompletionPayload` just before HTTP request | Info | "conversation upstream started" | `conversation_id`, `request_id`, `upstreamModel`, `stream`, `outgoingTokens` |
-| `conversation.upstream.completed` | `internal/chat/chat.go` `logUpstreamChatResponse` on 2xx | Info | "conversation upstream completed" | `conversation_id`, `request_id`, `upstreamModel`, `statusCode`, `usagePromptTokens`, `usageCompletionTokens`, `usageTotalTokens`, `responseBytes` |
-| `conversation.upstream.failed` | `internal/chat/chat.go` `logUpstreamChatResponse` on 4xx/5xx, **and** `chat.bifrost.error` path | Warn | "conversation upstream failed" | `conversation_id`, `request_id`, `upstreamModel`, `statusCode`, `err` |
-| `conversation.fallback.attempted` | `internal/chat/chat.go` `WithVirtualModelFallback` retry log (currently `chat.routing.fallback`) | Info | "conversation fallback attempted" | `conversation_id`, `request_id`, `upstreamModel`, `prev_status`, `attempt`, `chainLen` |
-| `conversation.fallback.exhausted` | `internal/chat/chat.go` exhaustion path (currently writes `gateway_exhausted` JSON error) | Warn | "conversation fallback exhausted" | `conversation_id`, `request_id`, `chainLen`, `excluded_413_count` |
-| `conversation.delivered` | `internal/server/server.go` after the response writer finishes (success path) | Info | "conversation delivered" | `conversation_id`, `request_id`, `statusCode`, `stream`, `bytes`, `total_ms` |
-| `conversation.errored` | `internal/server/server.go` final write on error response | Warn | "conversation errored" | `conversation_id`, `request_id`, `statusCode`, `errorType` |
-| `conversation.merge.failed` | `internal/conversationmerge/service.go` any failure path before resolve completes | Warn | "conversation merge failed" | `request_id` (the line is emitted **before** `conversation_id` is set; UI ties via `request_id`), `step` (`embed` / `dim_mismatch` / `list_candidates` / `dedup_read` / `upsert` / `snapshot_upsert`), `err` |
+| `conversation.received` | `internal/server/server.go` `handleChatCompletions` after conversation id is resolved | Info | "conversation received" | `conversation_id`, `request_id`, `principal_id`, `clientModel`, `stream`, `tenant`, `project`, `flavor`, `cid_source` (`header` / `merge` / `generated`), `turn_index` |
+| `conversation.merged` | `internal/conversationmerge/service.go` `Resolve` when a candidate matches | Info | "conversation matched" | `conversation_id`, `request_id`, `principal_id`, `match_score`, `candidate_count`, `merge_reason` (`semantic` / `sticky`), `turn_index` |
+| `conversation.dedup_hit` | `internal/conversationmerge/service.go` `Resolve` on dedup cache hit | Info | "conversation dedup hit" | `conversation_id`, `request_id`, `principal_id`, `dedup_bytes`, `turn_index` |
+| `conversation.routing.resolved` | `internal/chat/chat.go` after the model to try is decided | Info | "conversation routed" | `conversation_id`, `request_id`, `upstreamModel`, `attempt`, `chainLen`, `stream`, `turn_index` |
+| `conversation.rag.attached` | `internal/server/server.go` after `rag.InjectSystemMessage` | Info | "conversation RAG attached" | `conversation_id`, `request_id`, `tenant`, `project`, `flavor`, `hits`, `collection`, `turn_index` |
+| `conversation.rag.skipped` | `internal/server/server.go` when RAG is enabled but query empty or hits zero | Debug | "conversation RAG skipped" | `conversation_id`, `request_id`, `reason` (`empty_query` / `no_hits` / `disabled`), `turn_index` |
+| `conversation.rag.span` | `internal/rag/service.go` immediately before the first outbound vector or Qdrant-related work for this request, and once per retrieve path if multiple | Info | "conversation RAG span" | `conversation_id`, `request_id`, `collection`, `turn_index`, `span_id`, `window_ms` (default **10000**; used for tier 4b UI join) |
+| `conversation.upstream.started` | `internal/chat/chat.go` just before upstream HTTP | Info | "conversation upstream started" | `conversation_id`, `request_id`, `upstreamModel`, `stream`, `outgoingTokens`, `turn_index` |
+| `conversation.upstream.completed` | `internal/chat/chat.go` `logUpstreamChatResponse` on 2xx | Info | "conversation upstream completed" | `conversation_id`, `request_id`, `upstreamModel`, `statusCode`, `usagePromptTokens`, `usageCompletionTokens`, `usageTotalTokens`, `responseBytes`, `turn_index` |
+| `conversation.upstream.failed` | `internal/chat/chat.go` on 4xx/5xx and `chat.bifrost.error` path | Warn | "conversation upstream failed" | `conversation_id`, `request_id`, `upstreamModel`, `statusCode`, `err`, `turn_index` |
+| `conversation.fallback.attempted` | `internal/chat/chat.go` retry path | Info | "conversation fallback attempted" | `conversation_id`, `request_id`, `upstreamModel`, `prev_status`, `attempt`, `chainLen`, `turn_index` |
+| `conversation.fallback.exhausted` | `internal/chat/chat.go` exhaustion path | Warn | "conversation fallback exhausted" | `conversation_id`, `request_id`, `chainLen`, `excluded_413_count`, `turn_index` |
+| `conversation.delivered` | `internal/server/server.go` after response writer finishes (success) | Info | "conversation delivered" | `conversation_id`, `request_id`, `statusCode`, `stream`, `bytes`, `total_ms`, `turn_index` |
+| `conversation.errored` | `internal/server/server.go` on final error response | Warn | "conversation errored" | `conversation_id`, `request_id`, `statusCode`, `errorType`, `turn_index` |
+| `conversation.merge.failed` | *(Lifecycle / doc umbrella; **no new emitted `msg`**. Use shipped **`conversation.merge.resolve_failed`** and other **`conversation.merge.*`** — [Phase 1 merge naming](#phase-1--merge-failure-naming-cross-check).)* | Warn | "conversation merge failed" | `request_id`, `step`, `err` (and `conversation_id` when known); `turn_index` when known |
 
-### Tag propagation requirements
+*Merge diagnostics today:* [`log-gateway.md`](log-gateway.md) lists **`conversation.merge.resolve_failed`**, **`conversation.merge.embed_failed`**, **`conversation.merge.dedup_read_failed`**, and other **`conversation.merge.*`** rows. **Phase 1:** no rename; filter by prefix **`conversation.merge.`**.
 
-Every existing slug that already participates in a chat (`chat.bifrost.*`, `rag.*`, `chat.routing.*`, `ingest.*`) **must** carry `conversation_id` + `request_id` + `principal_id` in addition to its existing fields. This is largely true today via `routeLog.With(...)` in `handleChatCompletions`, but P2 plugs the remaining holes (notably the RAG `Retrieve` debug lines that already carry `request_id` / `conversation_id`, and the chat handler's `conversation merge resolve failed` Debug that does not carry the request id).
+### Turn fields (Phase 6)
 
----
+| Field | Type | Semantics |
+|-------|------|-----------|
+| `turn_index` | int | **1-based** count of user turns for this `conversation_id` within the **gateway process**. Incremented on each new `handleChatCompletions` request for that conversation, **including** dedup short-circuits that never call upstream (Phase 1 completion notes). |
+| `span_id` | string | Short random id per `conversation.rag.span` for correlating optional debug lines. |
 
-## Routing rules (UI fan-out into conversation cards)
+### Tool execution (`conversation.tool.*`) — gateway-emitted
 
-The conversation grouping in `renderSummarizedUnified()` is extended as follows.
+Emit at the points where the gateway applies tool routing, invokes tools, or records tool results (exact call sites in Phase 7; may wrap `internal/transform` and chat completion streaming paths).
 
-### Tier 1 — direct match
+| `msg` | Emit point | Level | Headline | Required KV |
+|-------|------------|-------|----------|-------------|
+| `conversation.tool.router` | After tool router pass completes | Debug | "conversation tool router" | `conversation_id`, `request_id`, `turn_index`, `tools_before`, `tools_after`, `router_model` (if any), `err` (empty on success) |
+| `conversation.tool.call_started` | Immediately before executing one tool call | Info | "conversation tool started" | `conversation_id`, `request_id`, `turn_index`, `tool_name`, `tool_call_id` (if protocol supplies), `arg_bytes` (size only; **no raw args** at Info) |
+| `conversation.tool.call_completed` | On tool success | Info | "conversation tool completed" | Same ids, `tool_name`, `tool_call_id`, `latency_ms`, `result_bytes` (size only) |
+| `conversation.tool.call_failed` | On tool error | Warn | "conversation tool failed" | Same ids, `tool_name`, `tool_call_id`, `latency_ms`, `err` (short, no secrets) |
 
-A line joins conversation `(principal_id, conversation_id)` if its flat fields contain **both** keys (today's behavior, unchanged). This is the primary path and covers all gateway-emitted lines once P2 lands.
+**Tag propagation:** Existing `chat.tool_router.*` slugs in [`log-gateway.md`](log-gateway.md) gain the same correlation triple and `turn_index`; derive modules accept both during any rename window.
 
-### Tier 2 — request_id join
+### Request and response witness (`conversation.*`) — gateway-emitted (Phase 8)
 
-A line joins conversation `(principal_id, conversation_id)` if its flat fields contain `request_id` **and** the cache already contains a Tier-1 line with the same `request_id` mapped to that conversation. Implementation: maintain an in-memory `requestIdToConv` map updated as lines arrive; when a later line shows up with `request_id` only, look it up and tag the line accordingly.
+| `msg` | Emit point | Level | Headline | Required KV |
+|-------|------------|-------|----------|-------------|
+| `conversation.request.witness` | After body parsed and normalized for upstream (redaction applied) | Info | "conversation request witness" | `conversation_id`, `request_id`, `turn_index`, `message_count`, `role_counts` (structured or JSON map), `prompt_char_estimate`, `tool_decl_count`, `sha256_canonical` (optional; omit if expensive) |
+| `conversation.response.witness` | After upstream success path has assembled assistant output length | Info | "conversation response witness" | `conversation_id`, `request_id`, `turn_index`, `completion_char_estimate`, `finish_reason`, `chunk_count` (non-streaming: 1) |
+| `conversation.payload.sample` | Optional gated excerpt | **Trace** only | "conversation payload sample" | `conversation_id`, `request_id`, `turn_index`, `kind` (`request` / `response`), `head`, `tail`, `redacted` (bool) — **never** log API keys, bearer tokens, or `Authorization`; follow repo security docs |
 
-### Tier 3 — index_run_id join (ingest only)
+**Policy defaults (Phase 1 locks the numbers)**
 
-When `ingest.complete` lines carry both `request_id` (chat-originated ingest) and `index_run_id`, subsequent indexer / qdrant lines bearing the same `index_run_id` may join the conversation **as ingest activity**. This is opt-in per UI (otherwise the indexer card stays the canonical home).
+- **Info:** counts, sizes, models, ids, hashes only if cheap and stable.
+- **Trace:** samples only when `LOG_LEVEL=trace` (or dedicated config flag); max **256** chars per `head`/`tail` after redaction unless config overrides.
+- **Never:** full payloads at Info; never raw tool arguments at Info (use size fields).
 
-### Tier 4 — collection + time window (qdrant fallback)
+### Tag propagation (all chat-related gateway slugs)
 
-When a conversation has at least one `rag.query` / `rag.embed` line carrying `collection` (already true today), Qdrant subprocess HTTP lines (`qdrant.http.collection_meta`, `qdrant.http.points_upsert_ok`, `qdrant.http.points_delete`, `qdrant.http.vector_search`) may be **annotated** with the conversation id when:
+Every slug that participates in a chat (`chat.bifrost.*`, `rag.*`, `chat.routing.*`, `ingest.*`, **`chat.tool_router.*`**, **`gateway.http.access`** on `/v1/chat/completions`, and renamed relay slugs per [`log-bifrost.md`](log-bifrost.md)) **must** carry `conversation_id`, `request_id`, `principal_id` when in scope, and **`turn_index`** after Phase 6. Client-credential lines remain **`gateway.auth.*`** — correlation applies only when a chat-scoped logger wraps those paths.
 
-- the qdrant line's `collection` matches the conversation's `collection`, **and**
-- the qdrant line's timestamp falls within ±**5 s** of the conversation's `rag.query` line.
+### Routing rules (user interface fan-out into conversation cards)
 
-The annotated qdrant line still appears in the qdrant card (existing behavior) and **also** gets a tier-4 entry under the conversation's RAG sub-section. UI marks it visually as "inferred" so operators know it was joined heuristically.
+#### Tier 1 — direct match
 
-### Tier 5 — bifrost subprocess (best-effort, P5 only)
+Line joins `(principal_id, conversation_id)` when both appear on the row.
 
-Today bifrost subprocess lines carry no conversation hint. P5 explores propagating an outgoing `X-Claudia-Conversation-Id` header on the upstream HTTP call so bifrost-emitted JSON includes it; if BiFrost echoes it (today: unverified) the line gets Tier-1 status. Otherwise, the line stays bifrost-only and the conversation card uses **gateway-emitted** `chat.bifrost.*` slugs as the canonical "BiFrost activity in this conversation" view.
+#### Tier 2 — request identifier join
 
----
+Line joins when `request_id` matches a tier-1 row already mapped to that conversation (`requestIdToConv` map in the UI buffer).
 
-## UI contract: Conversation card (summarized logs)
+#### Tier 3 — index run join (ingest)
 
-Applies to the **Conversations** section of the summarized log view (`buildConvCard`, `renderExpandedConv`).
+When `ingest.complete` carries `request_id`, `index_run_id`, and (when chat-originated) `conversation_id`, later indexer or Qdrant rows with the same `index_run_id` may appear under the conversation card **ingest** subsection (toggle or collapsed by default to avoid noise). This is sufficient for ingest correlation; do not add a separate `conversation.ingest.span` unless tier 3 proves insufficient.
 
-### Collapsed card header
+#### Tier 4 — collection and time window (Qdrant heuristic)
 
-Today: `<duration>` · `<tok> tok` · `<vec> vec` + binary `error / active` status.
+When a conversation has `rag.query` or `rag.embed` with `collection`, Qdrant subprocess lines with matching **`collection`** and timestamp within **±N seconds** of the **anchor** (see tier 4b) may be annotated for the conversation **RAG** subsection. **`collection`** must be compared using the **same derived name** as [`qdrantCollection.js`](../../internal/server/embedui/logs/derive/qdrantCollection.js) / indexer routing ([`log-qdrant.md`](log-qdrant.md) Phase 3) so tier 4 agrees with Qdrant and indexer cards. UI marks **inferred**.
 
-**Add** four pill chips (left of the Duration metric, before the existing token / vector chips):
+#### Tier 4b — gateway-anchored window (preferred over tier 4 alone)
 
-| Pill | Behavior |
-|------|----------|
-| **State** | Computed from the latest `conversation.*` lifecycle slug seen for this conversation. Values: **`received`** · **`routing`** · **`rag`** · **`upstream`** · **`delivered`** · **`failed`**. Color matches qdrant card semantics: blue/active for in-flight, green for delivered, red for failed. |
-| **BiFrost** | `chat.bifrost.request` count → `chat.bifrost.response` count, with `chat.bifrost.error` shown as fail. Tooltip: "n requests · m responses · k errors". |
-| **Qdrant** | Count of `rag.query` + tier-4-joined qdrant HTTP rows. Tooltip lists the collection name. |
-| **Fallback** | Count of `conversation.fallback.attempted`. Hidden when 0. Tooltip lists the model attempted at each step. |
+When `conversation.rag.span` is present for a `request_id`, tier 4 uses **`span_id`** and `window_ms`: Qdrant lines matching **`collection`** (same derivation as tier 4) with `timestamp` within `[span_start, span_start + window_ms]` join as **anchored inferred** (distinct pill or sub-label from pure tier 4). If multiple spans match, attribute the Qdrant row to the **most recent span start** and preserve `span_id` / `turn_index` metadata for Phase 6 grouping. If `conversation.rag.span` is absent, fall back to tier 4 relative to `rag.query` / `rag.embed` time (legacy behavior).
 
-### Expanded card — below the summary heading (KV row)
+#### Tier 5 — BiFrost subprocess
 
-Replace today's three mini-cards (Token count / Duration / Vectors retrieved) with a **KV row + counter row**:
+BiFrost subprocess lines join when normalized JSON carries a `request_id` that matches a gateway conversation request. The gateway sets upstream **`X-Request-Id`** to its `request_id`; custom `X-Claudia-*` headers are opportunistic only and must not be required because common clients do not send or preserve them. If BiFrost does not expose the upstream request id in subprocess logs, subprocess rows remain on the BiFrost service card only; **gateway relay** `chat.bifrost.*` / routing lines are already merged at tier 1 / tier 2 ([`conversationBifrost.js`](../../internal/server/embedui/logs/derive/conversationBifrost.js)) and stay canonical for the conversation **BiFrost · N** chip.
 
-KV row:
+### User interface contract — conversation card (summary)
 
-| Key | Source `msg` / logic |
-|-----|---------------------|
-| **principal** | `principal_id` (already used in card title) — keep token label fallback via `tokenLabelByTenant`. |
-| **client model** | `conversation.received` `clientModel`. |
-| **upstream model** | latest `conversation.routing.resolved` or `conversation.upstream.started` `upstreamModel`. |
-| **stream** | `conversation.received` `stream` (true/false → `SSE` / `JSON`). |
-| **RAG collection** | `conversation.rag.attached` `collection` (or first `rag.query` `collection`). |
-| **merge** | `conversation.merged` → `matched (score)` · `conversation.dedup_hit` → `dedup` · else `new`. |
-| **state** | mirrors the State pill (also available in expand for screen readers). |
+Collapsed: **State** pill from latest `conversation.*`; **BiFrost**, **Qdrant**, **Tools** (terminal tool rounds: `conversation.tool.call_completed` / `conversation.tool.call_failed`, plus `chat.tool_router.*`), **Fallback** chips; existing duration and token or vector summaries where still useful.
 
-Counter row:
-
-| Box | Behavior |
-|-----|----------|
-| **Tokens (out → usage)** | Sum `outgoingTokens` (from `chat.bifrost.request` / `conversation.upstream.started`) → sum `usageTotalTokens`. Shown identically to the bifrost card so numbers reconcile. |
-| **Vectors retrieved** | Sum `hits` from `conversation.rag.attached` (preferred) or `rag_hits` / `hits` / `chunks` (today's heuristic, kept as fallback). |
-| **Duration** | `conversation.delivered.total_ms` when present, else `convWindowMs` (today's behavior). |
-| **Fallbacks · errors** | `conversation.fallback.attempted` count · `conversation.errored` + `conversation.upstream.failed` count. |
-
-### Progress bar
-
-Below the KV / counter rows, render a **5-step progress bar** using the lifecycle slugs:
-
-`received → routed → (rag) → upstream → delivered`
-
-- Each step lights when its slug appears for this conversation; **rag** is dimmed (skipped) when `conversation.rag.skipped` fires before `conversation.upstream.started`.
-- The bar tints **error** when `conversation.upstream.failed` or `conversation.errored` is present after `conversation.upstream.started`.
-- Implementation: extend `derive/conversationMetrics.js` (or split into `derive/conversationCardModel.js`) to expose `{ state, steps[], progressIndex, errorAt }` for the renderer.
-
-### Full event log (expanded)
-
-- Keep the existing `<details>` with per-row `buildDetailsColumn` (lossless detail).
-- **Add** badges per row indicating which **service** the line came from when not the gateway: **bifrost** / **qdrant** / **indexer**. Today the row badge is generic — use `inferServiceBadge` already in `logs.js`.
-- **Add** a "tier" indicator (subtle muted text) when the line is tier-4 (qdrant heuristic join) so the operator sees that it is inferred.
+Expanded: key-value row includes **last `turn_index`**, **upstream model**, **client model**, **stream mode**, **RAG collection**, **merge state**; counter row reconciles with BiFrost card where possible; progress bar as in Phase 4; full log shows **service** badge, **tier** label (`direct`, `request_id`, `ingest`, `inferred`, `anchored_inferred`, `bifrost_echo`), and optional **turn** sub-headings when Phase 6 ships.
 
 ---
 
-## Phased implementation
+## Phase 2 — Correlation propagation
 
-### P1 — Spec
-
-**Goal.** Land this doc, capture fixtures, freeze the `conversation.*` slug list.
+**Goal.** Every gateway line that touches a chat request carries the full correlation triple (`request_id`, `conversation_id`, `principal_id`) wherever those values are known; ingest lines carry `index_run_id` and chat linkage when applicable.
 
 **Deliverables**
 
-- This file checked in.
-- Four fixtures captured to `temp/conversation-*.log`.
-- Confirm the routing tiers correctly classify every line in the fixtures (by hand or via a small Python helper).
+- Contract tests (merge, chat, RAG, ingest) plus `testdata/correlation` fixtures; exhaustive static `slog` audit for `internal/chat` deferred (gateway injects a contextualized logger for production chat).
+- `internal/server/server.go` `handleChatCompletions`: pass `request_id` into `conversationmerge.Resolve`; merge failures emit `request_id` for tier 2.
+- `internal/conversationmerge/service.go`: every `Resolve` path includes `request_id`; soft fallback emits merge failure lines with `request_id` (today **`conversation.merge.resolve_failed`** / related **`conversation.merge.*`** — extend rather than duplicate per [`log-gateway.md`](log-gateway.md)).
+- `internal/chat/chat.go`: provider limits, payload prep debug, and admission failures carry the request logger context.
+- `internal/server/ingest.go` and `ingest_session.go`: `ingest.complete` / `ingest.failed` include `request_id`, `index_run_id`, and `conversation_id` when chat-originated.
 
-**Acceptance.** Reviewer agrees every line in each fixture maps to a tier (1/2/3/4/5) and every gateway-emitted line maps to either an existing slug or a new `conversation.*` slug.
+**Acceptance**
 
-**Status:** `todo`
+- Contract tests cover merge, chat proxy, RAG retrieve, and ingest paths; see Phase 2 implementation notes below.
+- Text fixtures under `internal/server/testdata/correlation/` document expected log key shapes.
 
-### P2 — Correlation propagation
+**Status:** `done`
 
-**Goal.** Every gateway line that touches a chat request carries the full correlation triple (`request_id` + `conversation_id` + `principal_id`).
+**Implementation notes (Phase 2 shipped)**
 
-**Deliverables**
+- `conversationmerge.ResolveInput` includes `RequestID`; all `Resolve` and `RecordTurn` persistence warnings include `request_id`, `principal_id`, and `conversation_id` when known.
+- `handleV1Chat` passes `request_id` into `Resolve`, logs merge resolve failures with `request_id` + `principal_id`, passes `request_id` into `RecordTurn`, and attaches `conversation_id` to the tool-router logger when the client sends `X-Claudia-Conversation-Id` before merge resolves.
+- `internal/rag` `appendGatewayCorrelation` adds `principal_id` (from `Coords.TenantID`) on retrieve and ingest trace paths.
+- `ingest.go` / `ingest_session.go` pass optional `X-Claudia-Conversation-Id` through to `rag.IngestRequest` and emit it on `ingest.complete`, `ingest.failed`, and `ingest.chunked.error` when set.
+- Tests: `internal/conversationmerge/merge_correlation_test.go`, `internal/chat/correlation_contract_test.go`, `internal/rag/service_test.go` (`TestService_Retrieve_logContainsPrincipalId`), `internal/server/ingest_test.go` (`TestIngest_JSON_logsConversationIDWhenHeaderPresent`), `internal/server/correlation_phase2_doc_test.go`.
+- **`internal/chat`:** production `/v1/chat/completions` uses a logger pre-wrapped by the gateway; contract test asserts relay logs inherit the triple. Static audit of every `slog` line in chat is not enforced (logger is injected per call site).
 
-- Audit script (`scripts/audit-correlation.sh` or a Go test) that grep-checks every `slog` call in `internal/chat`, `internal/rag`, `internal/server`, `internal/conversationmerge` and flags any that omit the triple when the call site is inside a chat-handler scope.
-- Edits to plug holes:
-  - `internal/server/server.go` `handleChatCompletions`: pass `request_id` to `conversationmerge.Resolve` and have it emit failures with `request_id` (so tier-2 join can find them).
-  - `internal/conversationmerge/service.go`: include `request_id` (when supplied) on every Warn/Debug emitted from `Resolve`. Re-emit a `conversation.merge.failed` line with `request_id` after a soft fallback to a fresh id.
-  - `internal/chat/chat.go`: ensure `prepareChatPayload` debug, `chat blocked by provider limits`, `skipping upstream model (provider limits)`, and `provider limits admission query failed` carry the With-context.
-  - `internal/server/ingest.go` / `ingest_session.go`: ensure `request_id`, `index_run_id`, and (when chat-originated) `conversation_id` are present on `ingest.complete` and `ingest.failed`.
+---
 
-**Acceptance.** The audit script reports zero violations; running the four fixtures shows every relevant line tier-1 or tier-2 joinable to the right conversation.
+## Phase 3 — Lifecycle events
 
-**Status:** `todo`
-
-### P3 — Lifecycle events
-
-**Goal.** Gateway emits the full `conversation.*` lifecycle.
-
-**Deliverables**
-
-- `internal/server/server.go`:
-  - Emit `conversation.received` after `cid` is resolved (with `cid_source`).
-  - Emit `conversation.rag.attached` after `rag.InjectSystemMessage` (with `hits`, `collection`).
-  - Emit `conversation.rag.skipped` when RAG runs but produces 0 hits or empty query.
-  - Emit `conversation.delivered` from a small response wrapper (or via existing `wrapResponse` in `internal/server/server.go`) with `total_ms`, `bytes`, `statusCode`, `stream`.
-  - Emit `conversation.errored` from the JSON error writer paths.
-- `internal/chat/chat.go`:
-  - Emit `conversation.routing.resolved` (replacing/augmenting the existing `virtual model routing resolved`).
-  - Emit `conversation.upstream.started` immediately before HTTP request.
-  - Emit `conversation.upstream.completed` from `logUpstreamChatResponse` on 2xx (in addition to the existing `chat.bifrost.response`).
-  - Emit `conversation.upstream.failed` on 4xx/5xx and on the `chat.bifrost.error` path.
-  - Emit `conversation.fallback.attempted` (replacing/augmenting `chat.routing.fallback`).
-  - Emit `conversation.fallback.exhausted` from `WithVirtualModelFallback` exhaustion path.
-- `internal/conversationmerge/service.go`:
-  - Emit `conversation.merged` on a successful candidate match.
-  - Emit `conversation.dedup_hit` on a dedup cache hit.
-  - Emit `conversation.merge.failed` (with `step`, `err`, `request_id`) on the soft-fallback paths that already log Warn/Debug today.
-
-**Acceptance.** The four fixtures from P1 contain at least one of each lifecycle slug (across the four scenarios combined); the State pill in the conversation card transitions through the expected path.
-
-**Status:** `todo`
-
-### P4 — UI fan-out & conversation card
-
-**Goal.** Conversation card pulls fan-out lines and renders pills / KV / counters / progress as specified.
+**Goal.** Gateway emits the full **`conversation.*`** lifecycle at the call sites named in Phase 1, including **`conversation.rag.span`** before vector work.
 
 **Deliverables**
 
-- Extend `renderSummarizedUnified()` in [`internal/server/embedui/logs.js`](../../internal/server/embedui/logs.js) with the tier-2 (`request_id`) and tier-4 (qdrant collection + time window) joins. Tier-3 (`index_run_id`) is a follow-up.
-- Replace `derive/conversationMetrics.js` (or add a new `derive/conversationCardModel.js`) that returns `{ state, kv, counters, steps[], progressIndex, errorAt }` from the cluster of events.
-- Update `buildConvCard` and `renderExpandedConv` to render the new pills, KV row, counter row, and progress bar.
-- Add CSS for the State pill colors and the progress bar (mirror the qdrant card styling for consistency).
-- Refresh `internal/server/logs_components_test.go` and `internal/server/ui_logs_test.go`; add a derive test under `internal/server/embedui/logs/derive/` (goja) that asserts the lifecycle → state mapping.
+- Implementations in `internal/server/server.go`, `internal/chat/chat.go`, `internal/conversationmerge/service.go`, and `internal/rag/service.go` per Phase 1 table.
+- Keep existing relay slugs where [`log-bifrost.md`](log-bifrost.md) defines renames; add `conversation.*` in addition during any transition window if needed.
 
-**Acceptance.** Loading a fixture into the UI shows: pills correctly counting BiFrost / Qdrant / Fallback events, KV row populated for principal / client model / upstream model / stream / RAG collection / merge / state, counter row matching the bifrost card numbers within the same window, and the progress bar lighting through `received → routed → rag → upstream → delivered`.
+**Acceptance**
 
-**Status:** `todo`
+- Combined fixtures contain at least one instance of each lifecycle slug (spread across fixtures if necessary).
+- State pill transitions through **received → routed → upstream → delivered** on the happy path with RAG both on and off.
 
-### P5 — Subprocess linkage hardening
+**Status:** `done`
 
-**Goal.** Best-effort tier-1 join for bifrost subprocess lines when the upstream call is conversation-scoped.
+**Implementation notes (Phase 3 shipped)**
+
+- `internal/server/server.go` `handleV1Chat`: `flowStart` after JSON decode; `cid_source` (`header` / `merge` / `generated`); `conversation.received` after `conversation_id` is fixed; `Runtime.NextChatTurnIndex` on `routeLog` via `chatRouteLogger`; dedup short-circuit logs `conversation.received` + `conversation.delivered` (no upstream); `attachConversationDelivery` wires `conversation.delivered` / `conversation.errored` through `chat.ProxyOpts.OnChatDelivery`; virtual-model RAG emits `conversation.rag.skipped` (`disabled` / `empty_query` / `no_hits`), `conversation.rag.attached` after inject, passes `TurnIndex` + `LifecycleLog` into `rag.Retrieve`; missing initial model / missing client model emit `conversation.errored`.
+- `internal/conversationmerge`: `ResolveInput.NextTurnIndex` bumps turn for `conversation.dedup_hit` / `conversation.merged`; `ResolveOutcome.TurnIndex` lets the handler reuse the same index for received/delivered.
+- `internal/rag`: `conversation.rag.span` before embed/search with `window_ms=10000` and random `span_id`.
+- `internal/chat`: `notifyChatDelivery` on marshal failure and provider-limits denial; virtual-model path emits `conversation.routing.resolved` even when `chainLen==1`.
+- Fixtures: `internal/server/testdata/correlation/lifecycle-phase3.example.log`; tests `lifecycle_phase3_doc_test.go`, `correlation_phase2_doc_test.go` (file presence).
+
+---
+
+## Phase 4 — User interface fan-out and conversation card
+
+**Goal.** The conversation card consumes all join tiers that apply without hand-waving tier 3 as a follow-up; pills, counters, and progress match the spec in Phase 1.
+
+**Foundation already shipped** (see sibling plans): **tier 1 + tier 2** for BiFrost relay rows (**`conversationBifrostRelayCount`**, **`requestIdToConv`** merge in `renderSummarizedUnified`). Service cards use **`gatewayCardModel`**, **`qdrantCardModel`**, and **`bifrostMetrics`** patterns — conversation summarize should reuse the same derive/test style when adding **`conversationCardModel`** (or extending **`conversationMetrics.js`**) for state, progress, and tier labels.
 
 **Deliverables**
 
-- Investigate whether BiFrost echoes a custom request header in its log output (read `bifrost-http` source). Document findings in [`bifrost-discovery.md`](../bifrost-discovery.md).
-- If echo is supported: `internal/chat/chat.go` adds `X-Claudia-Conversation-Id` (and `X-Claudia-Request-Id`) to the upstream `http.NewRequestWithContext` call; verify `bifrostline.NormalizePayload` (from [`log-bifrost.md`](log-bifrost.md) P2) propagates the field into the normalized JSON.
-- If echo is **not** supported: document the gap, accept that `chat.bifrost.*` (gateway-emitted) remains the canonical conversation view of BiFrost activity, and propose an upstream BiFrost feature request.
+- `renderSummarizedUnified()` in [`internal/server/embedui/logs.js`](../../internal/server/embedui/logs.js): tier 2 (complete for BiFrost relay; extend as needed), tier 3 (ingest subsection), tier 4, and tier 4b join logic.
+- Derive module (`conversationCardModel` or extended `conversationMetrics.js`) exposing state, key-value row, counters, progress steps, and **tool** / **witness** summaries.
+- `buildConvCard` / `renderExpandedConv`: new chips, tier labels, optional ingest collapse, **Tools** chip; **Qdrant** pill metrics may align with **`qdrantCardModel`** counts scoped to the conversation RAG join window.
+- Styles mirroring Qdrant card semantics; tests in `internal/server/logs_components_test.go`, `internal/server/ui_logs_test.go`, and goja derive tests.
 
-**Acceptance.** Either bifrost subprocess lines join the conversation card via tier-1 with the new headers, or a clearly written gap note in `bifrost-discovery.md` plus an upstream tracking issue.
+**Acceptance**
 
-**Status:** `todo`
+- Fixture load shows correct pill counts, anchored vs unanchored Qdrant labeling, ingest subsection when `index_run_id` is present, and progress bar behavior for RAG skipped versus attached.
+
+**Status:** `done`
+
+**Implementation notes (Phase 4 shipped)**
+
+- Derive: [`internal/server/embedui/logs/derive/conversationCardModel.js`](../../internal/server/embedui/logs/derive/conversationCardModel.js) — `conversationRequestIdTier2Eligible`, `conversationIndexRunTier3Eligible`, `extractConversationQdrantJoinAnchors`, `joinQdrantLineConversationTier`, `buildConversationCardModel`.
+- [`internal/server/embedui/logs.js`](../../internal/server/embedui/logs.js) `renderSummarizedUnified`: tier 1 direct; tier 2 `request_id` only after mapping from **`conversation.received`**, **`chat.request`**, or **`gateway.http.access`** on `/v1/chat/completions`, then **`rag.query` / `rag.embed`** only if still unmapped (first mapping wins); tier-2 lines limited to BiFrost relay set, `conversation.*`, `rag.*`, `chat.request` / `chat.bifrost.*` / `chat.routing.*` / `chat.provider_limits.*` / `chat.tool_router.*`, and chat completions access — not blanket `chat.*` or `ingest.*`; tier 3 `index_run_id` (first mapping wins from ingest terminal lines); tier 4/4b Qdrant subprocess as before.
+- Conversation card: lifecycle step row, KV row, chip row (BiFrost, Qdrant inferred vs anchored, tools from `chat.tool_router.*` / `conversation.tool.*`, fallback), collapsed ingest summary when tier-3 lines present, join-tier badges on expanded rows (non-`direct`).
+- Tests: `TestLogsDerive_conversationCardModel_joinAndProgress` in [`internal/server/logs_components_test.go`](../../internal/server/logs_components_test.go); `/ui/logs` shell includes `conversationCardModel.js`.
+
+---
+
+## Phase 5 — Subprocess linkage hardening
+
+**Goal.** Subprocess lines join conversations when the platform exposes usable request ids; when BiFrost cannot expose upstream request ids, the operator still sees canonical gateway relay lines and a **deterministic** Qdrant window via **`conversation.rag.span`**.
+
+**Deliverables**
+
+- BiFrost: set upstream `X-Request-Id` from the gateway `request_id`; investigate whether BiFrost exposes that id on subprocess rows; document the result in [`bifrost-discovery.md`](../bifrost-discovery.md). Implement `bifrostline` `request_id` propagation only when the platform provides the value.
+- Qdrant: ensure normalized lines expose `collection` and timestamps for tier 4/4b; if local Qdrant can accept a harmless query parameter for correlation in dev-only mode, document behind config (optional; do not require for acceptance). Attribute overlapping tier-4b matches to the most recent span.
+- Gateway: always emit **`conversation.rag.span`** when RAG retrieval runs so tier 4b does not depend on subprocess cooperation alone. Future RAG interactions should emit the same span shape when they perform vector work.
+
+**Acceptance**
+
+- Either BiFrost subprocess rows appear with `request_id`, or `bifrost-discovery.md` records the gap and gateway relay remains canonical. Do not add `bifrost.relay.echo_missing` unless it carries operator-useful detail beyond the existing gateway relay lifecycle.
+- Tier 4b join verified in UI or derive tests using text fixtures with RAG plus Qdrant HTTP lines inside `window_ms`, including overlapping spans where the most recent span wins.
+
+**Status:** `done`
+
+**Implementation notes (Phase 5 shipped)**
+
+- Gateway upstream relay sets `X-Request-Id` from the gateway `request_id`; no client-provided Claudia header is required.
+- `internal/rag`: `conversation.rag.span` default window is **10000** ms and emits through the RAG service logger when no conversation lifecycle logger is supplied.
+- Derive/UI: tier 4b returns span metadata through `joinQdrantLineConversationMatch`; overlapping Qdrant rows attribute to the most recent matching span while preserving the existing tier label.
+- Fixtures/tests: `internal/server/testdata/correlation/phase5-qdrant-tier4b.example.log` covers overlapping spans; focused Go tests cover upstream header propagation, fallback RAG span logging, and Qdrant attribution.
+- BiFrost subprocess rows remain service-card-only unless BiFrost exposes `X-Request-Id`; gateway relay rows remain canonical and no synthetic `bifrost.relay.echo_missing` is emitted by default.
+
+---
+
+## Phase 6 — Turn identity and timeline grouping
+
+**Goal.** Operators and support can separate **turn one** from **turn two** without inferring from wall clock alone.
+
+**Deliverables**
+
+- In-memory per-`conversation_id` counter in the gateway chat path; increment rules documented and tested (including dedup and streaming).
+- Attach **`turn_index`** to every chat-scoped structured log line listed in Phase 1 and Phase 7; backfill derive and UI to group expanded rows by `turn_index` (sub-headings or dividers).
+- Document: counter resets on gateway restart (acceptable); optional future persistence is out of scope unless Phase 1 chose otherwise.
+
+**Acceptance**
+
+- Multi-turn fixture shows `turn_index` 1 then 2 on `conversation.received` and downstream lines for the second HTTP request.
+- Expanded conversation view groups or sorts by `turn_index` deterministically.
+
+**Status:** `done`
+
+**Implementation notes (Phase 6 shipped)**
+
+- `Runtime.NextChatTurnIndex` (`internal/server/runtime.go`) is the in-process per-`conversation_id` counter; `chatRouteLogger` attaches `turn_index` to every chat-scoped logger so `conversation.*`, `chat.request`, `chat.bifrost.*`, `chat.routing.*`, `chat.provider_limits.*`, `rag.*`, and dedup short-circuits all inherit the value. Counter resets on gateway restart by design; no persistence.
+- Dedup short-circuit and merge `Resolve` paths reuse the assigned turn (`ResolveOutcome.TurnIndex`) so `conversation.dedup_hit` / `conversation.merged` agree with the downstream `conversation.received` for that HTTP request.
+- Derive: `ClaudiaLogs.Derive.conversationTurnGroupsForExpanded(events, getFlat)` (`internal/server/embedui/logs/derive/conversationCardModel.js`) attributes each event to a turn using `flat.turn_index`, then `ev.qdrantTurnIndex` from the tier-4b match, then inherited from the most recent prior attribution. Groups are returned most-recent-turn-first; events inside a turn keep ascending seq/ts so the UI reverses for display while keeping the global newest-first feel.
+- UI: `renderExpandedConv` renders one `Turn N` sub-heading per group and falls back to the flat ordering when only one turn (or fewer) is present.
+- Fixtures: `internal/server/testdata/correlation/phase6-multi-turn.example.log`. Tests: `lifecycle_phase6_doc_test.go` (fixture content), `TestLogsDerive_conversationTurnGroupsForExpanded_*` in `internal/server/logs_components_test.go` (derive grouping, inheritance, unattributed events, tier-4b Qdrant attribution).
+
+---
+
+## Phase 7 — Tool execution logging
+
+**Goal.** Each tool invocation for a conversation request has started, completed, or failed events suitable for the **Tools** chip and expanded timeline.
+
+**Deliverables**
+
+- Wire `conversation.tool.*` at gateway boundaries where tools are selected, invoked, and return (success or error).
+- Ensure `tool_call_id` is populated when the upstream protocol provides it; omit when absent.
+- Levels: router at Debug; per-call started or completed at Info; failed at Warn.
+
+**Acceptance**
+
+- Fixture with at least one successful and one failed tool call shows four slugs with correct correlation and chips.
+- No raw secrets or full tool args at Info.
+
+**Status:** `done`
+
+**Implementation notes (Phase 7 shipped)**
+
+- `internal/transform/toolrouter.go`: `ApplyToolRouter` returns `(body, ToolRouterSummary)` for operator metrics (`tools_before`, `tools_after`, `router_model`, `err`). Dedup short-circuit skips the router (no upstream tool-router HTTP on cache hits).
+- `internal/server/server.go`: after `routeLog` is built, runs `ApplyToolRouter` with `routeLog` so `chat.tool_router.*` inherits `turn_index` and the correlation triple. Emits Debug `conversation.tool.router` when the router pass ran (`trSum.Ran`). Calls `LogConversationIncomingToolMessages` for each `messages[]` entry with `role=tool` (relay boundary): Info `conversation.tool.call_started` / `conversation.tool.call_completed`, or Warn `conversation.tool.call_failed` when content matches conservative error heuristics (`error:` prefix, JSON `error` / `is_error`, embedded `"is_error":true` in a string body). Sizes only (`arg_bytes`, `result_bytes`); optional `tool_call_id` / `tool_name` omitted when absent.
+- `internal/server/embedui/logs/derive/conversationCardModel.js`: Tools chip counts `chat.tool_router.*` plus terminal `conversation.tool.call_completed` and `conversation.tool.call_failed` (excludes `call_started` and `conversation.tool.router` so the chip reflects completed rounds).
+- Fixtures / tests: `internal/server/testdata/correlation/phase7-tools.example.log`, `lifecycle_phase7_doc_test.go`, `conversation_tool_log_test.go`, `TestLogsDerive_conversationCardModel_toolsChipCounts` in `logs_components_test.go`.
+
+---
+
+## Phase 8 — Request and response witness
+
+**Goal.** Operators can confirm **what class of payload** moved through the gateway (sizes, counts, finish reason) and, when explicitly enabled, inspect **redacted** samples at Trace without implementing “full body at Info.”
+
+**Deliverables**
+
+- Emit `conversation.request.witness` and `conversation.response.witness` on every chat completion path (including early errors where response witness is omitted).
+- Implement `conversation.payload.sample` behind trace or config; central redaction helper shared with any existing excerpt logic.
+- Configuration keys documented in [`config/gateway.example.yaml`](../../config/gateway.example.yaml) (names only in this plan; wire in implementation PR).
+
+**Acceptance**
+
+- Security review confirms no token or key material in witness or sample fields for default configs.
+- Fixture at Info shows stable size and count fields; trace fixture shows sample with `redacted: true` when applicable.
+
+**Status:** `done`
+
+**Implementation notes (Phase 8 shipped)**
+
+- `internal/conversationwitness`: `LogRequestWitness`, `LogResponseWitness`, `RedactSecrets`, `LogPayloadSample` (slog level -8 “trace”); request stats from `messages` / `tools` in the proxied body map; response stats from non-stream JSON or SSE tail; `sha256_canonical` omitted (optional per Phase 1).
+- `internal/server/server.go`: `emitConversationRequestWitness` after final request shaping — inside the virtual-model branch (post-RAG) and once on the direct path before proxy; merge **dedup** short-circuit logs request + response witness + optional sample from cached JSON. Payload samples use `gateway.yaml` `gateway.log_witness` (`payload_sample_max_chars`, `force_payload_sample_at_debug`) plus `config.Resolved.ShouldEmitPayloadSample` / `WitnessSampleMaxRunes`.
+- `internal/chat/chat.go`: `ProxyOpts` carries witness flags; after successful `prepareChatPayload`, trace request `conversation.payload.sample` when enabled; `logUpstreamChatResponse` emits `conversation.response.witness` and response sample on **2xx** bodies (streaming uses SSE tail + chunk counts). Virtual-model inner opts inherit witness flags.
+- `internal/server/embedui/logs/derive/conversationCardModel.js`: `buildConversationCardModel.witness` reflects presence of `conversation.request.witness` / `conversation.response.witness`; witness lines do not override the lifecycle state pill.
+- Fixtures / tests: `testdata/correlation/phase8-witness.example.log`, `lifecycle_phase8_doc_test.go`, `internal/conversationwitness/witness_test.go`, `TestLogsDerive_buildConversationCardModel_witnessFlags` in `logs_components_test.go`.
+- `config/gateway.example.yaml`: documents `gateway.log_witness` keys.
 
 ---
 
 ## Open questions
 
-- **Cross-link UX:** Should clicking a tier-4 (qdrant) row inside a conversation card jump to the qdrant card (and vice versa)? Default proposal: yes, via the existing `?seq=` focus mechanism.
-- **Time window for tier-4:** ±5 s is a starting point; revisit after fixture analysis (some upstream calls may dilate >5 s under load).
-- **Merge state visibility:** The `merge` KV value should distinguish "matched a previous conversation" from "deduped (returned cached body, did not call upstream)" — covered by `conversation.merged` vs `conversation.dedup_hit`, but verify the operator-facing copy reads cleanly.
-- **Failed conversation id:** When `conversation.merge.failed` fires, the line carries `request_id` but the conversation id may not be known yet. Tier-2 join handles this once the next line carries `conversation_id` + `request_id`. Confirm there is always such a follow-up in practice.
-- **Locale:** English-only operator strings (matches qdrant + indexer + bifrost + gateway).
+1. **Dedup and `turn_index`:** **Locked:** increment on every new HTTP chat completion for the conversation, including dedup short-circuit (see [Phase 1](#phase-1--turn_index-and-dedup-locked)).
+2. **Cross-link:** Clicking an inferred Qdrant row jumps to Qdrant card via `?seq=` (default yes).
+3. **Tier 4 window:** Starting **±5 s** from legacy anchor; **10 s** default for `conversation.rag.span`.
+4. **Streaming:** Whether `conversation.response.witness` emits once or per finalization chunk; default **once** after stream completes with aggregate `chunk_count`.
+5. **BiFrost echo:** **Locked:** no synthetic **`bifrost.relay.echo_missing`** by default. Gateway relay lines remain canonical unless a future synthetic line carries additional operator-useful detail.
 
 ---
 
-## Checklist before marking done
+## References
 
-- [ ] Every gateway line touching a chat request carries `request_id` + `conversation_id` + `principal_id` (audit script clean).
-- [ ] All `conversation.*` lifecycle slugs emitted at the points specified in the taxonomy.
-- [ ] Conversation card shows the **State** pill, BiFrost / Qdrant / Fallback chips, KV row, counter row, and 5-step progress bar.
-- [ ] Tier-2 (`request_id`) and tier-4 (collection + time window) joins implemented; tier-5 (bifrost subprocess) implemented or documented as a known gap.
-- [ ] Fixture-backed derive test under `internal/server/embedui/logs/derive/` covers lifecycle → state mapping.
-- [ ] [`log-presentation-layer.md`](log-presentation-layer.md) §10 changelog updated.
+- Code: [`internal/server/embedui/logs.js`](../../internal/server/embedui/logs.js); derive [`conversationMetrics.js`](../../internal/server/embedui/logs/derive/conversationMetrics.js), [`conversationBifrost.js`](../../internal/server/embedui/logs/derive/conversationBifrost.js), [`gatewayCardModel.js`](../../internal/server/embedui/logs/derive/gatewayCardModel.js), [`qdrantCollection.js`](../../internal/server/embedui/logs/derive/qdrantCollection.js) (`qdrantCardModel`); ingest [`internal/servicelogs/bifrostline/`](../../internal/servicelogs/bifrostline/), [`internal/servicelogs/qdrantline/`](../../internal/servicelogs/qdrantline/); gateway [`internal/server/server.go`](../../internal/server/server.go), [`internal/chat/chat.go`](../../internal/chat/chat.go), [`internal/conversationmerge/service.go`](../../internal/conversationmerge/service.go), [`internal/rag/service.go`](../../internal/rag/service.go), [`internal/server/ingest.go`](../../internal/server/ingest.go), [`internal/server/ingest_session.go`](../../internal/server/ingest_session.go)
+- Plans: [`log-presentation-layer.md`](log-presentation-layer.md), [`log-qdrant.md`](log-qdrant.md), [`log-bifrost.md`](log-bifrost.md), [`log-gateway.md`](log-gateway.md), [`log-view-indexer.md`](log-view-indexer.md)
+- Tests: `internal/server/logs_components_test.go`, `internal/server/ui_logs_test.go`, derive tests under `internal/server/embedui/logs/derive/`
+
+### Checklist before marking the overall feature done
+
+- [x] Correlation audit clean; ingest triple complete when chat-originated.
+- [x] All **`conversation.*`** lifecycle and **`conversation.rag.span`** events emitted per Phase 1.
+- [x] Conversation card: State pill, BiFrost, Qdrant, Tools, Fallback; key-value and counter rows; progress bar; tier labels including **anchored_inferred**.
+- [x] Tiers 2 (beyond BiFrost relay), 3, 4, 4b, and 5 implemented or documented with upstream tracking where impossible.
+- [x] **`turn_index`** on all chat-scoped lines; UI grouping by turn.
+- [x] **`conversation.tool.*`** wired for real tool paths; no secrets at Info.
+- [x] **`conversation.request.witness`** / **`conversation.response.witness`** / gated **`conversation.payload.sample`** per Phase 8.
+- [x] [`log-presentation-layer.md`](log-presentation-layer.md#10-changelog-implementation) changelog updated.

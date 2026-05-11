@@ -6,10 +6,12 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/lynn/claudia-gateway/internal/config"
 	"github.com/lynn/claudia-gateway/internal/gatewaymetrics"
+	"github.com/lynn/claudia-gateway/internal/operatorstore"
 	"github.com/lynn/claudia-gateway/internal/providerlimits"
 	"github.com/lynn/claudia-gateway/internal/rag"
 	"github.com/lynn/claudia-gateway/internal/rag/embed"
@@ -29,6 +31,7 @@ type Runtime struct {
 	tokens           *tokens.Store
 	routing          *routing.Policy
 	metrics          *gatewaymetrics.Store // optional; nil when disabled or init failed
+	operator         *operatorstore.Store  // optional; nil when init failed
 	upstreamOverride string                // non-empty: after each yaml load, patch upstream base + health (supervised BiFrost)
 
 	toolRouterMu      sync.Mutex
@@ -42,6 +45,16 @@ type Runtime struct {
 
 	// ingestSessions buffers v0.4 chunked uploads until complete.
 	ingestSessions *ingestSessionStore
+
+	// chatTurns counts user turns per conversation_id for structured logs (Phase 3 / 6).
+	chatTurnMu sync.Mutex
+	chatTurns  map[string]int
+
+	// catalogSnapshot is the most recent BiFrost `/v1/models` view, refreshed by the periodic
+	// poller in cmd/claudia/serve.go. nil until the first refresh completes. See
+	// availablemodels.go for the snapshot type and consumers (provider-health classifier and
+	// future routing/embedding/router-model auditors).
+	catalogSnapshot atomic.Pointer[CatalogSnapshot]
 }
 
 func NewRuntime(gatewayPath string, log *slog.Logger) (*Runtime, error) {
@@ -75,17 +88,25 @@ func NewRuntimeWithUpstreamOverride(gatewayPath string, log *slog.Logger, upstre
 	if res.MetricsEnabled {
 		if s, err := gatewaymetrics.Open(res.MetricsSQLitePath, res.MetricsMigrationsDir, log); err != nil {
 			if log != nil {
-				log.Error("gateway metrics init failed; continuing without SQLite metrics", "err", err,
+				log.Warn("gateway metrics init failed; continuing without SQLite metrics", "msg", "gateway.metrics.init_failed", "err", err,
 					"sqlite", res.MetricsSQLitePath, "migrations_dir", res.MetricsMigrationsDir)
 			}
 		} else {
 			rt.metrics = s
 		}
 	}
+	if s, err := operatorstore.Open(res.OperatorSQLitePath, res.OperatorMigrationsDir, log); err != nil {
+		if log != nil {
+			log.Warn("operator sqlite init failed; workspace CRUD disabled", "msg", "gateway.operator.init_failed", "err", err,
+				"sqlite", res.OperatorSQLitePath, "migrations_dir", res.OperatorMigrationsDir)
+		}
+	} else {
+		rt.operator = s
+	}
 	if res.RAG.Enabled {
 		if s, err := buildRAGService(res, log); err != nil {
 			if log != nil {
-				log.Error("rag init failed; continuing without RAG", "err", err)
+				log.Warn("rag init failed; continuing without RAG", "msg", "gateway.rag.init_failed", "err", err)
 			}
 		} else {
 			rt.rag = s
@@ -118,7 +139,7 @@ func (rt *Runtime) Sync() {
 	gst, err := os.Stat(rt.gatewayPath)
 	if err != nil {
 		if rt.log != nil {
-			rt.log.Error("gateway config missing", "path", rt.gatewayPath, "err", err)
+			rt.log.Error("gateway config missing", "msg", "gateway.config.missing", "path", rt.gatewayPath, "err", err)
 		}
 		return
 	}
@@ -139,7 +160,7 @@ func (rt *Runtime) Sync() {
 	next, err := config.LoadGatewayYAML(rt.gatewayPath, rt.log)
 	if err != nil {
 		if rt.log != nil {
-			rt.log.Error("failed to reload gateway.yaml", "path", rt.gatewayPath, "err", err)
+			rt.log.Error("failed to reload gateway.yaml", "msg", "gateway.config.reload_failed", "path", rt.gatewayPath, "err", err)
 		}
 		return
 	}
@@ -159,7 +180,7 @@ func (rt *Runtime) Sync() {
 		rt.routing = routing.NewPolicy(next.RoutingPolicyPath, rt.log)
 	}
 	if rt.log != nil {
-		rt.log.Info("reloaded gateway.yaml", "path", rt.gatewayPath)
+		rt.log.Info("reloaded gateway.yaml", "msg", "gateway.config.reloaded", "path", rt.gatewayPath)
 	}
 }
 
@@ -167,6 +188,20 @@ func (rt *Runtime) Snapshot() (*config.Resolved, *tokens.Store, *routing.Policy)
 	rt.mu.RLock()
 	defer rt.mu.RUnlock()
 	return rt.resolved, rt.tokens, rt.routing
+}
+
+// NextChatTurnIndex returns the next 1-based turn index for this conversation_id (in-process only).
+func (rt *Runtime) NextChatTurnIndex(conversationID string) int {
+	if rt == nil || conversationID == "" {
+		return 1
+	}
+	rt.chatTurnMu.Lock()
+	defer rt.chatTurnMu.Unlock()
+	if rt.chatTurns == nil {
+		rt.chatTurns = make(map[string]int)
+	}
+	rt.chatTurns[conversationID]++
+	return rt.chatTurns[conversationID]
 }
 
 // Metrics returns the SQLite metrics recorder, or nil when metrics are disabled or failed to open.
@@ -183,9 +218,13 @@ func (rt *Runtime) MetricsStore() *gatewaymetrics.Store {
 	return rt.metrics
 }
 
-// LimitsGuard returns an admission guard combining the parsed limits spec with live metrics.
-// Returns nil when no limits spec is configured or the metrics store is unavailable; callers
-// treat nil as "no enforcement".
+// OperatorStore returns the operator SQLite store for workspace persistence, or nil.
+func (rt *Runtime) OperatorStore() *operatorstore.Store {
+	rt.mu.RLock()
+	defer rt.mu.RUnlock()
+	return rt.operator
+}
+
 // NoteToolRouterAttempt records the last tool-router upstream call (for admin visibility).
 func (rt *Runtime) NoteToolRouterAttempt(model string, err error) {
 	rt.toolRouterMu.Lock()
@@ -208,6 +247,9 @@ func (rt *Runtime) ToolRouterLast() (model string, at time.Time, errMsg string) 
 	return rt.toolRouterModel, rt.toolRouterAt, rt.toolRouterLastErr
 }
 
+// LimitsGuard returns an admission guard combining the parsed limits spec with live metrics.
+// Returns nil when no limits spec is configured or the metrics store is unavailable; callers
+// treat nil as "no enforcement".
 func (rt *Runtime) LimitsGuard() *providerlimits.Guard {
 	rt.mu.RLock()
 	defer rt.mu.RUnlock()
@@ -242,6 +284,16 @@ func (rt *Runtime) CloseMetrics() {
 	if rt.metrics != nil {
 		_ = rt.metrics.Close()
 		rt.metrics = nil
+	}
+}
+
+// CloseOperator closes the operator SQLite store if it was opened (tests and graceful shutdown).
+func (rt *Runtime) CloseOperator() {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	if rt.operator != nil {
+		_ = rt.operator.Close()
+		rt.operator = nil
 	}
 }
 
@@ -281,6 +333,19 @@ func buildRAGService(res *config.Resolved, log *slog.Logger) (*rag.Service, erro
 		EmbeddingDim:   res.RAG.EmbeddingDim,
 		Log:            log,
 	})
+}
+
+// CatalogSnapshot returns the most recent BiFrost `/v1/models` snapshot, or nil when no poll
+// has succeeded yet. The returned pointer aliases the runtime's cached value — callers MUST
+// treat it as read-only.
+func (rt *Runtime) CatalogSnapshot() *CatalogSnapshot {
+	return rt.catalogSnapshot.Load()
+}
+
+// SetCatalogSnapshot publishes a new snapshot atomically. Used by [RefreshAvailableModels];
+// tests may call it directly to seed a known-good state.
+func (rt *Runtime) SetCatalogSnapshot(snap *CatalogSnapshot) {
+	rt.catalogSnapshot.Store(snap)
 }
 
 func (rt *Runtime) UpstreamAPIKey() string {

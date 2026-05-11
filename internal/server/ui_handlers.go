@@ -31,7 +31,7 @@ func sanitizeLoginNext(next string) string {
 	return next
 }
 
-//go:embed embedui/login.html embedui/panel.html embedui/logs.html embedui/logs.css embedui/logs.js embedui/logs_bootstrap.js embedui/logs/* embedui/logs/*/* embedui/metrics.html embedui/shell.html embedui/setup.html embedui/indexer.html embedui/continue.html
+//go:embed embedui/login.html embedui/panel.html embedui/logs.html embedui/logs.css embedui/theme-tokens.css embedui/logs.js embedui/logs_bootstrap.js embedui/logs/* embedui/logs/*/* embedui/metrics.html embedui/shell.html embedui/reload.svg embedui/setup.html
 var adminEmbedUI embed.FS
 
 func bifrostAdminClient(rt *Runtime) *bifrostadmin.Client {
@@ -170,10 +170,11 @@ func (a *adminUI) setUISessionCookie(w http.ResponseWriter, token string) (ok bo
 	if tokStore == nil || tokStore.Validate(token) == nil {
 		return false, false
 	}
-	sid, err := a.opts.Sessions.issue(token)
+	sid, err := a.opts.Sessions.issue()
 	if err != nil {
 		if a.log != nil {
-			a.log.Error("ui session issue", "err", err)
+			// In-memory store: failures here are not persistence I/O; keep default stream quiet (taxonomy P3).
+			a.log.Debug("ui session issue", "msg", "ui.session.error", "err", err)
 		}
 		return false, true
 	}
@@ -258,9 +259,8 @@ func (a *adminUI) handleState(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 12*time.Second)
 	defer cancel()
 	client := bifrostAdminClient(a.rt)
-	providers := []string{"groq", "gemini", "ollama"}
-	provOut := make(map[string]any, len(providers))
-	for _, name := range providers {
+	provOut := make(map[string]any, len(bifrostUIProviderNames))
+	for _, name := range bifrostUIProviderNames {
 		b, st, err := client.GetProvider(ctx, name)
 		entry := map[string]any{"provider": name}
 		if err != nil {
@@ -316,7 +316,7 @@ func (a *adminUI) handleState(w http.ResponseWriter, r *http.Request) {
 		"semver":                           res.Semver,
 		"virtual_model_id":                 res.VirtualModelID,
 		"public_base_url":                  publicGatewayBase(r),
-		"token_hint":                       "Paste the same gateway token you used to sign in (stored only in Continue on your machine).",
+		"token_hint":                       "Paste the same gateway token you used to sign in.",
 		"filter_free_tier_models":          res.FilterFreeTierModels,
 		"fallback_chain":                   res.FallbackChain,
 		"routing_policy_basename":          routeBase,
@@ -327,13 +327,10 @@ func (a *adminUI) handleState(w http.ResponseWriter, r *http.Request) {
 		"tool_router_last_error":           trErr,
 		"tool_router_last_at":              formatRFC3339OrEmpty(trAt),
 	}
-	if c, err := r.Cookie(a.cookieName()); err == nil && c.Value != "" {
-		if tok := a.opts.Sessions.GatewayToken(c.Value); tok != "" {
-			gwOut["continue_gateway_token"] = tok
-		}
-	}
 	gwOut["indexer_supervised_config_path"] = res.IndexerSupervisedConfigPath
 	gwOut["indexer_supervised_enabled"] = res.IndexerSupervisedEnabled
+	gwOut["operator_sqlite_path"] = res.OperatorSQLitePath
+	gwOut["operator_store_open"] = a.rt.OperatorStore() != nil
 	out := map[string]any{
 		"gateway":   gwOut,
 		"providers": provOut,
@@ -364,20 +361,24 @@ func registerAdminUI(mux *http.ServeMux, rt *Runtime, log *slog.Logger, ui *UIOp
 	mux.HandleFunc("GET /ui/panel", a.requireAuthPage(a.serveEmbed("embedui/panel.html")))
 	mux.HandleFunc("GET /ui/metrics", a.requireAuthPage(a.serveEmbed("embedui/metrics.html")))
 	if a.opts.LogStore != nil {
+		mux.HandleFunc("GET /ui/assets/reload.svg", a.requireAuthPage(a.serveEmbedAsset("embedui/reload.svg", "image/svg+xml; charset=utf-8")))
 		mux.HandleFunc("GET /ui/assets/logs.css", a.requireAuthPage(a.serveEmbedAsset("embedui/logs.css", "text/css; charset=utf-8")))
+		mux.HandleFunc("GET /ui/assets/theme-tokens.css", a.requireAuthPage(a.serveEmbedAsset("embedui/theme-tokens.css", "text/css; charset=utf-8")))
 		mux.HandleFunc("GET /ui/assets/logs.js", a.requireAuthPage(a.serveEmbedAsset("embedui/logs_bootstrap.js", "application/javascript; charset=utf-8")))
 		mux.HandleFunc("GET /ui/assets/logs/main.js", a.requireAuthPage(a.serveEmbedAsset("embedui/logs.js", "application/javascript; charset=utf-8")))
 		mux.HandleFunc("GET /ui/assets/logs/", a.requireAuthPage(a.serveLogsModuleAsset()))
 		mux.HandleFunc("GET /ui/logs", a.requireAuthPage(a.serveEmbed("embedui/logs.html")))
 		mux.HandleFunc("GET /ui/desktop", a.requireAuthPage(a.serveEmbed("embedui/shell.html")))
-		mux.HandleFunc("GET /ui/indexer", a.requireAuthPage(a.serveEmbed("embedui/indexer.html")))
-		mux.HandleFunc("GET /ui/continue", a.requireAuthPage(a.serveEmbed("embedui/continue.html")))
+		mux.HandleFunc("GET /ui/indexer", a.requireAuthPage(func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, "/ui/logs", http.StatusFound)
+		}))
 	}
 
 	mux.HandleFunc("POST /api/ui/login", a.handleLoginPOST)
 	mux.HandleFunc("POST /api/ui/logout", a.handleLogoutPOST)
 	mux.HandleFunc("GET /api/ui/state", a.requireAuthJSON(a.handleState))
 	mux.HandleFunc("GET /api/ui/metrics", a.requireAuthJSON(a.handleMetricsGET))
+	mux.HandleFunc("GET /api/ui/bifrost/providers", a.requireAuthJSON(a.handleBifrostProviderHealth))
 
 	for _, p := range []string{"groq", "gemini"} {
 		prov := p
@@ -397,12 +398,13 @@ func registerAdminUI(mux *http.ServeMux, rt *Runtime, log *slog.Logger, ui *UIOp
 
 	mux.HandleFunc("GET /api/ui/indexer/config", a.requireAuthJSON(a.handleIndexerConfigGET))
 	mux.HandleFunc("PUT /api/ui/indexer/config", a.requireAuthJSON(a.handleIndexerConfigPUT))
-	mux.HandleFunc("POST /api/ui/indexer/append-root", a.requireAuthJSON(a.handleIndexerAppendRootPOST))
-	mux.HandleFunc("POST /api/ui/indexer/remove-root", a.requireAuthJSON(a.handleIndexerRemoveRootPOST))
-	mux.HandleFunc("PUT /api/ui/indexer/root", a.requireAuthJSON(a.handleIndexerUpdateRootPUT))
-
-	mux.HandleFunc("POST /api/ui/continue/file-status", a.requireAuthJSON(a.handleContinueFileStatusPOST))
-	mux.HandleFunc("POST /api/ui/continue/write-config", a.requireAuthJSON(a.handleContinueWritePOST))
+	mux.HandleFunc("GET /api/ui/indexer/workspaces", a.requireAuthJSON(a.handleIndexerWorkspacesGET))
+	mux.HandleFunc("POST /api/ui/indexer/workspaces", a.requireAuthJSON(a.handleIndexerWorkspacesPOST))
+	mux.HandleFunc("PUT /api/ui/indexer/workspaces/{id}", a.requireAuthJSON(a.handleIndexerWorkspacePUT))
+	mux.HandleFunc("DELETE /api/ui/indexer/workspaces/{id}", a.requireAuthJSON(a.handleIndexerWorkspaceDELETE))
+	mux.HandleFunc("POST /api/ui/indexer/workspaces/{id}/paths", a.requireAuthJSON(a.handleIndexerWorkspacePathPOST))
+	mux.HandleFunc("PUT /api/ui/indexer/workspace-paths/{pathid}", a.requireAuthJSON(a.handleIndexerWorkspacePathPUT))
+	mux.HandleFunc("DELETE /api/ui/indexer/workspace-paths/{pathid}", a.requireAuthJSON(a.handleIndexerWorkspacePathDELETE))
 
 	registerUILogs(mux, a)
 }

@@ -94,7 +94,7 @@ func TestWaitHealthy_httptest(t *testing.T) {
 	defer srv.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	if err := WaitHealthy(ctx, srv.URL+"/health", time.Second, nil); err != nil {
+	if err := WaitHealthy(ctx, srv.URL+"/health", time.Second, nil, "bifrost"); err != nil {
 		t.Fatal(err)
 	}
 }
