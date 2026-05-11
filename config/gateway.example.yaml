@@ -68,6 +68,23 @@ routing:
     enabled: false
     confidence_threshold: 0.5
 
+# Planned v0.4 ensemble knobs (safe to keep now; ignored by current binaries).
+ensemble:
+  enabled: false
+  mode: "hosted_first"      # hosted_first | local_first
+  drafts: 3                 # default N (target v0.4 behavior)
+  max_drafts: 5             # hard cap for orchestration fan-out
+  # Manual trigger phrase in user text; gateway should trim before upstream.
+  manual_trigger: "//deep"
+  # Optional automatic trigger heuristics (planned):
+  auto_trigger:
+    enabled: false
+    min_user_chars: 500
+  # Planned synthesis behavior after draft phase:
+  synthesis:
+    enabled: true
+    model: ""               # empty -> use routed initial model
+
 # Gateway metrics (SQLite under ../data/gateway/ relative to this file; see docs/plans/version-v0.1.1.md §3.6).
 metrics:
   enabled: true
