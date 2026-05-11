@@ -53,14 +53,10 @@ routing:
     - "gemini/gemini-embedding-2-preview"
     - "gemini/gemini-robotics-er-1.5-preview"
     - "groq/groq/compound-mini"
-    - "ollama/llama3.2:3b"
-    - "ollama/qwen3.5:9b"
   # Ordered list of upstream models used for the tool-router transformer (try in order; see docs/plans/version-v0.1.1.md).
   # Leave empty to skip router calls. When non-empty, POST /v1/chat/completions may call the first working model
   # to score tools before the main upstream completion.
   router_models: []
-    # - "ollama/llama3.2:3b"
-    # - "ollama/qwen3.5:9b"
     # - "groq/groq/compound-mini"
     # - "groq/groq/compound"
     # - "gemini/gemini-3.1-flash-lite-preview"
@@ -115,7 +111,7 @@ rag:
     # base_url defaults to upstream.base_url when empty.
     # base_url: ""
     path: "/v1/embeddings"
-    model: "ollama/nomic-embed-text:latest"
+    model: "gemini/gemini-embedding-001"
     dim: 768
   chunking:
     size: 512
