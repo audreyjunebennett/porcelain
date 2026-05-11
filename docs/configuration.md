@@ -119,6 +119,27 @@ Operator-maintained allowlist of BiFrost `provider/model` ids (and optional `pat
 
 BiFrost bootstrap file. Provider keys use `env.VAR` for secrets.
 
+### Hosted-first with local backups (vLLM + llama.cpp)
+
+To keep Chimera as one interface while adding local resilience, use this pattern:
+
+1. Keep hosted providers (for example Groq/Gemini) in BiFrost as primary.
+2. Add one OpenAI-compatible local backend for vLLM and one for llama.cpp (either via separate provider entries or separate keys/routes, depending on your BiFrost setup).
+3. Put local model ids at the end of `routing.fallback_chain` in `gateway.yaml`.
+
+Example fallback ordering (conceptual):
+
+```yaml
+routing:
+  fallback_chain:
+    - "groq/llama-3.3-70b-versatile"
+    - "gemini/gemini-2.5-flash"
+    - "openai/local-vllm-qwen2.5-14b-instruct"
+    - "openai/local-llamacpp-phi-4-mini-instruct"
+```
+
+This gives you hosted-first quality/availability, then local continuity when hosted providers fail or are unavailable.
+
 **Per-key `models`:** In BiFrost, an **empty** or **omitted** `models` list means the key may be used for **any** model for that provider (minus `blacklisted_models` if set). **`"models": ["*"]` is not a wildcard** — it is treated as the literal model name `*`, so chat requests for real model ids will fail with *no keys found that support model*. Use no `models` field (or `[]`) when you want full catalog access without enumerating models.
 
 ## Logging semantics
