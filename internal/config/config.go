@@ -134,11 +134,11 @@ type gatewayDoc struct {
 
 	ConversationMerge conversationMergeDoc `yaml:"conversation_merge"`
 	Ensemble          struct {
-		Enabled *bool   `yaml:"enabled"`
-		Mode    string  `yaml:"mode"`
-		Drafts  *int    `yaml:"drafts"`
-		Max     *int    `yaml:"max_drafts"`
-		Manual  string  `yaml:"manual_trigger"`
+		Enabled *bool  `yaml:"enabled"`
+		Mode    string `yaml:"mode"`
+		Drafts  *int   `yaml:"drafts"`
+		Max     *int   `yaml:"max_drafts"`
+		Manual  string `yaml:"manual_trigger"`
 		Auto    struct {
 			Enabled *bool `yaml:"enabled"`
 			MinUser *int  `yaml:"min_user_chars"`
