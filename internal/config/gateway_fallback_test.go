@@ -129,6 +129,26 @@ routing:
 	}
 }
 
+func TestPatchGatewayYAMLBytesWithEnsembleEnabled(t *testing.T) {
+	raw := []byte(`gateway:
+  semver: "0.1.0"
+routing:
+  fallback_chain:
+    - "x"
+`)
+	out, err := PatchGatewayYAMLBytesWithEnsembleEnabled(raw, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := LoadGatewayYAML(writeTempGateway(t, out), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.EnsembleEnabled {
+		t.Fatal("expected ensemble enabled")
+	}
+}
+
 func TestLoadGatewayYAML_filterFreeTierDefaultTrueWhenOmitted(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "gateway.yaml")
@@ -199,5 +219,37 @@ routing:
 	}
 	if len(res.FallbackChain) != 2 || res.FallbackChain[0] != "groq/a" {
 		t.Fatalf("%#v", res.FallbackChain)
+	}
+}
+
+func TestWriteGatewayEnsembleEnabled_roundTrip(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "gateway.yaml")
+	raw := `gateway:
+  semver: "0.1.0"
+  listen_port: 3000
+  listen_host: "127.0.0.1"
+upstream:
+  base_url: "http://127.0.0.1:8080"
+  api_key_env: "CLAUDIA_UPSTREAM_API_KEY"
+paths:
+  tokens: "./tokens.yaml"
+  routing_policy: "./routing-policy.yaml"
+routing:
+  fallback_chain:
+    - "old"
+`
+	if err := os.WriteFile(p, []byte(raw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteGatewayEnsembleEnabled(p, true); err != nil {
+		t.Fatal(err)
+	}
+	res, err := LoadGatewayYAML(p, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.EnsembleEnabled {
+		t.Fatal("expected ensemble enabled")
 	}
 }

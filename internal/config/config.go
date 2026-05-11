@@ -65,6 +65,18 @@ type Resolved struct {
 	// ConversationMerge joins chat requests into one logical conversation_id per tenant
 	// and RAG scope using embeddings + similarity (requires metrics SQLite + embeddings API).
 	ConversationMerge ConversationMerge
+
+	// Ensemble (planned v0.4): safe feature flag + knobs. Current binaries may
+	// expose these in UI/state even before orchestration is fully implemented.
+	EnsembleEnabled                 bool
+	EnsembleMode                    string
+	EnsembleDrafts                  int
+	EnsembleMaxDrafts               int
+	EnsembleManualTrigger           string
+	EnsembleAutoTriggerEnabled      bool
+	EnsembleAutoTriggerMinUserChars int
+	EnsembleSynthesisEnabled        bool
+	EnsembleSynthesisModel          string
 }
 
 type upstreamBlock struct {
@@ -121,6 +133,21 @@ type gatewayDoc struct {
 	} `yaml:"indexer"`
 
 	ConversationMerge conversationMergeDoc `yaml:"conversation_merge"`
+	Ensemble          struct {
+		Enabled *bool   `yaml:"enabled"`
+		Mode    string  `yaml:"mode"`
+		Drafts  *int    `yaml:"drafts"`
+		Max     *int    `yaml:"max_drafts"`
+		Manual  string  `yaml:"manual_trigger"`
+		Auto    struct {
+			Enabled *bool `yaml:"enabled"`
+			MinUser *int  `yaml:"min_user_chars"`
+		} `yaml:"auto_trigger"`
+		Synthesis struct {
+			Enabled *bool  `yaml:"enabled"`
+			Model   string `yaml:"model"`
+		} `yaml:"synthesis"`
+	} `yaml:"ensemble"`
 }
 
 const (
@@ -132,6 +159,9 @@ const (
 	defaultAPIKeyEnv       = "CLAUDIA_UPSTREAM_API_KEY"
 	defaultHealthTimeoutMs = 5000
 	defaultChatTimeoutMs   = 300_000
+	defaultEnsembleMode    = "hosted_first"
+	defaultEnsembleDrafts  = 3
+	defaultEnsembleMax     = 5
 )
 
 // LoadGatewayYAML reads and parses gateway.yaml at filePath (absolute or cwd-relative).
@@ -337,6 +367,34 @@ func LoadGatewayYAML(filePath string, log *slog.Logger) (*Resolved, error) {
 		idxCfgPath = idxCfgRel
 	}
 
+	ensembleEnabled := doc.Ensemble.Enabled != nil && *doc.Ensemble.Enabled
+	ensembleMode := strings.TrimSpace(doc.Ensemble.Mode)
+	if ensembleMode == "" {
+		ensembleMode = defaultEnsembleMode
+	}
+	ensembleDrafts := defaultEnsembleDrafts
+	if doc.Ensemble.Drafts != nil && *doc.Ensemble.Drafts > 0 {
+		ensembleDrafts = *doc.Ensemble.Drafts
+	}
+	ensembleMax := defaultEnsembleMax
+	if doc.Ensemble.Max != nil && *doc.Ensemble.Max > 0 {
+		ensembleMax = *doc.Ensemble.Max
+	}
+	ensembleManual := strings.TrimSpace(doc.Ensemble.Manual)
+	if ensembleManual == "" {
+		ensembleManual = "//deep"
+	}
+	ensembleAutoEnabled := doc.Ensemble.Auto.Enabled != nil && *doc.Ensemble.Auto.Enabled
+	ensembleAutoMin := 500
+	if doc.Ensemble.Auto.MinUser != nil && *doc.Ensemble.Auto.MinUser > 0 {
+		ensembleAutoMin = *doc.Ensemble.Auto.MinUser
+	}
+	ensembleSynthEnabled := true
+	if doc.Ensemble.Synthesis.Enabled != nil {
+		ensembleSynthEnabled = *doc.Ensemble.Synthesis.Enabled
+	}
+	ensembleSynthModel := strings.TrimSpace(doc.Ensemble.Synthesis.Model)
+
 	if log != nil {
 		log.Debug("resolved gateway config paths", "filePath", filePath, "tokensPath", tokensPath, "routingPolicyPath", routingPath)
 	}
@@ -375,6 +433,15 @@ func LoadGatewayYAML(filePath string, log *slog.Logger) (*Resolved, error) {
 		IndexerSupervisedConfigPath:           idxCfgPath,
 		IndexerSupervisedStartWhenRAGDisabled: idxStartWhenRAGOff,
 		IndexerSupervisedLogJSON:              idxLogJSON,
+		EnsembleEnabled:                       ensembleEnabled,
+		EnsembleMode:                          ensembleMode,
+		EnsembleDrafts:                        ensembleDrafts,
+		EnsembleMaxDrafts:                     ensembleMax,
+		EnsembleManualTrigger:                 ensembleManual,
+		EnsembleAutoTriggerEnabled:            ensembleAutoEnabled,
+		EnsembleAutoTriggerMinUserChars:       ensembleAutoMin,
+		EnsembleSynthesisEnabled:              ensembleSynthEnabled,
+		EnsembleSynthesisModel:                ensembleSynthModel,
 	}, nil
 }
 

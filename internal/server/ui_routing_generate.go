@@ -463,6 +463,38 @@ func (a *adminUI) handleRoutingFilterFreeTierPOST(w http.ResponseWriter, r *http
 	})
 }
 
+func (a *adminUI) handleEnsembleEnabledPOST(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		Enabled bool `json:"enabled"`
+	}
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<14))
+	if err := dec.Decode(&body); err != nil {
+		writeRoutingGenJSONError(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+	a.rt.Sync()
+	res, _, _ := a.rt.Snapshot()
+	if res == nil {
+		writeRoutingGenJSONError(w, http.StatusInternalServerError, "gateway not configured")
+		return
+	}
+	if err := config.WriteGatewayEnsembleEnabled(res.GatewayYAMLPath, body.Enabled); err != nil {
+		writeRoutingGenJSONError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	a.rt.Sync()
+	res2, _, _ := a.rt.Snapshot()
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":               true,
+		"ensemble_enabled": res2.EnsembleEnabled,
+	})
+}
+
 func writeRoutingGenJSONError(w http.ResponseWriter, status int, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

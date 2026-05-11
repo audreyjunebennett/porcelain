@@ -167,6 +167,18 @@ When to revisit peer/fleet later:
 
 For now, treating peer/fleet as deferred is the intended low-risk path.
 
+### Ensemble on/off toggle (easy switch)
+
+The gateway now supports a simple runtime config switch:
+
+- `ensemble.enabled: true|false` in `gateway.yaml`
+
+Admin UI API (authenticated session):
+
+- `POST /api/ui/ensemble/enabled` with JSON body `{"enabled": true}` or `{"enabled": false}`
+
+This endpoint updates `gateway.yaml`, validates config reload, and returns the current `ensemble_enabled` value.
+
 **Per-key `models`:** In BiFrost, an **empty** or **omitted** `models` list means the key may be used for **any** model for that provider (minus `blacklisted_models` if set). **`"models": ["*"]` is not a wildcard** — it is treated as the literal model name `*`, so chat requests for real model ids will fail with *no keys found that support model*. Use no `models` field (or `[]`) when you want full catalog access without enumerating models.
 
 ## Logging semantics

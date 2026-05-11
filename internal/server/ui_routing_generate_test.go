@@ -115,4 +115,24 @@ func TestUIRoutingGenerate_writesFiles(t *testing.T) {
 	if !strings.Contains(string(rp), "long-user-turn") {
 		t.Fatalf("routing policy missing generated rule")
 	}
+
+	ensRes, err := client.Post(front.URL+"/api/ui/ensemble/enabled", "application/json", strings.NewReader(`{"enabled":true}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ensRes.Body.Close()
+	if ensRes.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(ensRes.Body)
+		t.Fatalf("ensemble toggle %d: %s", ensRes.StatusCode, b)
+	}
+	var ensOut struct {
+		OK      bool `json:"ok"`
+		Enabled bool `json:"ensemble_enabled"`
+	}
+	if err := json.NewDecoder(ensRes.Body).Decode(&ensOut); err != nil {
+		t.Fatal(err)
+	}
+	if !ensOut.OK || !ensOut.Enabled {
+		t.Fatalf("bad ensemble toggle response: %+v", ensOut)
+	}
 }

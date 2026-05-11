@@ -326,6 +326,15 @@ func (a *adminUI) handleState(w http.ResponseWriter, r *http.Request) {
 		"tool_router_last_model":           rm,
 		"tool_router_last_error":           trErr,
 		"tool_router_last_at":              formatRFC3339OrEmpty(trAt),
+		"ensemble_enabled":                 res.EnsembleEnabled,
+		"ensemble_mode":                    res.EnsembleMode,
+		"ensemble_drafts":                  res.EnsembleDrafts,
+		"ensemble_max_drafts":              res.EnsembleMaxDrafts,
+		"ensemble_manual_trigger":          res.EnsembleManualTrigger,
+		"ensemble_auto_trigger_enabled":    res.EnsembleAutoTriggerEnabled,
+		"ensemble_auto_trigger_min_chars":  res.EnsembleAutoTriggerMinUserChars,
+		"ensemble_synthesis_enabled":       res.EnsembleSynthesisEnabled,
+		"ensemble_synthesis_model":         res.EnsembleSynthesisModel,
 	}
 	if c, err := r.Cookie(a.cookieName()); err == nil && c.Value != "" {
 		if tok := a.opts.Sessions.GatewayToken(c.Value); tok != "" {
@@ -394,6 +403,7 @@ func registerAdminUI(mux *http.ServeMux, rt *Runtime, log *slog.Logger, ui *UIOp
 	mux.HandleFunc("POST /api/ui/routing/evaluate", a.requireAuthJSON(a.handleRoutingEvaluatePOST))
 	mux.HandleFunc("POST /api/ui/routing/filter_free_tier_models", a.requireAuthJSON(a.handleRoutingFilterFreeTierPOST))
 	mux.HandleFunc("POST /api/ui/routing/router_tooling", a.requireAuthJSON(a.handleRoutingRouterToolingPOST))
+	mux.HandleFunc("POST /api/ui/ensemble/enabled", a.requireAuthJSON(a.handleEnsembleEnabledPOST))
 
 	mux.HandleFunc("GET /api/ui/indexer/config", a.requireAuthJSON(a.handleIndexerConfigGET))
 	mux.HandleFunc("PUT /api/ui/indexer/config", a.requireAuthJSON(a.handleIndexerConfigPUT))

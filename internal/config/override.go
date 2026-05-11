@@ -19,6 +19,15 @@ func CloneResolved(r *Resolved) *Resolved {
 	n.FilterFreeTierModels = r.FilterFreeTierModels
 	n.ProviderFreeTierPath = r.ProviderFreeTierPath
 	n.ProviderFreeTierSpec = r.ProviderFreeTierSpec
+	n.EnsembleEnabled = r.EnsembleEnabled
+	n.EnsembleMode = r.EnsembleMode
+	n.EnsembleDrafts = r.EnsembleDrafts
+	n.EnsembleMaxDrafts = r.EnsembleMaxDrafts
+	n.EnsembleManualTrigger = r.EnsembleManualTrigger
+	n.EnsembleAutoTriggerEnabled = r.EnsembleAutoTriggerEnabled
+	n.EnsembleAutoTriggerMinUserChars = r.EnsembleAutoTriggerMinUserChars
+	n.EnsembleSynthesisEnabled = r.EnsembleSynthesisEnabled
+	n.EnsembleSynthesisModel = r.EnsembleSynthesisModel
 	return &n
 }
 

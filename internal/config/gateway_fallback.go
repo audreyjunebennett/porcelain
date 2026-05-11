@@ -38,6 +38,32 @@ func patchGatewayYAMLApply(raw []byte, fn func(*yaml.Node)) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+func patchGatewayYAMLApplyRoot(raw []byte, fn func(*yaml.Node)) ([]byte, error) {
+	var root yaml.Node
+	if err := yaml.Unmarshal(raw, &root); err != nil {
+		return nil, fmt.Errorf("parse gateway yaml: %w", err)
+	}
+	if root.Kind != yaml.DocumentNode || len(root.Content) == 0 {
+		return nil, fmt.Errorf("gateway yaml: expected document root")
+	}
+	docMap := root.Content[0]
+	if docMap.Kind != yaml.MappingNode {
+		return nil, fmt.Errorf("gateway yaml: expected mapping at document root")
+	}
+	fn(docMap)
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+	if err := enc.Encode(&root); err != nil {
+		_ = enc.Close()
+		return nil, fmt.Errorf("encode gateway yaml: %w", err)
+	}
+	if err := enc.Close(); err != nil {
+		return nil, fmt.Errorf("encode gateway yaml: %w", err)
+	}
+	return buf.Bytes(), nil
+}
+
 // PatchGatewayYAMLBytesWithFallbackChain returns a copy of raw gateway YAML with routing.fallback_chain replaced.
 func PatchGatewayYAMLBytesWithFallbackChain(raw []byte, chain []string) ([]byte, error) {
 	return patchGatewayYAMLApply(raw, func(rtNode *yaml.Node) {
@@ -66,6 +92,14 @@ func PatchGatewayYAMLBytesWithRouterTooling(raw []byte, routerModels []string, t
 		tr := mappingGetOrCreateChildMapping(rtNode, "tool_router")
 		setOrReplaceMappingBool(tr, "enabled", toolRouterEnabled)
 		setOrReplaceMappingFloat(tr, "confidence_threshold", confidenceThreshold)
+	})
+}
+
+// PatchGatewayYAMLBytesWithEnsembleEnabled sets top-level ensemble.enabled.
+func PatchGatewayYAMLBytesWithEnsembleEnabled(raw []byte, enabled bool) ([]byte, error) {
+	return patchGatewayYAMLApplyRoot(raw, func(docMap *yaml.Node) {
+		en := mappingGetOrCreateChildMapping(docMap, "ensemble")
+		setOrReplaceMappingBool(en, "enabled", enabled)
 	})
 }
 
@@ -133,6 +167,37 @@ func WriteGatewayRouterTooling(gatewayPath string, routerModels []string, toolRo
 	}
 	dir := filepath.Dir(gatewayPath)
 	tmp, err := os.CreateTemp(dir, "claudia-gw-router-*.yaml")
+	if err != nil {
+		return fmt.Errorf("temp file: %w", err)
+	}
+	tmpPath := tmp.Name()
+	_ = tmp.Close()
+	defer func() { _ = os.Remove(tmpPath) }()
+	if err := os.WriteFile(tmpPath, out, 0o600); err != nil {
+		return err
+	}
+	if _, err := LoadGatewayYAML(tmpPath, nil); err != nil {
+		return fmt.Errorf("gateway yaml after patch failed to load: %w", err)
+	}
+	mode := fs.FileMode(0o644)
+	if st, err := os.Stat(gatewayPath); err == nil {
+		mode = st.Mode() & fs.ModePerm
+	}
+	return ReplaceFile(gatewayPath, out, mode)
+}
+
+// WriteGatewayEnsembleEnabled updates ensemble.enabled in gateway.yaml and validates load.
+func WriteGatewayEnsembleEnabled(gatewayPath string, enabled bool) error {
+	raw, err := os.ReadFile(gatewayPath)
+	if err != nil {
+		return fmt.Errorf("read gateway yaml: %w", err)
+	}
+	out, err := PatchGatewayYAMLBytesWithEnsembleEnabled(raw, enabled)
+	if err != nil {
+		return err
+	}
+	dir := filepath.Dir(gatewayPath)
+	tmp, err := os.CreateTemp(dir, "claudia-gw-ensemble-*.yaml")
 	if err != nil {
 		return fmt.Errorf("temp file: %w", err)
 	}
