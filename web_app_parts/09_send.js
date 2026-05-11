@@ -180,9 +180,6 @@ if(currentId!==sentId)return;renderMessages(currentMessages,false,'mobile');upda
 }
 async function send(){
   if(currentRO)return;
-  if(isGroupView){
-    sendGroupMessage();return;
-  }
   if(currentSrc!=='mobile')return;
   if(!currentId){msgInput.focus();return;}
   if(!isCurrentConvoInMobileList()){

@@ -415,36 +415,6 @@ async function forkAndSendEdited(msgIndex,editedContent){
   if(data.title){var idx=mobileConvos.findIndex(function(c){return c.id===currentId});if(idx>=0){mobileConvos[idx]=Object.assign({},mobileConvos[idx],{title:data.title,updated_at:data.updated_at||new Date().toISOString()});renderSidebar();}}
   closeSidebar();if(msgInput)msgInput.focus();playDoneThinkingSound();
 }
-async function sendGroupMessage(){
-  var text=msgInput.value.trim();
-  var hasAttach=pendingAttachments.length>0;
-  if(!text&&!hasAttach)return;
-  var fileList=pendingFiles();var imgAtt=pendingImage();
-  var displayText=text||(imgAtt?'[Image]':(fileList.length?fileList.length===1?'[File: '+fileList[0].name+']':'['+fileList.length+' files]':'[File]'));
-  if(displayText.length>120)displayText=displayText.slice(0,117)+'...';
-  var imgToSend=imgAtt?imgAtt.imageBase64:null;
-  var textParts=[text||''];
-  pendingAttachments.forEach(function(a){if(a.type==='file'&&a.fileText!=null)textParts.push('[Attached: '+a.name+']:\n'+a.fileText);});
-  var contentToSend=textParts.join('\n\n').trim()||'(no text)';
-  var fileB64ToSend=null,fileMimeToSend=null,fileB64Name='';
-  var firstPdf=pendingAttachments.find(function(a){return a.type==='file'&&a.fileBase64;});
-  if(firstPdf){fileB64ToSend=firstPdf.fileBase64;fileMimeToSend=firstPdf.fileMime||'application/pdf';fileB64Name=firstPdf.name;}
-  pendingAttachments=[];hideAttachPreview();
-  msgInput.value='';msgInput.placeholder='Message Claudia...';autoResize();updateContextIndicator();
-  typing.classList.add('show');setHeaderMood('thinking');sendBtn.disabled=true;scrollBottom();
-  try{
-    var body={content:contentToSend,want_reply:true,image_base64:imgToSend||null};
-    if(fileB64ToSend){body.file_base64=fileB64ToSend;body.file_name=fileB64Name;body.file_mime=fileMimeToSend||'application/pdf';}
-    var r=await fetch('/api/group_chat/messages',mergeApiHeaders({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}));
-    var data=null;try{data=await r.json();}catch(_){}
-    typing.classList.remove('show');setHeaderMood(null);sendBtn.disabled=false;
-    if(!r.ok){if(data&&data.detail)addBubble('assistant',String(data.detail),true);else addBubble('assistant','Could not send. Try again.',true);return;}
-    currentMessages=data.messages||[];
-    renderMessages(currentMessages,false,'mobile',{group:true});
-    if(data.reply)playDoneThinkingSound();
-    scrollBottom();
-  }catch(e){typing.classList.remove('show');setHeaderMood(null);sendBtn.disabled=false;addBubble('assistant','Connection error: '+(e.message||e),true);}
-}
 async function editAndContinueInPlace(msgIndex,editedContent){
   if(!currentId||currentSrc!=='mobile')throw new Error('No conversation');
   var r=await fetch('/conversations/'+encodeURIComponent(currentId)+'/edit_and_continue',mergeApiHeaders({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message_index:msgIndex,content:editedContent,branch_index:currentBranchIndex})}));

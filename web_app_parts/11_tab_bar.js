@@ -55,28 +55,10 @@ function switchToTab(tab){
   var tabs=tabBar?tabBar.querySelectorAll('.tab'):[];
   tabs.forEach(function(t){var isActive=t.getAttribute('data-tab')===tab;t.classList.toggle('active',isActive);t.setAttribute('aria-selected',isActive);});
   if(tab==='room'){startBedroom();}else{stopBedroom();}
-  isGroupView=(tab==='social');
-  if(isGroupView){
-    if(hdrName)hdrName.textContent='Group';
-    if(hdrSub)hdrSub.textContent='Ruby, Lynn, Claudia, Raven';
-    loadGroupChat();
-  }else{
-    if(hdrName)hdrName.textContent=currentConvoTitle||'Chat';
-    if(hdrSub)hdrSub.textContent=currentSrc==='mobile'?'Claudia':(currentSrc||'');
-    if(currentId)loadConvo(currentId,currentSrc);
-    else{clearChat();showEmpty();}
-  }
-  updateCopyConvoButtonVisibility();
-}
-async function loadGroupChat(){
-  try{
-    var r=await fetch('/api/group_chat',mergeApiHeaders({cache:'no-store'}));
-    if(!r.ok){clearChat();showEmpty(true);currentMessages=[];return;}
-    var d=await r.json();
-    currentMessages=d.messages||[];
-    if(!currentMessages.length){clearChat();showEmpty(true);}
-    else{renderMessages(currentMessages,false,'mobile',{group:true});scrollBottom();}
-  }catch(e){clearChat();showEmpty(true);currentMessages=[];}
+  if(hdrName)hdrName.textContent=currentConvoTitle||'Chat';
+  if(hdrSub)hdrSub.textContent=currentSrc==='mobile'?'Claudia':(currentSrc||'');
+  if(currentId)loadConvo(currentId,currentSrc);
+  else{clearChat();showEmpty();}
   updateCopyConvoButtonVisibility();
 }
 if(tabBar){
