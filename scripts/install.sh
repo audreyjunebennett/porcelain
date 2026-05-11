@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# Idempotent: verify toolchain (auto-install git/make/go/node/gcc when possible), then install-bootstrap.sh (BiFrost + Qdrant binary + Qdrant source under .deps/qdrant).
+# Idempotent: verify toolchain (auto-install git/make/go/node/gcc when possible), then install-bootstrap.sh (BiFrost + Qdrant from deps.lock).
 # Skip auto-install: SKIP_AUTO_GIT, SKIP_AUTO_MAKE, SKIP_AUTO_GO, SKIP_AUTO_NODE, SKIP_AUTO_GCC (see scripts/install-toolchain-deps.sh, install-gcc.sh).
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
+# shellcheck source=scripts/chimera-names.sh
+source "$REPO_ROOT/scripts/chimera-names.sh"
 # shellcheck source=scripts/compiler-detect.sh
 source "$REPO_ROOT/scripts/compiler-detect.sh"
 # shellcheck source=scripts/install-toolchain-deps.sh
@@ -42,7 +44,7 @@ fi
 
 if [ "$missing" -ne 0 ]; then
 	echo "" >&2
-	echo "install: install missing tools, then re-run: make claudia-install" >&2
+	echo "install: install missing tools, then re-run: make ${CHIMERA_MAKE_INSTALL_TARGET}" >&2
 	exit 1
 fi
 

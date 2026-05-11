@@ -3,21 +3,26 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+# shellcheck source=scripts/chimera-names.sh
+source "$ROOT/scripts/chimera-names.sh"
 
-GW_PORT="${CLAUDIA_STATUS_GW_PORT:-3000}"
-BF_PORT="${CLAUDIA_STATUS_BF_PORT:-8080}"
-QD_PORT="${CLAUDIA_STATUS_QD_PORT:-6333}"
+# Prefer CHIMERA_STATUS_*; keep CLAUDIA_STATUS_* for existing env overrides.
+GW_PORT="${CHIMERA_STATUS_GW_PORT:-${CLAUDIA_STATUS_GW_PORT:-3000}}"
+BF_PORT="${CHIMERA_STATUS_BF_PORT:-${CLAUDIA_STATUS_BF_PORT:-8080}}"
+QD_PORT="${CHIMERA_STATUS_QD_PORT:-${CLAUDIA_STATUS_QD_PORT:-6333}}"
 
-echo "==> claudia-status"
-if [[ -f run/claudia.pid ]]; then
-	pid="$(cat run/claudia.pid)"
+pidf="$(chimera_pid_path)"
+
+echo "==> ${CHIMERA_MAKE_STATUS_TARGET}"
+if [[ -f "$pidf" ]]; then
+	pid="$(cat "$pidf")"
 	if kill -0 "$pid" 2>/dev/null; then
 		echo "    supervisor pid $pid: running"
 	else
-		echo "    run/claudia.pid present but process $pid: not running (stale)"
+		echo "    $pidf present but process $pid: not running (stale)"
 	fi
 else
-	echo "    background supervisor: not started (no run/claudia.pid; use make claudia-start or make up)"
+	echo "    background supervisor: not started (no $pidf; use make ${CHIMERA_MAKE_START_TARGET} or make up)"
 fi
 
 probe() {

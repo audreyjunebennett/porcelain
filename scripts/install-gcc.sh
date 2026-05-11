@@ -3,12 +3,14 @@
 # Idempotent: no-op if gcc or clang is already on PATH.
 # Set SKIP_AUTO_GCC=1 to skip this script (install.sh will fail if still no compiler).
 # Windows: winget/chocolatey installs use a UAC elevation prompt when not already Administrator
-# unless SKIP_WIN_ELEVATE=1 (then run Git Bash / make claudia-install as Administrator yourself).
+# unless SKIP_WIN_ELEVATE=1 (then run Git Bash / make chimera-install as Administrator yourself).
 # Sourced by install.sh so PATH shims (e.g. WinGet WinLibs) apply to the same shell.
 # On Windows, discovered compiler bin dirs are also appended to the User PATH (registry) when missing.
 set -euo pipefail
 
 _SCRIPTS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/chimera-names.sh
+source "$_SCRIPTS/chimera-names.sh"
 # shellcheck source=compiler-detect.sh
 source "$_SCRIPTS/compiler-detect.sh"
 # shellcheck source=win-persist-user-path.sh
@@ -269,7 +271,7 @@ main() {
 		return 1
 		;;
 	*)
-		echo "install-gcc: unknown OS ($kernel) — install gcc or clang, then re-run make claudia-install" >&2
+		echo "install-gcc: unknown OS ($kernel) — install gcc or clang, then re-run make ${CHIMERA_MAKE_INSTALL_TARGET}" >&2
 		return 1
 		;;
 	esac

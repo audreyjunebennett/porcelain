@@ -1,19 +1,17 @@
 #!/usr/bin/env bash
-# Invoked by install.sh (make claudia-install). Clone BiFrost at deps.lock ref, build bifrost-http, run qdrant-from-release.sh,
-# clone Qdrant source at deps.lock ref under .deps/qdrant (dev reference; runtime uses the release binary in bin/).
+# Invoked by install.sh (make chimera-install). Clone BiFrost at deps.lock ref, build bifrost-http, run qdrant-from-release.sh.
 # Requires: git, curl, tar, make (or mingw32-make), unzip on Windows, Node.js 20+ (BiFrost UI),
 # Go + CGO C compiler (gcc or clang on PATH). On Windows use Git Bash + MinGW-w64/MSYS2 gcc, or WSL.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=scripts/chimera-names.sh
+source "$REPO_ROOT/scripts/chimera-names.sh"
 # shellcheck source=deps-lock.sh
 source "$REPO_ROOT/scripts/deps-lock.sh"
 
 DEPS_DIR="${DEPS_DIR:-$REPO_ROOT/.deps}"
 BIFROST_DIR="${BIFROST_DIR:-$DEPS_DIR/bifrost}"
-QDRANT_SRC_DIR="${QDRANT_SRC_DIR:-$DEPS_DIR/qdrant}"
-# Official upstream; override when scripting (not read from deps.lock).
-QDRANT_GIT_URL="${QDRANT_GIT_URL:-https://github.com/qdrant/qdrant.git}"
 
 QDRANT_RELEASE="$(deps_lock_get QDRANT_RELEASE)"
 BIFROST_GIT_URL="$(deps_lock_get BIFROST_GIT_URL)"
@@ -113,7 +111,7 @@ elif [[ -f "$BF_ART" ]]; then
 	fi
 else
 	echo "install-bootstrap: no $BF_ART or ${BF_ART}.exe after BiFrost build (CGO often needs gcc on PATH)." >&2
-	echo "install-bootstrap: install gcc/clang, then: make claudia-install   (see docs/installation.md#c-compiler-cgo)" >&2
+	echo "install-bootstrap: install gcc/clang, then: make ${CHIMERA_MAKE_INSTALL_TARGET}   (see docs/installation.md#c-compiler-cgo)" >&2
 	ls -la "$BIFROST_DIR/tmp" 2>/dev/null || echo "    (tmp/ missing or empty)" >&2
 	exit 1
 fi
@@ -121,26 +119,12 @@ fi
 echo "==> Qdrant $QDRANT_RELEASE -> bin/"
 bash "$REPO_ROOT/scripts/qdrant-from-release.sh"
 
-echo "==> Qdrant source @ $QDRANT_RELEASE -> $QDRANT_SRC_DIR"
-if [[ ! -d "$QDRANT_SRC_DIR/.git" ]]; then
-	git clone "$QDRANT_GIT_URL" "$QDRANT_SRC_DIR"
-else
-	echo "    (existing clone; fetching)"
-	git -C "$QDRANT_SRC_DIR" remote set-url origin "$QDRANT_GIT_URL" 2>/dev/null || true
-fi
-git -C "$QDRANT_SRC_DIR" fetch origin
-if ! git -C "$QDRANT_SRC_DIR" rev-parse -q --verify "${QDRANT_RELEASE}^{commit}" >/dev/null 2>&1; then
-	git -C "$QDRANT_SRC_DIR" fetch origin "$QDRANT_RELEASE"
-fi
-git -C "$QDRANT_SRC_DIR" checkout -q "$QDRANT_RELEASE"
-
 QD_INSTALLED="$REPO_ROOT/bin/qdrant"
 [[ -f "$REPO_ROOT/bin/qdrant.exe" ]] && QD_INSTALLED="$REPO_ROOT/bin/qdrant.exe"
 
 echo ""
 echo "Done. Binaries: $BF_INSTALLED  $QD_INSTALLED"
 if [[ "$BF_INSTALLED" == *.exe ]] || [[ "$QD_INSTALLED" == *.exe ]]; then
-	echo "On Windows, run claudia with e.g. -bifrost-bin ./bin/bifrost-http.exe -qdrant-bin ./bin/qdrant.exe"
+	echo "On Windows, run ${CHIMERA_GATEWAY_BIN_BASE} with e.g. -bifrost-bin ./bin/bifrost-http.exe -qdrant-bin ./bin/qdrant.exe"
 fi
-echo "BiFrost checkout: $BIFROST_DIR (bump BIFROST_GIT_REF in deps.lock and re-run: make claudia-install)"
-echo "Qdrant source:    $QDRANT_SRC_DIR (bump QDRANT_RELEASE in deps.lock and re-run: make claudia-install)"
+echo "BiFrost checkout: $BIFROST_DIR (bump BIFROST_GIT_REF in deps.lock and re-run: make ${CHIMERA_MAKE_INSTALL_TARGET})"

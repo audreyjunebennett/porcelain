@@ -4,9 +4,11 @@
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
+# shellcheck source=scripts/chimera-names.sh
+source "$REPO_ROOT/scripts/chimera-names.sh"
 
 if ! command -v go >/dev/null 2>&1; then
-	echo "release-install: go not on PATH — run: make claudia-install" >&2
+	echo "release-install: go not on PATH — run: make ${CHIMERA_MAKE_INSTALL_TARGET}" >&2
 	exit 1
 fi
 

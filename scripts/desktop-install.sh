@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# make desktop-install — native deps for claudia-desktop (webview_go + CGO). Next: make desktop-build.
+# make desktop-install — native deps for desktop UI binary (CHIMERA_DESKTOP_BIN_BASE in scripts/chimera-names.sh). Next: make desktop-build.
 set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=scripts/chimera-names.sh
+source "$ROOT/scripts/chimera-names.sh"
 
 os=$(uname -s)
 
@@ -29,7 +32,7 @@ if [[ "$os" == "Linux" ]]; then
     sudo ln -sf "$wk41_pc" /usr/local/lib/pkgconfig/webkit2gtk-4.0.pc
     echo "desktop-install: webview_go uses pkg-config webkit2gtk-4.0; linked $wk41_pc as webkit2gtk-4.0.pc under /usr/local/lib/pkgconfig." >&2
   fi
-  echo "desktop-install: done. Next: make desktop-build"
+  echo "desktop-install: done. Next: make desktop-build   (output: ${CHIMERA_DESKTOP_BIN_BASE}[.exe])"
 
 elif [[ "$os" == "Darwin" ]]; then
   echo "desktop-install: macOS — Xcode Command Line Tools (clang + SDK) required for CGO."
@@ -42,9 +45,8 @@ elif [[ "$os" == "Darwin" ]]; then
   exit 1
 
 elif [[ "$os" =~ ^MINGW ]] || [[ "$os" =~ ^MSYS ]] || [[ "$os" =~ ^CYGWIN ]]; then
-  REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
   # shellcheck source=scripts/msys2-gcc-path.sh
-  source "$REPO_ROOT/scripts/msys2-gcc-path.sh"
+  source "$ROOT/scripts/msys2-gcc-path.sh"
   echo "desktop-install: Windows — use MSYS2 UCRT64 gcc (see scripts/install-gcc.sh / docs/plans/makefile-plan.md)."
   echo "desktop-install: Also install the WebView2 runtime if the window is blank:"
   echo "  https://developer.microsoft.com/en-us/microsoft-edge/webview2/"

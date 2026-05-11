@@ -1,4 +1,14 @@
-# Claudia Gateway — see docs/plans/makefile-plan.md and README.md
+# Chimera Gateway — see docs/plans/makefile-plan.md and README.md
+#
+# clean:      removes $(CHIMERA_GATEWAY_BIN)[.exe], $(CHIMERA_INDEX_BIN)[.exe], $(DESKTOP_BIN), dist/ only.
+# clean-all:  also removes bin/, packaging/qdrant-bundles/, packages/, node_modules/, .deps/, run/, logs/ (requires CONFIRM=1; runs clean first).
+# clean-data: removes data/bifrost/, data/qdrant/, data/gateway/ — fresh BiFrost + Qdrant + gateway metrics state (requires CONFIRM=1).
+#
+# Gateway/indexer basenames (no .exe). Defaults must match scripts/chimera-names.sh.
+CHIMERA_GATEWAY_BIN := chimera
+CHIMERA_INDEX_BIN := chimera-index
+CHIMERA_CMD_GATEWAY := ./cmd/$(CHIMERA_GATEWAY_BIN)
+CHIMERA_CMD_INDEXER := ./cmd/$(CHIMERA_INDEX_BIN)
 
 ifeq ($(OS),Windows_NT)
   # Same bash as scripts/*.sh (Git for Windows). MSYS2-only: set GITBASH, e.g.
@@ -18,26 +28,7 @@ ifeq ($(OS),Windows_NT)
   RACE_GATEWAY :=
   BIFROST_BIN := bin/bifrost-http.exe
   QDRANT_BIN := bin/qdrant.exe
-  DESKTOP_BIN := claudia-desktop.exe
-  # Paths for Bash (clean-data): inherit from CMD/PowerShell/IDE env, then ask cmd/ps for defaults.
-  # GNU Make parses this file—not PowerShell—so $$ becomes $ for ps -Command "...".
-  _APPDATA := $(strip $(or $(APPDATA),$(appdata),$(AppData)))
-  ifeq ($(_APPDATA),)
-    _APPDATA := $(subst \,/,$(strip $(shell cmd.exe /d /v:off /c "if defined APPDATA (echo.%APPDATA%)")))
-  endif
-  ifeq ($(_APPDATA),)
-    _APPDATA := $(subst \,/,$(strip $(shell powershell.exe -NoProfile -NonInteractive -Command "$$env:APPDATA" 2>/dev/null)))
-  endif
-  APPDATA := $(_APPDATA)
-
-  _WIN_HOME := $(strip $(or $(HOME),$(USERPROFILE),$(userprofile),$(UserProfile)))
-  ifeq ($(_WIN_HOME),)
-    _WIN_HOME := $(subst \,/,$(strip $(shell cmd.exe /d /v:off /c "if defined USERPROFILE (echo.%USERPROFILE%)")))
-  endif
-  ifeq ($(_WIN_HOME),)
-    _WIN_HOME := $(subst \,/,$(strip $(shell powershell.exe -NoProfile -NonInteractive -Command "$$env:USERPROFILE" 2>/dev/null)))
-  endif
-  HOME := $(_WIN_HOME)
+  DESKTOP_BIN := porcelain-desktop.exe
 else
   ifeq ($(origin GITBASH),undefined)
     GITBASH := bash
@@ -45,10 +36,10 @@ else
   RACE_GATEWAY := -race
   BIFROST_BIN := bin/bifrost-http
   QDRANT_BIN := bin/qdrant
-  DESKTOP_BIN := claudia-desktop
+  DESKTOP_BIN := porcelain-desktop
 endif
 
-# Desktop vet/test need CGO + WebKit (see desktop-install). Set SKIP_DESKTOP=1 to omit claudia desktop tag.
+# Desktop vet/test need CGO + WebKit (see desktop-install). Set SKIP_DESKTOP=1 to omit chimera desktop tag.
 SKIP_DESKTOP ?=
 ifeq ($(SKIP_DESKTOP),1)
   _DESKTOP_VET :=
@@ -65,16 +56,16 @@ else
   _BG_FLAGS := --stack
 endif
 
-.PHONY: help up configure install claudia-install clean clean-all clean-data fmt fmt-check logs \
+.PHONY: help up configure install chimera-install claudia-install clean clean-all clean-data fmt fmt-check logs \
 	bash \
-	save-state \
-	build claudia-build tokencount-file desktop-install desktop-build desktop-run run \
+	build chimera-build claudia-build tokencount-file desktop-install desktop-build desktop-run run \
+	chimera-run chimera-serve chimera-start chimera-stop chimera-status \
 	claudia-run claudia-serve claudia-start claudia-stop claudia-status \
 	indexer-build indexer-run indexer-install \
 	catalog-free catalog-available config-provider-free-tier \
 	release-install release-snapshot package \
 	vet vet-module vet-desktop \
-	test test-internal test-catalog-free test-catalog-available test-claudia test-desktop \
+	test test-internal test-catalog-free test-catalog-available test-chimera test-claudia test-desktop \
 	precommit
 
 # One bash process (same as scripts/*.sh) so Win32 Make does not run cmd `echo`/printf per line (quotes + CreateProcess failures).
@@ -91,42 +82,41 @@ bash:
 	$(GITBASH) -il
 
 install:
-	$(MAKE) claudia-install desktop-install
+	$(MAKE) chimera-install desktop-install
 
-claudia-install:
+chimera-install:
 	$(GITBASH) scripts/install.sh
 
-claudia-start:
-	$(GITBASH) scripts/claudia-start.sh $(_BG_FLAGS)
+claudia-install: chimera-install
 
-claudia-stop:
-	$(GITBASH) scripts/claudia-stop.sh
+chimera-start:
+	$(GITBASH) scripts/chimera-start.sh $(_BG_FLAGS)
 
-claudia-status:
-	$(GITBASH) scripts/claudia-status.sh
+claudia-start: chimera-start
+
+chimera-stop:
+	$(GITBASH) scripts/chimera-stop.sh
+
+claudia-stop: chimera-stop
+
+chimera-status:
+	$(GITBASH) scripts/chimera-status.sh
+
+claudia-status: chimera-status
 
 logs:
 	$(GITBASH) scripts/logs.sh
 
-# clean:      removes ./claudia[.exe], claudia-desktop[.exe], dist/ only.
 clean:
 	$(GITBASH) scripts/clean.sh
 
-# clean-all:  also removes bin/, packaging/qdrant-bundles/, packages/, node_modules/, .deps/, run/, logs/ (requires CONFIRM=1; runs clean first).
 clean-all:
 	$(GITBASH) scripts/clean-all-confirm.sh $(CONFIRM)
-	$(MAKE) clean clean-data "APPDATA=$(APPDATA)" "HOME=$(HOME)"
+	$(MAKE) clean
+	$(GITBASH) scripts/clean-all.sh
 
-# clean-data: removes data/bifrost/, data/qdrant/, data/gateway/ — fresh BiFrost + Qdrant + gateway metrics state (requires CONFIRM=1).
-clean-data: export APPDATA := $(APPDATA)
-clean-data: export HOME := $(HOME)
 clean-data:
 	$(GITBASH) scripts/clean-data.sh $(CONFIRM)
-
-# Snapshot ./data into temp/sessions/<sortable-id>/data and record a comment (optional).
-# Usage: make save-state COMMENT="what you did"
-save-state:
-	$(GITBASH) scripts/save-state.sh
 
 fmt:
 	gofmt -w cmd internal
@@ -141,9 +131,9 @@ vet-module:
 
 vet-desktop: export CGO_ENABLED := 1
 vet-desktop:
-	go vet -tags desktop ./cmd/claudia
+	go vet -tags desktop $(CHIMERA_CMD_GATEWAY)
 
-test: test-internal test-catalog-free test-catalog-available test-claudia $(_DESKTOP_TEST)
+test: test-internal test-catalog-free test-catalog-available test-chimera $(_DESKTOP_TEST)
 
 test-internal:
 	go test ./internal/... $(RACE_GATEWAY) -count=1
@@ -154,41 +144,45 @@ test-catalog-free:
 test-catalog-available:
 	go test ./cmd/catalog-write-available $(RACE_GATEWAY) -count=1
 
-test-claudia:
-	go test ./cmd/claudia $(RACE_GATEWAY) -count=1
+test-chimera:
+	go test $(CHIMERA_CMD_GATEWAY) $(RACE_GATEWAY) -count=1
+
+test-claudia: test-chimera
 
 test-desktop: export CGO_ENABLED := 1
 test-desktop:
-	go test -tags desktop ./cmd/claudia $(RACE_GATEWAY) -count=1
+	go test -tags desktop $(CHIMERA_CMD_GATEWAY) $(RACE_GATEWAY) -count=1
 
 precommit: fmt-check vet test
 
 build:
-	$(MAKE) claudia-build desktop-build
+	$(MAKE) chimera-build desktop-build
 
-claudia-build:
-	go build -o claudia ./cmd/claudia
+chimera-build:
+	go build -o $(CHIMERA_GATEWAY_BIN) $(CHIMERA_CMD_GATEWAY)
 
-# v0.2 workspace file indexer (see docs/plans/indexer.plan.md). Builds claudia-index[.exe] in repo root.
+claudia-build: chimera-build
+
+# v0.2 workspace file indexer (see docs/plans/indexer.plan.md). Builds $(CHIMERA_INDEX_BIN)[.exe] in repo root.
 indexer-build:
 ifeq ($(OS),Windows_NT)
-	go build -o claudia-index.exe ./cmd/claudia-index
+	go build -o $(CHIMERA_INDEX_BIN).exe $(CHIMERA_CMD_INDEXER)
 else
-	go build -o claudia-index ./cmd/claudia-index
+	go build -o $(CHIMERA_INDEX_BIN) $(CHIMERA_CMD_INDEXER)
 endif
 
 indexer-run:
-	go run ./cmd/claudia-index $(ARGS)
+	go run $(CHIMERA_CMD_INDEXER) $(ARGS)
 
 indexer-install:
-	go install ./cmd/claudia-index
+	go install $(CHIMERA_CMD_INDEXER)
 
 # Print bytes + cl100k_base + o200k_base token counts for a file (requires FILE=path).
 tokencount-file:
 ifeq ($(FILE),)
 	$(error FILE is required, e.g. make tokencount-file FILE=temp/groq-request.json)
 endif
-	go run ./cmd/claudia tokencount -f "$(FILE)"
+	go run $(CHIMERA_CMD_GATEWAY) tokencount -f "$(FILE)"
 
 # Fetch Groq rate-limits + Gemini pricing pages and write BiFrost-style model ids (requires network).
 # Optional: INTERSECT=path to JSON or YAML (OpenAI-style data[].id, e.g. catalog-available.snapshot.yaml).
@@ -224,12 +218,16 @@ desktop-run:
 
 run: desktop-run
 
-claudia-run:
-	go run ./cmd/claudia
+chimera-run:
+	go run $(CHIMERA_CMD_GATEWAY)
 
-# Foreground supervisor: same bin paths as claudia-start --stack (requires make claudia-install).
-claudia-serve:
-	go run ./cmd/claudia serve -qdrant-bin "$(QDRANT_BIN)" -bifrost-bin "$(BIFROST_BIN)"
+claudia-run: chimera-run
+
+# Foreground supervisor: same bin paths as chimera-start --stack (requires make chimera-install).
+chimera-serve:
+	go run $(CHIMERA_CMD_GATEWAY) serve -qdrant-bin "$(QDRANT_BIN)" -bifrost-bin "$(BIFROST_BIN)"
+
+claudia-serve: chimera-serve
 
 release-install:
 	$(GITBASH) scripts/release-install.sh
@@ -237,6 +235,6 @@ release-install:
 release-snapshot:
 	$(GITBASH) scripts/release-snapshot.sh
 
-# Desktop claudia + bifrost-http + qdrant + config → dist/personal/ (needs make install; CGO for desktop build).
+# Desktop $(CHIMERA_GATEWAY_BIN) + bifrost-http + qdrant + config → dist/personal/ (needs make install; CGO for desktop build).
 package:
 	$(GITBASH) scripts/release-package.sh "$(DESKTOP_BIN)"
