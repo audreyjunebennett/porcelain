@@ -10,9 +10,21 @@ cd "$root"
 export CGO_ENABLED=1
 # Windows: GUI subsystem so double-click / Explorer launch does not open a console host (logs → /ui/logs).
 target_os="${GOOS:-$(go env GOOS)}"
+target_arch="${GOARCH:-$(go env GOARCH)}"
 # Flags before package args only (-ldflags after ./cmd/claudia is parsed as a package path).
 args=("-tags" "desktop")
 if [[ "$target_os" == "windows" ]]; then
+	# Embed Explorer file icon from assets/icon.ico via a COFF resource object.
+	# This keeps the .exe icon consistent with the in-app window icon.
+	rc_file="$root/cmd/claudia/icon_windows.rc"
+	syso_file="$root/cmd/claudia/icon_windows_${target_arch}.syso"
+	if command -v windres >/dev/null 2>&1; then
+		windres "$rc_file" -O coff -o "$syso_file"
+	elif command -v x86_64-w64-mingw32-windres >/dev/null 2>&1; then
+		x86_64-w64-mingw32-windres "$rc_file" -O coff -o "$syso_file"
+	else
+		echo "desktop-build: warning: windres not found; .exe will use default file icon in Explorer." >&2
+	fi
 	args+=(-ldflags "-H=windowsgui")
 fi
 args+=("-o" "$root/$bin" "./cmd/claudia")
