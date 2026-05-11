@@ -454,6 +454,27 @@ func ResolveGatewayConfigPath() (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// Default path for normal repo-root launches.
+	candidates := []string{
+		filepath.Join(wd, "config", "gateway.yaml"),
+		// Desktop bundles often launch from ./bin, with config in ../config.
+		filepath.Join(wd, "..", "config", "gateway.yaml"),
+	}
+	// Also try next to the executable (and its parent), which helps double-click
+	// launches where CWD may not match the bundle root.
+	if exe, eerr := os.Executable(); eerr == nil && strings.TrimSpace(exe) != "" {
+		exeDir := filepath.Dir(exe)
+		candidates = append(candidates,
+			filepath.Join(exeDir, "config", "gateway.yaml"),
+			filepath.Join(exeDir, "..", "config", "gateway.yaml"),
+		)
+	}
+	for _, p := range candidates {
+		if st, serr := os.Stat(p); serr == nil && !st.IsDir() {
+			return filepath.Clean(p), nil
+		}
+	}
+	// Keep historical fallback shape if none exist yet.
 	return filepath.Join(wd, "config", "gateway.yaml"), nil
 }
 
