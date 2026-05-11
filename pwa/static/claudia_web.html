@@ -672,6 +672,14 @@
     <div id="sbUserPanel" class="sb-user-panel" role="region" aria-label="User settings">
       <div class="sb-user-panel-inner">
         <div id="sbWorkspace" class="sb-workspace"><strong>Claudia Core</strong> · same workspace as your PC.</div>
+        <div class="sb-avatar-picker-wrap" id="avatarPickerWrap">
+          <div class="sb-avatar-picker-label">Your look</div>
+          <div id="avatarPicker" class="sb-avatar-picker" role="listbox" aria-label="Pick your avatar"></div>
+          <div class="sb-avatar-custom-wrap" style="margin-top:6px">
+            <input type="url" id="avatarCustomUrl" class="sb-avatar-custom-input" placeholder="Or paste image URL..." autocomplete="off">
+            <button type="button" id="avatarCustomBtn" class="sb-avatar-custom-btn">Use</button>
+          </div>
+        </div>
         <div class="sb-refresh-row" style="padding:10px 12px 8px;border-top:1px solid var(--border);flex-shrink:0">
           <button type="button" id="sbRefreshBtn" class="sb-refresh-btn" title="Refresh chat list" aria-label="Refresh chat list" style="width:100%;padding:8px 12px;font-size:13px;font-weight:600;color:var(--pink,#ff7ad9);background:rgba(255,122,217,.12);border:1px solid rgba(255,122,217,.3);border-radius:8px;cursor:pointer">Refresh chat list</button>
         </div>

@@ -1,7 +1,11 @@
 /* ── Elements ── */
 var sidebar=document.getElementById('sidebar'),sideOverlay=document.getElementById('sideOverlay');
 var sbList=document.getElementById('sbList'),sbSearch=document.getElementById('sbSearch'),sbNew=document.getElementById('sbNew');
+var avatarPicker=document.getElementById('avatarPicker');
+var avatarCustomUrl=document.getElementById('avatarCustomUrl');
+var avatarCustomBtn=document.getElementById('avatarCustomBtn');
 var currentUserAvatarUrl='/user_avatar.svg';
+var avatarCharacters=[];
 var menuBtn=document.getElementById('menuBtn');
 var chatArea=document.getElementById('chatArea'),typing=document.getElementById('typing'),generatingImage=document.getElementById('generatingImage');
 var roHint=document.getElementById('roHint'),msgInput=document.getElementById('msgInput'),sendBtn=document.getElementById('sendBtn');
