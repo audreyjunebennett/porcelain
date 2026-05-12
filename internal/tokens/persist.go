@@ -75,11 +75,12 @@ func AppendToken(path, label string) (plainToken, tenantID string, err error) {
 	return plainToken, tenantID, nil
 }
 
-// TokenMeta is one row for admin listing (no secret token).
+// TokenMeta is one row for admin listing.
 type TokenMeta struct {
 	Index    int    `json:"index"`
 	Label    string `json:"label"`
 	TenantID string `json:"tenant_id"`
+	Token    string `json:"token"`
 }
 
 // ListTokenMeta returns valid rows in file order with YAML slice indices for removal.
@@ -97,7 +98,12 @@ func ListTokenMeta(path string) ([]TokenMeta, error) {
 		if strings.TrimSpace(row.Token) == "" || strings.TrimSpace(row.TenantID) == "" {
 			continue
 		}
-		out = append(out, TokenMeta{Index: i, Label: row.Label, TenantID: row.TenantID})
+		out = append(out, TokenMeta{
+			Index:    i,
+			Label:    row.Label,
+			TenantID: row.TenantID,
+			Token:    row.Token,
+		})
 	}
 	return out, nil
 }

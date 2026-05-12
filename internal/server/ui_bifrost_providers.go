@@ -29,14 +29,15 @@ var bifrostUIProviderNames = []string{"groq", "gemini", "ollama"}
 //   - "key_missing" provider is registered but has no configured key (groq / gemini).
 //   - "unknown"     provider is not registered (404), or the GET response could not be parsed.
 type bifrostProviderHealthEntry struct {
-	ID            string `json:"id"`
-	State         string `json:"state"`
-	KeyConfigured bool   `json:"key_configured"`
-	KeyCount      int    `json:"key_count"`
-	KeyHint       string `json:"key_hint,omitempty"`
-	OllamaBaseURL string `json:"ollama_base_url,omitempty"`
-	HTTPStatus    int    `json:"http_status,omitempty"`
-	Error         string `json:"error,omitempty"`
+	ID            string   `json:"id"`
+	State         string   `json:"state"`
+	KeyConfigured bool     `json:"key_configured"`
+	KeyCount      int      `json:"key_count"`
+	KeyHint       string   `json:"key_hint,omitempty"`
+	ModelIDs      []string `json:"model_ids,omitempty"`
+	OllamaBaseURL string   `json:"ollama_base_url,omitempty"`
+	HTTPStatus    int      `json:"http_status,omitempty"`
+	Error         string   `json:"error,omitempty"`
 }
 
 type bifrostProviderHealthResponse struct {
@@ -143,6 +144,7 @@ func fetchBifrostProviderHealth(ctx context.Context, client *bifrostadmin.Client
 		FetchedAt: time.Now().UTC(),
 		Providers: make([]bifrostProviderHealthEntry, 0, len(names)),
 	}
+	snapshotFresh := liveSnapshot != nil && liveSnapshot.OK && liveSnapshot.IsFresh(time.Now(), CatalogSnapshotFreshness)
 	if client == nil || strings.TrimSpace(client.BaseURL) == "" {
 		out.Error = "bifrost upstream not configured"
 		out.BifrostUp = false
@@ -155,6 +157,9 @@ func fetchBifrostProviderHealth(ctx context.Context, client *bifrostadmin.Client
 	for _, name := range names {
 		body, status, err := client.GetProvider(ctx, name)
 		entry := classifyBifrostProviderResult(name, body, status, err, liveSnapshot)
+		if snapshotFresh {
+			entry.ModelIDs = catalogModelIDsForProvider(liveSnapshot, name)
+		}
 		if err == nil {
 			anySuccess = true
 		}
@@ -169,6 +174,27 @@ func fetchBifrostProviderHealth(ctx context.Context, client *bifrostadmin.Client
 			if out.Providers[i].State == "" || out.Providers[i].State == "unknown" {
 				out.Providers[i].State = "down"
 			}
+		}
+	}
+	return out
+}
+
+func catalogModelIDsForProvider(snap *CatalogSnapshot, providerName string) []string {
+	if snap == nil || !snap.OK || len(snap.ModelIDs) == 0 {
+		return nil
+	}
+	prefix := strings.ToLower(strings.TrimSpace(providerName)) + "/"
+	if prefix == "/" {
+		return nil
+	}
+	out := make([]string, 0, 24)
+	for _, mid := range snap.ModelIDs {
+		id := strings.TrimSpace(mid)
+		if id == "" {
+			continue
+		}
+		if strings.HasPrefix(strings.ToLower(id), prefix) {
+			out = append(out, id)
 		}
 	}
 	return out

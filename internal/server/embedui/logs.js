@@ -5,10 +5,20 @@ globalThis.ClaudiaLogs.Main = function () {
   if (embedded) {
     document.documentElement.classList.add("logs-embedded");
     document.body.classList.add("logs-embedded");
+    (function openLogsChromeLinksInNewTab() {
+      var nav = document.querySelector(".logs-chrome__nav");
+      if (!nav) return;
+      var as = nav.querySelectorAll("a");
+      for (var ai = 0; ai < as.length; ai++) {
+        as[ai].setAttribute("target", "_blank");
+        as[ai].setAttribute("rel", "noopener noreferrer");
+      }
+    })();
   }
   var focusPrincipal = (params.get("principal") || "").trim();
   var focusConv = (params.get("conversation") || params.get("conv") || "").trim();
   var focusSeq = (params.get("seq") || "").trim();
+  var focusCard = (params.get("focus") || params.get("card") || "").trim().toLowerCase();
   var tbody = document.getElementById("log-body");
   var statusEl = document.getElementById("status");
   var statusLine =
@@ -50,6 +60,31 @@ globalThis.ClaudiaLogs.Main = function () {
   var metricsCache = null;
   var metricsPollTimer = null;
   var METRICS_POLL_MS = 12000;
+  /** Gateway overview snapshot for Main-parity cards (/api/ui/state). */
+  var gatewayOverviewCache = null;
+  var gatewayOverviewPollTimer = null;
+  var GATEWAY_OVERVIEW_POLL_MS = 12000;
+  /** Admin workflows cache: /api/ui/state + /api/ui/tokens snapshots. */
+  var adminStateCache = null;
+  var tokenListCache = [];
+  var adminStatePollTimer = null;
+  var ADMIN_STATE_POLL_MS = 12000;
+  var routingPolicyTouched = false;
+  var routingPolicyDraft = null;
+  var fallbackTouched = false;
+  var routerModelsTouched = false;
+  var routerModelsDraft = null;
+  var routerThresholdTouched = false;
+  var routerThresholdDraft = null;
+  var routerEnabledTouched = false;
+  var routerEnabledDraft = null;
+  var adminUserDrafts = [];
+  var nextAdminUserDraftId = 1;
+  var adminRoutingEditing = false;
+  var adminFallbackEditing = false;
+  var adminRouterEditing = false;
+  /** Ephemeral token secrets from POST /api/ui/tokens, keyed by tenant_id for in-card masked display + copy. */
+  var adminCreatedTokenByTenant = {};
   /** Live BiFrost provider snapshot (/api/ui/bifrost/providers) — drives the Provider health strip on the BiFrost card. */
   var bifrostProviderSnapshot = null;
   var bifrostProviderPollTimer = null;
@@ -364,6 +399,8 @@ globalThis.ClaudiaLogs.Main = function () {
     var psu = document.getElementById("panel-summarized");
     if (!psu) return;
     syncBifrostProviderPolling();
+    syncGatewayOverviewPolling();
+    syncAdminStatePolling();
     try {
       document.body.classList.toggle("logs-summarized", true);
       document.body.classList.toggle("logs-raw", false);
@@ -1481,6 +1518,12 @@ globalThis.ClaudiaLogs.Main = function () {
     if (!a.closest("#panel-summarized")) return false;
     if (a.classList && a.classList.contains("sum-evlog__search")) return true;
     if (a.matches && a.matches("[data-evlog-filter-status]")) return true;
+    if (
+      a.id === "admin-routing-yaml" ||
+      a.id === "admin-fallback-yaml" ||
+      a.id === "admin-router-models-yaml" ||
+      a.id === "admin-router-threshold"
+    ) return true;
     return false;
   }
 
@@ -1567,6 +1610,24 @@ globalThis.ClaudiaLogs.Main = function () {
     for (var ri = 0; ri < openDetailIds.length; ri++) {
       var d = document.getElementById(openDetailIds[ri]);
       if (d && d.tagName === "DETAILS") d.open = true;
+    }
+    if (focusCard) {
+      var focusId = "";
+      if (focusCard === "admin" || focusCard === "access" || focusCard === "tokens" || focusCard === "users") focusId = "admin-users";
+      else if (focusCard === "providers" || focusCard === "provider") focusId = "admin-provider-groq";
+      else if (focusCard === "groq") focusId = "admin-provider-groq";
+      else if (focusCard === "gemini") focusId = "admin-provider-gemini";
+      else if (focusCard === "ollama") focusId = "admin-provider-ollama";
+      else if (focusCard === "routing" || focusCard === "rules") focusId = "admin-routing-rules";
+      else if (focusCard === "fallback" || focusCard === "fallbackchain") focusId = "admin-fallback-chain";
+      else if (focusCard === "router" || focusCard === "router-model" || focusCard === "routermodel") focusId = "admin-router-model";
+      if (focusId) {
+        var fd = document.getElementById(focusId);
+        if (fd && fd.tagName === "DETAILS") {
+          fd.open = true;
+          try { fd.scrollIntoView({ block: "start", behavior: "auto" }); } catch (_eFocus) {}
+        }
+      }
     }
 
     try {
@@ -1665,6 +1726,25 @@ globalThis.ClaudiaLogs.Main = function () {
       wrapsNew[wj].scrollLeft = tableScroll[wj].left;
       wrapsNew[wj].scrollTop = tableScroll[wj].top;
     }
+  }
+
+  /** Replace only the gateway overview card so /api/ui/state polls avoid full feed rebuilds. */
+  function patchGatewayOverviewCard() {
+    if (viewMode !== "summarized") return;
+    var psu = document.getElementById("panel-summarized");
+    if (!psu) return;
+    var oldEl = document.getElementById("gw-overview");
+    if (!oldEl) {
+      refreshSummarizedPanel();
+      return;
+    }
+    var keepOpen = !!oldEl.open;
+    var wrap = document.createElement("div");
+    wrap.innerHTML = buildGatewayOverviewCardHtml().trim();
+    var newEl = wrap.firstElementChild;
+    if (!newEl || newEl.id !== "gw-overview") return;
+    oldEl.parentNode.replaceChild(newEl, oldEl);
+    newEl.open = keepOpen;
   }
 
   function scheduleStoryRebuild() {
@@ -1854,6 +1934,38 @@ globalThis.ClaudiaLogs.Main = function () {
     if (viewMode !== "summarized") return;
     fetchGatewayMetrics();
     metricsPollTimer = setInterval(fetchGatewayMetrics, METRICS_POLL_MS);
+  }
+
+  function fetchGatewayOverview() {
+    fetch("/api/ui/state", { credentials: "same-origin" })
+      .then(function (res) {
+        if (res.status === 401) return null;
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        return res.json();
+      })
+      .then(function (data) {
+        if (!data || !data.gateway) return;
+        gatewayOverviewCache = data.gateway;
+        if (viewMode === "summarized") patchGatewayOverviewCard();
+      })
+      .catch(function (e) {
+        gatewayOverviewCache = {
+          _error: e && e.message ? String(e.message) : String(e)
+        };
+        if (viewMode === "summarized") patchGatewayOverviewCard();
+      });
+  }
+
+  function syncGatewayOverviewPolling() {
+    if (gatewayOverviewPollTimer) {
+      try {
+        clearInterval(gatewayOverviewPollTimer);
+      } catch (x) {}
+      gatewayOverviewPollTimer = null;
+    }
+    if (viewMode !== "summarized") return;
+    fetchGatewayOverview();
+    gatewayOverviewPollTimer = setInterval(fetchGatewayOverview, GATEWAY_OVERVIEW_POLL_MS);
   }
 
   /**
@@ -2247,6 +2359,1092 @@ globalThis.ClaudiaLogs.Main = function () {
     );
   }
 
+  function overviewStatePillClass(state) {
+    var s = String(state || "").toLowerCase();
+    if (s === "ok" || s === "up") return "sum-st-active";
+    if (s === "degraded" || s === "down" || s === "unavailable") return "sum-st-error";
+    return "sum-st-monitor";
+  }
+
+  function gatewayServiceHealthTone(raw) {
+    var s = String(raw || "").trim().toLowerCase();
+    if (
+      s === "up" ||
+      s === "ok" ||
+      s === "healthy" ||
+      s === "ready" ||
+      s === "running" ||
+      s === "enabled" ||
+      s === "supervised"
+    ) {
+      return "up";
+    }
+    if (s === "down" || s === "degraded" || s === "unavailable" || s === "error" || s === "failed" || s === "disabled") {
+      return "down";
+    }
+    return "unknown";
+  }
+
+  function gatewayServiceHealthEntries(ov) {
+    var bf = ov && ov.bifrost ? ov.bifrost : {};
+    var qd = ov && ov.qdrant ? ov.qdrant : {};
+    var ix = ov && ov.indexer ? ov.indexer : {};
+    return [
+      { id: "gateway", raw: "up" },
+      { id: "bifrost", raw: bf.state },
+      { id: "qdrant", raw: qd.state },
+      { id: "indexer", raw: ix.worker }
+    ];
+  }
+
+  /**
+   * Gateway service-health strip: compact in collapsed summary row, full strip in expanded body.
+   */
+  function gatewayServiceHealthStripHtml(ov, opts) {
+    opts = opts || {};
+    var compact = !!opts.compact;
+    var list = gatewayServiceHealthEntries(ov);
+    var stateColor = { up: "#66bb6a", down: "#ef5350", unknown: "#bdbdbd" };
+    var stateLabel = { up: "up", down: "down", unknown: "unknown" };
+    var segs = [];
+    var labels = [];
+    for (var i = 0; i < list.length; i++) {
+      var ent = list[i] || {};
+      var tone = gatewayServiceHealthTone(ent.raw);
+      var lab = stateLabel[tone];
+      var title = String(ent.id || "service") + " · " + lab + (ent.raw != null && ent.raw !== "" ? " (" + String(ent.raw) + ")" : "");
+      segs.push(
+        '<span class="sum-bf-prov-health-seg" title="' +
+          escapeHtml(title) +
+          '" style="background:' +
+          stateColor[tone] +
+          '"></span>'
+      );
+      if (!compact) {
+        labels.push(
+          '<span class="sum-bf-prov-health-label" title="' +
+            escapeHtml(title) +
+            '">' +
+            escapeHtml(String(ent.id || "—")) +
+            "</span>"
+        );
+      }
+    }
+    if (compact) {
+      return (
+        '<div class="sum-bf-prov-health-root sum-bf-prov-health-root--compact" role="img" aria-label="service health">' +
+        '<div class="sum-bf-prov-health-track sum-bf-prov-health-track--compact" title="service health">' +
+        segs.join("") +
+        "</div></div>"
+      );
+    }
+    return (
+      '<div class="sum-bf-prov-health-root" id="gateway-service-health-strip">' +
+      '<div class="sum-bf-prov-health-track" title="Service health: gateway, bifrost, qdrant, indexer">' +
+      segs.join("") +
+      '</div><div class="sum-bf-prov-health-labels">' +
+      labels.join("") +
+      "</div></div>"
+    );
+  }
+
+  function buildGatewayOverviewCardHtml() {
+    var data = gatewayOverviewCache;
+    var loading = !data;
+    var hasErr = !!(data && data._error);
+    var semver = data && data.semver ? String(data.semver) : "—";
+    var virtualModel = data && data.virtual_model_id ? String(data.virtual_model_id) : "—";
+    var ov = data && data.service_overview ? data.service_overview : null;
+    var compactHealth = gatewayServiceHealthStripHtml(ov, { compact: true });
+    var sub;
+    if (loading) {
+      sub = '<span class="sum-sub sum-sub--clamp muted">Loading overview…</span>';
+    } else if (hasErr) {
+      sub = '<span class="sum-sub sum-sub--clamp muted">Overview unavailable — using last known logs.</span>';
+    } else {
+      sub = '<span class="sum-sub sum-sub--clamp">Main-surface parity: version, virtual model, and service health.</span>';
+    }
+    var body = "";
+    if (loading) {
+      body = '<p class="muted">Fetching /api/ui/state…</p>';
+    } else if (hasErr) {
+      body = '<p class="muted">' + escapeHtml(String(data._error || "overview unavailable")) + "</p>";
+    } else {
+      var refAt = ov && ov.refreshed_at ? formatUtcLikeLogTimestamp(ov.refreshed_at) : "—";
+      body =
+        '<div class="sum-section-label">Service health</div>' +
+        gatewayServiceHealthStripHtml(ov) +
+        '<dl class="indexer-run-kv indexer-run-kv--gateway-summary">' +
+        "<dt>version</dt><dd><code class=\"sum-mono-id\">" + escapeHtml(semver) + "</code></dd>" +
+        "<dt>virtual model</dt><dd><code class=\"sum-mono-id\">" + escapeHtml(virtualModel) + "</code></dd>" +
+        "<dt>updated</dt><dd>" + escapeHtml(refAt) + "</dd>" +
+        "</dl>";
+    }
+    return (
+      '<details class="sum-card" id="gw-overview">' +
+      "<summary>" +
+      '<span class="sum-avatar sum-av-svc-gateway">GW</span>' +
+      '<span class="sum-main"><span class="sum-title">Overview</span>' +
+      sub +
+      "</span>" +
+      compactHealth +
+      '<span class="sum-chev"></span></summary>' +
+      '<div class="sum-body">' + body + "</div></details>"
+    );
+  }
+
+  function buildGatewayOverviewFeedSection() {
+    return (
+      '<div class="sum-feed-section">' +
+      buildGatewayOverviewCardHtml() +
+      buildGatewayUsageCardHtml() +
+      "</div>"
+    );
+  }
+
+  function fallbackChainToYAML(ids) {
+    if (!ids || !ids.length) return "";
+    return ids
+      .map(function (id) {
+        var s = String(id);
+        if (/^[\w./-]+$/.test(s)) return "- " + s;
+        return "- " + JSON.stringify(s);
+      })
+      .join("\n");
+  }
+
+  function parseFallbackChainInput(text) {
+    var t = String(text || "").trim();
+    if (t.length > 0 && t[0] === "[") {
+      try {
+        var j = JSON.parse(t);
+        if (Array.isArray(j)) return j.map(function (x) { return String(x); });
+      } catch (_e) {}
+    }
+    var lines = String(text || "").split(/\r?\n/);
+    var out = [];
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].replace(/#.*$/, "").trim();
+      if (!line) continue;
+      if (line[0] !== "-") throw new Error("each non-empty line must start with '-' (line " + (i + 1) + ")");
+      var rest = line.slice(1).trim();
+      if (!rest) throw new Error("empty list item (line " + (i + 1) + ")");
+      if (rest[0] === '"') {
+        try {
+          out.push(JSON.parse(rest));
+        } catch (e) {
+          throw new Error("bad double-quoted string (line " + (i + 1) + "): " + e.message);
+        }
+        continue;
+      }
+      if (rest[0] === "'") {
+        if (rest.length < 2 || rest[rest.length - 1] !== "'") throw new Error("unclosed single-quoted string (line " + (i + 1) + ")");
+        out.push(rest.slice(1, -1).replace(/''/g, "'"));
+        continue;
+      }
+      out.push(rest);
+    }
+    return out;
+  }
+
+  function adminSetMessage(kind, msg) {
+    if (!statusEl) return;
+    statusEl.textContent = msg || "";
+    statusEl.className = msg ? (kind === "err" ? "status-line err" : "status-line") : "status-line";
+  }
+
+  function adminPostJSON(url, body) {
+    return fetch(url, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body || {})
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) {
+        if (r.status === 401) throw new Error("Unauthorized");
+        if (!r.ok) throw new Error((j && (j.error || (j.error && j.error.message))) || ("HTTP " + r.status));
+        return j;
+      });
+    });
+  }
+
+  function fetchAdminState() {
+    return fetch("/api/ui/state", { credentials: "same-origin" })
+      .then(function (r) {
+        if (r.status === 401) return null;
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.json();
+      })
+      .then(function (j) {
+        if (!j) return;
+        adminStateCache = j;
+      });
+  }
+
+  function fetchAdminTokens() {
+    return fetch("/api/ui/tokens", { credentials: "same-origin" })
+      .then(function (r) {
+        if (r.status === 401) return null;
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.json();
+      })
+      .then(function (j) {
+        if (!j) return;
+        tokenListCache = Array.isArray(j.tokens) ? j.tokens : [];
+        for (var i = 0; i < tokenListCache.length; i++) {
+          var row = tokenListCache[i] || {};
+          var tid = row.tenant_id != null ? String(row.tenant_id).trim() : "";
+          var tok = row.token != null ? String(row.token).trim() : "";
+          if (tid && tok) adminCreatedTokenByTenant[tid] = tok;
+        }
+      });
+  }
+
+  function syncAdminStatePolling() {
+    if (adminStatePollTimer) {
+      try { clearInterval(adminStatePollTimer); } catch (_e) {}
+      adminStatePollTimer = null;
+    }
+    if (viewMode !== "summarized") return;
+    Promise.all([fetchAdminState(), fetchAdminTokens()])
+      .then(function () { if (viewMode === "summarized") refreshSummarizedPanel(); })
+      .catch(function (e) { adminSetMessage("err", e && e.message ? e.message : String(e)); });
+    adminStatePollTimer = setInterval(function () {
+      Promise.all([fetchAdminState(), fetchAdminTokens()])
+        .then(function () { if (viewMode === "summarized") refreshSummarizedPanel(); })
+        .catch(function () {});
+    }, ADMIN_STATE_POLL_MS);
+  }
+
+  function providerRowsHtml(providerId, p) {
+    var rows = p && Array.isArray(p.keys) ? p.keys : [];
+    if (!rows.length) return '<li class="muted">No keys yet.</li>';
+    var out = "";
+    for (var i = 0; i < rows.length; i++) {
+      var nm = rows[i] && rows[i].name != null ? String(rows[i].name) : "";
+      out +=
+        '<li><code>' + escapeHtml(nm || "(unnamed)") + "</code> · " + escapeHtml((rows[i] && rows[i].key_hint) || "—") +
+        ' <button type="button" class="sg-op-btn sg-op-btn--small sg-op-btn--danger sg-op-btn--pill" data-admin-action="provider-key-delete" data-provider="' + escapeHtml(providerId) + '" data-name="' + escapeHtml(nm) + '">Remove</button></li>';
+    }
+    return out;
+  }
+
+  function adminProviderIntro(providerId, subtitle) {
+    var links = {
+      groq: { href: "https://groq.com/", label: "groq.com" },
+      gemini: { href: "https://ai.google.dev/gemini-api/docs", label: "Gemini API docs" },
+      ollama: { href: "https://ollama.com/", label: "ollama.com" }
+    };
+    var meta = links[providerId] || null;
+    var out = '<p class="sg-op-provider-intro">' + escapeHtml(subtitle || "");
+    if (meta) {
+      out += ' Public reference: <a href="' + escapeHtml(meta.href) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(meta.label) + "</a>.";
+    }
+    return out + "</p>";
+  }
+
+  function adminProviderAvatarClass(providerId) {
+    if (providerId === "groq") return "sum-av-a";
+    if (providerId === "gemini") return "sum-av-b";
+    if (providerId === "ollama") return "sum-av-c";
+    return "sum-av-svc-upstream";
+  }
+
+  function adminProviderHealthEntry(providerId) {
+    if (!providerId || !bifrostProviderSnapshot || !bifrostProviderSnapshot.data || !Array.isArray(bifrostProviderSnapshot.data.providers)) {
+      return null;
+    }
+    var snapshotAgeMs = Date.now() - Number(bifrostProviderSnapshot.fetchedClientMs || 0);
+    if (snapshotAgeMs > BIFROST_PROVIDER_STALE_MS) return null;
+    var list = bifrostProviderSnapshot.data.providers;
+    for (var i = 0; i < list.length; i++) {
+      var row = list[i] || {};
+      if (String(row.id || "").toLowerCase() === String(providerId).toLowerCase()) return row;
+    }
+    return null;
+  }
+
+  function adminProviderAvailabilityHtml(providerId, fallbackOk) {
+    var hp = adminProviderHealthEntry(providerId);
+    var st = hp && hp.state ? String(hp.state).toLowerCase() : (fallbackOk ? "up" : "unknown");
+    var map = {
+      up: { cls: "sum-st-active", label: "reachable" },
+      key_missing: { cls: "sum-st-monitor", label: "key missing" },
+      down: { cls: "sum-st-error", label: "down" },
+      unknown: { cls: "sum-st-monitor", label: "unknown" }
+    };
+    var meta = map[st] || map.unknown;
+    return '<span class="sum-status ' + meta.cls + '">' + escapeHtml(meta.label) + "</span>";
+  }
+
+  function adminProviderModelCount(providerId) {
+    var listed = adminProviderCatalogModels(providerId);
+    if (listed.length) return listed.length;
+    var data = metricsCache || {};
+    var rows = [];
+    if (Array.isArray(data.day_rollups) && data.day_rollups.length) rows = data.day_rollups;
+    else if (Array.isArray(data.minute_rollups) && data.minute_rollups.length) rows = data.minute_rollups;
+    var seen = {};
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i] || {};
+      var rp = String(r.provider || "").toLowerCase();
+      var mid = String(r.model_id || "");
+      if (rp && rp !== String(providerId).toLowerCase()) continue;
+      if (!rp && mid.toLowerCase().indexOf(String(providerId).toLowerCase() + "/") !== 0) continue;
+      if (mid) seen[mid] = true;
+    }
+    var n = 0;
+    for (var k in seen) {
+      if (Object.prototype.hasOwnProperty.call(seen, k)) n++;
+    }
+    return n;
+  }
+
+  function countRoutingRulesFromYAML(yamlText) {
+    var src = String(yamlText || "");
+    if (!src.trim()) return 0;
+    var lines = src.split(/\r?\n/);
+    var inRules = false;
+    var rulesIndent = 0;
+    var itemIndent = -1;
+    var n = 0;
+    for (var i = 0; i < lines.length; i++) {
+      var ln = lines[i];
+      if (!inRules) {
+        var mHead = /^(\s*)rules\s*:\s*$/.exec(ln);
+        if (mHead) {
+          inRules = true;
+          rulesIndent = mHead[1].length;
+        }
+        continue;
+      }
+      if (!ln.trim()) continue;
+      var indent = ln.match(/^\s*/)[0].length;
+      if (indent <= rulesIndent && /^[^\s#]/.test(ln)) break;
+      if (!/^\s*-\s+/.test(ln)) continue;
+      if (itemIndent < 0) itemIndent = indent;
+      if (indent === itemIndent) n++;
+    }
+    return n;
+  }
+
+  function parseRoutingYamlScalar(value) {
+    var s = String(value || "").replace(/#.*$/, "").trim();
+    if (!s) return "";
+    if (s[0] === '"') {
+      try { return String(JSON.parse(s)); } catch (_eScalar) {}
+    }
+    if (s[0] === "'" && s[s.length - 1] === "'") {
+      return s.slice(1, -1).replace(/''/g, "'");
+    }
+    return s;
+  }
+
+  function parseRoutingRulesFromYAML(yamlText) {
+    var src = String(yamlText || "");
+    if (!src.trim()) return [];
+    var lines = src.split(/\r?\n/);
+    var inRules = false;
+    var rulesIndent = 0;
+    var out = [];
+    var cur = null;
+    var itemIndent = -1;
+    var inWhen = false;
+    var whenIndent = 0;
+    var inModels = false;
+    var modelsIndent = 0;
+
+    function pushCurrent() {
+      if (!cur) return;
+      out.push(cur);
+      cur = null;
+    }
+
+    for (var i = 0; i < lines.length; i++) {
+      var ln = lines[i] || "";
+      if (!inRules) {
+        var mHead = /^(\s*)rules\s*:\s*$/.exec(ln);
+        if (mHead) {
+          inRules = true;
+          rulesIndent = mHead[1].length;
+        }
+        continue;
+      }
+      if (!ln.trim()) continue;
+      var indent = ln.match(/^\s*/)[0].length;
+      if (indent <= rulesIndent && /^[^\s#]/.test(ln)) break;
+
+      var mItem = /^\s*-\s*(.*)$/.exec(ln);
+      if (mItem) {
+        if (itemIndent < 0) itemIndent = indent;
+        if (indent !== itemIndent) {
+          if (inModels) {
+            var midNested = parseRoutingYamlScalar(mItem[1]);
+            if (midNested) cur.models.push(midNested);
+          }
+          continue;
+        }
+        pushCurrent();
+        cur = {
+          name: "unnamed",
+          whenInline: "",
+          whenParts: [],
+          models: []
+        };
+        inWhen = false;
+        inModels = false;
+        var itemRest = String(mItem[1] || "").trim();
+        if (itemRest) {
+          var mNameInline = /^name\s*:\s*(.*)$/.exec(itemRest);
+          var mWhenInline = /^when\s*:\s*(.*)$/.exec(itemRest);
+          var mModelsInline = /^models\s*:\s*(.*)$/.exec(itemRest);
+          if (mNameInline) cur.name = parseRoutingYamlScalar(mNameInline[1]) || "unnamed";
+          else if (mWhenInline) cur.whenInline = parseRoutingYamlScalar(mWhenInline[1]);
+          else if (mModelsInline) {
+            var mv = parseRoutingYamlScalar(mModelsInline[1]);
+            if (mv && mv !== "[]") cur.models.push(mv);
+            inModels = !String(mModelsInline[1] || "").trim();
+            modelsIndent = indent;
+          }
+        }
+        continue;
+      }
+      if (!cur) continue;
+
+      if (inWhen && indent <= whenIndent) inWhen = false;
+      if (inModels && indent <= modelsIndent) inModels = false;
+
+      var mName = /^\s*name\s*:\s*(.*)$/.exec(ln);
+      if (mName) {
+        cur.name = parseRoutingYamlScalar(mName[1]) || cur.name || "unnamed";
+        continue;
+      }
+
+      var mWhen = /^\s*when\s*:\s*(.*)$/.exec(ln);
+      if (mWhen) {
+        var whenRest = String(mWhen[1] || "").trim();
+        cur.whenInline = parseRoutingYamlScalar(whenRest);
+        inWhen = !whenRest;
+        whenIndent = indent;
+        inModels = false;
+        continue;
+      }
+
+      var mModels = /^\s*models\s*:\s*$/.exec(ln);
+      if (mModels) {
+        inModels = true;
+        modelsIndent = indent;
+        inWhen = false;
+        continue;
+      }
+
+      if (inWhen) {
+        var whenLn = ln.replace(/^\s+/, "").trim();
+        if (whenLn && whenLn[0] !== "#") cur.whenParts.push(whenLn);
+        continue;
+      }
+
+      if (inModels) {
+        var mModel = /^\s*-\s*(.+)$/.exec(ln);
+        if (mModel) {
+          var mid = parseRoutingYamlScalar(mModel[1]);
+          if (mid) cur.models.push(mid);
+        }
+      }
+    }
+
+    pushCurrent();
+    return out;
+  }
+
+  function adminPrincipalForFlat(f) {
+    if (!f) return "";
+    return String(f.tenant_id || f.principal_id || f.tenant || "").trim();
+  }
+
+  function adminExtractProviderModel(mid) {
+    var s = String(mid || "").trim();
+    var slash = s.indexOf("/");
+    if (slash <= 0) return { provider: "", model: s };
+    return { provider: s.slice(0, slash), model: s.slice(slash + 1) };
+  }
+
+  function adminProviderCatalogModels(providerId) {
+    var pid = String(providerId || "").toLowerCase();
+    if (!pid) return [];
+    if (!bifrostProviderSnapshot || !bifrostProviderSnapshot.data || !Array.isArray(bifrostProviderSnapshot.data.providers)) return [];
+    var snapshotAgeMs = Date.now() - Number(bifrostProviderSnapshot.fetchedClientMs || 0);
+    if (snapshotAgeMs > BIFROST_PROVIDER_STALE_MS) return [];
+    var providers = bifrostProviderSnapshot.data.providers;
+    for (var i = 0; i < providers.length; i++) {
+      var row = providers[i] || {};
+      if (String(row.id || "").toLowerCase() !== pid) continue;
+      var mids = Array.isArray(row.model_ids) ? row.model_ids : [];
+      var seen = {};
+      var out = [];
+      for (var j = 0; j < mids.length; j++) {
+        var mid = String(mids[j] || "").trim();
+        if (!mid) continue;
+        var key = mid.toLowerCase();
+        if (seen[key]) continue;
+        seen[key] = true;
+        out.push(mid);
+      }
+      return out;
+    }
+    return [];
+  }
+
+  function adminProviderUsageRows(providerId) {
+    var out = {};
+    var listedModels = adminProviderCatalogModels(providerId);
+    for (var li = 0; li < listedModels.length; li++) {
+      var listed = String(listedModels[li] || "").trim();
+      if (!listed) continue;
+      out[listed] = { model_id: listed, calls: 0, errors: 0 };
+    }
+    var data = metricsCache || {};
+    var rows = Array.isArray(data.day_rollups) && data.day_rollups.length
+      ? data.day_rollups
+      : (Array.isArray(data.minute_rollups) ? data.minute_rollups : []);
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i] || {};
+      var mid = String(r.model_id || "");
+      var pm = adminExtractProviderModel(mid);
+      var provider = String(r.provider || pm.provider || "").toLowerCase();
+      if (!provider || provider !== String(providerId).toLowerCase()) continue;
+      var key = mid || provider + "/(unknown)";
+      if (!out[key]) out[key] = { model_id: key, calls: 0, errors: 0 };
+      out[key].calls += Number(r.calls) || 0;
+      var status = Number(r.status);
+      if (!isNaN(status) && (status < 200 || status >= 300)) out[key].errors += Number(r.calls) || 0;
+    }
+    var list = [];
+    for (var k in out) {
+      if (Object.prototype.hasOwnProperty.call(out, k)) list.push(out[k]);
+    }
+    list.sort(function (a, b) {
+      var dc = (b.calls || 0) - (a.calls || 0);
+      if (dc !== 0) return dc;
+      var de = (b.errors || 0) - (a.errors || 0);
+      if (de !== 0) return de;
+      return String(a.model_id || "").localeCompare(String(b.model_id || ""));
+    });
+    return list;
+  }
+
+  function adminModelUsageById() {
+    var out = {};
+    var data = metricsCache || {};
+    var rows = Array.isArray(data.day_rollups) && data.day_rollups.length
+      ? data.day_rollups
+      : (Array.isArray(data.minute_rollups) ? data.minute_rollups : []);
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i] || {};
+      var mid = String(r.model_id || "").trim();
+      if (!mid) continue;
+      out[mid] = (out[mid] || 0) + (Number(r.calls) || 0);
+    }
+    return out;
+  }
+
+  function adminProviderTierSpan(provider) {
+    var p = String(provider || "").toLowerCase();
+    var tier = "sum-conv-tier--inferred";
+    var label = provider || "";
+    if (p === "groq") {
+      tier = "sum-conv-tier--request_id";
+      label = "Groq";
+    } else if (p === "gemini") {
+      tier = "sum-conv-tier--ingest";
+      label = "Gemini";
+    } else if (p === "ollama") {
+      tier = "sum-conv-tier--anchored_inferred";
+      label = "Ollama";
+    }
+    return '<span class="sum-conv-tier ' + tier + '">' + escapeHtml(label) + "</span>";
+  }
+
+  function adminScopedEventsForPrincipal(principalId, maxN) {
+    var want = String(principalId || "").trim();
+    var out = [];
+    for (var i = entryCache.length - 1; i >= 0; i--) {
+      var ev = entryCache[i];
+      var f = getFlat(ev.parsed);
+      if (adminPrincipalForFlat(f) !== want) continue;
+      out.push(ev);
+      if (out.length >= maxN) break;
+    }
+    return out;
+  }
+
+  function adminUserStatsByPrincipal() {
+    var map = {};
+    for (var i = 0; i < entryCache.length; i++) {
+      var ev = entryCache[i];
+      var f = getFlat(ev.parsed);
+      var pid = adminPrincipalForFlat(f);
+      if (!pid) continue;
+      if (!map[pid]) map[pid] = { conv: {}, ws: {} };
+      var cid = f.conversation_id != null ? String(f.conversation_id).trim() : "";
+      if (cid) map[pid].conv[cid] = true;
+      var proj = String(
+        f.scope_project_id != null ? f.scope_project_id
+          : f.project_id != null ? f.project_id
+          : f.ingest_project != null ? f.ingest_project
+          : ""
+      ).trim();
+      if (proj) map[pid].ws[proj] = true;
+    }
+    return map;
+  }
+
+  function adminScopedEvlogPanelFromEvents(title, scopeId, evs) {
+    var parts = [];
+    var warnN = 0;
+    var failN = 0;
+    for (var i = 0; i < evs.length; i++) {
+      var ev = evs[i];
+      var flat = getFlat(ev.parsed);
+      var http = sumEvlogHttpCode(ev.parsed, flat);
+      var lvl = String(ev.parsed.levelCanon || ev.parsed.levelLabel || "").trim();
+      if (sumEvlogIsWarnish(lvl, http)) warnN++;
+      if (sumEvlogIsFailish(lvl, http)) failN++;
+      parts.push(sumEvlogRowTrHtml(ev, scopeId, i, inferServiceBadge(ev), {}));
+    }
+    return sumEvlogPanelHtml({
+      title: title,
+      scrollTbodyId: "sum-evlog-" + escapeHtml(scopeId),
+      warnN: warnN,
+      failN: failN,
+      tbodyInnerHtml: parts.join("")
+    });
+  }
+
+  function adminBuildUserCardHtml(principalId, tokensForUser, stats) {
+    var label = tokenLabelByTenant[principalId] || (tokensForUser[0] && tokensForUser[0].label) || principalId;
+    var initials = avatarInitials(label);
+    var convN = 0;
+    var wsN = 0;
+    if (stats) {
+      for (var ck in stats.conv) if (Object.prototype.hasOwnProperty.call(stats.conv, ck)) convN++;
+      for (var wk in stats.ws) if (Object.prototype.hasOwnProperty.call(stats.ws, wk)) wsN++;
+    }
+    var revokeIndex = tokensForUser[0] && tokensForUser[0].index != null ? String(tokensForUser[0].index) : "";
+    var tokenRows = "";
+    for (var i = 0; i < tokensForUser.length; i++) {
+      var tr = tokensForUser[i] || {};
+      tokenRows +=
+        '<li><code class="sum-mono-id">' + escapeHtml(String(tr.label || "(no label)")) + '</code> · tenant ' +
+        escapeHtml(String(tr.tenant_id || principalId)) + "</li>";
+    }
+    if (!tokenRows) tokenRows = '<li class="muted">No gateway tokens yet.</li>';
+    var tokenRaw = "";
+    if (tokensForUser[0] && tokensForUser[0].token != null && String(tokensForUser[0].token).trim() !== "") {
+      tokenRaw = String(tokensForUser[0].token).trim();
+    } else if (adminCreatedTokenByTenant[principalId]) {
+      tokenRaw = String(adminCreatedTokenByTenant[principalId] || "").trim();
+    }
+    var createdTokenHint = tokenRaw ? ("****************************" + tokenRaw.slice(-4)) : "****************************";
+    var createdTokenCopyBtn = tokenRaw
+      ? '<button type="button" class="sg-op-token-copy-btn" data-admin-action="user-token-copy" data-token="' + escapeHtml(tokenRaw) + '" title="Copy API key" aria-label="Copy API key">' +
+        '<svg class="sum-evlog__copy-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button>'
+      : "";
+    var scoped = adminScopedEventsForPrincipal(principalId, 18);
+    return (
+      '<details class="sum-card sg-op-user-card" id="admin-user-' + strHash("admin-user-" + principalId) + '" data-sg-op-user-id="' + escapeHtml(principalId) + '">' +
+      "<summary>" +
+      '<span class="sum-avatar sum-av-b" title="User">' + escapeHtml(initials) + '</span>' +
+      '<span class="sum-main"><span class="sum-title">' + escapeHtml(label) + '</span>' +
+      '<span class="sum-sub sum-sub--clamp">' + escapeHtml(principalId) + "</span></span>" +
+      '<button type="button" class="sg-op-btn sg-op-btn--small sg-op-btn--danger sg-op-user-revoke-btn" data-admin-action="token-delete" data-index="' + escapeHtml(revokeIndex) + '" disabled aria-disabled="true" title="Revocation is temporarily disabled">Revoke</button>' +
+      '<span class="sum-chev"></span></summary>' +
+      '<div class="sum-body">' +
+      '<dl class="indexer-run-kv indexer-run-kv--gateway-summary">' +
+      "<dt>User id</dt><dd><code class=\"sum-mono-id\">" + escapeHtml(principalId) + "</code></dd>" +
+      "<dt>Conversations</dt><dd>" + escapeHtml(formatInt(convN)) + "</dd>" +
+      "<dt>Workspaces</dt><dd>" + escapeHtml(formatInt(wsN)) + "</dd></dl>" +
+      '<div class="sum-section-label">Gateway tokens</div><ul class="sg-op-key-list">' + tokenRows + "</ul>" +
+      '<div class="sum-section-label">Gateway API key</div><div class="sg-op-token-row"><code class="sum-mono-id">' + escapeHtml(createdTokenHint) + "</code>" + createdTokenCopyBtn + "</div>" +
+      adminScopedEvlogPanelFromEvents("Scoped log — user", "user-" + principalId, scoped) +
+      "</div></details>"
+    );
+  }
+
+  function buildAdminUserDraftCardHtml(draft) {
+    var nm = draft && draft.name ? String(draft.name) : "";
+    var em = draft && draft.email ? String(draft.email) : "";
+    var msg = draft && draft.msg ? String(draft.msg) : "";
+    return (
+      '<article class="sum-card sum-card--workspace-draft" data-admin-user-draft="' + escapeHtml(draft.id) + '">' +
+      '<header class="sum-card__workspace-draft-hdr">' +
+      '<span class="sum-avatar sum-av-a">+</span>' +
+      '<span class="sum-main sum-main--workspace-draft"><span class="sum-title">New user</span>' +
+      '<span class="sum-sub sum-sub--clamp muted">Create a gateway token and save this principal.</span></span>' +
+      '<span class="ws-draft-actions"><button type="button" class="ws-draft-btn ws-draft-btn-cancel" data-admin-action="user-draft-cancel" data-draft-id="' + escapeHtml(draft.id) + '">Cancel</button>' +
+      '<button type="button" class="ws-draft-btn ws-draft-btn-save" data-admin-action="user-draft-save" data-draft-id="' + escapeHtml(draft.id) + '"' + (draft.saving ? " disabled" : "") + ">Save</button></span>" +
+      "</header>" +
+      '<div class="sum-body"><div class="ws-draft-fields">' +
+      '<div class="ws-draft-field"><label class="ws-draft-field-label">Display name</label>' +
+      '<input class="ws-draft-input" data-admin-user-field="name" data-draft-id="' + escapeHtml(draft.id) + '" type="text" value="' + escapeHtml(nm) + '" placeholder="e.g. Operations" /></div>' +
+      '<div class="ws-draft-field"><label class="ws-draft-field-label">Identifier / email</label>' +
+      '<input class="ws-draft-input" data-admin-user-field="email" data-draft-id="' + escapeHtml(draft.id) + '" type="text" value="' + escapeHtml(em) + '" placeholder="ops@example.com" /></div>' +
+      "</div>" +
+      (msg ? '<p class="muted ws-draft-hint">' + escapeHtml(msg) + "</p>" : "") +
+      "</div></article>"
+    );
+  }
+
+  function buildAdminUsersCardHtml() {
+    var toks = tokenListCache || [];
+    var byPrincipal = {};
+    for (var i = 0; i < toks.length; i++) {
+      var row = toks[i] || {};
+      var pid = String(row.tenant_id || "").trim();
+      if (!pid) continue;
+      if (!byPrincipal[pid]) byPrincipal[pid] = [];
+      byPrincipal[pid].push(row);
+    }
+    var userStats = adminUserStatsByPrincipal();
+    var draftHtml = "";
+    for (var d = 0; d < adminUserDrafts.length; d++) draftHtml += buildAdminUserDraftCardHtml(adminUserDrafts[d]);
+    var usersHtml = "";
+    var pids = Object.keys(byPrincipal);
+    pids.sort();
+    for (var p = 0; p < pids.length; p++) {
+      var pid2 = pids[p];
+      usersHtml += adminBuildUserCardHtml(pid2, byPrincipal[pid2], userStats[pid2] || null);
+    }
+    if (!usersHtml) usersHtml = '<p class="muted">No users yet. Add one to create a gateway token.</p>';
+    return (
+      '<div class="sum-feed-section" id="admin-users">' +
+      '<div class="sum-feed-section-head">' +
+      '<span class="sum-feed-section-title sum-section-label">Users</span>' +
+      '<button type="button" class="sum-workspaces-create-btn" data-admin-action="user-add">Add user</button></div>' +
+      '<div class="sum-workspaces-intro"><p class="sum-workspaces-intro-lead">Onboard principals as first-class users with gateway tokens, conversation/workspace counts, and a scoped activity stream.</p></div>' +
+      '<div class="sg-op-user-drafts-stack">' + draftHtml + "</div>" +
+      '<div class="sg-op-user-cards-stack">' + usersHtml + "</div></div>"
+    );
+  }
+
+  function buildAdminProviderCardHtml(providerId, title, avatar, subtitle) {
+    var st = adminStateCache || {};
+    var p = st.providers || {};
+    var row = p[providerId] || {};
+    var keys = row && Array.isArray(row.keys) ? row.keys : [];
+    var keyCount = keys.length;
+    var modelCount = adminProviderModelCount(providerId);
+    var isOllama = providerId === "ollama";
+    var metrics = "";
+    if (isOllama) {
+      metrics = '<span class="sum-metrics"><span class="chip">models ' + escapeHtml(formatInt(modelCount)) + "</span></span>";
+    } else {
+      metrics =
+        '<span class="sum-metrics"><span class="chip">keys ' +
+        escapeHtml(formatInt(keyCount)) +
+        '</span><span class="chip">models ' +
+        escapeHtml(formatInt(modelCount)) +
+        "</span></span>";
+    }
+    var availability = adminProviderAvailabilityHtml(providerId, !!row.ok);
+    var usageRows = adminProviderUsageRows(providerId);
+    var providerIntro = adminProviderIntro(providerId, subtitle);
+    var usageHtml = "";
+    if (!usageRows.length) {
+      usageHtml = '<p class="muted">No usage yet in loaded metrics window.</p>';
+    } else {
+      usageHtml = '<div class="sum-metrics-table-wrap"><table class="sum-metrics-table"><thead><tr><th>Model</th><th class="num">Requests</th><th class="num">Errors</th></tr></thead><tbody>';
+      for (var ui = 0; ui < usageRows.length; ui++) {
+        var ur = usageRows[ui];
+        usageHtml += '<tr><td><code class="sum-mono-id">' + escapeHtml(ur.model_id) + '</code></td><td class="num">' + escapeHtml(formatInt(ur.calls)) + '</td><td class="num">' + escapeHtml(formatInt(ur.errors)) + "</td></tr>";
+      }
+      usageHtml += "</tbody></table></div>";
+    }
+    var body = "";
+    if (isOllama) {
+      body =
+        providerIntro +
+        '<div class="sum-section-label">Model usage (24h)</div>' + usageHtml +
+        '<div class="sg-op-provider-edit-row"><div class="sg-op-provider-edit-main"><label class="sg-op-label">Server base URL</label>' +
+        '<input id="admin-ollama-url" class="sg-op-input" type="url" placeholder="http://127.0.0.1:11434" value="' + escapeHtml(row.ollama_base_url || "") + '"/></div>' +
+        '<button class="sum-workspaces-create-btn sg-op-save-btn" type="button" data-admin-action="ollama-save">Save</button></div>';
+    } else {
+      body =
+        providerIntro +
+        '<div class="sum-section-label">Model usage (24h)</div>' + usageHtml +
+        '<div class="sum-section-label">API KEYS</div>' +
+        '<ul class="sg-op-key-list">' + providerRowsHtml(providerId, row) + "</ul>" +
+        '<div class="sg-op-provider-edit-row"><div class="sg-op-provider-edit-main">' +
+        '<input id="admin-' + escapeHtml(providerId) + '-key" class="sg-op-input" type="password" placeholder="' + (providerId === "groq" ? "gsk-…" : "AIza…") + '"/></div>' +
+        '<button class="sum-workspaces-create-btn sg-op-save-btn" type="button" data-admin-action="provider-key-add" data-provider="' + escapeHtml(providerId) + '">Save</button></div>';
+    }
+    var scoped = [];
+    for (var ei = entryCache.length - 1; ei >= 0 && scoped.length < 18; ei--) {
+      var ev = entryCache[ei];
+      var fEv = getFlat(ev.parsed);
+      var msgEv = String(fEv.msg || fEv.message || "").toLowerCase();
+      var providerHit =
+        String(fEv.provider_id || fEv.provider || fEv.upstream_provider || "").toLowerCase() === String(providerId).toLowerCase() ||
+        String(fEv.upstreamModel || fEv.model || "").toLowerCase().indexOf(String(providerId).toLowerCase() + "/") === 0 ||
+        msgEv.indexOf(String(providerId).toLowerCase()) >= 0;
+      if (providerHit) scoped.push(ev);
+    }
+    var avatarClass = adminProviderAvatarClass(providerId);
+    return (
+      '<details class="sum-card" id="admin-provider-' + escapeHtml(providerId) + '">' +
+      '<summary><span class="sum-avatar ' + escapeHtml(avatarClass) + '">' + escapeHtml(avatar) + '</span><span class="sum-main"><span class="sum-title">' + escapeHtml(title) + "</span>" +
+      '<span class="sum-sub sum-sub--clamp">' + escapeHtml(subtitle) + "</span></span>" +
+      metrics +
+      availability +
+      '<span class="sum-chev"></span></summary><div class="sum-body">' + body +
+      adminScopedEvlogPanelFromEvents("Scoped log — " + title, "provider-" + providerId, scoped) +
+      "</div></details>"
+    );
+  }
+
+  function buildAdminRoutingRulesCardHtml() {
+    var gw = (adminStateCache && adminStateCache.gateway) || {};
+    var policy = gw.routing_policy_yaml || "";
+    var policyLive = routingPolicyDraft != null ? String(routingPolicyDraft) : String(policy);
+    var policyDirty = String(policyLive) !== String(policy);
+    var rulesCount = countRoutingRulesFromYAML(policyLive);
+    var freeTierOnly = !!gw.filter_free_tier_models;
+    var usesByModel = adminModelUsageById();
+    var routingRulesRows = parseRoutingRulesFromYAML(policy);
+    var tableRows = "";
+    for (var ri = 0; ri < routingRulesRows.length; ri++) {
+      var rr = routingRulesRows[ri] || {};
+      var matchVal = "";
+      if (rr.whenInline) {
+        matchVal = rr.whenInline === "{}" ? "(catch-all)" : rr.whenInline;
+      } else if (rr.whenParts && rr.whenParts.length) {
+        matchVal = rr.whenParts.join("; ");
+      } else {
+        matchVal = "(catch-all)";
+      }
+      var modelCell = "—";
+      if (rr.models && rr.models.length) {
+        var parts = [];
+        for (var mi = 0; mi < rr.models.length; mi++) {
+          parts.push('<code class="sum-mono-id">' + escapeHtml(rr.models[mi]) + "</code>");
+        }
+        modelCell = parts.join(", ");
+      }
+      var hits = 0;
+      for (var hm = 0; hm < (rr.models || []).length; hm++) {
+        hits += Number(usesByModel[rr.models[hm]] || 0);
+      }
+      tableRows +=
+        "<tr>" +
+        '<td><code class="sum-mono-id">' + escapeHtml(rr.name || "unnamed") + "</code></td>" +
+        '<td><code class="sum-mono-id">' + escapeHtml(matchVal) + "</code></td>" +
+        "<td>" + modelCell + "</td>" +
+        '<td class="num">' + escapeHtml(formatInt(hits)) + "</td>" +
+        "</tr>";
+    }
+    if (!tableRows) tableRows = '<tr><td colspan="4" class="muted">No routing rules configured.</td></tr>';
+    return (
+      '<details class="sum-card" id="admin-routing-rules">' +
+      '<summary><span class="sum-avatar sum-av-svc-gateway">Rt</span><span class="sum-main"><span class="sum-title">Routing rules</span>' +
+      '<span class="sum-sub sum-sub--clamp">Virtual model policy with editable YAML and live catalog generation.</span></span>' +
+      '<span class="sum-metrics"><span class="chip">' + escapeHtml(formatInt(rulesCount)) + ' active rules</span></span>' +
+      '<span class="sum-chev"></span></summary>' +
+      '<div class="sum-body">' +
+      '<div class="sg-op-card-note">Review active routing rules and 24h hits; use Configure to edit policy YAML.</div>' +
+      '<div class="sg-op-head-row">' +
+      '<div class="sum-section-label">Routing Policy</div>' +
+      '<div class="sg-op-head-actions">' +
+      (adminRoutingEditing
+        ? ('<button class="sg-op-btn sg-op-btn--ghost sg-op-btn--toggle' + (freeTierOnly ? " is-active" : "") + '" type="button" data-admin-action="routing-free-tier-toggle" aria-pressed="' + (freeTierOnly ? "true" : "false") + '">Free Tier Only</button>' +
+          '<button class="sg-op-btn sg-op-btn--ghost" type="button" data-admin-action="routing-generate">Generate from live catalog</button>' +
+          '<button class="sg-op-btn sg-op-btn--ghost" type="button" data-admin-action="routing-cancel">Cancel</button>')
+        : '<button class="sg-op-btn" type="button" data-admin-action="routing-configure">Configure</button>') +
+      "</div>" +
+      "</div>" +
+      '<div id="admin-routing-table-view"' + (adminRoutingEditing ? " hidden" : "") + ">" +
+      '<div class="sum-metrics-table-wrap sg-op-routing-table-scroll"><table class="sum-metrics-table"><thead><tr><th>Name</th><th>Match</th><th>Models</th><th class="num">Hits (24h)</th></tr></thead><tbody>' + tableRows + "</tbody></table></div>" +
+      "</div>" +
+      '<div id="admin-routing-yaml-view"' + (adminRoutingEditing ? "" : " hidden") + ">" +
+      '<div id="admin-routing-policy-wrap" class="sg-op-yaml-wrap sg-op-yaml-wrap--full' + (policyDirty ? " sg-op-yaml-wrap--dirty" : "") + '">' +
+      '<textarea id="admin-routing-yaml" class="sg-op-yaml-textarea" rows="10" spellcheck="false">' + escapeHtml(policyLive) + "</textarea>" +
+      '<div class="sg-op-yaml-ov">' +
+      '<button type="button" class="sg-op-yaml-ov-btn" data-admin-action="routing-policy-refresh" title="Revert to last saved routing YAML" aria-label="Revert routing policy"><span class="sg-op-reload-icon" aria-hidden="true"></span></button>' +
+      '<button type="button" class="sg-op-yaml-ov-btn sg-op-yaml-ov-btn--save sg-op-yaml-ov-save" data-admin-action="routing-policy-save">Save</button>' +
+      "</div></div></div>" +
+      adminScopedEvlogPanelFromEvents("Scoped log — routing decisions", "routing-rules", adminScopedEventsForRouting("rules")) +
+      "</div></details>"
+    );
+  }
+
+  function buildAdminFallbackCardHtml() {
+    var gw = (adminStateCache && adminStateCache.gateway) || {};
+    var fallback = Array.isArray(gw.fallback_chain) ? gw.fallback_chain : [];
+    var freeTierOnly = !!gw.filter_free_tier_models;
+    var fallbackYAML = fallbackTouched ? ((document.getElementById("admin-fallback-yaml") && document.getElementById("admin-fallback-yaml").value) || fallbackChainToYAML(fallback)) : fallbackChainToYAML(fallback);
+    var chain = fallback;
+    if (fallbackTouched) {
+      try {
+        chain = parseFallbackChainInput(fallbackYAML);
+      } catch (_eFbParse) {
+        chain = fallback;
+      }
+    }
+    var usesByModel = adminModelUsageById();
+    var tableRows = "";
+    for (var i = 0; i < chain.length; i++) {
+      var mid = String(chain[i] || "");
+      var pm = adminExtractProviderModel(mid);
+      tableRows +=
+        "<tr>" +
+        '<td class="num">' + escapeHtml(String(i + 1)) + "</td>" +
+        "<td>" + adminProviderTierSpan(pm.provider) + "</td>" +
+        '<td><code class="sum-mono-id">' + escapeHtml(mid) + "</code></td>" +
+        '<td class="num">' + escapeHtml(formatInt(usesByModel[mid] || 0)) + "</td>" +
+        "</tr>";
+    }
+    if (!tableRows) tableRows = '<tr><td colspan="4" class="muted">No fallback routes configured.</td></tr>';
+    return (
+      '<details class="sum-card" id="admin-fallback-chain">' +
+      '<summary><span class="sum-avatar sum-av-svc-gateway">Fb</span><span class="sum-main"><span class="sum-title">Fallback chain</span>' +
+      '<span class="sum-sub sum-sub--clamp">Ordered failover list used when the first route cannot serve.</span></span>' +
+      '<span class="sum-metrics"><span class="chip">' + escapeHtml(formatInt(fallback.length)) + ' tiers</span></span>' +
+      '<span class="sum-chev"></span></summary>' +
+      '<div class="sum-body">' +
+      '<div class="sg-op-card-note">Define the fallback sequence used when the selected route cannot serve a request.</div>' +
+      '<div class="sg-op-head-row">' +
+      '<div class="sum-section-label">Fallback Order</div>' +
+      '<div class="sg-op-head-actions">' +
+      (adminFallbackEditing
+        ? ('<button class="sg-op-btn sg-op-btn--ghost sg-op-btn--toggle' + (freeTierOnly ? " is-active" : "") + '" type="button" data-admin-action="routing-free-tier-toggle" aria-pressed="' + (freeTierOnly ? "true" : "false") + '">Free Tier Only</button>' +
+          '<button class="sg-op-btn sg-op-btn--ghost" type="button" data-admin-action="routing-generate">Generate from live catalog</button>' +
+          '<button class="sg-op-btn sg-op-btn--ghost" type="button" data-admin-action="fallback-cancel">Cancel</button>')
+        : '<button class="sg-op-btn" type="button" data-admin-action="fallback-configure">Configure</button>') +
+      "</div></div>" +
+      '<div id="admin-fallback-table-view"' + (adminFallbackEditing ? " hidden" : "") + ">" +
+      '<div class="sum-metrics-table-wrap sg-op-fallback-table-scroll"><table class="sum-metrics-table sg-op-fallback-table"><thead><tr><th class="num">Order</th><th>Provider</th><th>Model</th><th class="num">Uses (24h)</th></tr></thead><tbody>' + tableRows + "</tbody></table></div>" +
+      "</div>" +
+      '<div id="admin-fallback-yaml-view"' + (adminFallbackEditing ? "" : " hidden") + ">" +
+      '<div id="admin-fallback-yaml-wrap" class="sg-op-yaml-wrap sg-op-yaml-wrap--full' + (fallbackTouched ? " sg-op-yaml-wrap--dirty" : "") + '">' +
+      '<textarea id="admin-fallback-yaml" class="sg-op-yaml-textarea" rows="8" spellcheck="false">' + escapeHtml(fallbackYAML) + "</textarea>" +
+      '<div class="sg-op-yaml-ov"><button type="button" class="sg-op-yaml-ov-btn" data-admin-action="fallback-refresh" title="Revert fallback chain" aria-label="Revert fallback chain"><span class="sg-op-reload-icon" aria-hidden="true"></span></button>' +
+      '<button type="button" class="sg-op-yaml-ov-btn sg-op-yaml-ov-btn--save sg-op-yaml-ov-save" data-admin-action="fallback-save">Save</button></div></div>' +
+      "</div>" +
+      adminScopedEvlogPanelFromEvents("Scoped log — fallback / failover", "routing-fallback", adminScopedEventsForRouting("fallback")) +
+      "</div></details>"
+    );
+  }
+
+  function buildAdminRouterModelCardHtml() {
+    var gw = (adminStateCache && adminStateCache.gateway) || {};
+    var routerModels = Array.isArray(gw.router_models) ? gw.router_models : [];
+    var freeTierOnly = !!gw.filter_free_tier_models;
+    var thresholdSaved = String(gw.tool_router_confidence_threshold != null ? gw.tool_router_confidence_threshold : 0.5);
+    var threshold = routerThresholdTouched && routerThresholdDraft != null ? String(routerThresholdDraft) : thresholdSaved;
+    var routerEnabled = routerEnabledTouched && routerEnabledDraft != null ? !!routerEnabledDraft : !!gw.tool_router_enabled;
+    var routerModelsYAML = routerModelsTouched
+      ? String(routerModelsDraft != null ? routerModelsDraft : ((document.getElementById("admin-router-models-yaml") && document.getElementById("admin-router-models-yaml").value) || fallbackChainToYAML(routerModels)))
+      : fallbackChainToYAML(routerModels);
+    var routerChain = routerModels;
+    if (routerModelsTouched) {
+      try {
+        routerChain = parseFallbackChainInput(routerModelsYAML);
+      } catch (_eRouterParse) {
+        routerChain = routerModels;
+      }
+    }
+    var usesByModel = adminModelUsageById();
+    var routerTableRows = "";
+    for (var i = 0; i < routerChain.length; i++) {
+      var rid = String(routerChain[i] || "");
+      var rpm = adminExtractProviderModel(rid);
+      routerTableRows +=
+        "<tr>" +
+        '<td class="num">' + escapeHtml(String(i + 1)) + "</td>" +
+        "<td>" + adminProviderTierSpan(rpm.provider) + "</td>" +
+        '<td><code class="sum-mono-id">' + escapeHtml(rid) + "</code></td>" +
+        '<td class="num">' + escapeHtml(formatInt(usesByModel[rid] || 0)) + "</td>" +
+        "</tr>";
+    }
+    if (!routerTableRows) routerTableRows = '<tr><td colspan="4" class="muted">No router models configured.</td></tr>';
+    return (
+      '<details class="sum-card" id="admin-router-model">' +
+      '<summary><span class="sum-avatar sum-av-svc-gateway">Tr</span><span class="sum-main"><span class="sum-title">Router model</span>' +
+      '<span class="sum-sub sum-sub--clamp">Tool-router controls and ordered router model list.</span></span>' +
+      '<button class="sum-router-toggle" type="button" id="admin-router-enabled" data-admin-action="router-enabled-toggle" aria-label="Toggle tool router" aria-pressed="' + (routerEnabled ? "true" : "false") + '">' +
+      '<span class="sum-router-toggle__track"><span class="sum-router-toggle__thumb"></span></span>' +
+      "</button>" +
+      '<span class="sum-chev"></span></summary>' +
+      '<div class="sum-body">' +
+      '<div class="sg-op-head-row">' +
+      '<div class="sg-op-card-note sg-op-card-note--tight">Manage tool-router model order, enabled state, and confidence threshold from one panel.</div>' +
+      "</div>" +
+      '<div class="sg-op-head-row">' +
+      '<div class="sum-section-label">Router Models</div>' +
+      '<div class="sg-op-head-actions">' +
+      (adminRouterEditing
+        ? ('<button class="sg-op-btn sg-op-btn--ghost sg-op-btn--toggle' + (freeTierOnly ? " is-active" : "") + '" type="button" data-admin-action="routing-free-tier-toggle" aria-pressed="' + (freeTierOnly ? "true" : "false") + '">Free Tier Only</button>' +
+          '<button class="sg-op-btn sg-op-btn--ghost" type="button" data-admin-action="routing-generate">Generate from live catalog</button>' +
+          '<button class="sg-op-btn sg-op-btn--ghost" type="button" data-admin-action="router-cancel">Cancel</button>')
+        : '<button class="sg-op-btn" type="button" data-admin-action="router-configure">Configure</button>') +
+      "</div></div>" +
+      '<div id="admin-router-table-view"' + (adminRouterEditing ? " hidden" : "") + ">" +
+      '<div class="sum-metrics-table-wrap sg-op-router-table-scroll"><table class="sum-metrics-table sg-op-router-table"><thead><tr><th class="num">Order</th><th>Provider</th><th>Model</th><th class="num">Uses (24h)</th></tr></thead><tbody>' + routerTableRows + "</tbody></table></div>" +
+      "</div>" +
+      '<div id="admin-router-yaml-view"' + (adminRouterEditing ? "" : " hidden") + ">" +
+      '<div id="admin-router-models-wrap" class="sg-op-yaml-wrap sg-op-yaml-wrap--full' + (routerModelsTouched ? " sg-op-yaml-wrap--dirty" : "") + '">' +
+      '<textarea id="admin-router-models-yaml" class="sg-op-yaml-textarea" rows="8" spellcheck="false">' + escapeHtml(routerModelsYAML) + "</textarea>" +
+      '<div class="sg-op-yaml-ov"><button type="button" class="sg-op-yaml-ov-btn" data-admin-action="router-models-refresh" title="Revert router models" aria-label="Revert router models"><span class="sg-op-reload-icon" aria-hidden="true"></span></button>' +
+      '<button type="button" class="sg-op-yaml-ov-btn sg-op-yaml-ov-btn--save sg-op-yaml-ov-save" data-admin-action="router-save">Save</button></div></div>' +
+      "</div>" +
+      '<div class="sg-op-head-row">' +
+      '<label class="sg-op-label sg-op-label--inline" for="admin-router-threshold">Confidence threshold</label>' +
+      '<div class="sg-op-head-actions">' +
+      '<input id="admin-router-threshold" class="sg-op-input" type="number" min="0" max="1" step="0.05" value="' + escapeHtml(threshold) + '" style="max-width:9rem"/>' +
+      '<button type="button" class="sg-op-yaml-ov-btn sg-op-yaml-ov-btn--save" data-admin-action="router-save">Save</button>' +
+      "</div></div>" +
+      adminScopedEvlogPanelFromEvents("Scoped log — tool-router", "routing-router", adminScopedEventsForRouting("router")) +
+      "</div></details>"
+    );
+  }
+
+  function adminScopedEventsForRouting(kind) {
+    var out = [];
+    var want = String(kind || "").toLowerCase();
+    for (var i = entryCache.length - 1; i >= 0 && out.length < 18; i--) {
+      var ev = entryCache[i];
+      var f = getFlat(ev.parsed);
+      var msg = String(f.msg || f.message || "").toLowerCase();
+      var hit = false;
+      if (want === "rules") {
+        hit = msg.indexOf("routing") >= 0 || msg.indexOf("virtual model") >= 0;
+      } else if (want === "fallback") {
+        hit = msg.indexOf("fallback") >= 0 || msg.indexOf("failover") >= 0;
+      } else if (want === "router") {
+        hit = msg.indexOf("router") >= 0 || msg.indexOf("tool_router") >= 0 || msg.indexOf("tool-router") >= 0;
+      }
+      if (hit) out.push(ev);
+    }
+    return out;
+  }
+
+  function buildAdminWorkflowsFeedSection() {
+    return (
+      '<div class="sum-feed-section">' +
+      buildAdminUsersCardHtml() +
+      '<div class="sum-section-label sum-feed-section-title">Providers</div>' +
+      '<div class="sum-workspaces-intro"><p class="sum-workspaces-intro-lead">Providers drive upstream inference through BiFrost; each card shows configuration, usage, and scoped log activity.</p></div>' +
+      buildAdminProviderCardHtml("groq", "Groq", "Gq", "LPU inference provider with key management.") +
+      buildAdminProviderCardHtml("gemini", "Gemini", "Gm", "Google Gemini provider with key management.") +
+      buildAdminProviderCardHtml("ollama", "Ollama", "Ol", "Local/remote Ollama endpoint for chat and embeddings.") +
+      '<div class="sum-section-label sum-feed-section-title">Routing</div>' +
+      '<div class="sum-workspaces-intro"><p class="sum-workspaces-intro-lead">Routing controls are fully editable here: policy YAML, fallback chain, and tool-router settings.</p></div>' +
+      buildAdminRoutingRulesCardHtml() +
+      buildAdminFallbackCardHtml() +
+      buildAdminRouterModelCardHtml() +
+      "</div>"
+    );
+  }
+
   function buildGatewayUsageCardHtml() {
     var data = metricsCache;
     var m =
@@ -2330,15 +3528,6 @@ globalThis.ClaudiaLogs.Main = function () {
     );
   }
 
-  function buildGatewayUsageFeedSection() {
-    return (
-      '<div class="sum-feed-section">' +
-      '<div class="sum-section-label sum-feed-section-title">Gateway usage</div>' +
-      buildGatewayUsageCardHtml() +
-      "</div>"
-    );
-  }
-
   function fetchTokenLabels() {
     fetch("/api/ui/tokens", { credentials: "same-origin" })
       .then(function (r) {
@@ -2355,6 +3544,8 @@ globalThis.ClaudiaLogs.Main = function () {
               ? String(row.tenant_id).trim()
               : "";
           if (!tid) continue;
+          var tok = row.token != null && String(row.token).trim() !== "" ? String(row.token).trim() : "";
+          if (tok) adminCreatedTokenByTenant[tid] = tok;
           var lb =
             row.label != null && String(row.label).trim() !== ""
               ? String(row.label).trim()
@@ -7043,7 +8234,7 @@ globalThis.ClaudiaLogs.Main = function () {
       var kb = b.sortKey != null ? String(b.sortKey) : "";
       return ka.localeCompare(kb, undefined, { sensitivity: "base", numeric: true });
     });
-    var body = buildGatewayUsageFeedSection();
+    var body = buildGatewayOverviewFeedSection() + buildAdminWorkflowsFeedSection();
     if (convTimeline.length) {
       body +=
         '<div class="sum-feed-section"><div class="sum-section-label sum-feed-section-title">Conversations</div>';
@@ -7873,6 +9064,438 @@ globalThis.ClaudiaLogs.Main = function () {
       },
       true
     );
+  })();
+
+  (function wireAdminWorkflowCards() {
+    function syncYamlOverlayVScrollFromTarget(t) {
+      if (!t || String(t.tagName || "").toLowerCase() !== "textarea") return;
+      var wrap = t.closest && t.closest(".sg-op-yaml-wrap");
+      if (!wrap) return;
+      wrap.classList.toggle("sg-op-yaml-wrap--vscroll", t.scrollHeight > t.clientHeight + 1);
+    }
+
+    function applyRoutingPolicyDraftToEditor() {
+      var y = document.getElementById("admin-routing-yaml");
+      if (!y) return;
+      y.value = String(routingPolicyDraft != null ? routingPolicyDraft : "");
+      var savedPolicy = String((((adminStateCache && adminStateCache.gateway) || {}).routing_policy_yaml) || "");
+      routingPolicyTouched = String(y.value) !== savedPolicy;
+      var wrap = document.getElementById("admin-routing-policy-wrap");
+      if (wrap) wrap.classList.toggle("sg-op-yaml-wrap--dirty", !!routingPolicyTouched);
+      syncYamlOverlayVScrollFromTarget(y);
+    }
+
+    document.body.addEventListener("input", function (ev) {
+      var t = ev.target;
+      if (!t || !t.id) return;
+      if (t.id === "admin-routing-yaml") {
+        routingPolicyDraft = t.value != null ? String(t.value) : "";
+        var savedPolicy = String((((adminStateCache && adminStateCache.gateway) || {}).routing_policy_yaml) || "");
+        routingPolicyTouched = String(routingPolicyDraft) !== savedPolicy;
+      }
+      else if (t.id === "admin-fallback-yaml") fallbackTouched = true;
+      else if (t.id === "admin-router-models-yaml") {
+        routerModelsTouched = true;
+        routerModelsDraft = t.value != null ? String(t.value) : "";
+        var routerWrap = document.getElementById("admin-router-models-wrap");
+        if (routerWrap) routerWrap.classList.add("sg-op-yaml-wrap--dirty");
+      }
+      else if (t.id === "admin-router-threshold") {
+        routerThresholdTouched = true;
+        routerThresholdDraft = t.value != null ? String(t.value) : "";
+      }
+    });
+    document.body.addEventListener("input", function (ev) {
+      var t = ev.target;
+      if (!t || typeof t.getAttribute !== "function") return;
+      var fld = t.getAttribute("data-admin-user-field");
+      if (!fld) return;
+      var did = Number(t.getAttribute("data-draft-id"));
+      if (!did) return;
+      for (var i = 0; i < adminUserDrafts.length; i++) {
+        if (adminUserDrafts[i] && adminUserDrafts[i].id === did) {
+          adminUserDrafts[i][fld] = t.value != null ? String(t.value) : "";
+          break;
+        }
+      }
+    });
+
+    document.body.addEventListener("click", function (ev) {
+      var t = ev.target;
+      if (!t || typeof t.closest !== "function") return;
+      var actionEl = t.closest("[data-admin-action]");
+      if (!actionEl || typeof actionEl.getAttribute !== "function") return;
+      t = actionEl;
+      var act = t.getAttribute("data-admin-action");
+      if (!act) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+
+      function reloadAdmin() {
+        Promise.all([fetchAdminState(), fetchAdminTokens()]).then(function () {
+          refreshSummarizedPanel();
+        });
+      }
+
+      if (act === "user-add") {
+        adminUserDrafts.unshift({
+          id: nextAdminUserDraftId++,
+          name: "",
+          email: "",
+          saving: false,
+          msg: ""
+        });
+        refreshSummarizedPanel();
+        return;
+      }
+
+      if (act === "user-draft-cancel") {
+        var dCancel = Number(t.getAttribute("data-draft-id"));
+        if (!dCancel) return;
+        var kept = [];
+        for (var dc = 0; dc < adminUserDrafts.length; dc++) {
+          if (!adminUserDrafts[dc] || adminUserDrafts[dc].id !== dCancel) kept.push(adminUserDrafts[dc]);
+        }
+        adminUserDrafts = kept;
+        refreshSummarizedPanel();
+        return;
+      }
+
+      if (act === "user-draft-save") {
+        var dSave = Number(t.getAttribute("data-draft-id"));
+        if (!dSave) return;
+        var draft = null;
+        for (var ds = 0; ds < adminUserDrafts.length; ds++) {
+          if (adminUserDrafts[ds] && adminUserDrafts[ds].id === dSave) {
+            draft = adminUserDrafts[ds];
+            break;
+          }
+        }
+        if (!draft) return;
+        draft.saving = true;
+        draft.msg = "";
+        refreshSummarizedPanel();
+        var label = String(draft.name || draft.email || "token").trim();
+        adminPostJSON("/api/ui/tokens", { label: label })
+          .then(function (j) {
+            adminSetMessage("", "User token created. Copy it now; it will not be shown again.");
+            var keep = [];
+            for (var di = 0; di < adminUserDrafts.length; di++) {
+              if (!adminUserDrafts[di] || adminUserDrafts[di].id !== dSave) keep.push(adminUserDrafts[di]);
+            }
+            adminUserDrafts = keep;
+            var tenant = j && j.tenant_id != null ? String(j.tenant_id).trim() : "";
+            if (tenant) {
+              adminCreatedTokenByTenant[tenant] = String((j && j.token) || "");
+            }
+            reloadAdmin();
+          })
+          .catch(function (e) {
+            draft.saving = false;
+            draft.msg = e && e.message ? e.message : String(e);
+            refreshSummarizedPanel();
+            adminSetMessage("err", draft.msg);
+          });
+        return;
+      }
+
+      if (act === "fallback-configure") {
+        adminFallbackEditing = true;
+        refreshSummarizedPanel();
+        return;
+      }
+
+      if (act === "routing-configure") {
+        adminRoutingEditing = true;
+        if (routingPolicyDraft == null) routingPolicyDraft = String((((adminStateCache && adminStateCache.gateway) || {}).routing_policy_yaml) || "");
+        refreshSummarizedPanel();
+        return;
+      }
+
+      if (act === "routing-cancel") {
+        adminRoutingEditing = false;
+        routingPolicyTouched = false;
+        routingPolicyDraft = String((((adminStateCache && adminStateCache.gateway) || {}).routing_policy_yaml) || "");
+        refreshSummarizedPanel();
+        return;
+      }
+
+      if (act === "router-configure") {
+        adminRouterEditing = true;
+        refreshSummarizedPanel();
+        return;
+      }
+
+      if (act === "router-cancel") {
+        adminRouterEditing = false;
+        routerModelsTouched = false;
+        routerModelsDraft = null;
+        routerThresholdTouched = false;
+        routerThresholdDraft = null;
+        routerEnabledTouched = false;
+        routerEnabledDraft = null;
+        refreshSummarizedPanel();
+        return;
+      }
+
+      if (act === "fallback-cancel") {
+        adminFallbackEditing = false;
+        fallbackTouched = false;
+        refreshSummarizedPanel();
+        return;
+      }
+
+      if (act === "routing-policy-refresh") {
+        fetchAdminState()
+          .catch(function () {})
+          .then(function () {
+            var saved = String((((adminStateCache && adminStateCache.gateway) || {}).routing_policy_yaml) || "");
+            routingPolicyDraft = saved;
+            applyRoutingPolicyDraftToEditor();
+          });
+        return;
+      }
+
+      if (act === "fallback-refresh") {
+        fallbackTouched = false;
+        refreshSummarizedPanel();
+        return;
+      }
+
+      if (act === "router-models-refresh") {
+        routerModelsTouched = false;
+        routerModelsDraft = null;
+        refreshSummarizedPanel();
+        return;
+      }
+
+      if (act === "router-enabled-toggle") {
+        var toggleEl = t;
+        if (!toggleEl || !toggleEl.getAttribute || !toggleEl.classList || !toggleEl.classList.contains("sum-router-toggle")) {
+          toggleEl = t.closest && t.closest(".sum-router-toggle");
+        }
+        if (!toggleEl || !toggleEl.getAttribute) return;
+        var nextPressed = String(toggleEl.getAttribute("aria-pressed") || "").toLowerCase() !== "true";
+        var savedModels = Array.isArray((((adminStateCache && adminStateCache.gateway) || {}).router_models))
+          ? (((adminStateCache && adminStateCache.gateway) || {}).router_models)
+          : [];
+        var savedThr = parseFloat(String((((adminStateCache && adminStateCache.gateway) || {}).tool_router_confidence_threshold) || "0.5"));
+        if (isNaN(savedThr) || savedThr < 0 || savedThr > 1) savedThr = 0.5;
+        adminPostJSON("/api/ui/routing/router_tooling", {
+          router_models: savedModels,
+          tool_router_enabled: nextPressed,
+          confidence_threshold: savedThr
+        })
+          .then(function () {
+            routerEnabledTouched = false;
+            routerEnabledDraft = null;
+            adminSetMessage("", "Tool router " + (nextPressed ? "enabled." : "disabled."));
+            reloadAdmin();
+          })
+          .catch(function (e) { adminSetMessage("err", e && e.message ? e.message : String(e)); });
+        return;
+      }
+
+      if (act === "user-token-copy") {
+        var valCopy = String(t.getAttribute("data-token") || "");
+        if (valCopy) {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(valCopy).catch(function () { });
+          } else {
+            var taCopy = document.createElement("textarea");
+            taCopy.value = valCopy;
+            taCopy.style.position = "fixed";
+            taCopy.style.opacity = "0";
+            document.body.appendChild(taCopy);
+            taCopy.focus();
+            taCopy.select();
+            try { document.execCommand("copy"); } catch (_eCopy) {}
+            try { document.body.removeChild(taCopy); } catch (_eCopyRm) {}
+          }
+        }
+        return;
+      }
+
+      if (act === "token-create") {
+        var tokLabel = (document.getElementById("admin-token-label") || {}).value || "";
+        adminPostJSON("/api/ui/tokens", { label: String(tokLabel).trim() })
+          .then(function (j) {
+            var tenant2 = j && j.tenant_id != null ? String(j.tenant_id).trim() : "";
+            if (tenant2) adminCreatedTokenByTenant[tenant2] = String((j && j.token) || "");
+            var tl = document.getElementById("admin-token-label");
+            if (tl) tl.value = "";
+            adminSetMessage("", "Token created.");
+            reloadAdmin();
+          })
+          .catch(function (e) { adminSetMessage("err", e && e.message ? e.message : String(e)); });
+        return;
+      }
+
+      if (act === "token-delete") {
+        var idx = parseInt(String(t.getAttribute("data-index") || ""), 10);
+        if (isNaN(idx)) return;
+        adminPostJSON("/api/ui/tokens/delete", { index: idx })
+          .then(function () { adminSetMessage("", "Token removed."); reloadAdmin(); })
+          .catch(function (e) { adminSetMessage("err", e && e.message ? e.message : String(e)); });
+        return;
+      }
+
+      if (act === "provider-key-add") {
+        var prov = String(t.getAttribute("data-provider") || "");
+        var inputId = prov === "groq" ? "admin-groq-key" : prov === "gemini" ? "admin-gemini-key" : "";
+        var val = inputId ? ((document.getElementById(inputId) || {}).value || "") : "";
+        if (!val.trim()) {
+          adminSetMessage("err", "Enter a key.");
+          return;
+        }
+        adminPostJSON("/api/ui/provider/" + prov + "/keys", { value: String(val).trim() })
+          .then(function () {
+            var inp = document.getElementById(inputId);
+            if (inp) inp.value = "";
+            adminSetMessage("", "Provider key added.");
+            reloadAdmin();
+          })
+          .catch(function (e) { adminSetMessage("err", e && e.message ? e.message : String(e)); });
+        return;
+      }
+
+      if (act === "provider-key-delete") {
+        var provDel = String(t.getAttribute("data-provider") || "");
+        var nmDel = String(t.getAttribute("data-name") || "");
+        if (!provDel || !nmDel) return;
+        adminPostJSON("/api/ui/provider/" + provDel + "/keys/delete", { name: nmDel })
+          .then(function () { adminSetMessage("", "Provider key removed."); reloadAdmin(); })
+          .catch(function (e) { adminSetMessage("err", e && e.message ? e.message : String(e)); });
+        return;
+      }
+
+      if (act === "ollama-save") {
+        var baseURL = ((document.getElementById("admin-ollama-url") || {}).value || "").trim();
+        if (!baseURL) {
+          adminSetMessage("err", "Enter a URL.");
+          return;
+        }
+        adminPostJSON("/api/ui/provider/ollama/base_url", { base_url: baseURL })
+          .then(function () { adminSetMessage("", "Ollama URL saved."); reloadAdmin(); })
+          .catch(function (e) { adminSetMessage("err", e && e.message ? e.message : String(e)); });
+        return;
+      }
+
+      if (act === "routing-generate") {
+        adminPostJSON("/api/ui/routing/preview", {})
+          .then(function (j) {
+            var savedPolicy = String((((adminStateCache && adminStateCache.gateway) || {}).routing_policy_yaml) || "");
+            routingPolicyDraft = String((j && j.routing_policy_yaml) || "");
+            routingPolicyTouched = String(routingPolicyDraft) !== savedPolicy;
+            adminSetMessage("", "Routing preview generated. Save to apply.");
+            refreshSummarizedPanel();
+          })
+          .catch(function (e) { adminSetMessage("err", e && e.message ? e.message : String(e)); });
+        return;
+      }
+
+      if (act === "routing-policy-save") {
+        var policyYAML = ((document.getElementById("admin-routing-yaml") || {}).value || "");
+        if (!String(policyYAML).trim()) {
+          adminSetMessage("err", "Routing policy YAML is required.");
+          return;
+        }
+        adminPostJSON("/api/ui/routing/policy", { routing_policy_yaml: policyYAML })
+          .then(function () {
+            routingPolicyTouched = false;
+            routingPolicyDraft = null;
+            adminRoutingEditing = false;
+            adminSetMessage("", "Routing policy saved.");
+            reloadAdmin();
+          })
+          .catch(function (e) { adminSetMessage("err", e && e.message ? e.message : String(e)); });
+        return;
+      }
+
+      if (act === "fallback-save") {
+        try {
+          var fallbackList = parseFallbackChainInput(((document.getElementById("admin-fallback-yaml") || {}).value || ""));
+          adminPostJSON("/api/ui/routing/fallback_chain", { fallback_chain: fallbackList })
+            .then(function () {
+              fallbackTouched = false;
+              adminFallbackEditing = false;
+              adminSetMessage("", "Fallback chain saved.");
+              reloadAdmin();
+            })
+            .catch(function (e) { adminSetMessage("err", e && e.message ? e.message : String(e)); });
+        } catch (e) {
+          adminSetMessage("err", e && e.message ? e.message : String(e));
+        }
+        return;
+      }
+
+      if (act === "router-save") {
+        try {
+          var modelsRaw = ((document.getElementById("admin-router-models-yaml") || {}).value || "");
+          if (!String(modelsRaw).trim() && routerModelsTouched && routerModelsDraft != null) modelsRaw = String(routerModelsDraft);
+          if (!String(modelsRaw).trim()) modelsRaw = fallbackChainToYAML((((adminStateCache && adminStateCache.gateway) || {}).router_models) || []);
+          var models = parseFallbackChainInput(modelsRaw);
+          var thr = parseFloat(String(((document.getElementById("admin-router-threshold") || {}).value || "0.5"), 10));
+          if (isNaN(thr) || thr < 0 || thr > 1) throw new Error("Threshold must be a number between 0 and 1.");
+          var routerEnabledBtn = document.getElementById("admin-router-enabled");
+          var enabled = String((routerEnabledBtn && routerEnabledBtn.getAttribute && routerEnabledBtn.getAttribute("aria-pressed")) || "").toLowerCase() === "true";
+          adminPostJSON("/api/ui/routing/router_tooling", {
+            router_models: models,
+            tool_router_enabled: enabled,
+            confidence_threshold: thr
+          })
+            .then(function () {
+              routerModelsTouched = false;
+              routerModelsDraft = null;
+              routerThresholdTouched = false;
+              routerThresholdDraft = null;
+              routerEnabledTouched = false;
+              routerEnabledDraft = null;
+              adminRouterEditing = false;
+              adminSetMessage("", "Router settings saved.");
+              reloadAdmin();
+            })
+            .catch(function (e) { adminSetMessage("err", e && e.message ? e.message : String(e)); });
+        } catch (e) {
+          adminSetMessage("err", e && e.message ? e.message : String(e));
+        }
+        return;
+      }
+
+      if (act === "routing-free-tier-toggle") {
+        var curPressed = String(t.getAttribute("aria-pressed") || "").toLowerCase() === "true";
+        var nextEnabled = !curPressed;
+        adminPostJSON("/api/ui/routing/filter_free_tier_models", { enabled: nextEnabled })
+          .then(function () {
+            adminSetMessage("", "Free-tier filter updated.");
+            reloadAdmin();
+          })
+          .catch(function (e) { adminSetMessage("err", e && e.message ? e.message : String(e)); });
+        return;
+      }
+    });
+
+    document.body.addEventListener("focusin", function (ev) {
+      var t = ev.target;
+      syncYamlOverlayVScrollFromTarget(t);
+    });
+
+    document.body.addEventListener("input", function (ev) {
+      var t = ev.target;
+      syncYamlOverlayVScrollFromTarget(t);
+    });
+
+    document.body.addEventListener("scroll", function (ev) {
+      var t = ev.target;
+      syncYamlOverlayVScrollFromTarget(t);
+    }, true);
+
+    window.addEventListener("resize", function () {
+      var textareas = document.querySelectorAll(".sg-op-yaml-wrap textarea");
+      for (var i = 0; i < textareas.length; i++) {
+        syncYamlOverlayVScrollFromTarget(textareas[i]);
+      }
+    });
   })();
 
   fetchTokenLabels();

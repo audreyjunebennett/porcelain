@@ -55,6 +55,21 @@ type Runtime struct {
 	// availablemodels.go for the snapshot type and consumers (provider-health classifier and
 	// future routing/embedding/router-model auditors).
 	catalogSnapshot atomic.Pointer[CatalogSnapshot]
+
+	indexerStatusMu sync.Mutex
+	indexerStatus   IndexerSupervisorStatus
+}
+
+// IndexerSupervisorStatus is the gateway-owned view of supervised indexer process health.
+// It is updated by cmd/claudia/serve.go (process lifecycle + parsed indexer.state heartbeats)
+// and consumed by /api/ui/state for operator cards.
+type IndexerSupervisorStatus struct {
+	WorkerState     string
+	LastState       string
+	LastHeartbeatAt time.Time
+	LastLogAt       time.Time
+	LastError       string
+	UpdatedAt       time.Time
 }
 
 func NewRuntime(gatewayPath string, log *slog.Logger) (*Runtime, error) {
@@ -245,6 +260,71 @@ func (rt *Runtime) ToolRouterLast() (model string, at time.Time, errMsg string) 
 	rt.toolRouterMu.Lock()
 	defer rt.toolRouterMu.Unlock()
 	return rt.toolRouterModel, rt.toolRouterAt, rt.toolRouterLastErr
+}
+
+// SetIndexerSupervisorStatus replaces the in-process indexer supervisor status snapshot.
+func (rt *Runtime) SetIndexerSupervisorStatus(st IndexerSupervisorStatus) {
+	if rt == nil {
+		return
+	}
+	if st.UpdatedAt.IsZero() {
+		st.UpdatedAt = time.Now().UTC()
+	}
+	rt.indexerStatusMu.Lock()
+	rt.indexerStatus = st
+	rt.indexerStatusMu.Unlock()
+}
+
+// NoteIndexerSupervisorLog records that the supervised indexer emitted a line.
+func (rt *Runtime) NoteIndexerSupervisorLog(at time.Time) {
+	if rt == nil {
+		return
+	}
+	if at.IsZero() {
+		at = time.Now().UTC()
+	}
+	rt.indexerStatusMu.Lock()
+	st := rt.indexerStatus
+	if at.After(st.LastLogAt) {
+		st.LastLogAt = at
+	}
+	if st.WorkerState == "" || st.WorkerState == "unknown" || st.WorkerState == "starting" {
+		st.WorkerState = "up"
+	}
+	st.UpdatedAt = time.Now().UTC()
+	rt.indexerStatus = st
+	rt.indexerStatusMu.Unlock()
+}
+
+// NoteIndexerSupervisorHeartbeat records parsed indexer.state heartbeat details.
+func (rt *Runtime) NoteIndexerSupervisorHeartbeat(at time.Time, declaredState, workerState string) {
+	if rt == nil {
+		return
+	}
+	if at.IsZero() {
+		at = time.Now().UTC()
+	}
+	rt.indexerStatusMu.Lock()
+	st := rt.indexerStatus
+	st.LastHeartbeatAt = at
+	st.LastState = strings.TrimSpace(declaredState)
+	ws := strings.TrimSpace(workerState)
+	if ws != "" {
+		st.WorkerState = ws
+	}
+	st.UpdatedAt = time.Now().UTC()
+	rt.indexerStatus = st
+	rt.indexerStatusMu.Unlock()
+}
+
+// IndexerSupervisorStatus returns a copy of the latest in-process snapshot.
+func (rt *Runtime) IndexerSupervisorStatus() IndexerSupervisorStatus {
+	if rt == nil {
+		return IndexerSupervisorStatus{}
+	}
+	rt.indexerStatusMu.Lock()
+	defer rt.indexerStatusMu.Unlock()
+	return rt.indexerStatus
 }
 
 // LimitsGuard returns an admission guard combining the parsed limits spec with live metrics.

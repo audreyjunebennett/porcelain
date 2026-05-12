@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/lynn/claudia-gateway/internal/bifrostadmin"
+	"github.com/lynn/claudia-gateway/internal/upstream"
 )
 
 // envLoginTokenName is a gateway token (same as tokens.yaml) used to skip the /ui/login form when set in the process environment.
@@ -26,12 +27,12 @@ func envLoginToken() string {
 func sanitizeLoginNext(next string) string {
 	next = strings.TrimSpace(next)
 	if !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") || !strings.HasPrefix(next, "/ui/") {
-		return "/ui/panel"
+		return "/ui/logs"
 	}
 	return next
 }
 
-//go:embed embedui/login.html embedui/panel.html embedui/logs.html embedui/logs.css embedui/theme-tokens.css embedui/logs.js embedui/logs_bootstrap.js embedui/logs/* embedui/logs/*/* embedui/metrics.html embedui/shell.html embedui/reload.svg embedui/setup.html
+//go:embed embedui/login.html embedui/panel.html embedui/logs.html embedui/logs.css embedui/theme-tokens.css embedui/logs.js embedui/logs_bootstrap.js embedui/logs/* embedui/logs/*/* embedui/metrics.html embedui/shell.html embedui/pwa.html embedui/reload.svg embedui/setup.html
 var adminEmbedUI embed.FS
 
 func bifrostAdminClient(rt *Runtime) *bifrostadmin.Client {
@@ -308,10 +309,71 @@ func (a *adminUI) handleState(w http.ResponseWriter, r *http.Request) {
 		provOut[name] = entry
 	}
 	routeBase := ""
+	routingPolicyYAML := ""
 	if p := strings.TrimSpace(res.RoutingPolicyPath); p != "" {
 		routeBase = filepath.Base(p)
+		if b, err := os.ReadFile(p); err == nil {
+			routingPolicyYAML = string(b)
+		}
 	}
 	rm, trAt, trErr := a.rt.ToolRouterLast()
+	bifrostURL := strings.TrimSuffix(res.UpstreamBaseURL, "/")
+	bifrostOK, _, bifrostDetail := upstream.ProbeHealth(ctx, res.HealthUpstreamURL, a.rt.UpstreamAPIKey(), healthTimeout(res), a.log)
+	bifrostState := "down"
+	if bifrostOK {
+		bifrostState = "up"
+	}
+	qdrantURL := strings.TrimSuffix(res.RAG.QdrantURL, "/")
+	qdrantState := "disabled"
+	if res.RAG.Enabled {
+		if a.rt.RAG() == nil {
+			qdrantState = "unavailable"
+		} else if err := a.rt.RAG().StoreHealth(ctx); err != nil {
+			qdrantState = "down"
+		} else {
+			qdrantState = "up"
+		}
+	}
+	idxScope := res.IndexerSupervisedEnabled && (res.RAG.Enabled || res.IndexerSupervisedStartWhenRAGDisabled)
+	indexerWorker := "disabled"
+	indexerDeclaredState := ""
+	indexerLastHeartbeatAt := ""
+	indexerLastLogAt := ""
+	indexerDetail := ""
+	if res.IndexerSupervisedEnabled {
+		if !idxScope {
+			indexerWorker = "not_running_out_of_scope"
+		} else {
+			indexerWorker = "starting"
+			idxSt := a.rt.IndexerSupervisorStatus()
+			if strings.TrimSpace(idxSt.WorkerState) != "" {
+				indexerWorker = strings.TrimSpace(idxSt.WorkerState)
+			}
+			indexerDeclaredState = strings.TrimSpace(idxSt.LastState)
+			indexerLastHeartbeatAt = formatRFC3339OrEmpty(idxSt.LastHeartbeatAt)
+			indexerLastLogAt = formatRFC3339OrEmpty(idxSt.LastLogAt)
+			indexerDetail = strings.TrimSpace(idxSt.LastError)
+			if indexerWorker == "" {
+				indexerWorker = "unknown"
+			}
+		}
+	}
+	overviewState := "ok"
+	if bifrostState != "up" || (res.RAG.Enabled && qdrantState != "up") {
+		overviewState = "degraded"
+	}
+	if res.IndexerSupervisedEnabled && idxScope {
+		switch indexerWorker {
+		case "down", "degraded":
+			overviewState = "degraded"
+		case "up":
+			// no-op
+		default:
+			if overviewState == "ok" {
+				overviewState = "monitor"
+			}
+		}
+	}
 	gwOut := map[string]any{
 		"semver":                           res.Semver,
 		"virtual_model_id":                 res.VirtualModelID,
@@ -326,6 +388,34 @@ func (a *adminUI) handleState(w http.ResponseWriter, r *http.Request) {
 		"tool_router_last_model":           rm,
 		"tool_router_last_error":           trErr,
 		"tool_router_last_at":              formatRFC3339OrEmpty(trAt),
+		"routing_policy_yaml":              routingPolicyYAML,
+		"service_overview": map[string]any{
+			"overall_state": overviewState,
+			"gateway": map[string]any{
+				"state": "up",
+			},
+			"bifrost": map[string]any{
+				"state":  bifrostState,
+				"url":    bifrostURL,
+				"detail": bifrostDetail,
+			},
+			"qdrant": map[string]any{
+				"enabled": res.RAG.Enabled,
+				"state":   qdrantState,
+				"url":     qdrantURL,
+			},
+			"indexer": map[string]any{
+				"enabled":             res.IndexerSupervisedEnabled,
+				"in_scope":            idxScope,
+				"worker":              indexerWorker,
+				"state":               indexerDeclaredState,
+				"last_heartbeat_at":   indexerLastHeartbeatAt,
+				"last_log_at":         indexerLastLogAt,
+				"detail":              indexerDetail,
+				"supervision_signals": "process_liveness + indexer.state heartbeat",
+			},
+			"refreshed_at": time.Now().UTC().Format(time.RFC3339),
+		},
 	}
 	gwOut["indexer_supervised_config_path"] = res.IndexerSupervisedConfigPath
 	gwOut["indexer_supervised_enabled"] = res.IndexerSupervisedEnabled
@@ -351,14 +441,16 @@ func registerAdminUI(mux *http.ServeMux, rt *Runtime, log *slog.Logger, ui *UIOp
 			return
 		}
 		if a.sessionOK(r) {
-			http.Redirect(w, r, "/ui/panel", http.StatusFound)
+			http.Redirect(w, r, "/ui/desktop", http.StatusFound)
 			return
 		}
 		http.Redirect(w, r, "/ui/login", http.StatusFound)
 	})
 
 	mux.HandleFunc("GET /ui/login", a.handleLoginGET)
-	mux.HandleFunc("GET /ui/panel", a.requireAuthPage(a.serveEmbed("embedui/panel.html")))
+	mux.HandleFunc("GET /ui/panel", a.requireAuthPage(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/ui/logs?focus=admin", http.StatusFound)
+	}))
 	mux.HandleFunc("GET /ui/metrics", a.requireAuthPage(a.serveEmbed("embedui/metrics.html")))
 	if a.opts.LogStore != nil {
 		mux.HandleFunc("GET /ui/assets/reload.svg", a.requireAuthPage(a.serveEmbedAsset("embedui/reload.svg", "image/svg+xml; charset=utf-8")))
@@ -369,6 +461,7 @@ func registerAdminUI(mux *http.ServeMux, rt *Runtime, log *slog.Logger, ui *UIOp
 		mux.HandleFunc("GET /ui/assets/logs/", a.requireAuthPage(a.serveLogsModuleAsset()))
 		mux.HandleFunc("GET /ui/logs", a.requireAuthPage(a.serveEmbed("embedui/logs.html")))
 		mux.HandleFunc("GET /ui/desktop", a.requireAuthPage(a.serveEmbed("embedui/shell.html")))
+		mux.HandleFunc("GET /ui/pwa", a.requireAuthPage(a.serveEmbed("embedui/pwa.html")))
 		mux.HandleFunc("GET /ui/indexer", a.requireAuthPage(func(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, "/ui/logs", http.StatusFound)
 		}))
@@ -391,6 +484,8 @@ func registerAdminUI(mux *http.ServeMux, rt *Runtime, log *slog.Logger, ui *UIOp
 	mux.HandleFunc("POST /api/ui/tokens", a.requireAuthJSON(a.handleTokensCreate))
 	mux.HandleFunc("POST /api/ui/tokens/delete", a.requireAuthJSON(a.handleTokensDelete))
 	mux.HandleFunc("POST /api/ui/routing/preview", a.requireAuthJSON(a.handleRoutingPreviewPOST))
+	mux.HandleFunc("POST /api/ui/routing/policy", a.requireAuthJSON(a.handleRoutingPolicySavePOST))
+	mux.HandleFunc("POST /api/ui/routing/fallback_chain", a.requireAuthJSON(a.handleRoutingFallbackChainSavePOST))
 	mux.HandleFunc("POST /api/ui/routing/generate", a.requireAuthJSON(a.handleRoutingGeneratePOST))
 	mux.HandleFunc("POST /api/ui/routing/evaluate", a.requireAuthJSON(a.handleRoutingEvaluatePOST))
 	mux.HandleFunc("POST /api/ui/routing/filter_free_tier_models", a.requireAuthJSON(a.handleRoutingFilterFreeTierPOST))

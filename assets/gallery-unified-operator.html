@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Unified operator view — gallery draft (Phase 1)</title>
+  <link rel="stylesheet" href="../internal/server/embedui/theme-tokens.css" />
+  <link rel="stylesheet" href="../internal/server/embedui/logs.css" />
+  <link rel="stylesheet" href="gallery-shell.css" />
+</head>
+<body class="logs-summarized styleguide-body">
+  <nav class="styleguide-nav" aria-label="Unified operator gallery">
+    <a href="#sg-unified-operator">Top</a><span class="styleguide-nav-sep">·</span>
+    <a href="#sg-uo-overview">Overview</a><span class="styleguide-nav-sep">·</span>
+    <a href="#sg-uo-users">Users &amp; tokens</a><span class="styleguide-nav-sep">·</span>
+    <a href="#sg-uo-providers">Providers</a><span class="styleguide-nav-sep">·</span>
+    <a href="#sg-uo-routing">Routing</a><span class="styleguide-nav-sep">|</span>
+    <a href="gallery.html">Full component gallery</a>
+  </nav>
+
+  <header class="styleguide-hero">
+    <h1 id="sg-unified-operator">Unified operator view (draft)</h1>
+    <p>
+      Prototypes for operator cards above the log stream. Traceability:
+      <a href="../docs/plans/unified-logs-operator-shell.md"><code>docs/plans/unified-logs-operator-shell.md</code></a>.
+      Uses production patterns from <code>logs.css</code> and gallery chrome in <code>gallery-shell.css</code>.
+      When this page is opened over <strong>HTTP(S) on the gateway origin</strong> with a UI session, routing YAML and
+      fallback-chain saves call <code>POST /api/ui/routing/policy</code> and <code>POST /api/ui/routing/fallback_chain</code>
+      (same validation as the admin panel). <code>file://</code> cannot reach those APIs — editors still work with local
+      refresh/save affordances and demo data.
+    </p>
+  </header>
+
+  <div class="styleguide-toolbar" role="radiogroup" aria-label="Color theme">
+    <span style="font-size:0.78rem;color:#555;font-weight:600">Theme:</span>
+    <button type="button" id="theme-default" role="radio" aria-checked="true">Default</button>
+    <button type="button" id="theme-porcelain" role="radio" aria-checked="false">Porcelain</button>
+  </div>
+
+  <div id="panel-summarized" class="styleguide-panel">
+
+    <section class="styleguide-section" aria-labelledby="heading-uo-overview">
+      <h2 id="heading-uo-overview">Card rail layout</h2>
+      <p class="styleguide-sub">
+        Cards stack in a <code>sg-op-rail</code> container (muted surface) mimicking a future column above the live
+        event log. Expand/collapse uses native <code>details</code>/<code>summary</code> with <code>sum-card</code>.
+      </p>
+
+      <div id="sg-uo-overview" class="sum-section-label" style="scroll-margin-top:3.25rem">Overview (Main parity)</div>
+      <p class="styleguide-sub" style="margin-top:0.15rem">
+        Gateway version + virtual model; composite health + per-service rows (BiFrost, Qdrant when RAG on, indexer
+        when supervised).
+      </p>
+      <div class="styleguide-demo-bg sg-op-rail">
+        <details class="sum-card" open>
+          <summary>
+            <span class="sum-avatar sum-av-svc-gateway">Gw</span>
+            <span class="sum-main">
+              <span class="sum-title">Gateway</span>
+              <span class="sum-sub sum-sub--clamp">Build and routing identity visible at a glance.</span>
+            </span>
+            <span class="sum-metrics">
+              <span class="chip">v1.4.2+dev</span>
+              <span class="chip">virtual/claude-opus-proxy</span>
+              <span class="chip">channel main</span>
+            </span>
+            <span class="sum-chev"></span>
+          </summary>
+          <div class="sum-body">
+            <dl class="indexer-run-kv indexer-run-kv--gateway-summary">
+              <dt>Gateway version</dt><dd><code class="sum-mono-id">1.4.2+dev (ab12cd3)</code></dd>
+              <dt>Virtual model</dt><dd><code class="sum-mono-id">virtual/claude-opus-proxy</code> — display name <strong>Acme · Opus relay</strong></dd>
+              <dt>Listen</dt><dd><code class="sum-mono-id">:8080</code></dd>
+            </dl>
+          </div>
+        </details>
+
+        <details class="sum-card" open>
+          <summary>
+            <span class="sum-avatar sum-av-svc-bifrost">+</span>
+            <span class="sum-main">
+              <span class="sum-title">Service health</span>
+              <span class="sum-sub sum-sub--clamp">Composite probe across critical dependencies.</span>
+            </span>
+            <span class="sum-metrics"><span class="chip">4/4 up</span></span>
+            <span class="sum-status sum-st-complete">all healthy</span>
+            <span class="sum-chev"></span>
+          </summary>
+          <div class="sum-body">
+            <p class="muted" style="margin:0 0 0.5rem;font-size:0.78rem">Degraded state would swap the status pill and chip copy; per-service rows stay comparable to <code>GET /</code> / <code>/api/ui/state</code>.</p>
+            <dl class="indexer-run-kv indexer-run-kv--gateway-summary">
+              <dt>BiFrost / upstream</dt><dd>reachable · last probe <span class="muted">420ms ago</span></dd>
+              <dt>Qdrant</dt><dd>optional RAG — <span class="sum-status sum-st-complete" style="font-size:0.65rem;padding:0.12rem 0.35rem">up</span> · collection <code class="sum-mono-id">claudia-default</code></dd>
+              <dt>Indexer</dt><dd>supervised · <span class="sum-status sum-st-monitor" style="font-size:0.65rem;padding:0.12rem 0.35rem">idle</span> · lag <code class="sum-mono-id">1.1s</code></dd>
+              <dt>Gateway process</dt><dd>PID <code class="sum-mono-id">8812</code> · uptime <code class="sum-mono-id">3d 02h</code></dd>
+            </dl>
+          </div>
+        </details>
+      </div>
+
+      <div id="sg-uo-users" class="sum-section-label" style="scroll-margin-top:3.25rem">Users &amp; gateway tokens (Admin parity)</div>
+      <p class="styleguide-sub" style="margin-top:0.15rem">
+        Same shell as <strong>Workspaces → Create</strong> in summarized logs: section title row with <strong>Add user</strong> on the right,
+        lead description, then draft cards (<code class="sum-mono-id">sum-card--workspace-draft</code>) with Save/Cancel and an auto-generated
+        gateway token + copy. Saved users list conversations, workspaces, and a scoped <code class="sum-mono-id">sum-evlog</code> for that principal.
+      </p>
+      <div class="styleguide-demo-bg sg-op-rail">
+        <div class="sum-feed-section-head">
+          <span class="sum-feed-section-title sum-section-label">Users &amp; gateway tokens</span>
+          <button type="button" class="sum-workspaces-create-btn" id="sg-op-user-add">Add user</button>
+        </div>
+        <div class="sum-workspaces-intro">
+          <p class="sum-workspaces-intro-lead">
+            Onboard principals as first-class users: display name, identifier, and a one-time gateway token. After save,
+            the card collapses into read-only summary plus activity scoped to that user (gallery simulates counts and log lines).
+          </p>
+        </div>
+
+        <div id="sg-op-user-drafts" class="sg-op-user-drafts-stack" aria-live="polite"></div>
+
+        <div id="sg-op-user-saved" class="sg-op-user-cards-stack">
+          <article class="sum-card sg-op-user-saved" data-sg-op-user-id="usr_7a21f0c4">
+            <header class="sum-card__workspace-draft-hdr">
+              <span class="sum-avatar sum-av-b" title="Saved user">Op</span>
+              <span class="sum-main sum-main--workspace-draft">
+                <span class="sum-title">Operations</span>
+                <span class="sum-sub sum-sub--clamp muted">ops@acme.example · usr_7a21f0c4 · 2 gateway tokens</span>
+              </span>
+              <span class="ws-draft-actions">
+                <button type="button" class="sg-op-btn sg-op-btn--small sg-op-btn--danger" disabled title="Gallery demo">Revoke</button>
+              </span>
+            </header>
+            <div class="sum-body">
+              <dl class="indexer-run-kv indexer-run-kv--gateway-summary">
+                <dt>User id</dt><dd><code class="sum-mono-id">usr_7a21f0c4</code></dd>
+                <dt>Conversations</dt><dd>41</dd>
+                <dt>Workspaces</dt><dd>3</dd>
+              </dl>
+              <div class="sum-section-label">Scoped log — user</div>
+              <div class="sum-evlog sum-evlog--in-card" data-gallery-evlog-root>
+                <div class="sum-evlog__toolbar">
+                  <input class="sum-evlog__search" type="search" placeholder="Search message or time…" aria-label="Search log entries" autocomplete="off" />
+                  <label class="sum-evlog__lvl-label" style="margin-left:auto">
+                    <span class="sum-evlog__level-filters-label" style="margin-right:0.35rem">Status</span>
+                    <select class="sum-evlog__filter-select" data-evlog-filter-status aria-label="Filter by severity">
+                      <option value="all">All</option>
+                      <option value="warnings">⚠ Warnings</option>
+                      <option value="errors">✖ Errors</option>
+                    </select>
+                  </label>
+                  <button type="button" class="sum-evlog__copy-btn" title="Copy as TSV" aria-label="Copy as TSV"><svg class="sum-evlog__copy-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><span class="sr-only">Copy</span></button>
+                </div>
+                <div class="sum-metrics-table-wrap sum-evlog__table-scroll">
+                  <table class="sum-metrics-table sum-evlog__table">
+                    <colgroup><col class="sum-evlog__col-time" /><col class="sum-evlog__col-msg" /><col class="sum-evlog__col-status" /></colgroup>
+                    <thead><tr><th class="sum-evlog__cell--time" scope="col">Time</th><th scope="col">Message</th><th class="sum-evlog__th-status" scope="col">
+                      <div class="sum-evlog__th-status-head" role="group" aria-label="Status counts">
+                        <span class="sum-evlog__th-status-label">Status</span>
+                        <span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN sum-evlog-metric-num" data-sum-evlog-metric-warn>—</span>
+                        <span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN sum-evlog__metric-icon" aria-hidden="true">⚠</span>
+                        <span class="sum-evlog-status__pill sum-evlog-status__lvl--ERROR sum-evlog-metric-num" data-sum-evlog-metric-fail>—</span>
+                        <span class="sum-evlog-status__pill sum-evlog-status__lvl--ERROR sum-evlog__metric-icon" aria-hidden="true">✖</span>
+                      </div>
+                    </th></tr></thead>
+                    <tbody data-gallery-evlog-tbody>
+                      <tr class="sum-evlog__row" data-evlog-id="demo-usr1-1" data-evlog-level="INFO" data-evlog-http="200">
+                        <td class="sum-evlog__cell--time"><time datetime="2026-05-11T10:01:02.100Z"></time></td>
+                        <td class="sum-evlog__cell--msg"><span class="sum-svc-badge sum-svc-gateway">gateway</span>Token minted for <code class="sum-mono-id">usr_7a21f0c4</code> · ops@acme.example</td>
+                        <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="pill-2xx">200</span></div></td>
+                      </tr>
+                      <tr class="sum-evlog__row" data-evlog-id="demo-usr1-2" data-evlog-level="INFO">
+                        <td class="sum-evlog__cell--time"><time datetime="2026-05-11T10:04:18.040Z"></time></td>
+                        <td class="sum-evlog__cell--msg">Conversation <code class="sum-mono-id">conv_8a2</code> attributed to principal <code class="sum-mono-id">usr_7a21f0c4</code>.</td>
+                        <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="sum-evlog-status__empty" aria-hidden="true"></span></div></td>
+                      </tr>
+                      <tr class="sum-evlog__row" data-evlog-id="demo-usr1-3" data-evlog-level="WARN">
+                        <td class="sum-evlog__cell--time"><time datetime="2026-05-11T10:08:55.881Z"></time></td>
+                        <td class="sum-evlog__cell--msg">Indexer workspace write by <code class="sum-mono-id">usr_7a21f0c4</code> — path policy advisory.</td>
+                        <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN">WARN</span></div></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="sum-evlog__footer-row">
+                  <div class="sum-evlog__footer-left"><p class="sum-evlog__footer" data-gallery-evlog-oldest></p></div>
+                  <p class="sum-evlog__toast sum-gallery-evlog__toast-align" data-gallery-evlog-toast role="status" aria-live="polite"></p>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <article class="sum-card sg-op-user-saved" data-sg-op-user-id="usr_9bee110a">
+            <header class="sum-card__workspace-draft-hdr">
+              <span class="sum-avatar sum-av-c" title="Saved user">Co</span>
+              <span class="sum-main sum-main--workspace-draft">
+                <span class="sum-title">contractor-east</span>
+                <span class="sum-sub sum-sub--clamp muted">usr_9bee110a · 1 gateway token</span>
+              </span>
+              <span class="ws-draft-actions">
+                <button type="button" class="sg-op-btn sg-op-btn--small sg-op-btn--danger" disabled title="Gallery demo">Revoke</button>
+              </span>
+            </header>
+            <div class="sum-body">
+              <dl class="indexer-run-kv indexer-run-kv--gateway-summary">
+                <dt>User id</dt><dd><code class="sum-mono-id">usr_9bee110a</code></dd>
+                <dt>Conversations</dt><dd>12</dd>
+                <dt>Workspaces</dt><dd>1</dd>
+              </dl>
+              <div class="sum-section-label">Scoped log — user</div>
+              <div class="sum-evlog sum-evlog--in-card" data-gallery-evlog-root>
+                <div class="sum-evlog__toolbar">
+                  <input class="sum-evlog__search" type="search" placeholder="Search message or time…" aria-label="Search log entries" autocomplete="off" />
+                  <label class="sum-evlog__lvl-label" style="margin-left:auto">
+                    <span class="sum-evlog__level-filters-label" style="margin-right:0.35rem">Status</span>
+                    <select class="sum-evlog__filter-select" data-evlog-filter-status aria-label="Filter by severity">
+                      <option value="all">All</option>
+                      <option value="warnings">⚠ Warnings</option>
+                      <option value="errors">✖ Errors</option>
+                    </select>
+                  </label>
+                  <button type="button" class="sum-evlog__copy-btn" title="Copy as TSV" aria-label="Copy as TSV"><svg class="sum-evlog__copy-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><span class="sr-only">Copy</span></button>
+                </div>
+                <div class="sum-metrics-table-wrap sum-evlog__table-scroll">
+                  <table class="sum-metrics-table sum-evlog__table">
+                    <colgroup><col class="sum-evlog__col-time" /><col class="sum-evlog__col-msg" /><col class="sum-evlog__col-status" /></colgroup>
+                    <thead><tr><th class="sum-evlog__cell--time" scope="col">Time</th><th scope="col">Message</th><th class="sum-evlog__th-status" scope="col">
+                      <div class="sum-evlog__th-status-head" role="group" aria-label="Status counts">
+                        <span class="sum-evlog__th-status-label">Status</span>
+                        <span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN sum-evlog-metric-num" data-sum-evlog-metric-warn>—</span>
+                        <span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN sum-evlog__metric-icon" aria-hidden="true">⚠</span>
+                        <span class="sum-evlog-status__pill sum-evlog-status__lvl--ERROR sum-evlog-metric-num" data-sum-evlog-metric-fail>—</span>
+                        <span class="sum-evlog-status__pill sum-evlog-status__lvl--ERROR sum-evlog__metric-icon" aria-hidden="true">✖</span>
+                      </div>
+                    </th></tr></thead>
+                    <tbody data-gallery-evlog-tbody>
+                      <tr class="sum-evlog__row" data-evlog-id="demo-usr2-1" data-evlog-level="INFO" data-evlog-http="200">
+                        <td class="sum-evlog__cell--time"><time datetime="2026-05-11T11:02:10.200Z"></time></td>
+                        <td class="sum-evlog__cell--msg"><span class="sum-svc-badge sum-svc-web">web</span>Panel login · principal <code class="sum-mono-id">usr_9bee110a</code> (contractor-east).</td>
+                        <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="pill-2xx">200</span></div></td>
+                      </tr>
+                      <tr class="sum-evlog__row" data-evlog-id="demo-usr2-2" data-evlog-level="INFO">
+                        <td class="sum-evlog__cell--time"><time datetime="2026-05-11T11:05:33.040Z"></time></td>
+                        <td class="sum-evlog__cell--msg">Workspace <code class="sum-mono-id">ws_contractor</code> touched by <code class="sum-mono-id">usr_9bee110a</code>.</td>
+                        <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="sum-evlog-status__empty" aria-hidden="true"></span></div></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="sum-evlog__footer-row">
+                  <div class="sum-evlog__footer-left"><p class="sum-evlog__footer" data-gallery-evlog-oldest></p></div>
+                  <p class="sum-evlog__toast sum-gallery-evlog__toast-align" data-gallery-evlog-toast role="status" aria-live="polite"></p>
+                </div>
+              </div>
+            </div>
+          </article>
+        </div>
+      </div>
+
+      <div id="sg-uo-providers" class="sum-section-label" style="margin-top:1.25rem;scroll-margin-top:3.25rem">Providers</div>
+      <p class="styleguide-sub" style="margin-top:0.15rem">
+        Rows here drive upstream inference through BiFrost. <strong>Groq</strong> is expanded to show the shared pattern
+        (description + docs link, per-model usage, keys, scoped log). <strong>Gemini</strong> stays collapsed;
+        <strong>Ollama</strong> is expanded with chat + <strong>embedding</strong> usage (embedding counts appear in metrics once ingest records them).
+      </p>
+      <div class="styleguide-demo-bg sg-op-rail">
+        <details class="sum-card" open>
+          <summary>
+            <span class="sum-avatar sum-av-a">Gq</span>
+            <span class="sum-main">
+              <span class="sum-title">Groq</span>
+              <span class="sum-sub sum-sub--clamp">LPU inference — keys and catalog from gateway + BiFrost.</span>
+            </span>
+            <span class="sum-metrics">
+              <span class="chip">keys 2</span>
+              <span class="chip">models 14</span>
+            </span>
+            <span class="sum-status sum-st-active">reachable</span>
+            <span class="sum-chev"></span>
+          </summary>
+          <div class="sum-body">
+            <p style="margin:0 0 0.65rem;font-size:0.8rem">
+              High-throughput OpenAI-compatible API. Public reference:
+              <a href="https://groq.com/">groq.com</a> (opens externally when wired).
+            </p>
+            <div class="sum-section-label">Model usage (24h)</div>
+            <div class="sum-metrics-table-wrap">
+              <table class="sum-metrics-table">
+                <thead>
+                  <tr><th>Model</th><th class="num">Requests</th><th class="num">Errors</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td><code class="sum-mono-id">llama-3.3-70b</code></td><td class="num">1 842</td><td class="num">3</td></tr>
+                  <tr><td><code class="sum-mono-id">mixtral-8x7b</code></td><td class="num">412</td><td class="num">0</td></tr>
+                  <tr><td><code class="sum-mono-id">llama-3.1-8b</code></td><td class="num">96</td><td class="num">1</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="sum-section-label">API keys</div>
+            <ul class="sg-op-key-list">
+              <li><code class="sum-mono-id">gsk_••••••••••••4a9c</code> <span class="muted">prod relay</span> <button type="button" class="sg-op-btn sg-op-btn--small sg-op-btn--danger" disabled>Remove</button></li>
+              <li><code class="sum-mono-id">gsk_••••••••••••1ffe</code> <span class="muted">staging</span> <button type="button" class="sg-op-btn sg-op-btn--small sg-op-btn--danger" disabled>Remove</button></li>
+            </ul>
+            <label class="sg-op-label">Add key (masked after save)</label>
+            <input class="sg-op-input" type="password" value="" placeholder="gsk_…" readonly tabindex="-1" />
+            <div class="sg-op-btn-row">
+              <button type="button" class="sg-op-btn" disabled>Save key</button>
+              <button type="button" class="sg-op-btn sg-op-btn--ghost" disabled>Cancel</button>
+            </div>
+
+            <div class="sum-section-label" style="margin-top:0.75rem">Scoped log — Groq</div>
+            <div class="sum-evlog sum-evlog--in-card" data-gallery-evlog-root>
+              <div class="sum-evlog__toolbar">
+                <input class="sum-evlog__search" type="search" placeholder="Search message or time…" aria-label="Search log entries" autocomplete="off" />
+                <label class="sum-evlog__lvl-label" style="margin-left:auto">
+                  <span class="sum-evlog__level-filters-label" style="margin-right:0.35rem">Status</span>
+                  <select class="sum-evlog__filter-select" data-evlog-filter-status aria-label="Filter by severity">
+                    <option value="all">All</option>
+                    <option value="warnings">⚠ Warnings</option>
+                    <option value="errors">✖ Errors</option>
+                  </select>
+                </label>
+                <button type="button" class="sum-evlog__copy-btn" title="Copy as TSV" aria-label="Copy as TSV"><svg class="sum-evlog__copy-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><span class="sr-only">Copy</span></button>
+              </div>
+              <div class="sum-metrics-table-wrap sum-evlog__table-scroll">
+                <table class="sum-metrics-table sum-evlog__table">
+                  <colgroup><col class="sum-evlog__col-time" /><col class="sum-evlog__col-msg" /><col class="sum-evlog__col-status" /></colgroup>
+                  <thead><tr><th class="sum-evlog__cell--time" scope="col">Time</th><th scope="col">Message</th><th class="sum-evlog__th-status" scope="col">
+                    <div class="sum-evlog__th-status-head" role="group" aria-label="Status counts">
+                      <span class="sum-evlog__th-status-label">Status</span>
+                      <span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN sum-evlog-metric-num" data-sum-evlog-metric-warn>—</span>
+                      <span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN sum-evlog__metric-icon" aria-hidden="true">⚠</span>
+                      <span class="sum-evlog-status__pill sum-evlog-status__lvl--ERROR sum-evlog-metric-num" data-sum-evlog-metric-fail>—</span>
+                      <span class="sum-evlog-status__pill sum-evlog-status__lvl--ERROR sum-evlog__metric-icon" aria-hidden="true">✖</span>
+                    </div>
+                  </th></tr></thead>
+                  <tbody data-gallery-evlog-tbody>
+                    <tr class="sum-evlog__row" data-evlog-id="demo-usr2-1" data-evlog-level="INFO" data-evlog-http="200">
+                      <td class="sum-evlog__cell--time"><time datetime="2026-05-11T11:02:10.200Z"></time></td>
+                      <td class="sum-evlog__cell--msg"><span class="sum-svc-badge sum-svc-web">web</span>Panel login · principal <code class="sum-mono-id">usr_9bee110a</code> (contractor-east).</td>
+                      <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="pill-2xx">200</span></div></td>
+                    </tr>
+                    <tr class="sum-evlog__row" data-evlog-id="demo-usr2-2" data-evlog-level="INFO">
+                      <td class="sum-evlog__cell--time"><time datetime="2026-05-11T11:05:33.040Z"></time></td>
+                      <td class="sum-evlog__cell--msg">Workspace <code class="sum-mono-id">ws_contractor</code> touched by <code class="sum-mono-id">usr_9bee110a</code>.</td>
+                      <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="sum-evlog-status__empty" aria-hidden="true"></span></div></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="sum-evlog__footer-row">
+                <div class="sum-evlog__footer-left"><p class="sum-evlog__footer" data-gallery-evlog-oldest></p></div>
+                <p class="sum-evlog__toast sum-gallery-evlog__toast-align" data-gallery-evlog-toast role="status" aria-live="polite"></p>
+              </div>
+            </div>
+      </details>
+
+        <details class="sum-card">
+          <summary>
+            <span class="sum-avatar sum-av-b">Gm</span>
+            <span class="sum-main">
+              <span class="sum-title">Gemini</span>
+              <span class="sum-sub sum-sub--clamp">Google AI Studio / Vertex compatible paths.</span>
+            </span>
+            <span class="sum-metrics">
+              <span class="chip">keys 1</span>
+              <span class="chip">models 6</span>
+            </span>
+            <span class="sum-status sum-st-active">reachable</span>
+            <span class="sum-chev"></span>
+          </summary>
+          <div class="sum-body">
+            <p class="muted" style="margin:0">Collapsed summary shows the same chip pattern as Groq; expanded body would mirror Groq (link, usage table, keys, scoped log).</p>
+          </div>
+        </details>
+
+        <details class="sum-card" open>
+          <summary>
+            <span class="sum-avatar sum-av-c">Ol</span>
+            <span class="sum-main">
+              <span class="sum-title">Ollama</span>
+              <span class="sum-sub sum-sub--clamp">Local / remote Ollama — chat + embeddings for RAG ingest.</span>
+            </span>
+            <span class="sum-metrics">
+              <span class="chip">models 5</span>
+            </span>
+            <span class="sum-status sum-st-active">reachable</span>
+            <span class="sum-chev"></span>
+          </summary>
+          <div class="sum-body">
+            <p style="margin:0 0 0.5rem;font-size:0.8rem">
+              Ollama is often used for <strong>embedding</strong> models during <code class="sum-mono-id">POST /v1/ingest</code>.
+              Gateway metrics rollups now record a row per successful ingest using the configured embedding model id (same
+              <code class="sum-mono-id">RecordUpstreamResponse</code> path as chat upstream), so operator usage tables can list embed traffic alongside chat completions.
+            </p>
+            <div class="sum-section-label">Model usage (24h)</div>
+            <div class="sum-metrics-table-wrap">
+              <table class="sum-metrics-table">
+                <thead>
+                  <tr><th>Model</th><th>Kind</th><th class="num">Requests</th><th class="num">Errors</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td><code class="sum-mono-id">llama3.1:8b</code></td><td>chat</td><td class="num">310</td><td class="num">1</td></tr>
+                  <tr><td><code class="sum-mono-id">nomic-embed-text</code></td><td>embed</td><td class="num">9 021</td><td class="num">0</td></tr>
+                  <tr><td><code class="sum-mono-id">mxbai-embed-large</code></td><td>embed</td><td class="num">1 204</td><td class="num">0</td></tr>
+                  <tr><td><code class="sum-mono-id">llama3.2:3b</code></td><td>chat</td><td class="num">44</td><td class="num">0</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <label class="sg-op-label" style="margin-top:0.65rem">Server base URL</label>
+            <input class="sg-op-input" type="url" value="http://127.0.0.1:11434" readonly tabindex="-1" />
+            <div class="sg-op-btn-row">
+              <button type="button" class="sg-op-btn" disabled>Save URL</button>
+              <button type="button" class="sg-op-btn sg-op-btn--ghost" disabled>Cancel</button>
+            </div>
+          </div>
+        </details>
+      </div>
+
+      <div id="sg-uo-routing" class="sum-section-label" style="margin-top:1.25rem;scroll-margin-top:3.25rem">Routing</div>
+      <p class="styleguide-sub" style="margin-top:0.15rem">
+        Virtual model policy, fallback chain with <code class="sum-mono-id">sum-conv-tier</code> provider labels, and tool-router controls.
+        Scoped logs use the same <code class="sum-mono-id">sum-evlog</code> shell as <code>gallery.html</code> / summarized cards.
+      </p>
+      <div class="styleguide-demo-bg sg-op-rail">
+        <details class="sum-card" open>
+          <summary>
+            <span class="sum-avatar sum-av-d">Rt</span>
+            <span class="sum-main">
+              <span class="sum-title">Routing rules</span>
+              <span class="sum-sub sum-sub--clamp">Virtual model policy — editable YAML; refresh restores last saved on disk (via <code class="sum-mono-id">GET /api/ui/state</code> when online).</span>
+            </span>
+            <span class="sum-metrics"><span class="chip">14 active rules</span></span>
+            <span class="sum-chev"></span>
+          </summary>
+          <div class="sum-body">
+            <div class="sum-metrics-table-wrap">
+              <table class="sum-metrics-table">
+                <thead>
+                  <tr><th>Rule id</th><th>Match</th><th class="num">Hits (24h)</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td><code class="sum-mono-id">default</code></td><td><code class="sum-mono-id">(catch-all)</code></td><td class="num">9 204</td></tr>
+                  <tr><td><code class="sum-mono-id">tenant-acme</code></td><td><code class="sum-mono-id">min_message_chars ≥ 1</code></td><td class="num">1 120</td></tr>
+                  <tr><td><code class="sum-mono-id">long-user-turn</code></td><td><code class="sum-mono-id">min_message_chars ≥ 8000</code></td><td class="num">88</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <label class="sg-op-label" for="sg-op-routing-policy-yaml">Routing policy YAML</label>
+            <div id="sg-op-routing-policy-wrap" class="sg-op-yaml-wrap">
+              <textarea id="sg-op-routing-policy-yaml" class="sg-op-yaml-textarea" spellcheck="false" aria-label="Routing policy YAML">ambiguous_default_model: "groq/llama-3.3-70b"
+rules:
+  - name: default
+    when: {}
+    models:
+      - "groq/llama-3.3-70b"
+  - name: tenant-acme
+    when:
+      min_message_chars: 1
+    models:
+      - "gemini/gemini-2.0-flash"</textarea>
+              <div class="sg-op-yaml-ov" aria-hidden="false">
+                <button type="button" class="sg-op-yaml-ov-btn" data-sg-op-yaml-refresh title="Revert to last saved on disk" aria-label="Revert to last saved routing YAML">
+                  <img src="reload.svg" width="14" height="14" alt="" />
+                </button>
+                <button type="button" class="sg-op-yaml-ov-btn sg-op-yaml-ov-btn--save sg-op-yaml-ov-save" data-sg-op-yaml-save title="Save routing policy file" aria-label="Save routing policy">Save</button>
+              </div>
+            </div>
+            <label style="display:flex;align-items:center;gap:0.4rem;margin-top:0.5rem;font-size:0.78rem;color:var(--embed-text-secondary)">
+              <input type="checkbox" disabled />
+              Prefer free-tier models when listed in catalog (optional control)
+            </label>
+            <div class="sg-op-btn-row">
+              <button type="button" class="sg-op-btn" disabled>Preview</button>
+              <button type="button" class="sg-op-btn sg-op-btn--ghost" disabled>Generate from live catalog</button>
+            </div>
+
+            <div class="sum-section-label" style="margin-top:0.65rem">Scoped log — routing decisions</div>
+            <div class="sum-evlog sum-evlog--in-card" data-gallery-evlog-root>
+              <div class="sum-evlog__toolbar">
+                <input class="sum-evlog__search" type="search" placeholder="Search message or time…" aria-label="Search log entries" autocomplete="off" />
+                <label class="sum-evlog__lvl-label" style="margin-left:auto">
+                  <span class="sum-evlog__level-filters-label" style="margin-right:0.35rem">Status</span>
+                  <select class="sum-evlog__filter-select" data-evlog-filter-status aria-label="Filter by severity">
+                    <option value="all">All</option>
+                    <option value="warnings">⚠ Warnings</option>
+                    <option value="errors">✖ Errors</option>
+                  </select>
+                </label>
+                <button type="button" class="sum-evlog__copy-btn" title="Copy as TSV — selected rows, or all visible if none selected" aria-label="Copy as TSV"><svg class="sum-evlog__copy-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><span class="sr-only">Copy</span></button>
+              </div>
+              <div class="sum-metrics-table-wrap sum-evlog__table-scroll">
+                <table class="sum-metrics-table sum-evlog__table">
+                  <colgroup><col class="sum-evlog__col-time" /><col class="sum-evlog__col-msg" /><col class="sum-evlog__col-status" /></colgroup>
+                  <thead><tr><th class="sum-evlog__cell--time" scope="col">Time</th><th scope="col">Message</th><th class="sum-evlog__th-status" scope="col">
+                    <div class="sum-evlog__th-status-head" role="group" aria-label="Status counts">
+                      <span class="sum-evlog__th-status-label">Status</span>
+                      <span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN sum-evlog-metric-num" data-sum-evlog-metric-warn>—</span>
+                      <span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN sum-evlog__metric-icon" aria-hidden="true">⚠</span>
+                      <span class="sum-evlog-status__pill sum-evlog-status__lvl--ERROR sum-evlog-metric-num" data-sum-evlog-metric-fail>—</span>
+                      <span class="sum-evlog-status__pill sum-evlog-status__lvl--ERROR sum-evlog__metric-icon" aria-hidden="true">✖</span>
+                    </div>
+                  </th></tr></thead>
+                  <tbody data-gallery-evlog-tbody>
+                    <tr class="sum-evlog__row" data-evlog-id="rt-1" data-evlog-level="INFO">
+                      <td class="sum-evlog__cell--time"><time datetime="2026-05-11T08:10:20.100Z"></time></td>
+                      <td class="sum-evlog__cell--msg"><span class="sum-svc-badge sum-svc-gateway">gateway</span>Compiled routing policy <code class="sum-mono-id">v14</code> (14 rules).</td>
+                      <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="sum-evlog-status__empty" aria-hidden="true"></span></div></td>
+                    </tr>
+                    <tr class="sum-evlog__row" data-evlog-id="rt-2" data-evlog-level="INFO">
+                      <td class="sum-evlog__cell--time"><time datetime="2026-05-11T08:10:22.040Z"></time></td>
+                      <td class="sum-evlog__cell--msg">Policy matched rule <code class="sum-mono-id">tenant-acme</code> → upstream <code class="sum-mono-id">gemini/gemini-2.0-flash</code>.</td>
+                      <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="sum-evlog-status__empty" aria-hidden="true"></span></div></td>
+                    </tr>
+                    <tr class="sum-evlog__row" data-evlog-id="rt-3" data-evlog-level="WARN">
+                      <td class="sum-evlog__cell--time"><time datetime="2026-05-11T08:10:45.881Z"></time></td>
+                      <td class="sum-evlog__cell--msg">Ambiguous default branch taken — two rules tied on score; using <code class="sum-mono-id">ambiguous_default_model</code>.</td>
+                      <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN">WARN</span></div></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="sum-evlog__footer-row">
+                <div class="sum-evlog__footer-left">
+                  <p class="sum-evlog__footer" data-gallery-evlog-oldest></p>
+                </div>
+                <p class="sum-evlog__toast sum-gallery-evlog__toast-align" data-gallery-evlog-toast role="status" aria-live="polite"></p>
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <details class="sum-card" open>
+          <summary>
+            <span class="sum-avatar sum-av-e">Fb</span>
+            <span class="sum-main">
+              <span class="sum-title">Fallback chain</span>
+              <span class="sum-sub sum-sub--clamp">Ordered failover when the primary route errors or rate-limits.</span>
+            </span>
+            <span class="sum-metrics"><span class="chip">5 tiers</span></span>
+            <span class="sum-chev"></span>
+          </summary>
+          <div class="sum-body">
+            <div id="sg-op-fb-table-view">
+              <div class="sum-metrics-table-wrap">
+                <table class="sum-metrics-table sg-op-fallback-table">
+                  <thead>
+                    <tr><th class="num">Order</th><th>Provider</th><th>Model</th><th class="num">Uses (24h)</th></tr>
+                  </thead>
+                  <tbody data-sg-op-fallback-tbody>
+                    <tr>
+                      <td class="num">1</td>
+                      <td><span class="sum-conv-tier sum-conv-tier--request_id">Groq</span></td>
+                      <td><code class="sum-mono-id">groq/llama-3.3-70b</code></td>
+                      <td class="num">1 842</td>
+                    </tr>
+                    <tr>
+                      <td class="num">2</td>
+                      <td><span class="sum-conv-tier sum-conv-tier--ingest">Gemini</span></td>
+                      <td><code class="sum-mono-id">gemini/gemini-2.0-flash</code></td>
+                      <td class="num">612</td>
+                    </tr>
+                    <tr>
+                      <td class="num">3</td>
+                      <td><span class="sum-conv-tier sum-conv-tier--anchored_inferred">Ollama</span></td>
+                      <td><code class="sum-mono-id">ollama/llama3.1:8b</code></td>
+                      <td class="num">104</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="sg-op-btn-row">
+                <button type="button" class="sg-op-btn" id="sg-op-fb-configure">Configure chain</button>
+                <button type="button" class="sg-op-btn sg-op-btn--ghost" disabled>Generate from live catalog</button>
+              </div>
+            </div>
+
+            <div id="sg-op-fb-yaml-view" hidden>
+              <p class="muted" style="margin:0 0 0.4rem;font-size:0.74rem">YAML list (one <code class="sum-mono-id">- provider/model</code> per line). Save writes <code class="sum-mono-id">routing.fallback_chain</code> in <code class="sum-mono-id">gateway.yaml</code>.</p>
+              <div id="sg-op-fallback-yaml-wrap" class="sg-op-yaml-wrap">
+                <textarea id="sg-op-fallback-yaml" class="sg-op-yaml-textarea" spellcheck="false" aria-label="Fallback chain YAML"></textarea>
+                <div class="sg-op-yaml-ov">
+                  <button type="button" class="sg-op-yaml-ov-btn" data-sg-op-yaml-refresh title="Revert to last saved chain" aria-label="Revert fallback YAML">
+                    <img src="reload.svg" width="14" height="14" alt="" />
+                  </button>
+                  <button type="button" class="sg-op-yaml-ov-btn sg-op-yaml-ov-btn--save sg-op-yaml-ov-save" data-sg-op-yaml-save title="Save fallback chain" aria-label="Save fallback chain">Save</button>
+                </div>
+              </div>
+              <div class="sg-op-fb-yaml-actions">
+                <button type="button" class="sg-op-btn sg-op-btn--ghost" id="sg-op-fb-yaml-cancel">Cancel</button>
+              </div>
+            </div>
+
+            <div class="sum-section-label" style="margin-top:0.65rem">Scoped log — fallback / failover</div>
+            <div class="sum-evlog sum-evlog--in-card" data-gallery-evlog-root>
+              <div class="sum-evlog__toolbar">
+                <input class="sum-evlog__search" type="search" placeholder="Search message or time…" aria-label="Search log entries" autocomplete="off" />
+                <label class="sum-evlog__lvl-label" style="margin-left:auto">
+                  <span class="sum-evlog__level-filters-label" style="margin-right:0.35rem">Status</span>
+                  <select class="sum-evlog__filter-select" data-evlog-filter-status aria-label="Filter by severity">
+                    <option value="all">All</option>
+                    <option value="warnings">⚠ Warnings</option>
+                    <option value="errors">✖ Errors</option>
+                  </select>
+                </label>
+                <button type="button" class="sum-evlog__copy-btn" title="Copy as TSV — selected rows, or all visible if none selected" aria-label="Copy as TSV"><svg class="sum-evlog__copy-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><span class="sr-only">Copy</span></button>
+              </div>
+              <div class="sum-metrics-table-wrap sum-evlog__table-scroll">
+                <table class="sum-metrics-table sum-evlog__table">
+                  <colgroup><col class="sum-evlog__col-time" /><col class="sum-evlog__col-msg" /><col class="sum-evlog__col-status" /></colgroup>
+                  <thead><tr><th class="sum-evlog__cell--time" scope="col">Time</th><th scope="col">Message</th><th class="sum-evlog__th-status" scope="col">
+                    <div class="sum-evlog__th-status-head" role="group" aria-label="Status counts">
+                      <span class="sum-evlog__th-status-label">Status</span>
+                      <span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN sum-evlog-metric-num" data-sum-evlog-metric-warn>—</span>
+                      <span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN sum-evlog__metric-icon" aria-hidden="true">⚠</span>
+                      <span class="sum-evlog-status__pill sum-evlog-status__lvl--ERROR sum-evlog-metric-num" data-sum-evlog-metric-fail>—</span>
+                      <span class="sum-evlog-status__pill sum-evlog-status__lvl--ERROR sum-evlog__metric-icon" aria-hidden="true">✖</span>
+                    </div>
+                  </th></tr></thead>
+                  <tbody data-gallery-evlog-tbody>
+                    <tr class="sum-evlog__row" data-evlog-id="fb-1" data-evlog-level="WARN" data-evlog-http="429">
+                      <td class="sum-evlog__cell--time"><time datetime="2026-05-11T08:11:01.200Z"></time></td>
+                      <td class="sum-evlog__cell--msg"><span class="sum-svc-badge sum-svc-upstream">upstream</span>Primary model rate-limited; evaluating fallback tier 2.</td>
+                      <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN">WARN</span><span class="pill-4xx">429</span></div></td>
+                    </tr>
+                    <tr class="sum-evlog__row" data-evlog-id="fb-2" data-evlog-level="INFO" data-evlog-http="200">
+                      <td class="sum-evlog__cell--time"><time datetime="2026-05-11T08:11:03.040Z"></time></td>
+                      <td class="sum-evlog__cell--msg">Relay succeeded on fallback route <code class="sum-mono-id">gemini/gemini-2.0-flash</code>.</td>
+                      <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="pill-2xx">200</span></div></td>
+                    </tr>
+                    <tr class="sum-evlog__row" data-evlog-id="fb-3" data-evlog-level="ERROR" data-evlog-http="503">
+                      <td class="sum-evlog__cell--time"><time datetime="2026-05-11T08:11:18.900Z"></time></td>
+                      <td class="sum-evlog__cell--msg">Exhausted fallback chain — returning last error envelope to client.</td>
+                      <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="sum-evlog-status__pill sum-evlog-status__lvl--ERROR">ERROR</span><span class="pill-5xx">503</span></div></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="sum-evlog__footer-row">
+                <div class="sum-evlog__footer-left">
+                  <p class="sum-evlog__footer" data-gallery-evlog-oldest></p>
+                </div>
+                <p class="sum-evlog__toast sum-gallery-evlog__toast-align" data-gallery-evlog-toast role="status" aria-live="polite"></p>
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <details class="sum-card" open>
+          <summary>
+            <span class="sum-avatar sum-av-f">Tr</span>
+            <span class="sum-main">
+              <span class="sum-title">Router model (tool-router)</span>
+              <span class="sum-sub sum-sub--clamp">Tool-call routing — not the virtual model id above.</span>
+            </span>
+            <span class="sum-metrics">
+              <span class="chip">3 router models</span>
+              <span class="chip">enabled</span>
+            </span>
+            <span class="sum-status sum-st-active">on</span>
+            <span class="sum-chev"></span>
+          </summary>
+          <div class="sum-body">
+            <p class="muted" style="margin:0 0 0.55rem;font-size:0.78rem">Ordered list in usage order; parity with Admin panel router section (threshold, transformers, save). Model list uses the same YAML list syntax as fallback chain (<code>- provider/model</code> per line).</p>
+            <label class="sg-op-label" style="margin-top:0" for="sg-op-router-threshold">Confidence threshold</label>
+            <input id="sg-op-router-threshold" class="sg-op-input" type="number" step="0.05" min="0" max="1" value="0.35" style="max-width:8rem" />
+            <label class="sg-op-label" for="sg-op-router-models-yaml">Router model list (YAML list, same as Admin routing)</label>
+            <div id="sg-op-router-models-wrap" class="sg-op-yaml-wrap">
+              <textarea id="sg-op-router-models-yaml" class="sg-op-code" rows="5" spellcheck="false" aria-label="Router model list">- groq/llama-3.3-70b
+- gemini/gemini-2.0-flash
+- ollama/llama3.1:8b</textarea>
+              <div class="sg-op-yaml-ov" aria-hidden="false">
+                <button type="button" class="sg-op-yaml-ov-btn" data-sg-op-yaml-refresh title="Revert router model list to last saved" aria-label="Revert router model list">
+                  <img src="reload.svg" width="14" height="14" alt="" />
+                </button>
+                <button type="button" class="sg-op-yaml-ov-btn sg-op-yaml-ov-btn--save sg-op-yaml-ov-save" data-sg-op-yaml-save title="Save router models to gateway.yaml" aria-label="Save router model list">Save</button>
+              </div>
+            </div>
+            <div style="margin-top:0.5rem;font-size:0.78rem;color:var(--embed-text-secondary)">
+              <label style="display:flex;align-items:center;gap:0.35rem;margin-bottom:0.35rem">
+                <input id="sg-op-router-enabled" type="checkbox" checked /> Enable tool-router
+              </label>
+              <label style="display:flex;align-items:center;gap:0.35rem;margin-bottom:0.35rem">
+                <input type="checkbox" disabled /> Transformer pass A
+              </label>
+              <label style="display:flex;align-items:center;gap:0.35rem">
+                <input type="checkbox" checked disabled /> Transformer pass B
+              </label>
+            </div>
+            <div class="sg-op-btn-row">
+              <button type="button" class="sg-op-btn" disabled>Save router settings</button>
+              <button type="button" class="sg-op-btn sg-op-btn--ghost" disabled>Dry-run evaluate</button>
+            </div>
+            <div class="sum-section-label">Scoped log — user</div>
+            <div class="sum-evlog sum-evlog--in-card" data-gallery-evlog-root>
+              <div class="sum-evlog__toolbar">
+                <input class="sum-evlog__search" type="search" placeholder="Search message or time…" aria-label="Search log entries" autocomplete="off" />
+                <label class="sum-evlog__lvl-label" style="margin-left:auto">
+                  <span class="sum-evlog__level-filters-label" style="margin-right:0.35rem">Status</span>
+                  <select class="sum-evlog__filter-select" data-evlog-filter-status aria-label="Filter by severity">
+                    <option value="all">All</option>
+                    <option value="warnings">⚠ Warnings</option>
+                    <option value="errors">✖ Errors</option>
+                  </select>
+                </label>
+                <button type="button" class="sum-evlog__copy-btn" title="Copy as TSV" aria-label="Copy as TSV"><svg class="sum-evlog__copy-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><span class="sr-only">Copy</span></button>
+              </div>
+              <div class="sum-metrics-table-wrap sum-evlog__table-scroll">
+                <table class="sum-metrics-table sum-evlog__table">
+                  <colgroup><col class="sum-evlog__col-time" /><col class="sum-evlog__col-msg" /><col class="sum-evlog__col-status" /></colgroup>
+                  <thead><tr><th class="sum-evlog__cell--time" scope="col">Time</th><th scope="col">Message</th><th class="sum-evlog__th-status" scope="col">
+                    <div class="sum-evlog__th-status-head" role="group" aria-label="Status counts">
+                      <span class="sum-evlog__th-status-label">Status</span>
+                      <span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN sum-evlog-metric-num" data-sum-evlog-metric-warn>—</span>
+                      <span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN sum-evlog__metric-icon" aria-hidden="true">⚠</span>
+                      <span class="sum-evlog-status__pill sum-evlog-status__lvl--ERROR sum-evlog-metric-num" data-sum-evlog-metric-fail>—</span>
+                      <span class="sum-evlog-status__pill sum-evlog-status__lvl--ERROR sum-evlog__metric-icon" aria-hidden="true">✖</span>
+                    </div>
+                  </th></tr></thead>
+                  <tbody data-gallery-evlog-tbody>
+                    <tr class="sum-evlog__row" data-evlog-id="demo-usr2-1" data-evlog-level="INFO" data-evlog-http="200">
+                      <td class="sum-evlog__cell--time"><time datetime="2026-05-11T11:02:10.200Z"></time></td>
+                      <td class="sum-evlog__cell--msg"><span class="sum-svc-badge sum-svc-web">web</span>Panel login · principal <code class="sum-mono-id">usr_9bee110a</code> (contractor-east).</td>
+                      <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="pill-2xx">200</span></div></td>
+                    </tr>
+                    <tr class="sum-evlog__row" data-evlog-id="demo-usr2-2" data-evlog-level="INFO">
+                      <td class="sum-evlog__cell--time"><time datetime="2026-05-11T11:05:33.040Z"></time></td>
+                      <td class="sum-evlog__cell--msg">Workspace <code class="sum-mono-id">ws_contractor</code> touched by <code class="sum-mono-id">usr_9bee110a</code>.</td>
+                      <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="sum-evlog-status__empty" aria-hidden="true"></span></div></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="sum-evlog__footer-row">
+                <div class="sum-evlog__footer-left"><p class="sum-evlog__footer" data-gallery-evlog-oldest></p></div>
+                <p class="sum-evlog__toast sum-gallery-evlog__toast-align" data-gallery-evlog-toast role="status" aria-live="polite"></p>
+              </div>
+            </div>
+
+          </div>
+        </details>
+      </div>
+    </section>
+  </div>
+
+  <script src="gallery-event-log-demo.js" defer></script>
+  <script src="gallery-unified-operator-users.js" defer></script>
+  <script src="gallery-unified-operator-routing.js" defer></script>
+  <script>
+    (function () {
+      var root = document.documentElement;
+      var bDef = document.getElementById("theme-default");
+      var bPor = document.getElementById("theme-porcelain");
+      function setTheme(name) {
+        if (name === "porcelain") {
+          root.setAttribute("data-theme", "porcelain");
+          bDef.setAttribute("aria-checked", "false");
+          bPor.setAttribute("aria-checked", "true");
+        } else {
+          root.removeAttribute("data-theme");
+          bDef.setAttribute("aria-checked", "true");
+          bPor.setAttribute("aria-checked", "false");
+        }
+      }
+      bDef.addEventListener("click", function () { setTheme("default"); });
+      bPor.addEventListener("click", function () { setTheme("porcelain"); });
+    })();
+  </script>
+</body>
+</html>

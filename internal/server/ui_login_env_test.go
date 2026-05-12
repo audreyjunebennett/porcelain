@@ -32,7 +32,7 @@ func TestUILoginGET_autoLoginFromEnvToken(t *testing.T) {
 	if res.StatusCode != http.StatusFound {
 		t.Fatalf("want redirect, got %d", res.StatusCode)
 	}
-	if loc := res.Header.Get("Location"); loc != "/ui/panel" {
+	if loc := res.Header.Get("Location"); loc != "/ui/logs" {
 		t.Fatalf("Location: %q", loc)
 	}
 	if c := res.Header.Values("Set-Cookie"); len(c) == 0 || !strings.Contains(strings.Join(c, ";"), "claudia_ui_session=") {
@@ -125,7 +125,7 @@ func TestUILoginGET_openRedirectQuerySanitized(t *testing.T) {
 	if res.StatusCode != http.StatusFound {
 		t.Fatalf("want redirect, got %d", res.StatusCode)
 	}
-	if loc := res.Header.Get("Location"); loc != "/ui/panel" {
+	if loc := res.Header.Get("Location"); loc != "/ui/logs" {
 		t.Fatalf("Location: %q", loc)
 	}
 }

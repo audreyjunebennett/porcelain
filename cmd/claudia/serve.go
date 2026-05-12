@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -56,8 +57,8 @@ func gatewayPublicURLFromResolved(res *config.Resolved) string {
 	return fmt.Sprintf("http://%s:%d", host, res.ListenPort)
 }
 
-func panelURLFromListenAddr(ln net.Addr) string {
-	return gatewayPublicURL(ln) + "/ui/panel"
+func operatorShellURLFromListenAddr(ln net.Addr) string {
+	return gatewayPublicURL(ln) + "/ui/desktop"
 }
 
 // webviewEntryURL is opened by the native desktop shell: setup (bootstrap) or login → /ui/desktop.
@@ -102,6 +103,64 @@ func waitForChildExit(name string, cmd *exec.Cmd, waitCh <-chan error, timeout t
 			log.Warn(name+" still has not exited after forced kill", "msg", "gateway.shutdown.child_stuck", "child", name)
 		}
 	}
+}
+
+func indexerStateMsg(flat map[string]any) string {
+	raw := ""
+	if v, ok := flat["msg"]; ok && v != nil {
+		raw = strings.TrimSpace(fmt.Sprint(v))
+	}
+	if raw == "" {
+		if v, ok := flat["message"]; ok && v != nil {
+			raw = strings.TrimSpace(fmt.Sprint(v))
+		}
+	}
+	return strings.ToLower(raw)
+}
+
+func startIndexerSupervisorStateTracker(ctx context.Context, rt *server.Runtime, store *servicelogs.Store) {
+	if ctx == nil || rt == nil || store == nil {
+		return
+	}
+	ch, cancel := store.Subscribe(256)
+	go func() {
+		defer cancel()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case ent, ok := <-ch:
+				if !ok {
+					return
+				}
+				if strings.TrimSpace(ent.Source) != "indexer" {
+					continue
+				}
+				rt.NoteIndexerSupervisorLog(ent.Time)
+				var flat map[string]any
+				if err := json.Unmarshal([]byte(ent.Text), &flat); err != nil {
+					continue
+				}
+				msg := indexerStateMsg(flat)
+				if msg != "indexer.state" && msg != "indexer state" {
+					continue
+				}
+				declaredState := strings.TrimSpace(fmt.Sprint(flat["state"]))
+				if declaredState == "<nil>" {
+					declaredState = ""
+				}
+				recovery := false
+				if rv, ok := flat["recovery"].(bool); ok && rv {
+					recovery = true
+				}
+				workerState := "up"
+				if recovery || strings.EqualFold(declaredState, "recovery") {
+					workerState = "degraded"
+				}
+				rt.NoteIndexerSupervisorHeartbeat(ent.Time, declaredState, workerState)
+			}
+		}
+	}()
 }
 
 func runServe(args []string, openWebview bool) {
@@ -209,6 +268,8 @@ func runServe(args []string, openWebview bool) {
 	var bifrostWaitErr chan error
 	var indexerProc *exec.Cmd
 	var indexerWait chan error
+	startIndexerSupervisorStateTracker(childCtx, rt, logStore)
+	rt.SetIndexerSupervisorStatus(server.IndexerSupervisorStatus{WorkerState: "disabled"})
 
 	if !bootstrap {
 		if qBin != "" {
@@ -298,7 +359,11 @@ func runServe(args []string, openWebview bool) {
 		}
 
 		idxScope := res.IndexerSupervisedEnabled && (res.RAG.Enabled || res.IndexerSupervisedStartWhenRAGDisabled)
+		if res.IndexerSupervisedEnabled && !idxScope {
+			rt.SetIndexerSupervisorStatus(server.IndexerSupervisorStatus{WorkerState: "not_running_out_of_scope"})
+		}
 		if idxScope {
+			rt.SetIndexerSupervisorStatus(server.IndexerSupervisorStatus{WorkerState: "starting"})
 			idxBin := strings.TrimSpace(res.IndexerSupervisedBin)
 			if idxBin == "" {
 				idxBin = defaultSupervisorIndexerBin()
@@ -322,13 +387,30 @@ func runServe(args []string, openWebview bool) {
 					Stderr:     platform.StderrTee(idxSink),
 				}, log)
 				if ierr != nil {
+					rt.SetIndexerSupervisorStatus(server.IndexerSupervisorStatus{WorkerState: "down", LastError: ierr.Error()})
 					if log != nil {
 						log.Warn("indexer supervised not started", "msg", "gateway.supervisor.indexer.not_started", "err", ierr, "bin", idxBin)
 					}
 				} else {
 					indexerWait = make(chan error, 1)
+					indexerStatusWait := make(chan error, 1)
+					rt.SetIndexerSupervisorStatus(server.IndexerSupervisorStatus{WorkerState: "up"})
 					go func() {
-						indexerWait <- indexerProc.Wait()
+						werr := indexerProc.Wait()
+						indexerWait <- werr
+						indexerStatusWait <- werr
+					}()
+					go func() {
+						werr := <-indexerStatusWait
+						if childCtx.Err() != nil {
+							return
+						}
+						st := rt.IndexerSupervisorStatus()
+						st.WorkerState = "down"
+						if werr != nil {
+							st.LastError = werr.Error()
+						}
+						rt.SetIndexerSupervisorStatus(st)
 					}()
 				}
 			}
@@ -429,7 +511,7 @@ func runServe(args []string, openWebview bool) {
 			fmt.Fprintf(os.Stderr, "claudia serve: listen %s: %v\n", addr, lerr)
 			os.Exit(1)
 		}
-		entryURL = panelURLFromListenAddr(ln.Addr())
+		entryURL = operatorShellURLFromListenAddr(ln.Addr())
 		if openWebview {
 			entryURL = webviewEntryURL(ln.Addr(), false)
 		}

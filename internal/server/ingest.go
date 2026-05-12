@@ -10,6 +10,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/lynn/claudia-gateway/internal/platform/requestid"
 	"github.com/lynn/claudia-gateway/internal/rag"
@@ -134,6 +135,21 @@ func handleV1Ingest(w http.ResponseWriter, r *http.Request, rt *Runtime, log *sl
 			args = append(args, "conversation_id", convID)
 		}
 		log.Info("ingest complete", args...)
+	}
+	if rec := rt.Metrics(); rec != nil {
+		if rag := rt.RAG(); rag != nil {
+			mid := strings.TrimSpace(rag.EmbeddingModel())
+			if mid != "" {
+				est := len(text) / 4
+				if est < 1 {
+					est = 1
+				}
+				if est > 2_000_000 {
+					est = 2_000_000
+				}
+				rec.RecordUpstreamResponse(time.Now().UTC(), mid, 200, est)
+			}
+		}
 	}
 	_ = json.NewEncoder(w).Encode(out)
 }

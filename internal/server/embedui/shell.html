@@ -7,36 +7,36 @@
   <style>
     * { box-sizing: border-box; }
     html, body { height: 100%; margin: 0; font-family: system-ui, sans-serif; overflow: hidden; }
-    /* Flex column avoids calc(navHeight) mismatch that can overflow and confuse WebView hit-testing. */
     body {
       display: flex;
       flex-direction: column;
     }
-    #tabs {
+    #shell-top {
       flex: 0 0 auto;
-      display: flex; gap: 0; background: #f0f0f0; border-bottom: 1px solid #ccc;
-      padding: 0 0.25rem; align-items: stretch;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: #f0f0f0;
+      border-bottom: 1px solid #ccc;
+      padding: 0.35rem 0.5rem;
       position: relative;
       z-index: 2;
     }
-    #tabs button {
-      border: none; background: transparent; padding: 0.6rem 1rem; cursor: pointer;
-      font-size: 0.9rem; color: #333; border-bottom: 2px solid transparent;
-    }
-    #tabs button:hover { background: #e5e5e5; }
-    #tabs button.active { border-bottom-color: #0b57d0; font-weight: 600; color: #0b57d0; }
-    #tabs .spacer { flex: 1 1 auto; }
-    #tabs #btn-reload {
-      margin-left: 0.25rem;
+    #shell-top .spacer { flex: 1 1 auto; }
+    #btn-reload {
+      flex: 0 0 auto;
+      border: none;
+      background: transparent;
       padding: 0.35rem 0.6rem;
+      cursor: pointer;
       display: inline-flex;
       align-items: center;
       justify-content: center;
       color: #333;
-      border-bottom: 2px solid transparent;
+      border-radius: 4px;
     }
-    #tabs #btn-reload:hover { background: #e5e5e5; }
-    #tabs #btn-reload .reload-icon {
+    #btn-reload:hover { background: #e5e5e5; }
+    #btn-reload .reload-icon {
       display: block;
       width: 18px;
       height: 18px;
@@ -44,6 +44,29 @@
       -webkit-mask: url("/ui/assets/reload.svg") center / contain no-repeat;
       mask: url("/ui/assets/reload.svg") center / contain no-repeat;
     }
+    #btn-settings {
+      flex: 0 0 auto;
+      border: none;
+      background: transparent;
+      padding: 0.35rem 0.6rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #333;
+      border-radius: 4px;
+      min-width: 2.1rem;
+    }
+    #btn-settings:hover { background: #e5e5e5; }
+    #btn-settings .settings-icon {
+      display: inline-block;
+      font-size: 1.05rem;
+      line-height: 1;
+      font-weight: 600;
+    }
+    #btn-settings .settings-icon--close { display: none; }
+    #btn-settings.is-logs .settings-icon--gear { display: none; }
+    #btn-settings.is-logs .settings-icon--close { display: inline-block; }
     #frame-wrap {
       flex: 1 1 auto;
       min-height: 0;
@@ -51,129 +74,120 @@
       z-index: 1;
       overflow: hidden;
     }
-    /*
-     * Only mount one iframe in the hit-test tree at a time. WebView2 can still deliver
-     * clicks to stacked opacity:0/visibility:hidden iframes.
-     * display:none removes inactive frames from hit-testing; scroll state is preserved when shown again in Chromium.
-     */
     iframe {
-      display: none;
       position: absolute;
       inset: 0;
       width: 100%;
       height: 100%;
       border: none;
-      z-index: 0;
-    }
-    iframe.visible {
-      display: block;
       z-index: 1;
     }
   </style>
 </head>
 <body>
-  <nav id="tabs" role="tablist">
-    <button type="button" role="tab" data-tab="main" class="active" aria-selected="true">Main</button>
-    <button type="button" role="tab" data-tab="logs" aria-selected="false">Logs</button>
-    <button type="button" role="tab" data-tab="admin" aria-selected="false">Admin</button>
+  <header id="shell-top">
     <span class="spacer" aria-hidden="true"></span>
     <button type="button" id="btn-reload" title="Reload (Shift+Click: reset cache)" aria-label="Reload (Shift+Click: reset cache)">
       <span class="reload-icon" aria-hidden="true"></span>
     </button>
-  </nav>
+    <button type="button" id="btn-settings" title="Open settings" aria-label="Open settings">
+      <span class="settings-icon settings-icon--gear" aria-hidden="true">&#9881;</span>
+      <span class="settings-icon settings-icon--close" aria-hidden="true">X</span>
+    </button>
+  </header>
   <div id="frame-wrap">
-    <iframe id="f-main" class="visible" title="Gateway main" src="/"></iframe>
-    <!-- Lazy src: defer loading until first shown so embeds are not laid out at 0×0 while hidden. -->
-    <iframe id="f-logs" title="Logs" data-lazy-src="/ui/logs?embed=1"></iframe>
-    <iframe id="f-admin" title="Admin" data-lazy-src="/ui/panel"></iframe>
+    <iframe id="f-main" title="Operator page" src="about:blank"></iframe>
   </div>
   <script>
 (function () {
+  var DEFAULT_ROUTE = "/ui/pwa";
+  var LOGS_ROUTE = "/ui/logs?embed=1";
+  var LS_CURRENT_ROUTE = "claudia.shell.currentRoute.v1";
+  var LS_RETURN_ROUTE = "claudia.shell.settingsReturnRoute.v1";
   var origin = window.location.origin;
-  var ACTIVE_TAB_LS = "claudia.shell.activeTab.v1";
-  /* Exclude #btn-reload — it has no data-tab; treating it as a tab called show(null) and hid every iframe. */
-  var tabs = document.querySelectorAll("#tabs button[data-tab]");
+  var frame = document.getElementById("f-main");
   var reloadBtn = document.getElementById("btn-reload");
-  var frames = {
-    main: document.getElementById("f-main"),
-    logs: document.getElementById("f-logs"),
-    admin: document.getElementById("f-admin")
-  };
+  var settingsBtn = document.getElementById("btn-settings");
+
+  function safeGetLS(k) {
+    try { return localStorage.getItem(k) || ""; } catch (_e) { return ""; }
+  }
+  function safeSetLS(k, v) {
+    try { localStorage.setItem(k, String(v || "")); } catch (_e) {}
+  }
+  function normalizeRoute(raw) {
+    var s = String(raw || "").trim();
+    if (!s) return "";
+    try {
+      var u = new URL(s, origin);
+      if (u.origin !== origin) return "";
+      if (!u.pathname || u.pathname.charAt(0) !== "/") return "";
+      return u.pathname + (u.search || "") + (u.hash || "");
+    } catch (_e) {
+      return "";
+    }
+  }
+  function getSafeRoute(raw, fallback) {
+    var n = normalizeRoute(raw);
+    return n || fallback;
+  }
+  function isLogsRoute(route) {
+    return String(route || "").indexOf("/ui/logs") === 0;
+  }
+  function updateSettingsButton(isLogs) {
+    if (!settingsBtn) return;
+    settingsBtn.classList.toggle("is-logs", !!isLogs);
+    if (isLogs) {
+      settingsBtn.title = "Close settings";
+      settingsBtn.setAttribute("aria-label", "Close settings");
+    } else {
+      settingsBtn.title = "Open settings";
+      settingsBtn.setAttribute("aria-label", "Open settings");
+    }
+  }
+  function currentRouteFromFrame() {
+    try {
+      if (frame && frame.contentWindow && frame.contentWindow.location) {
+        return normalizeRoute(frame.contentWindow.location.href);
+      }
+    } catch (_e) {}
+    try {
+      return normalizeRoute(frame.getAttribute("src") || frame.src);
+    } catch (_e2) {
+      return "";
+    }
+  }
+  function navigateFrame(route) {
+    var target = getSafeRoute(route, DEFAULT_ROUTE);
+    if (!frame) return;
+    frame.src = target;
+    safeSetLS(LS_CURRENT_ROUTE, target);
+    updateSettingsButton(isLogsRoute(target));
+  }
   function notifyLogsActive() {
-    var w = frames.logs.contentWindow;
+    var route = currentRouteFromFrame();
+    if (!isLogsRoute(route)) return;
+    var w = frame && frame.contentWindow;
     try {
       if (w) {
         w.postMessage({ type: "claudia-logs-activate" }, origin);
       }
     } catch (e) {}
   }
-  function ensureLazyFrame(name) {
-    var fr = frames[name];
-    if (!fr) return;
-    var lazy = fr.getAttribute("data-lazy-src");
-    if (!lazy) return;
-    var cur = "";
-    try {
-      cur = fr.getAttribute("src") || "";
-    } catch (e) {}
-    if (cur && cur !== "about:blank") return;
-    fr.src = lazy;
-  }
-  function show(name) {
-    try { localStorage.setItem(ACTIVE_TAB_LS, String(name || "")); } catch (_e) {}
-    if (name === "main") {
-      /* Always show gateway root (same origin → e.g. http://127.0.0.1:3000/) */
-      frames.main.src = "/";
-    }
-    ensureLazyFrame(name);
-    Object.keys(frames).forEach(function (k) {
-      var fr = frames[k];
-      var vis = k === name;
-      fr.classList.toggle("visible", vis);
-      if (!vis) {
-        try {
-          if (fr.contentWindow && fr.contentWindow.blur) fr.contentWindow.blur();
-        } catch (e) {}
-      }
-    });
-    tabs.forEach(function (b) {
-      var on = b.getAttribute("data-tab") === name;
-      b.classList.toggle("active", on);
-      b.setAttribute("aria-selected", on ? "true" : "false");
-    });
-    if (name === "logs") {
+  if (frame) {
+    frame.addEventListener("load", function () {
+      var loadedRoute = getSafeRoute(currentRouteFromFrame(), DEFAULT_ROUTE);
+      safeSetLS(LS_CURRENT_ROUTE, loadedRoute);
+      updateSettingsButton(isLogsRoute(loadedRoute));
       notifyLogsActive();
-      setTimeout(notifyLogsActive, 50);
-    }
-  }
-  frames.logs.addEventListener("load", function () {
-    if (frames.logs.classList.contains("visible")) {
-      notifyLogsActive();
-    }
-  });
-  tabs.forEach(function (btn) {
-    btn.addEventListener("click", function () {
-      var tabName = btn.getAttribute("data-tab");
-      show(tabName);
     });
-  });
-
-  function currentTabName() {
-    for (var i = 0; i < tabs.length; i++) {
-      if (tabs[i].classList.contains("active")) return tabs[i].getAttribute("data-tab") || "main";
-    }
-    return "main";
   }
-
-  function currentFrame() {
-    var n = currentTabName();
-    return frames[n] || frames.main;
-  }
+  var startupRoute = getSafeRoute(safeGetLS(LS_CURRENT_ROUTE), DEFAULT_ROUTE);
+  navigateFrame(startupRoute);
 
   function cacheBustedSrc(src) {
     var s = String(src || "");
     if (!s || s === "about:blank") return s;
-    // Keep hash; bump query.
     var hash = "";
     var hIdx = s.indexOf("#");
     if (hIdx >= 0) { hash = s.slice(hIdx); s = s.slice(0, hIdx); }
@@ -182,11 +196,8 @@
   }
 
   async function resetWebviewCacheBestEffort() {
-    // UI-level reset: clear local/session storage + cache storage + service workers + indexedDB.
-    // This does not guarantee clearing the browser engine HTTP cache; it’s the best available from JS.
     try { sessionStorage.clear(); } catch (_e) {}
     try {
-      // Prefer targeted deletes (keeps login/session cookies unaffected).
       var keys = [];
       for (var i = 0; i < localStorage.length; i++) keys.push(localStorage.key(i));
       for (var j = 0; j < keys.length; j++) {
@@ -225,26 +236,19 @@
   }
 
   function reloadCurrent(ev) {
-    var fr = currentFrame();
-    var tabName = currentTabName();
-    // Ensure we don't switch tabs; just reload content of the current iframe.
-    try { localStorage.setItem(ACTIVE_TAB_LS, String(tabName || "")); } catch (_e) {}
-
+    var fr = frame;
+    if (!fr) return;
     var wantReset = !!(ev && ev.shiftKey);
     if (!wantReset) {
       try {
-        // Prefer true reload when possible.
-        if (fr && fr.contentWindow && fr.contentWindow.location && fr.contentWindow.location.reload) {
+        if (fr.contentWindow && fr.contentWindow.location && fr.contentWindow.location.reload) {
           fr.contentWindow.location.reload();
           return;
         }
       } catch (_e2) {}
-      // Fallback: bump src.
       try { fr.src = cacheBustedSrc(fr.getAttribute("src") || fr.src); } catch (_e3) {}
       return;
     }
-
-    // Shift+Click: clear caches (best-effort) then force reload with cache-busted URL.
     Promise.resolve()
       .then(function () { return resetWebviewCacheBestEffort(); })
       .then(function () {
@@ -257,13 +261,18 @@
       reloadCurrent(ev);
     });
   }
-
-  // Restore last tab on full shell reloads (Indexer tab removed — open Logs instead).
-  try {
-    var last = localStorage.getItem(ACTIVE_TAB_LS);
-    if (last === "indexer") last = "logs";
-    if (last && frames[last]) show(last);
-  } catch (_e10) {}
+  if (settingsBtn) {
+    settingsBtn.addEventListener("click", function () {
+      var route = getSafeRoute(currentRouteFromFrame(), DEFAULT_ROUTE);
+      if (isLogsRoute(route)) {
+        var backTo = getSafeRoute(safeGetLS(LS_RETURN_ROUTE), DEFAULT_ROUTE);
+        navigateFrame(backTo);
+        return;
+      }
+      safeSetLS(LS_RETURN_ROUTE, route);
+      navigateFrame(LOGS_ROUTE);
+    });
+  }
 })();
   </script>
 </body>

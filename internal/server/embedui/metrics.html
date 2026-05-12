@@ -54,9 +54,9 @@
   var embedded = params.get("embed") === "1" || window.self !== window.top;
   var extra = document.getElementById("toolbar-extra");
   if (embedded) {
-    extra.textContent = "Embedded in desktop shell — use tabs above to switch views.";
+    extra.textContent = "Embedded — use Gateway · Admin · Metrics in the bar above the logs view (desktop shell).";
   } else {
-    extra.innerHTML = '<a href="/ui/desktop">Desktop shell</a> · <a href="/ui/panel">Admin</a> · <a href="/ui/logs">Logs</a>';
+    extra.innerHTML = '<a href="/ui/logs">Logs</a> · <a href="/ui/desktop">Desktop shell</a> · <a href="/ui/logs?focus=admin">Admin</a>';
   }
 
   var statusEl = document.getElementById("status");

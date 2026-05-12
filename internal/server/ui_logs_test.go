@@ -447,6 +447,7 @@ func TestUILogsPage_servesLogsHTMLWhenAuthed(t *testing.T) {
 		`src="/ui/assets/logs/components/MetricPills.js"`,
 		`src="/ui/assets/logs/main.js"`,
 		`src="/ui/assets/logs.js"`,
+		`id="logs-chrome"`,
 		`id="status"`,
 		`id="panel-summarized"`,
 	}
@@ -651,14 +652,54 @@ func TestUIDesktopPage_servesShellWhenAuthed(t *testing.T) {
 		t.Fatal(err)
 	}
 	page := string(b)
-	if !strings.Contains(page, "f-logs") || !strings.Contains(page, "/ui/logs") {
-		t.Fatal("expected tabbed shell markup")
+	if !strings.Contains(page, "f-main") || !strings.Contains(page, "/ui/pwa") {
+		t.Fatal("expected desktop shell with default PWA page")
+	}
+	if strings.Contains(page, `data-tab="main"`) {
+		t.Fatal("desktop shell should not include a separate Main tab")
 	}
 	if strings.Contains(page, "f-stats") || strings.Contains(page, `data-tab="stats"`) {
 		t.Fatal("desktop shell should not include a Stats tab (metrics live under /ui/logs summarized view)")
 	}
 	if strings.Contains(page, `data-tab="indexer"`) || strings.Contains(page, "f-indexer") {
 		t.Fatal("desktop shell should not include Indexer tab (workspaces live under Logs)")
+	}
+}
+
+func TestUIPWAPage_servesWhenAuthed(t *testing.T) {
+	t.Setenv("CLAUDIA_UPSTREAM_API_KEY", "ukey")
+	up := bifrostStubForUILogs(t)
+	t.Cleanup(up.Close)
+
+	rt := runtimeForUILogs(t, up.URL)
+	ui := NewUIOptions()
+	ui.LogStore = servicelogs.New(10)
+	front := httptest.NewServer(NewMux(rt, testLog(), nil, ui))
+	t.Cleanup(front.Close)
+
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{Jar: jar}
+	if _, err := client.Post(front.URL+"/api/ui/login", "application/json", strings.NewReader(`{"token":"gw-ui-secret"}`)); err != nil {
+		t.Fatal(err)
+	}
+	res, err := client.Get(front.URL + "/ui/pwa")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status %d", res.StatusCode)
+	}
+	b, err := io.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(b)
+	if !strings.Contains(page, ">PWA<") {
+		t.Fatal("expected PWA landing content")
 	}
 }
 
@@ -696,5 +737,42 @@ func TestUIIndexer_redirectsToLogsWhenAuthed(t *testing.T) {
 	}
 	if loc := res.Header.Get("Location"); loc != "/ui/logs" {
 		t.Fatalf("Location %q want %q", loc, "/ui/logs")
+	}
+}
+
+func TestUIPanel_redirectsToLogsAdminWhenAuthed(t *testing.T) {
+	t.Setenv("CLAUDIA_UPSTREAM_API_KEY", "ukey")
+	up := bifrostStubForUILogs(t)
+	t.Cleanup(up.Close)
+
+	rt := runtimeForUILogs(t, up.URL)
+	ui := NewUIOptions()
+	ui.LogStore = servicelogs.New(10)
+	front := httptest.NewServer(NewMux(rt, testLog(), nil, ui))
+	t.Cleanup(front.Close)
+
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{
+		Jar: jar,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	if _, err := client.Post(front.URL+"/api/ui/login", "application/json", strings.NewReader(`{"token":"gw-ui-secret"}`)); err != nil {
+		t.Fatal(err)
+	}
+	res, err := client.Get(front.URL + "/ui/panel")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusFound {
+		t.Fatalf("status %d want %d", res.StatusCode, http.StatusFound)
+	}
+	if loc := res.Header.Get("Location"); loc != "/ui/logs?focus=admin" {
+		t.Fatalf("Location %q want %q", loc, "/ui/logs?focus=admin")
 	}
 }

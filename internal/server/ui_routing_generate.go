@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io/fs"
 	"net/http"
 	"os"
@@ -460,6 +461,137 @@ func (a *adminUI) handleRoutingFilterFreeTierPOST(w http.ResponseWriter, r *http
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"ok":                      true,
 		"filter_free_tier_models": res2.FilterFreeTierModels,
+	})
+}
+
+func (a *adminUI) handleRoutingPolicySavePOST(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		RoutingPolicyYAML string `json:"routing_policy_yaml"`
+	}
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 512<<10))
+	if err := dec.Decode(&body); err != nil {
+		writeRoutingGenJSONError(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+	yamlStr := strings.TrimSpace(body.RoutingPolicyYAML)
+	if err := routing.ValidatePolicyYAML([]byte(yamlStr)); err != nil {
+		writeRoutingGenJSONError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	a.rt.Sync()
+	res, _, _ := a.rt.Snapshot()
+	if res == nil || strings.TrimSpace(res.RoutingPolicyPath) == "" {
+		writeRoutingGenJSONError(w, http.StatusInternalServerError, "gateway not configured")
+		return
+	}
+	routePerm := fs.FileMode(0o644)
+	if st, err := os.Stat(res.RoutingPolicyPath); err == nil {
+		routePerm = st.Mode() & fs.ModePerm
+	}
+	if err := config.ReplaceFile(res.RoutingPolicyPath, []byte(yamlStr), routePerm); err != nil {
+		writeRoutingGenJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	rb, err := os.ReadFile(res.RoutingPolicyPath)
+	if err != nil {
+		writeRoutingGenJSONError(w, http.StatusInternalServerError, "read back routing policy: "+err.Error())
+		return
+	}
+	if err := routing.ValidatePolicyYAML(rb); err != nil {
+		writeRoutingGenJSONError(w, http.StatusInternalServerError, "routing policy on disk failed validation after write: "+err.Error())
+		return
+	}
+	a.rt.Sync()
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":                    true,
+		"saved":                 true,
+		"routing_policy_yaml": strings.TrimSpace(string(rb)),
+	})
+}
+
+func (a *adminUI) handleRoutingFallbackChainSavePOST(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		FallbackChain []string `json:"fallback_chain"`
+	}
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 512<<10))
+	if err := dec.Decode(&body); err != nil {
+		writeRoutingGenJSONError(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+	if len(body.FallbackChain) == 0 {
+		writeRoutingGenJSONError(w, http.StatusBadRequest, "fallback_chain must be non-empty")
+		return
+	}
+	for i, id := range body.FallbackChain {
+		if strings.TrimSpace(id) == "" {
+			writeRoutingGenJSONError(w, http.StatusBadRequest, fmt.Sprintf("fallback_chain[%d] is empty", i))
+			return
+		}
+	}
+	a.rt.Sync()
+	res, _, _ := a.rt.Snapshot()
+	if res == nil || strings.TrimSpace(res.GatewayYAMLPath) == "" {
+		writeRoutingGenJSONError(w, http.StatusInternalServerError, "gateway not configured")
+		return
+	}
+	gwRaw, err := os.ReadFile(res.GatewayYAMLPath)
+	if err != nil {
+		writeRoutingGenJSONError(w, http.StatusInternalServerError, "read gateway.yaml: "+err.Error())
+		return
+	}
+	gwPatched, err := config.PatchGatewayYAMLBytesWithFallbackChain(gwRaw, body.FallbackChain)
+	if err != nil {
+		writeRoutingGenJSONError(w, http.StatusBadRequest, "gateway.yaml patch validation failed: "+err.Error())
+		return
+	}
+	tmpValidate, err := os.CreateTemp(filepath.Dir(res.GatewayYAMLPath), "claudia-gw-fb-validate-*.yaml")
+	if err != nil {
+		writeRoutingGenJSONError(w, http.StatusInternalServerError, "temp file")
+		return
+	}
+	tmpPath := tmpValidate.Name()
+	_ = tmpValidate.Close()
+	defer func() { _ = os.Remove(tmpPath) }()
+	if err := os.WriteFile(tmpPath, gwPatched, 0o600); err != nil {
+		writeRoutingGenJSONError(w, http.StatusInternalServerError, "stage gateway validate")
+		return
+	}
+	if _, err := config.LoadGatewayYAML(tmpPath, nil); err != nil {
+		writeRoutingGenJSONError(w, http.StatusBadRequest, "gateway.yaml after patch failed to load: "+err.Error())
+		return
+	}
+	gwPerm := fs.FileMode(0o644)
+	if st, err := os.Stat(res.GatewayYAMLPath); err == nil {
+		gwPerm = st.Mode() & fs.ModePerm
+	}
+	if err := config.ReplaceFile(res.GatewayYAMLPath, gwPatched, gwPerm); err != nil {
+		writeRoutingGenJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if _, err := config.LoadGatewayYAML(res.GatewayYAMLPath, nil); err != nil {
+		writeRoutingGenJSONError(w, http.StatusInternalServerError, "reload gateway.yaml after write: "+err.Error())
+		return
+	}
+	a.rt.Sync()
+	res2, _, _ := a.rt.Snapshot()
+	fb := []string(nil)
+	if res2 != nil {
+		fb = res2.FallbackChain
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":              true,
+		"saved":           true,
+		"fallback_chain": fb,
 	})
 }
 

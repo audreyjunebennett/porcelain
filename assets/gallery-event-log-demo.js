@@ -419,4 +419,6 @@
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
   else init();
+
+  globalThis.GalleryEventLogDemo = { wireRoot: wireRoot, reinitAll: init };
 })();

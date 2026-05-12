@@ -7,7 +7,12 @@
   <link rel="stylesheet" href="/ui/assets/logs.css" />
 </head>
 <body>
-  <div id="status" class="status-line" aria-live="polite"></div>
+  <header id="logs-chrome" class="logs-chrome">
+    <div id="status" class="status-line" aria-live="polite"></div>
+    <nav class="logs-chrome__nav" aria-label="Related operator views">
+      <a class="logs-chrome__shell" href="/ui/desktop">Shell</a>
+    </nav>
+  </header>
   <div id="panel-summarized"></div>
   <script src="/ui/assets/logs/testing/loader.js" defer></script>
   <script src="/ui/assets/logs/util/escape.js" defer></script>

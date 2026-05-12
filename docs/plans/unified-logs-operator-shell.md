@@ -15,10 +15,10 @@ Operators should land in one place: the live event log, with the same facts and 
 
 | Phase | Outcome | Status |
 |-------|---------|--------|
-| [Phase 1 — Gallery prototypes (static)](#phase-1--gallery-prototypes-static) | [`assets/gallery.html`](../../assets/gallery.html) shows example cards for overview, users, providers, routing, and scoped log snippets | `todo` |
-| [Phase 2 — Shell and layout unification](#phase-2--shell-and-layout-unification) | Desktop and browser default to a single primary surface; logs are the main view without a duplicate header | `todo` |
-| [Phase 3 — Operator overview cards](#phase-3--operator-overview-cards) | Gateway version, virtual model, and aggregate service health match what mattered on the old Main surface | `todo` |
-| [Phase 4 — Admin workflows as cards](#phase-4--admin-workflows-as-cards) | Tokens, providers, and routing controls from `/ui/panel` move into cards with metrics, actions, and scoped log streams | `todo` |
+| [Phase 1 — Gallery prototypes (static)](#phase-1--gallery-prototypes-static) | [`assets/gallery-unified-operator.html`](../../assets/gallery-unified-operator.html) (linked from gallery nav) shows static cards for overview, users, providers, routing, and scoped log snippets | `done` |
+| [Phase 2 — Shell and layout unification](#phase-2--shell-and-layout-unification) | Desktop and browser default to a single primary surface; logs are the main view without a duplicate header | `done` |
+| [Phase 3 — Operator overview cards](#phase-3--operator-overview-cards) | Gateway version, virtual model, and aggregate service health match what mattered on the old Main surface | `done` |
+| [Phase 4 — Admin workflows as cards](#phase-4--admin-workflows-as-cards) | Tokens, providers, and routing controls from `/ui/panel` move into cards with metrics, actions, and scoped log streams | `done` |
 
 ---
 
@@ -94,7 +94,7 @@ Sections are ordered roughly as operators scan: **overview** (from Main), then *
 
 **Deliverables**
 
-- Add a **Unified operator (draft)** section to [`assets/gallery.html`](../../assets/gallery.html) (nav anchor `sg-unified-operator`) that demonstrates, using existing `sum-card`, chips, tables, `log-line-sum`, and `indexer-run-kv` patterns:
+- **Unified operator (draft)** page [`assets/gallery-unified-operator.html`](../../assets/gallery-unified-operator.html) (nav anchor `sg-unified-operator`; standalone page so later phases can iterate without the full component gallery) demonstrates, using existing `sum-card`, chips, tables, `log-line-sum`, and `indexer-run-kv` patterns:
   - **Overview:** gateway version + virtual model card; composite **all healthy** indicator + per-service breakdown.
   - **Users / tokens:** token-creation workflow row and a **grid of user cards** (labels, fake ids, Revoke).
   - **Providers:** section blurb; **Groq**, **Gemini**, and **Ollama** cards with collapsed-summary chips (keys/models/availability rules per spec); **one** expanded provider body showing description + external link, per-model usage table, key or URL editing, and a **scoped log** sample block.
@@ -104,10 +104,10 @@ Sections are ordered roughly as operators scan: **overview** (from Main), then *
 
 **Acceptance**
 
-- Opening `gallery.html` in a browser shows the full operator draft **without** running the gateway; every bullet under **Target card layout** has a visible reference (possibly combined, e.g. one expanded provider covers the shared pattern for Groq/Gemini).
+- Opening `gallery-unified-operator.html` in a browser shows the full operator draft **without** running the gateway; every bullet under **Target card layout** has a visible reference (possibly combined, e.g. one expanded provider covers the shared pattern for Groq/Gemini).
 - No new routes or embed UI behavior are required for this phase.
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 
@@ -129,7 +129,7 @@ Sections are ordered roughly as operators scan: **overview** (from Main), then *
 - Embed message flow (`postMessage` activation) still fires when the shell shows logs.
 - No broken navigation from bookmarks to `/ui/logs` or `/ui/desktop`.
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 
@@ -148,7 +148,7 @@ Sections are ordered roughly as operators scan: **overview** (from Main), then *
 - Version string and virtual model match `GET /` for the same running process.
 - Health summary matches degraded/ok semantics expected from BiFrost probe and optional Qdrant/indexer when enabled.
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 
@@ -169,7 +169,59 @@ Sections are ordered roughly as operators scan: **overview** (from Main), then *
 - All operations currently possible on `/ui/panel` (tokens, keys, Ollama URL, routing YAML, fallback list, router settings, dry-run evaluate) remain possible from `/ui/logs` without opening the admin iframe.
 - Provider availability and key counts match pre-migration behavior for the same gateway state.
 
-**Status:** `todo`
+**Status:** `done`
+
+---
+
+## Agent handoff notes (card editing guide)
+
+Use this as the quick map for follow-on card work in `/ui/logs`.
+
+### Primary implementation files
+
+- Main summarized-card renderer: [`internal/server/embedui/logs.js`](../../internal/server/embedui/logs.js).
+- Card styling + shared strip/chip geometry: [`internal/server/embedui/logs.css`](../../internal/server/embedui/logs.css).
+- Markup shell / script wiring: [`internal/server/embedui/logs.html`](../../internal/server/embedui/logs.html).
+- Log derivation helpers used by card summaries/scoped streams: [`internal/server/embedui/logs/`](../../internal/server/embedui/logs/).
+
+### Card structure and naming conventions
+
+- Most operator cards are emitted by `build*CardHtml()` helpers in `logs.js`.
+- Keep the existing shell shape: `<details class="sum-card">` with `<summary>` (collapsed row) and `.sum-body` (expanded article).
+- Collapsed row conventions:
+  - left: avatar + title/subtitle (`sum-avatar`, `sum-main`, `sum-title`, `sum-sub`);
+  - middle: compact chips/indicators (`sum-metrics`, compact bars);
+  - right: optional single status pill + chevron.
+- Expanded body conventions:
+  - `sum-section-label` headings;
+  - `indexer-run-kv` for key/value facts;
+  - timeline-style bars and mini cards for aggregate health/outcomes;
+  - in-card event table via `buildEventLogPanelHtml(...)` for scoped logs.
+
+### Service/status indicators
+
+- Reuse existing segmented-strip primitives before creating new UI patterns:
+  - `sum-bf-prov-health-*` classes for compact + expanded segment bars;
+  - `sum-timeline-bar` / `sum-timeline-seg` for bucketed distributions;
+  - `sum-strip-caption*` for optional textual state legends.
+- If a card needs both collapsed and expanded health views, keep one helper that supports `opts.compact` so visuals and state mapping stay consistent.
+
+### Data and refresh sources (do not fork)
+
+- `gatewayOverviewCache` from `/api/ui/state` is the overview card source of truth.
+- `bifrostProviderSnapshot` from `/api/ui/bifrost/providers` is the source of truth for provider health.
+- `metricsCache` from `/api/ui/metrics` backs model counts and usage rollups.
+- Keep polling behavior centralized (existing `sync*Polling` functions); avoid adding per-card timers.
+
+### Safe-edit practices for multiple agents
+
+- Preserve existing IDs/classes used by tests and event delegation (`data-admin-action`, summary card ids, scoped log hooks).
+- Prefer adding/adjusting small renderer helpers over editing many call sites inline.
+- Keep copy short and operational; avoid introducing new terminology for existing controls.
+- When changing a card, verify both states:
+  - collapsed summary row in normal list flow;
+  - expanded body with labels, bars, and scoped log block.
+- If a new pattern is needed, mirror it in gallery artifacts first when feasible (`assets/gallery-unified-operator.html`, `assets/gallery-shell.css`), then port to `logs.js`.
 
 ---
 
@@ -185,6 +237,6 @@ Sections are ordered roughly as operators scan: **overview** (from Main), then *
 
 ## References
 
-- Code: [`assets/gallery.html`](../../assets/gallery.html), [`assets/gallery-shell.css`](../../assets/gallery-shell.css), [`internal/server/server.go`](../../internal/server/server.go) (`GET /`, `gatewayIndexTmpl`), [`internal/server/embedui/shell.html`](../../internal/server/embedui/shell.html), [`internal/server/embedui/panel.html`](../../internal/server/embedui/panel.html), [`internal/server/embedui/logs.html`](../../internal/server/embedui/logs.html), [`internal/server/embedui/logs.js`](../../internal/server/embedui/logs.js), [`internal/server/ui_handlers.go`](../../internal/server/ui_handlers.go)
+- Code: [`assets/gallery.html`](../../assets/gallery.html), [`assets/gallery-unified-operator.html`](../../assets/gallery-unified-operator.html), [`assets/gallery-shell.css`](../../assets/gallery-shell.css), [`internal/server/server.go`](../../internal/server/server.go) (`GET /`, `gatewayIndexTmpl`), [`internal/server/embedui/shell.html`](../../internal/server/embedui/shell.html), [`internal/server/embedui/panel.html`](../../internal/server/embedui/panel.html), [`internal/server/embedui/logs.html`](../../internal/server/embedui/logs.html), [`internal/server/embedui/logs.js`](../../internal/server/embedui/logs.js), [`internal/server/ui_handlers.go`](../../internal/server/ui_handlers.go)
 - Docs: [`desktop-ui.md`](desktop-ui.md), [`configuration.md`](../configuration.md)
 - Tickets / PRs: (add when filed)

@@ -37,7 +37,7 @@
       if (r.ok) {
         var next = new URLSearchParams(window.location.search).get("next") || "";
         if (next.indexOf("/") !== 0 || next.indexOf("//") === 0 || next.indexOf("/ui/") !== 0) {
-          next = "/ui/panel";
+          next = "/ui/logs";
         }
         window.location.href = next;
         return;
