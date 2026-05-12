@@ -78,6 +78,313 @@
       </div>
     </section>
 
+    <section id="sg-event-log" class="styleguide-section">
+      <h2>Event log panel (Phase 1)</h2>
+      <p class="styleguide-sub">
+        <code>sum-metrics-table</code> shell; timestamps from <code>datetime</code> via <code>formatLogDateTimeLocal</code> in <code>logs.js</code>.
+        Status filter: All / ⚠ Warnings / ✖ Errors. Row selection: click; Ctrl/⌘+click; Shift+click range.
+        Copy: selected rows as TSV; with none selected, copies all visible rows.
+        Unified streams may include lines from other services: put the source tag first in the message cell as <code>span.sum-svc-badge</code> (outline or filled), then the prose.
+        Plan: <a href="../docs/plans/embedui-event-log-panel.md"><code>docs/plans/embedui-event-log-panel.md</code></a>.
+      </p>
+      <p class="styleguide-sub" style="margin-top:-0.45rem">
+        <strong>Phase 2 CSS contract</strong> (in <code>internal/server/embedui/logs.css</code>):
+        <code>sum-evlog</code>,
+        <code>sum-metrics-table-wrap.sum-evlog__table-scroll</code>, <code>sum-metrics-table.sum-evlog__table</code>,
+        <code>sum-evlog__col-time</code>, <code>sum-evlog__col-msg</code>, <code>sum-evlog__col-status</code>,
+        <code>sum-evlog__th-status</code>, <code>sum-evlog__th-status-head</code>, <code>sum-evlog__th-status-label</code>,
+        <code>sum-evlog-metric-num</code>, <code>sum-evlog__metric-icon</code>,
+        <code>sum-section-label</code> (panel title — first child of <code>sum-evlog</code>),
+        <code>sum-evlog__toolbar</code>, <code>sum-evlog__search</code>, <code>sum-evlog__filter-select</code>, <code>sum-evlog__copy-btn</code>, <code>sum-evlog__copy-icon</code>,
+        <code>sum-evlog__row</code>, <code>sum-evlog__row--hidden</code>, <code>sum-evlog__row--selected</code>,
+        <code>sum-evlog__cell--time</code>, <code>sum-evlog__cell--msg</code>, <code>sum-evlog__cell--status</code>,
+        <code>sum-evlog-status</code>, <code>sum-evlog-status__pill</code>, <code>sum-evlog-status__empty</code>,
+        <code>sum-evlog__footer</code>, <code>sum-evlog__toast</code>, <code>sum-evlog__footer-row</code>,
+        <code>sum-evlog--in-card</code>,
+        <code>sum-svc-badge</code> (leading service tag in <code>sum-evlog__cell--msg</code>).
+      </p>
+
+      <div class="sum-section-label">Demo A — warning / severity column states</div>
+      <div class="styleguide-demo-bg">
+        <div class="sum-evlog" style="max-height:26rem;margin:0;padding:0.55rem" data-gallery-evlog-root>
+          <div class="sum-section-label">Full event logs</div>
+          <div class="sum-evlog__toolbar">
+            <input class="sum-evlog__search" type="search" placeholder="Search message or time…" aria-label="Search log entries" autocomplete="off" />
+            <label class="sum-evlog__lvl-label" style="margin-left:auto">
+              <span class="sum-evlog__level-filters-label" style="margin-right:0.35rem">Status</span>
+              <select class="sum-evlog__filter-select" data-evlog-filter-status aria-label="Filter by severity">
+                <option value="all">All</option>
+                <option value="warnings">⚠ Warnings</option>
+                <option value="errors">✖ Errors</option>
+              </select>
+            </label>
+            <button type="button" class="sum-evlog__copy-btn" title="Copy as TSV — selected rows, or all visible if none selected" aria-label="Copy as TSV: selected rows, or all visible if none selected"><svg class="sum-evlog__copy-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><span class="sr-only">Copy</span></button>
+          </div>
+          <div class="sum-metrics-table-wrap sum-evlog__table-scroll">
+            <table class="sum-metrics-table sum-evlog__table">
+              <colgroup><col class="sum-evlog__col-time" /><col class="sum-evlog__col-msg" /><col class="sum-evlog__col-status" /></colgroup>
+              <thead><tr><th class="sum-evlog__cell--time" scope="col">Time</th><th scope="col">Message</th><th class="sum-evlog__th-status" scope="col">
+                <div class="sum-evlog__th-status-head" role="group" aria-label="Status: warning and error counts in this slice">
+                  <span class="sum-evlog__th-status-label">Status</span>
+                  <span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN sum-evlog-metric-num" data-sum-evlog-metric-warn>—</span>
+                  <span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN sum-evlog__metric-icon" aria-hidden="true">⚠</span>
+                  <span class="sum-evlog-status__pill sum-evlog-status__lvl--ERROR sum-evlog-metric-num" data-sum-evlog-metric-fail>—</span>
+                  <span class="sum-evlog-status__pill sum-evlog-status__lvl--ERROR sum-evlog__metric-icon" aria-hidden="true">✖</span>
+                </div>
+              </th></tr></thead>
+              <tbody data-gallery-evlog-tbody>
+                <tr class="sum-evlog__row" data-evlog-id="a-none" data-evlog-level="">
+                  <td class="sum-evlog__cell--time"><time datetime="2026-05-11T08:02:06.881Z"></time></td>
+                  <td class="sum-evlog__cell--msg">Synthetic line without a level token — prose only.</td>
+                  <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="sum-evlog-status__empty" aria-hidden="true"></span></div></td>
+                </tr>
+                <tr class="sum-evlog__row" data-evlog-id="a-debug" data-evlog-level="DEBUG">
+                  <td class="sum-evlog__cell--time"><time datetime="2026-05-11T08:02:07.040Z"></time></td>
+                  <td class="sum-evlog__cell--msg">Cache key round-trip for route policy v14 (DEBUG — no badge in column 3).</td>
+                  <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="sum-evlog-status__empty" aria-hidden="true"></span></div></td>
+                </tr>
+                <tr class="sum-evlog__row" data-evlog-id="a-info200" data-evlog-level="INFO" data-evlog-http="200">
+                  <td class="sum-evlog__cell--time"><time datetime="2026-05-11T08:02:07.812Z"></time></td>
+                  <td class="sum-evlog__cell--msg">POST /v1/chat accepted; stream id assigned.</td>
+                  <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="pill-2xx">200</span></div></td>
+                </tr>
+                <tr class="sum-evlog__row" data-evlog-id="a-svc-qdr" data-evlog-level="INFO" data-evlog-http="200">
+                  <td class="sum-evlog__cell--time"><time datetime="2026-05-11T08:02:07.860Z"></time></td>
+                  <td class="sum-evlog__cell--msg"><span class="sum-svc-badge sum-svc-qdrant">qdrant</span>Scroll snapshot applied; HNSW index warmed for <code class="sum-mono-id">workspace_vectors</code>.</td>
+                  <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="pill-2xx">200</span></div></td>
+                </tr>
+                <tr class="sum-evlog__row" data-evlog-id="a-svc-idx" data-evlog-level="INFO">
+                  <td class="sum-evlog__cell--time"><time datetime="2026-05-11T08:02:07.875Z"></time></td>
+                  <td class="sum-evlog__cell--msg"><span class="sum-svc-badge sum-svc-badge-filled sum-svc-indexer sum-svc-indexer-filled">indexer</span>Batch <code class="sum-mono-id">ingest-9f2a</code> committed 412 chunks; lag 1.2s vs watermark.</td>
+                  <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="sum-evlog-status__empty" aria-hidden="true"></span></div></td>
+                </tr>
+                <tr class="sum-evlog__row" data-evlog-id="a-svc-up" data-evlog-level="WARN" data-evlog-http="429">
+                  <td class="sum-evlog__cell--time"><time datetime="2026-05-11T08:02:07.890Z"></time></td>
+                  <td class="sum-evlog__cell--msg"><span class="sum-svc-badge sum-svc-upstream">upstream</span>Provider quota header <code class="sum-mono-id">x-ratelimit-remaining: 0</code>; gateway will retry with backoff.</td>
+                  <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN">WARN</span><span class="pill-4xx">429</span></div></td>
+                </tr>
+                <tr class="sum-evlog__row" data-evlog-id="a-svc-web" data-evlog-level="INFO" data-evlog-http="304">
+                  <td class="sum-evlog__cell--time"><time datetime="2026-05-11T08:02:07.905Z"></time></td>
+                  <td class="sum-evlog__cell--msg"><span class="sum-svc-badge sum-svc-web">web</span>Static asset <code class="sum-mono-id">/assets/gallery-shell.css</code> served from edge cache (not modified).</td>
+                  <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="chip">304</span></div></td>
+                </tr>
+                <tr class="sum-evlog__row" data-evlog-id="a-svc-gw" data-evlog-level="INFO" data-evlog-http="204">
+                  <td class="sum-evlog__cell--time"><time datetime="2026-05-11T08:02:07.918Z"></time></td>
+                  <td class="sum-evlog__cell--msg"><span class="sum-svc-badge sum-svc-gateway">gateway</span>Policy probe completed; no body returned to client.</td>
+                  <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="pill-2xx">204</span></div></td>
+                </tr>
+                <tr class="sum-evlog__row" data-evlog-id="a-warn" data-evlog-level="WARN">
+                  <td class="sum-evlog__cell--time"><time datetime="2026-05-11T08:02:08.102Z"></time></td>
+                  <td class="sum-evlog__cell--msg">Soft quota advisory — no hard stop yet.</td>
+                  <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN">WARN</span></div></td>
+                </tr>
+                <tr class="sum-evlog__row" data-evlog-id="a-err" data-evlog-level="ERROR">
+                  <td class="sum-evlog__cell--time"><time datetime="2026-05-11T08:02:09.003Z"></time></td>
+                  <td class="sum-evlog__cell--msg">Shard connection reset after three retries.</td>
+                  <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="sum-evlog-status__pill sum-evlog-status__lvl--ERROR">ERROR</span></div></td>
+                </tr>
+                <tr class="sum-evlog__row" data-evlog-id="a-warn429" data-evlog-level="WARN" data-evlog-http="429">
+                  <td class="sum-evlog__cell--time"><time datetime="2026-05-11T08:02:09.440Z"></time></td>
+                  <td class="sum-evlog__cell--msg">Upstream rate limit — backing off with Retry-After.</td>
+                  <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN">WARN</span><span class="pill-4xx">429</span></div></td>
+                </tr>
+                <tr class="sum-evlog__row" data-evlog-id="a-err503" data-evlog-level="ERROR" data-evlog-http="503">
+                  <td class="sum-evlog__cell--time"><time datetime="2026-05-11T08:02:10.200Z"></time></td>
+                  <td class="sum-evlog__cell--msg">Model host unavailable after circuit half-open.</td>
+                  <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="sum-evlog-status__pill sum-evlog-status__lvl--ERROR">ERROR</span><span class="pill-5xx">503</span></div></td>
+                </tr>
+                <tr class="sum-evlog__row" data-evlog-id="a-trace" data-evlog-level="TRACE">
+                  <td class="sum-evlog__cell--time"><time datetime="2026-05-11T08:02:10.991Z"></time></td>
+                  <td class="sum-evlog__cell--msg">Span exit; correlation id forwarded to parent.</td>
+                  <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="sum-evlog-status__pill sum-evlog-status__lvl--TRACE">TRACE</span></div></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="sum-evlog__footer-row">
+            <div class="sum-evlog__footer-left">
+              <p class="sum-evlog__footer" data-gallery-evlog-oldest></p>
+              <p class="sum-gallery-evlog__search-empty" data-gallery-evlog-search-empty hidden>No matching entries for your search. <button type="button" class="sum-gallery-evlog__clear-search" data-gallery-evlog-clear-search>Clear search</button></p>
+            </div>
+            <p class="sum-evlog__toast sum-gallery-evlog__toast-align" data-gallery-evlog-toast role="status" aria-live="polite"></p>
+          </div>
+        </div>
+      </div>
+
+      <div class="sum-section-label" style="margin-top:1rem">Demo B — HTTP status families (2xx / 3xx / 4xx / 5xx / 429)</div>
+      <div class="styleguide-demo-bg">
+        <div class="sum-evlog" style="max-height:28rem;margin:0;padding:0.55rem" data-gallery-evlog-root>
+          <div class="sum-section-label">Full event logs</div>
+          <div class="sum-evlog__toolbar">
+            <input class="sum-evlog__search" type="search" placeholder="Search…" aria-label="Search log entries" autocomplete="off" />
+            <label class="sum-evlog__lvl-label" style="margin-left:auto">
+              <span class="sum-evlog__level-filters-label" style="margin-right:0.35rem">Status</span>
+              <select class="sum-evlog__filter-select" data-evlog-filter-status aria-label="Filter by severity">
+                <option value="all">All</option>
+                <option value="warnings">⚠ Warnings</option>
+                <option value="errors">✖ Errors</option>
+              </select>
+            </label>
+            <button type="button" class="sum-evlog__copy-btn" title="Copy as TSV — selected rows, or all visible if none selected" aria-label="Copy as TSV: selected rows, or all visible if none selected"><svg class="sum-evlog__copy-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><span class="sr-only">Copy</span></button>
+          </div>
+          <div class="sum-metrics-table-wrap sum-evlog__table-scroll">
+            <table class="sum-metrics-table sum-evlog__table">
+              <colgroup><col class="sum-evlog__col-time" /><col class="sum-evlog__col-msg" /><col class="sum-evlog__col-status" /></colgroup>
+              <thead><tr><th class="sum-evlog__cell--time" scope="col">Time</th><th scope="col">Message</th><th class="sum-evlog__th-status" scope="col">
+                <div class="sum-evlog__th-status-head" role="group" aria-label="Status: warning and error counts in this slice">
+                  <span class="sum-evlog__th-status-label">Status</span>
+                  <span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN sum-evlog-metric-num" data-sum-evlog-metric-warn>—</span>
+                  <span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN sum-evlog__metric-icon" aria-hidden="true">⚠</span>
+                  <span class="sum-evlog-status__pill sum-evlog-status__lvl--ERROR sum-evlog-metric-num" data-sum-evlog-metric-fail>—</span>
+                  <span class="sum-evlog-status__pill sum-evlog-status__lvl--ERROR sum-evlog__metric-icon" aria-hidden="true">✖</span>
+                </div>
+              </th></tr></thead>
+              <tbody data-gallery-evlog-tbody>
+                <tr class="sum-evlog__row" data-evlog-id="b-200" data-evlog-level="INFO" data-evlog-http="200">
+                  <td class="sum-evlog__cell--time"><time datetime="2026-05-11T09:00:01.000Z"></time></td>
+                  <td class="sum-evlog__cell--msg">GET /health OK</td>
+                  <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="pill-2xx">200</span></div></td>
+                </tr>
+                <tr class="sum-evlog__row" data-evlog-id="b-201" data-evlog-level="INFO" data-evlog-http="201">
+                  <td class="sum-evlog__cell--time"><time datetime="2026-05-11T09:00:02.100Z"></time></td>
+                  <td class="sum-evlog__cell--msg">Embedding upsert committed</td>
+                  <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="pill-2xx">201</span></div></td>
+                </tr>
+                <tr class="sum-evlog__row" data-evlog-id="b-svc-qd" data-evlog-level="INFO" data-evlog-http="200">
+                  <td class="sum-evlog__cell--time"><time datetime="2026-05-11T09:00:02.550Z"></time></td>
+                  <td class="sum-evlog__cell--msg"><span class="sum-svc-badge sum-svc-qdrant">qdrant</span>PUT <code class="sum-mono-id">/collections/*/points</code> acknowledged; vectors=128 dims.</td>
+                  <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="pill-2xx">200</span></div></td>
+                </tr>
+                <tr class="sum-evlog__row" data-evlog-id="b-svc-up" data-evlog-level="INFO" data-evlog-http="502">
+                  <td class="sum-evlog__cell--time"><time datetime="2026-05-11T09:00:02.700Z"></time></td>
+                  <td class="sum-evlog__cell--msg"><span class="sum-svc-badge sum-svc-badge-filled sum-svc-upstream sum-svc-upstream-filled">upstream</span>Model host closed socket before headers; surfaced as 502 to caller.</td>
+                  <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="pill-5xx">502</span></div></td>
+                </tr>
+                <tr class="sum-evlog__row" data-evlog-id="b-204" data-evlog-level="INFO" data-evlog-http="204">
+                  <td class="sum-evlog__cell--time"><time datetime="2026-05-11T09:00:03.200Z"></time></td>
+                  <td class="sum-evlog__cell--msg">Prefetch warm — no response body</td>
+                  <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="pill-2xx">204</span></div></td>
+                </tr>
+                <tr class="sum-evlog__row" data-evlog-id="b-301" data-evlog-level="INFO" data-evlog-http="301">
+                  <td class="sum-evlog__cell--time"><time datetime="2026-05-11T09:00:04.300Z"></time></td>
+                  <td class="sum-evlog__cell--msg">Canonical redirect to versioned docs path</td>
+                  <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="chip">301</span></div></td>
+                </tr>
+                <tr class="sum-evlog__row" data-evlog-id="b-400" data-evlog-level="INFO" data-evlog-http="400">
+                  <td class="sum-evlog__cell--time"><time datetime="2026-05-11T09:00:05.400Z"></time></td>
+                  <td class="sum-evlog__cell--msg">Malformed JSON in request body</td>
+                  <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="pill-4xx">400</span></div></td>
+                </tr>
+                <tr class="sum-evlog__row" data-evlog-id="b-401" data-evlog-level="INFO" data-evlog-http="401">
+                  <td class="sum-evlog__cell--time"><time datetime="2026-05-11T09:00:06.500Z"></time></td>
+                  <td class="sum-evlog__cell--msg">Bearer token expired</td>
+                  <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="pill-4xx">401</span></div></td>
+                </tr>
+                <tr class="sum-evlog__row" data-evlog-id="b-404" data-evlog-level="INFO" data-evlog-http="404">
+                  <td class="sum-evlog__cell--time"><time datetime="2026-05-11T09:00:07.600Z"></time></td>
+                  <td class="sum-evlog__cell--msg">Unknown collection alias</td>
+                  <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="pill-4xx">404</span></div></td>
+                </tr>
+                <tr class="sum-evlog__row" data-evlog-id="b-409" data-evlog-level="INFO" data-evlog-http="409">
+                  <td class="sum-evlog__cell--time"><time datetime="2026-05-11T09:00:08.700Z"></time></td>
+                  <td class="sum-evlog__cell--msg">Optimistic concurrency — revision mismatch</td>
+                  <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="pill-4xx">409</span></div></td>
+                </tr>
+                <tr class="sum-evlog__row" data-evlog-id="b-429" data-evlog-level="WARN" data-evlog-http="429">
+                  <td class="sum-evlog__cell--time"><time datetime="2026-05-11T09:00:09.800Z"></time></td>
+                  <td class="sum-evlog__cell--msg">Provider signaled too many requests</td>
+                  <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="pill-4xx">429</span></div></td>
+                </tr>
+                <tr class="sum-evlog__row" data-evlog-id="b-500" data-evlog-level="INFO" data-evlog-http="500">
+                  <td class="sum-evlog__cell--time"><time datetime="2026-05-11T09:00:10.900Z"></time></td>
+                  <td class="sum-evlog__cell--msg">Upstream opaque 500 bubble</td>
+                  <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="pill-5xx">500</span></div></td>
+                </tr>
+                <tr class="sum-evlog__row" data-evlog-id="b-502" data-evlog-level="INFO" data-evlog-http="502">
+                  <td class="sum-evlog__cell--time"><time datetime="2026-05-11T09:00:12.000Z"></time></td>
+                  <td class="sum-evlog__cell--msg">Bad gateway — TCP reset mid-response</td>
+                  <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="pill-5xx">502</span></div></td>
+                </tr>
+                <tr class="sum-evlog__row" data-evlog-id="b-503" data-evlog-level="INFO" data-evlog-http="503">
+                  <td class="sum-evlog__cell--time"><time datetime="2026-05-11T09:00:13.100Z"></time></td>
+                  <td class="sum-evlog__cell--msg">Service overloaded — shedding load</td>
+                  <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="pill-5xx">503</span></div></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="sum-evlog__footer-row">
+            <div class="sum-evlog__footer-left">
+              <p class="sum-evlog__footer" data-gallery-evlog-oldest></p>
+              <p class="sum-gallery-evlog__search-empty" data-gallery-evlog-search-empty hidden>No matching entries for your search. <button type="button" class="sum-gallery-evlog__clear-search" data-gallery-evlog-clear-search>Clear search</button></p>
+            </div>
+            <p class="sum-evlog__toast sum-gallery-evlog__toast-align" data-gallery-evlog-toast role="status" aria-live="polite"></p>
+          </div>
+        </div>
+      </div>
+
+      <div class="sum-section-label" style="margin-top:1rem">Demo C — long wrapped messages</div>
+      <div class="styleguide-demo-bg">
+        <div class="sum-evlog" style="max-height:24rem;margin:0;padding:0.55rem" data-gallery-evlog-root>
+          <div class="sum-section-label">Full event logs</div>
+          <div class="sum-evlog__toolbar">
+            <input class="sum-evlog__search" type="search" placeholder="Search long text…" aria-label="Search log entries" autocomplete="off" />
+            <label class="sum-evlog__lvl-label" style="margin-left:auto">
+              <span class="sum-evlog__level-filters-label" style="margin-right:0.35rem">Status</span>
+              <select class="sum-evlog__filter-select" data-evlog-filter-status aria-label="Filter by severity">
+                <option value="all">All</option>
+                <option value="warnings">⚠ Warnings</option>
+                <option value="errors">✖ Errors</option>
+              </select>
+            </label>
+            <button type="button" class="sum-evlog__copy-btn" title="Copy as TSV — selected rows, or all visible if none selected" aria-label="Copy as TSV: selected rows, or all visible if none selected"><svg class="sum-evlog__copy-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><span class="sr-only">Copy</span></button>
+          </div>
+          <div class="sum-metrics-table-wrap sum-evlog__table-scroll">
+            <table class="sum-metrics-table sum-evlog__table">
+              <colgroup><col class="sum-evlog__col-time" /><col class="sum-evlog__col-msg" /><col class="sum-evlog__col-status" /></colgroup>
+              <thead><tr><th class="sum-evlog__cell--time" scope="col">Time</th><th scope="col">Message</th><th class="sum-evlog__th-status" scope="col">
+                <div class="sum-evlog__th-status-head" role="group" aria-label="Status: warning and error counts in this slice">
+                  <span class="sum-evlog__th-status-label">Status</span>
+                  <span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN sum-evlog-metric-num" data-sum-evlog-metric-warn>—</span>
+                  <span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN sum-evlog__metric-icon" aria-hidden="true">⚠</span>
+                  <span class="sum-evlog-status__pill sum-evlog-status__lvl--ERROR sum-evlog-metric-num" data-sum-evlog-metric-fail>—</span>
+                  <span class="sum-evlog-status__pill sum-evlog-status__lvl--ERROR sum-evlog__metric-icon" aria-hidden="true">✖</span>
+                </div>
+              </th></tr></thead>
+              <tbody data-gallery-evlog-tbody>
+                <tr class="sum-evlog__row" data-evlog-id="c-debug" data-evlog-level="DEBUG">
+                  <td class="sum-evlog__cell--time"><time datetime="2026-05-11T10:05:02.881Z"></time></td>
+                  <td class="sum-evlog__cell--msg"><span class="sum-svc-badge sum-svc-gateway">gateway</span>Evaluated routing fingerprints for workspace <code class="sum-mono-id">ws/repo/main</code> against policy bundle <code class="sum-mono-id">Claudia-0.3@sha256:e7a…9c</code>; candidates were ordered by locality, tenancy, and staleness budgets. Tie-break favored the lowest hop-count virtual model alias. No user-visible divergence — this trace exists for regression diffs.</td>
+                  <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="sum-evlog-status__empty" aria-hidden="true"></span></div></td>
+                </tr>
+                <tr class="sum-evlog__row" data-evlog-id="c-info" data-evlog-level="INFO" data-evlog-http="204">
+                  <td class="sum-evlog__cell--time"><time datetime="2026-05-11T10:05:03.994Z"></time></td>
+                  <td class="sum-evlog__cell--msg">Hydrated downstream cache after batch merge. Reference URL logged for correlation only: https://gateway.example.invalid/v1/embeddings/batch?id=88421c7d-3310-4f2e-9c11-0aae7fdeadbeef&amp;shard=eu-west-42&amp;corr=acct%3Aw-9f3a&amp;peek=1 — never paste secrets from logs into tickets.</td>
+                  <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="pill-2xx">204</span></div></td>
+                </tr>
+                <tr class="sum-evlog__row" data-evlog-id="c-multi" data-evlog-level="INFO">
+                  <td class="sum-evlog__cell--time"><time datetime="2026-05-11T10:05:05.060Z"></time></td>
+                  <td class="sum-evlog__cell--msg">Three facts in one line for wrap stress: (1) tokenizer cache warmed for <code class="sum-mono-id">llama-3.3-70b</code>; (2) tenant default RAG slice stayed pinned to revision 118; (3) indexer fan-out watermark advanced without compaction. Operators skim the middle column — it should breathe with soft breaks, not collide with timestamps or pills.</td>
+                  <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="sum-evlog-status__empty" aria-hidden="true"></span></div></td>
+                </tr>
+                <tr class="sum-evlog__row" data-evlog-id="c-warn" data-evlog-level="WARN">
+                  <td class="sum-evlog__cell--time"><time datetime="2026-05-11T10:05:06.701Z"></time></td>
+                  <td class="sum-evlog__cell--msg">Partial shard read: quorum 2/3 replicas answered before deadline; synthesized response marked <em>degraded-consistency</em> for observability dashboards. Retry policy allows one idempotent replay on the chat path — follow-up spans may still show GREEN if the replay lands on primaries.</td>
+                  <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN">WARN</span></div></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="sum-evlog__footer-row">
+            <div class="sum-evlog__footer-left">
+              <p class="sum-evlog__footer" data-gallery-evlog-oldest></p>
+            </div>
+            <p class="sum-evlog__toast sum-gallery-evlog__toast-align" data-gallery-evlog-toast role="status" aria-live="polite"></p>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <section id="sg-pills" class="styleguide-section">
       <h2>Pills, chips, conversation tiers, service badges</h2>
       <p class="styleguide-sub">Exhaustive small primitives (HTTP pills, chips, conv chips, tier variants, service outline + filled).</p>
@@ -556,6 +863,144 @@
         </div>
       </details>
 
+      <div class="sum-section-label" style="margin-top:1rem">Conversation + embedded event log</div>
+      <div class="styleguide-demo-bg" style="max-width:48rem">
+        <details class="sum-card sum-card--conversation" open>
+          <summary>
+            <span class="sum-avatar sum-av-b">Cv</span>
+            <span class="sum-main">
+              <span class="sum-title">Acme · conversation <span class="sum-conv-tier sum-conv-tier--ingest">ingest</span></span>
+              <span class="sum-sub sum-sub--clamp">RAG retrieve + chat relay; expanded body mirrors summarized cards with KV + metrics + full event log panel.</span>
+              <div class="sum-conv-chip-row sum-conv-chip-row--summary">
+                <span class="sum-conv-chip">Tools · 1</span>
+                <span class="sum-conv-chip">Fallback · 0</span>
+              </div>
+            </span>
+            <span class="sum-metrics"><span class="sum-metric">2.4s</span></span>
+            <div class="sum-conv-lifecycle-bar sum-conv-lifecycle-bar--compact" role="group" aria-label="Lifecycle">
+              <div class="sum-conv-lifecycle-bar-track">
+                <span class="sum-conv-lifecycle-seg sum-conv-lifecycle-seg--done"></span>
+                <span class="sum-conv-lifecycle-seg sum-conv-lifecycle-seg--done"></span>
+                <span class="sum-conv-lifecycle-seg sum-conv-lifecycle-seg--done"></span>
+                <span class="sum-conv-lifecycle-seg sum-conv-lifecycle-seg--done"></span>
+                <span class="sum-conv-lifecycle-seg sum-conv-lifecycle-seg--pending"></span>
+              </div>
+            </div>
+            <span class="sum-status sum-st-monitor">monitor</span>
+            <span class="sum-chev"></span>
+          </summary>
+          <div class="sum-body">
+            <div class="sum-section-label">Conversation</div>
+            <div class="sum-conv-kv">
+              <dl class="sum-conv-kv-grid">
+                <div class="sum-conv-kv-row"><dt>Turn</dt><dd>3</dd></div>
+                <div class="sum-conv-kv-row"><dt>Client model</dt><dd><code class="sum-mono-id">claude-3-5-sonnet</code></dd></div>
+                <div class="sum-conv-kv-row"><dt>Upstream model</dt><dd><code class="sum-mono-id">groq/llama-3.3-70b</code></dd></div>
+                <div class="sum-conv-kv-row"><dt>Stream</dt><dd>true</dd></div>
+              </dl>
+            </div>
+            <div class="sum-section-label">Step timings</div>
+            <div class="sum-metrics-table-wrap">
+              <table class="sum-metrics-table">
+                <thead><tr><th>Step</th><th class="num">ms</th></tr></thead>
+                <tbody>
+                  <tr><td>rag.retrieve</td><td class="num">98</td></tr>
+                  <tr><td>upstream.first_token</td><td class="num">412</td></tr>
+                  <tr><td>stream.complete</td><td class="num">1 884</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="sum-evlog sum-evlog--in-card" data-gallery-evlog-root>
+              <div class="sum-section-label">Full event logs</div>
+              <div class="sum-evlog__toolbar">
+                <input class="sum-evlog__search" type="search" placeholder="Search…" aria-label="Search log entries" autocomplete="off" />
+                <label class="sum-evlog__lvl-label" style="margin-left:auto">
+                  <span class="sum-evlog__level-filters-label" style="margin-right:0.35rem">Status</span>
+                  <select class="sum-evlog__filter-select" data-evlog-filter-status aria-label="Filter by severity">
+                    <option value="all">All</option>
+                    <option value="warnings">⚠ Warnings</option>
+                    <option value="errors">✖ Errors</option>
+                  </select>
+                </label>
+                <button type="button" class="sum-evlog__copy-btn" title="Copy as TSV — selected rows, or all visible if none selected" aria-label="Copy as TSV: selected rows, or all visible if none selected"><svg class="sum-evlog__copy-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><span class="sr-only">Copy</span></button>
+              </div>
+              <div class="sum-metrics-table-wrap sum-evlog__table-scroll">
+                <table class="sum-metrics-table sum-evlog__table">
+                  <colgroup><col class="sum-evlog__col-time" /><col class="sum-evlog__col-msg" /><col class="sum-evlog__col-status" /></colgroup>
+                  <thead><tr><th class="sum-evlog__cell--time" scope="col">Time</th><th scope="col">Message</th><th class="sum-evlog__th-status" scope="col">
+                    <div class="sum-evlog__th-status-head" role="group" aria-label="Status: warning and error counts in this slice">
+                      <span class="sum-evlog__th-status-label">Status</span>
+                      <span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN sum-evlog-metric-num" data-sum-evlog-metric-warn>—</span>
+                      <span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN sum-evlog__metric-icon" aria-hidden="true">⚠</span>
+                      <span class="sum-evlog-status__pill sum-evlog-status__lvl--ERROR sum-evlog-metric-num" data-sum-evlog-metric-fail>—</span>
+                      <span class="sum-evlog-status__pill sum-evlog-status__lvl--ERROR sum-evlog__metric-icon" aria-hidden="true">✖</span>
+                    </div>
+                  </th></tr></thead>
+                  <tbody data-gallery-evlog-tbody>
+                    <tr class="sum-evlog__row" data-evlog-id="convx-1" data-evlog-level="INFO" data-evlog-http="200">
+                      <td class="sum-evlog__cell--time"><time datetime="2026-05-12T14:01:02.100Z"></time></td>
+                      <td class="sum-evlog__cell--msg">POST /v1/chat accepted; conversation slice loaded.</td>
+                      <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="pill-2xx">200</span></div></td>
+                    </tr>
+                    <tr class="sum-evlog__row" data-evlog-id="convx-2" data-evlog-level="INFO">
+                      <td class="sum-evlog__cell--time"><time datetime="2026-05-12T14:01:03.040Z"></time></td>
+                      <td class="sum-evlog__cell--msg">rag.retrieve: 4 hits from <code class="sum-mono-id">workspace_vectors</code></td>
+                      <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="sum-evlog-status__empty" aria-hidden="true"></span></div></td>
+                    </tr>
+                    <tr class="sum-evlog__row" data-evlog-id="convx-2b" data-evlog-level="INFO">
+                      <td class="sum-evlog__cell--time"><time datetime="2026-05-12T14:01:03.180Z"></time></td>
+                      <td class="sum-evlog__cell--msg"><span class="sum-svc-badge sum-svc-qdrant-filled">qdrant</span>Hybrid search returned 4 points; fusion weights <code class="sum-mono-id">dense=0.72</code>, <code class="sum-mono-id">sparse=0.28</code>.</td>
+                      <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="sum-evlog-status__empty" aria-hidden="true"></span></div></td>
+                    </tr>
+                    <tr class="sum-evlog__row" data-evlog-id="convx-2c" data-evlog-level="INFO">
+                      <td class="sum-evlog__cell--time"><time datetime="2026-05-12T14:01:03.310Z"></time></td>
+                      <td class="sum-evlog__cell--msg"><span class="sum-svc-badge sum-svc-indexer-filled">indexer</span>Slice <code class="sum-mono-id">repo/main@118</code> fingerprint matched; skipped redundant embed.</td>
+                      <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="sum-evlog-status__empty" aria-hidden="true"></span></div></td>
+                    </tr>
+                    <tr class="sum-evlog__row" data-evlog-id="convx-3" data-evlog-level="WARN" data-evlog-http="429">
+                      <td class="sum-evlog__cell--time"><time datetime="2026-05-12T14:01:04.881Z"></time></td>
+                      <td class="sum-evlog__cell--msg"><span class="sum-svc-badge sum-svc-upstream-filled">upstream</span>Rate limit on first provider; gateway retrying with backoff.</td>
+                      <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN">WARN</span><span class="pill-4xx">429</span></div></td>
+                    </tr>
+                    <tr class="sum-evlog__row" data-evlog-id="convx-4" data-evlog-level="INFO" data-evlog-http="200">
+                      <td class="sum-evlog__cell--time"><time datetime="2026-05-12T14:01:06.220Z"></time></td>
+                      <td class="sum-evlog__cell--msg">Relay succeeded on fallback route.</td>
+                      <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="pill-2xx">200</span></div></td>
+                    </tr>
+                    <tr class="sum-evlog__row" data-evlog-id="convx-5" data-evlog-level="INFO">
+                      <td class="sum-evlog__cell--time"><time datetime="2026-05-12T14:01:07.990Z"></time></td>
+                      <td class="sum-evlog__cell--msg">Stream closed; usage recorded.</td>
+                      <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="sum-evlog-status__empty" aria-hidden="true"></span></div></td>
+                    </tr>
+                    <tr class="sum-evlog__row" data-evlog-id="convx-5" data-evlog-level="INFO">
+                      <td class="sum-evlog__cell--time"><time datetime="2026-05-12T14:01:07.990Z"></time></td>
+                      <td class="sum-evlog__cell--msg">Stream closed; usage recorded.</td>
+                      <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="sum-evlog-status__empty" aria-hidden="true"></span></div></td>
+                    </tr>
+                    <tr class="sum-evlog__row" data-evlog-id="convx-5" data-evlog-level="INFO">
+                      <td class="sum-evlog__cell--time"><time datetime="2026-05-12T14:01:07.990Z"></time></td>
+                      <td class="sum-evlog__cell--msg">Stream closed; usage recorded.</td>
+                      <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="sum-evlog-status__empty" aria-hidden="true"></span></div></td>
+                    </tr>
+                    <tr class="sum-evlog__row" data-evlog-id="convx-5" data-evlog-level="INFO">
+                      <td class="sum-evlog__cell--time"><time datetime="2026-05-12T14:01:07.990Z"></time></td>
+                      <td class="sum-evlog__cell--msg">Stream closed; usage recorded.</td>
+                      <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="sum-evlog-status__empty" aria-hidden="true"></span></div></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="sum-evlog__footer-row">
+                <div class="sum-evlog__footer-left">
+                  <p class="sum-evlog__footer" data-gallery-evlog-oldest></p>
+                </div>
+                <p class="sum-evlog__toast sum-gallery-evlog__toast-align" data-gallery-evlog-toast role="status" aria-live="polite"></p>
+              </div>
+            </div>
+          </div>
+        </details>
+      </div>
+
       <div class="sum-section-label" style="margin-top:1.25rem">Service-style card + stale indexer variant</div>
       <div class="styleguide-row" style="align-items:stretch">
         <details class="sum-card" style="flex:1 1 18rem;margin-bottom:0">
@@ -598,11 +1043,11 @@
       <h2>Workspace draft card</h2>
       <p class="styleguide-sub">
         <code>sum-card--workspace-draft</code> — unsaved indexer workspace row from Logs → Workspaces → Create.
-        Summary grid reserves space for Cancel / Save; body uses <code>ws-draft-fields</code> + path list + Add / Remove.
+        Uses <code>article</code> + <code>header</code> (not <code>details</code>/<code>summary</code>) so Cancel / Save stay outside any disclosure summary; body uses <code>ws-draft-fields</code> + path list + Add / Remove.
       </p>
       <div class="styleguide-demo-bg" style="max-width:42rem">
-        <details class="sum-card sum-card--workspace-draft" open data-workspace-draft="0">
-          <summary>
+        <article class="sum-card sum-card--workspace-draft" data-workspace-draft="0">
+          <header class="sum-card__workspace-draft-hdr">
             <span class="sum-avatar sum-av-c" title="New workspace">+</span>
             <span class="sum-main sum-main--workspace-draft">
               <span class="sum-title">
@@ -619,8 +1064,7 @@
               <button type="button" class="ws-draft-btn ws-draft-btn-cancel" tabindex="-1">Cancel</button>
               <button type="button" class="ws-draft-btn ws-draft-btn-save" tabindex="-1">Save</button>
             </span>
-            <span class="sum-chev"></span>
-          </summary>
+          </header>
           <div class="sum-body">
             <div class="ws-draft-fields">
               <div class="ws-draft-field">
@@ -648,12 +1092,13 @@
             </div>
             <p class="muted ws-draft-hint" style="margin-bottom:0">Static demo — interactive behavior lives in <code>logs.js</code>.</p>
           </div>
-        </details>
+        </article>
       </div>
     </section>
 
   </div>
 
+  <script src="gallery-event-log-demo.js" defer></script>
   <script>
     (function () {
       var root = document.documentElement;

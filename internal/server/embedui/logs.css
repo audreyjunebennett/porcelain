@@ -597,7 +597,7 @@ body.logs-summarized #panel-summarized {
 .sum-av-svc-gateway { background: var(--embed-avatar-svc-gw-bg); color: var(--embed-text-near-black); }
 .sum-av-svc-bifrost { background: var(--embed-svc-upstream-filled-bg); color: var(--embed-text-on-inverse); }
 .sum-av-svc-qdrant { background: var(--embed-svc-qdrant-filled-bg); color: var(--embed-text-on-inverse); }
-.sum-av-svc-indexer { background: var(--embed-svc-indexer-filled-bg); color: var(--embed-text-dark-brown); }
+.sum-av-svc-indexer { background: var(--embed-svc-indexer-filled-bg); color: var(--embed-text-on-inverse); }
 .sum-main { flex: 1 1 auto; min-width: 0; text-align: left; }
 .sum-title { display: block; font-weight: 600; font-size: 0.88rem; color: var(--embed-text-primary); word-break: break-word; }
 .sum-title.sum-title--service-indexer {
@@ -1038,7 +1038,7 @@ a.sum-ext-link {
 /* Filled pills (indexer run + bifrost upstream narrative) */
 .sum-svc-badge-filled { border: none !important; }
 .sum-svc-upstream-filled { background: var(--embed-svc-upstream-filled-bg); color: var(--embed-text-on-inverse); }
-.sum-svc-indexer-filled { background: var(--embed-svc-indexer-filled-bg); color: var(--embed-text-dark-brown); }
+.sum-svc-indexer-filled { background: var(--embed-svc-indexer-filled-bg); color: var(--embed-text-on-inverse); }
 .sum-svc-qdrant-filled { background: var(--embed-svc-qdrant-filled-bg); color: var(--embed-text-on-inverse); }
 .sum-mono-id { font-family: ui-monospace, monospace; font-weight: 500; }
 .sum-timeline-bar { display: flex; height: 0.45rem; border-radius: 4px; overflow: hidden; margin: 0.35rem 0 0.5rem; background: var(--embed-surface-table-header); }
@@ -1178,6 +1178,481 @@ a.sum-ext-link {
 .sum-mini-card.sum-mini-card--error {
   border-color: var(--embed-mini-card-error-border);
   background: var(--embed-semantic-error-bg);
+}
+
+/* Full event log panel (summarized cards) — Phase 1 contract: sum-evlog-* (see assets/gallery.html) */
+.sum-evlog {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  background: var(--embed-surface-muted);
+  border-radius: 8px;
+  max-height: 22rem;
+  box-sizing: border-box;
+}
+.sum-evlog-metric-num {
+  font-variant-numeric: tabular-nums;
+}
+.sum-evlog__metric-icon {
+  font-size: 0.72rem;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.sum-evlog__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.65rem;
+  padding: 0.38rem 0.45rem;
+  border-radius: 8px;
+  border: 1px solid var(--embed-surface-toolbar-border);
+  background: var(--embed-surface-table-header-alt);
+}
+.sum-evlog__search {
+  flex: 1 1 11rem;
+  min-width: 8rem;
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 0.28rem 0.45rem;
+  border-radius: 6px;
+  border: 1px solid var(--embed-border-medium);
+  box-sizing: border-box;
+}
+.sum-evlog__level-filters-label {
+  font-weight: 600;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--embed-text-secondary);
+  margin-right: 0.15rem;
+}
+.sum-evlog__lvl-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  cursor: pointer;
+  user-select: none;
+}
+.sum-evlog__filter-select {
+  font: inherit;
+  font-size: 0.74rem;
+  padding: 0.22rem 0.4rem;
+  border-radius: 6px;
+  border: 1px solid var(--embed-border-medium);
+  background: var(--embed-surface-page);
+}
+.sum-evlog__copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.28rem 0.42rem;
+  border-radius: 6px;
+  border: 1px solid var(--embed-border-medium);
+  background: var(--embed-surface-page);
+  color: var(--embed-text-heading);
+  cursor: pointer;
+}
+.sum-evlog__copy-icon {
+  display: block;
+  width: 1.05rem;
+  height: 1.05rem;
+}
+.sum-evlog__copy-btn:hover {
+  border-color: var(--embed-focus-ring);
+  color: var(--embed-link-accent);
+}
+.sum-evlog__copy-btn:focus-visible {
+  outline: 2px solid var(--embed-focus-ring);
+  outline-offset: 2px;
+}
+.sum-metrics-table-wrap.sum-evlog__table-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow: visible;
+  margin: 0;
+}
+/* Toolbar sits flush above the scroll region (toolbar does not scroll; only the wrap does). */
+.sum-evlog > .sum-evlog__toolbar + .sum-metrics-table-wrap.sum-evlog__table-scroll {
+  margin-top: -0.45rem;
+  border: 1px solid var(--embed-surface-toolbar-border);
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  background: var(--embed-surface-page);
+}
+.sum-evlog > .sum-evlog__toolbar:has(+ .sum-metrics-table-wrap.sum-evlog__table-scroll) {
+  border-radius: 8px 8px 0 0;
+  /* border-top: none; */
+  border-bottom: none;
+}
+/* Footer row under the table: bottom corners round like toolbar top; wrap carries inner-bottom shadow over rows. */
+.sum-evlog:has(> .sum-evlog__footer-row) > .sum-metrics-table-wrap.sum-evlog__table-scroll {
+  border-bottom: none;
+  border-radius: 0;
+  box-shadow:
+    inset 0 -6px 10px -4px color-mix(in srgb, var(--embed-text-primary) 14%, transparent),
+    inset 0 -2px 4px -2px color-mix(in srgb, var(--embed-text-primary) 10%, transparent);
+}
+.sum-evlog > .sum-evlog__footer-row {
+  margin-top: -0.45rem;
+  border: 1px solid var(--embed-surface-toolbar-border);
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  background: var(--embed-surface-table-header-alt);
+}
+/* Event log inside summarized cards: one outer frame (sum-full-log--evlog), inner panel without second card chrome */
+.sum-full-log.sum-full-log--evlog > .sum-evlog.sum-evlog--in-card,
+.sum-card .sum-body .sum-evlog--in-card {
+  max-height: none;
+  margin-top: 0.35rem;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+/* In-card event log: transparent inner shell; optional .sum-section-label child inside conversation card body */
+.sum-card .sum-body .sum-evlog--in-card > .sum-section-label {
+  margin-top: 0;
+  margin-bottom: 0.15rem;
+}
+/* Title row variant: section-label on left + right-side strip (e.g. services chips on conv card) */
+.sum-card .sum-body .sum-evlog--in-card > .sum-evlog__title-row {
+  margin-top: 0;
+  margin-bottom: 0.15rem;
+}
+.sum-evlog--in-card > .sum-evlog__title-row > .sum-section-label {
+  margin: 0;
+}
+.sum-metrics-table.sum-evlog__table thead th.sum-evlog__th-status .sum-evlog__th-status-head {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.00rem;
+  white-space: nowrap;
+}
+.sum-metrics-table.sum-evlog__table thead th.sum-evlog__th-status .sum-evlog__th-status-head > .sum-evlog-status__pill {
+  min-width: 0;
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.12rem 0.45rem;
+  border-radius: 4px;
+  line-height: 1.25;
+  font-family: ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+.sum-metrics-table.sum-evlog__table thead th.sum-evlog__th-status .sum-evlog__th-status-head > .sum-evlog__metric-icon {
+  padding: 0.1rem 0.38rem;
+  min-width: 0;
+  margin: 0;
+}
+.sum-metrics-table.sum-evlog__table thead th.sum-evlog__th-status .sum-evlog__th-status-head > .sum-evlog-metric-num {
+  margin-left: 0.55rem;
+}
+.sum-metrics-table.sum-evlog__table thead th.sum-evlog__th-status .sum-evlog__th-status-label {
+  font: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  text-transform: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.sum-card .sum-body .sum-metrics-table-wrap.sum-evlog__table-scroll .sum-metrics-table.sum-evlog__table tbody {
+  max-height: 11rem;
+}
+.sum-metrics-table.sum-evlog__table {
+  display: block;
+  width: 100%;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  overflow: visible;
+  table-layout: fixed;
+}
+.sum-metrics-table.sum-evlog__table thead,
+.sum-metrics-table.sum-evlog__table tbody {
+  display: block;
+  width: 100%;
+}
+.sum-metrics-table.sum-evlog__table thead {
+  position: relative;
+  z-index: 2;
+  /* Soft lift: reads as a shadow cast onto the scrolling row block below */
+  box-shadow:
+    0 5px 10px -4px color-mix(in srgb, var(--embed-text-primary) 14%, transparent),
+    0 2px 4px -2px color-mix(in srgb, var(--embed-text-primary) 10%, transparent);
+}
+.sum-metrics-table.sum-evlog__table thead th {
+  border-top: none;
+}
+.sum-metrics-table.sum-evlog__table tbody {
+  max-height: 16rem;
+  overflow-x: auto;
+  overflow-y: auto;
+}
+.sum-metrics-table.sum-evlog__table thead tr,
+.sum-metrics-table.sum-evlog__table tbody tr {
+  display: table;
+  width: 100%;
+  table-layout: fixed;
+}
+.sum-metrics-table.sum-evlog__table tbody tr.sum-evlog__row--hidden {
+  display: none;
+}
+.sum-metrics-table.sum-evlog__table col.sum-evlog__col-time {
+  width: 21ch;
+}
+.sum-metrics-table.sum-evlog__table col.sum-evlog__col-msg {
+  min-width: 0;
+}
+.sum-metrics-table.sum-evlog__table col.sum-evlog__col-status {
+  width: 12rem;
+  min-width: 12rem;
+}
+.sum-metrics-table.sum-evlog__table th.sum-evlog__th-status,
+.sum-metrics-table.sum-evlog__table td.sum-evlog__cell--status {
+  text-align: right;
+  vertical-align: top;
+}
+.sum-metrics-table.sum-evlog__table .sum-evlog__cell--time time {
+  display: inline-block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--embed-text-mono-dt);
+  font-variant-numeric: tabular-nums;
+}
+.sum-metrics-table.sum-evlog__table .sum-evlog__cell--time {
+  width: 21ch;
+  max-width: 21ch;
+  box-sizing: border-box;
+}
+/* Status rail: header row fits label + slice counts; body cells fit badges */
+.sum-metrics-table.sum-evlog__table .sum-evlog__cell--status {
+  width: 12rem;
+  max-width: 12rem;
+  box-sizing: border-box;
+}
+.sum-metrics-table.sum-evlog__table .sum-evlog__cell--msg {
+  min-width: 0;
+  width: auto;
+}
+.sum-metrics-table.sum-evlog__table .sum-evlog__cell--msg code {
+  font-size: inherit;
+}
+.sum-evlog__row--hidden {
+  display: none;
+}
+.sum-evlog__row--selected {
+  background: var(--embed-semantic-info-bg);
+}
+.sum-metrics-table.sum-evlog__table tr.sum-evlog__row {
+  cursor: pointer;
+  user-select: none;
+}
+.sum-metrics-table.sum-evlog__table tr.sum-evlog__row:hover {
+  filter: brightness(0.995);
+}
+.sum-evlog__cell--msg {
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  line-height: 1.42;
+  color: var(--embed-text-heading);
+}
+/* Leading service tag before message body (unified multi-source logs) */
+.sum-metrics-table.sum-evlog__table .sum-evlog__cell--msg > .sum-svc-badge:first-child {
+  margin-right: 0.75rem;
+  vertical-align: 0.06em;
+}
+/* Inline cluster: statuses sit tight and the cell aligns them to the right */
+.sum-metrics-table.sum-evlog__table .sum-evlog-status {
+  display: inline-flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.28rem;
+  max-width: 100%;
+  box-sizing: border-box;
+  min-height: 1.45rem;
+}
+.sum-evlog-status__empty {
+  display: inline-block;
+  width: 0;
+  height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+  flex-shrink: 0;
+}
+.sum-evlog-status__pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.5rem;
+  padding: 0.12rem 0.45rem;
+  border-radius: 4px;
+  font-family: ui-monospace, monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.25;
+  text-align: center;
+}
+.sum-metrics-table.sum-evlog__table .sum-evlog-status .sum-evlog-status__pill {
+  min-width: 0;
+}
+/* Row status strip: same type size as HTTP pills + chips */
+.sum-metrics-table.sum-evlog__table .sum-evlog-status .pill-2xx,
+.sum-metrics-table.sum-evlog__table .sum-evlog-status .pill-4xx,
+.sum-metrics-table.sum-evlog__table .sum-evlog-status .pill-5xx {
+  font-size: 0.72rem;
+  margin-right: 0;
+}
+.sum-metrics-table.sum-evlog__table .sum-evlog-status .chip {
+  font-size: 0.72rem;
+  margin: 0;
+}
+/* Level-only pills in status column */
+.sum-evlog-status__lvl--WARN {
+  background: var(--embed-semantic-warn-bg);
+  color: var(--embed-semantic-warn-fg);
+}
+.sum-evlog-status__lvl--ERROR {
+  background: var(--embed-semantic-error-bg);
+  color: var(--embed-semantic-error-fg);
+}
+.sum-evlog-status__lvl--TRACE {
+  background: var(--embed-surface-row-alt);
+  color: var(--embed-text-faint);
+  font-weight: 600;
+}
+/* HTTP overlaps with pill-2xx / pill-4xx / pill-5xx from logs.css */
+.sum-evlog__footer {
+  margin: 0;
+  padding: 0.15rem 0.32rem;
+  font-size: 0.68rem;
+  color: var(--embed-text-muted);
+  position: relative;
+}
+.sum-evlog__footer span {
+  color: var(--embed-text-muted);
+}
+.sum-evlog__footer strong {
+  color: var(--embed-text-secondary);
+  font-weight: 600;
+}
+.sum-evlog__toast {
+  min-height: 1rem;
+  font-size: 0.68rem;
+  color: var(--embed-link-accent);
+}
+.sum-evlog__toast--error {
+  color: var(--embed-semantic-error-fg);
+}
+
+.sum-evlog__footer-row {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin: 0;
+  padding: 0.15rem 0.32rem;
+  box-sizing: border-box;
+}
+.sum-evlog__footer-left {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.sum-evlog__footer-row .sum-evlog__footer {
+  padding: 0;
+}
+.sum-evlog__footer-rel {
+  color: var(--embed-text-secondary);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.sum-metrics-table.sum-evlog__table tr.sum-evlog__search-empty-row {
+  cursor: default;
+}
+.sum-metrics-table.sum-evlog__table tr.sum-evlog__search-empty-row:hover {
+  filter: none;
+}
+.sum-metrics-table.sum-evlog__table tr.sum-evlog__search-empty-row[hidden] {
+  display: none !important;
+}
+.sum-metrics-table.sum-evlog__table td.sum-evlog__search-empty-cell {
+  text-align: center;
+  vertical-align: middle;
+  padding: 1.05rem 0.75rem;
+  font-size: 0.78rem;
+  color: var(--embed-text-muted);
+  line-height: 1.45;
+  border-bottom: 1px solid var(--embed-border-subtle);
+}
+.sum-evlog__clear-inline-search {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: inherit;
+  color: var(--embed-link-accent);
+  text-decoration: underline;
+  cursor: pointer;
+  border-radius: 2px;
+}
+.sum-evlog__clear-inline-search:hover {
+  color: var(--embed-text-secondary);
+}
+.sum-evlog__clear-inline-search:focus-visible {
+  outline: 2px solid var(--embed-focus-ring);
+  outline-offset: 1px;
+}
+.sum-evlog__toast.sum-gallery-evlog__toast-align {
+  flex: 0 1 auto;
+  margin: 0;
+  margin-left: auto;
+  padding: 0;
+  max-width: min(100%, 48%);
+  text-align: right;
+  align-self: flex-start;
+  white-space: normal;
+  word-break: break-word;
+}
+.sum-evlog__footer-row .sum-evlog__toast:empty {
+  display: none;
+}
+.sum-evlog__section-cell {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--embed-text-secondary);
+  padding: 0.35rem 0.45rem 0.25rem;
+  border-bottom: 1px solid var(--embed-border-subtle);
+  background: var(--embed-surface-table-header-alt);
+}
+/*
+  Event log panel in summarized cards: the .sum-full-log--evlog wrapper carries no
+  visible chrome — the inner .sum-evlog--in-card is the gallery-matching component.
+  We keep the wrapper element for any internal gateway toolbar slot and for any
+  scroll restoration that walks .sum-full-log elements.
+*/
+.sum-full-log.sum-full-log--evlog {
+  max-height: none;
+  overflow: visible;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  margin: 0;
 }
 
 .sum-full-log { background: var(--embed-surface-muted); border: 1px solid var(--embed-border-medium); border-radius: 8px; padding: 0.45rem 0.55rem; max-height: 14rem; overflow-y: auto; }
@@ -1435,11 +1910,24 @@ a.sum-ext-link {
 .workspace-draft-status { font-weight: 600; color: #1565c0; }
 .workspace-draft-status--err { color: #c62828; }
 
-.sum-card.sum-card--workspace-draft > summary {
+/* article + header (not details/summary): summary must not contain interactive content */
+.sum-card.sum-card--workspace-draft > header.sum-card__workspace-draft-hdr {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto 1rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 0.65rem;
+  margin: 0;
+  padding: 0.65rem 0.75rem;
+  min-height: 3.25rem;
+  box-sizing: border-box;
+  border-bottom: 1px solid var(--embed-border-summary-open);
+}
+.sum-card.sum-card--workspace-draft > .sum-body {
+  color: var(--embed-text-strong);
+  background: var(--embed-body-tint-c);
+}
+.sum-card.sum-card--workspace-draft > .sum-body .sum-section-label {
+  color: var(--embed-text-secondary);
 }
 .sum-main--workspace-draft .sum-title {
   font-weight: 600;

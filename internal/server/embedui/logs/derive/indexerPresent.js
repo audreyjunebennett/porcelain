@@ -328,7 +328,7 @@ function indexerProseSummary(flat) {
     case "indexer.job.upload": {
       var tr = flat.transport ? String(flat.transport) : "whole";
       var sz = flat.bytes != null ? formatBytesShort(flat.bytes) : "?";
-      return "Upload starting · " + (flat.rel || "file") + " · " + sz + " · " + tr;
+      return "Uploading · " + (flat.rel || "file") + " · " + sz + " · " + tr;
     }
     case "indexer.job.ingested":
     case "ingested":

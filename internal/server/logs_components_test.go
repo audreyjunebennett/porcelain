@@ -738,6 +738,31 @@ func TestLogsDerive_bifrostOperatorLine(t *testing.T) {
 		}
 	}
 
+	evCases := []struct {
+		flat map[string]any
+		want string
+	}{
+		{
+			flat: map[string]any{"service": "bifrost", "msg": "bifrost.http.access", "http_method": "GET", "http_target": "http://localhost:8081/v1/models", "http_status": 200, "http_duration_ms": 3.2},
+			want: "Inbound · GET /v1/models · 3 ms",
+		},
+		{
+			flat: map[string]any{"msg": "chat.bifrost.response", "statusCode": 200, "usageTotalTokens": 50, "responseBytes": 1200},
+			want: "Relay response · 50 usage tok · 1200 B",
+		},
+	}
+	opts := map[string]any{"forEventLog": true}
+	for i, tc := range evCases {
+		v, err := fn(goja.Undefined(), vm.ToValue(tc.flat), vm.ToValue(opts))
+		if err != nil {
+			t.Fatalf("forEventLog case %d: %v", i, err)
+		}
+		got := v.String()
+		if got != tc.want {
+			t.Fatalf("forEventLog case %d: got %q want %q", i, got, tc.want)
+		}
+	}
+
 	vSilent, err := fn(goja.Undefined(), vm.ToValue(map[string]any{"msg": "gateway.startup.banner"}))
 	if err != nil {
 		t.Fatal(err)
@@ -978,6 +1003,38 @@ func TestLogsDerive_qdrantCollection_nameGolden(t *testing.T) {
 	}
 	if v2.String() != "claudia-default-clone-_-0ef54bfe" {
 		t.Fatalf("clone got %q", v2.String())
+	}
+}
+
+func TestLogsDerive_qdrantOperatorLine_forEventLog(t *testing.T) {
+	vm := goja.New()
+	evalJS(t, vm, logsUIPath(t, "testing", "loader.js"))
+	evalJS(t, vm, logsUIPath(t, "derive", "qdrantCollection.js"))
+
+	derive := vm.Get("ClaudiaLogs").ToObject(vm).Get("Derive").ToObject(vm)
+	fn, ok := goja.AssertFunction(derive.Get("qdrantOperatorLine"))
+	if !ok {
+		t.Fatal("missing qdrantOperatorLine")
+	}
+	flat := map[string]any{
+		"msg":          "qdrant.http.collection_meta",
+		"collection":   "lynn:rimworld",
+		"http_status":  200,
+	}
+	v, err := fn(goja.Undefined(), vm.ToValue(flat), goja.Undefined(), goja.Undefined())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.String() != "Reading collection lynn:rimworld · 200" {
+		t.Fatalf("default got %q", v.String())
+	}
+	opts := map[string]any{"forEventLog": true}
+	v2, err := fn(goja.Undefined(), vm.ToValue(flat), goja.Undefined(), vm.ToValue(opts))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v2.String() != "Reading collection lynn:rimworld" {
+		t.Fatalf("forEventLog got %q", v2.String())
 	}
 }
 

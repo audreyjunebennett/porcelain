@@ -38,6 +38,10 @@ globalThis.ClaudiaLogs.Main = function () {
   /** Maps gateway tenant_id → token label from tokens.yaml (via GET /api/ui/tokens). */
   var tokenLabelByTenant = {};
   var storyRebuildTimer = null;
+  /** Full summarized `innerHTML` refresh is deferred while evlog UI is in use (see `summarizedEvlogInteractionBlocksRebuild`). */
+  var sumEvlogUiDeferTimer = null;
+  /** After pointer interaction in a card event log, suppress full panel rebuild briefly so row select / click completes. */
+  var sumEvlogPointerSuppressedUntil = 0;
   var maxSeq = 0;
   var stickPx = 160;
   var es = null;
@@ -658,12 +662,166 @@ globalThis.ClaudiaLogs.Main = function () {
         var modUp = flat.upstreamModel != null ? String(flat.upstreamModel).trim() : "";
         return modUp ? baseUp + " Model: " + modUp + "." : baseUp;
       }
+      case "ingest.complete": {
+        var bitsIc = ["Ingest finished — document indexed."];
+        var ch = flat.chunks != null ? Number(flat.chunks) : NaN;
+        if (!isNaN(ch) && ch >= 0) bitsIc.push(Math.round(ch) + " chunk" + (ch === 1 ? "" : "s"));
+        var srcIc = flat.source != null ? String(flat.source).trim() : "";
+        if (srcIc) bitsIc.push("source: " + (srcIc.length > 80 ? srcIc.slice(0, 79) + "…" : srcIc));
+        var tenIc = flat.tenant != null ? String(flat.tenant).trim() : "";
+        if (tenIc) bitsIc.push("tenant " + tenIc);
+        return bitsIc.join(" · ");
+      }
+      case "gateway.auth.reloaded": {
+        var baseAuth = "Client credentials reloaded from disk.";
+        var nAuth = flat.count != null ? Number(flat.count) : NaN;
+        if (!isNaN(nAuth) && nAuth >= 0) return baseAuth + " Active keys: " + Math.round(nAuth) + ".";
+        return baseAuth;
+      }
+      case "gateway.health.upstream": {
+        var okH = flat.ok === true || flat.ok === "true" || flat.ok === 1;
+        var baseH = okH ? "Upstream health OK" : "Upstream health failed";
+        var bitsH = [];
+        var stH = flat.status != null ? Number(flat.status) : NaN;
+        if (!isNaN(stH)) bitsH.push("probe HTTP " + Math.round(stH));
+        var detH = flat.detail != null ? String(flat.detail).replace(/\s+/g, " ").trim() : "";
+        if (detH.length > 100) detH = detH.slice(0, 99) + "…";
+        if (!okH && detH) bitsH.push(detH);
+        var tgtH = flat.target != null ? String(flat.target).trim() : "";
+        if (tgtH) {
+          var hostH = "";
+          try {
+            hostH = new URL(tgtH).host || "";
+          } catch (eH) {
+            hostH = "";
+          }
+          if (!hostH && tgtH) hostH = tgtH.length > 72 ? tgtH.slice(0, 71) + "…" : tgtH;
+          if (hostH) bitsH.push(hostH);
+        }
+        return bitsH.length ? baseH + " · " + bitsH.join(" · ") : baseH;
+      }
+      case "gateway.startup.listening": {
+        var bitsL = ["Gateway listening for HTTP requests."];
+        var addrL = flat.addr != null ? String(flat.addr).trim() : "";
+        if (addrL) bitsL.push("bind " + addrL);
+        var upL = flat.upstream != null ? String(flat.upstream).trim() : "";
+        if (upL) {
+          var upShort = upL;
+          try {
+            upShort = new URL(upL).host || upL;
+          } catch (eL) {
+            upShort = upL;
+          }
+          if (upShort.length > 56) upShort = upShort.slice(0, 55) + "…";
+          bitsL.push("upstream " + upShort);
+        }
+        return bitsL.join(" · ");
+      }
+      case "gateway.supervisor.indexer.starting": {
+        var bitsIxS = ["Supervised indexer process starting."];
+        if (flat.bin != null && String(flat.bin).trim() !== "") {
+          var bn = String(flat.bin).replace(/\\/g, "/");
+          var leaf = bn.split("/").pop();
+          bitsIxS.push(leaf || bn);
+        }
+        var cfgIxS = flat.config != null ? String(flat.config).trim() : "";
+        if (cfgIxS) bitsIxS.push("config " + (cfgIxS.length > 48 ? cfgIxS.slice(0, 47) + "…" : cfgIxS));
+        return bitsIxS.join(" · ");
+      }
+      case "gateway.supervisor.bifrost.ready": {
+        var baseBr = "BiFrost passed health check — ready.";
+        var urlBr = flat.url != null ? String(flat.url).trim() : "";
+        if (!urlBr) return baseBr;
+        try {
+          var uBr = new URL(urlBr);
+          var tailBr = (uBr.host + (uBr.pathname === "/" ? "" : uBr.pathname)).slice(0, 96);
+          return baseBr + " · " + tailBr;
+        } catch (eBr) {
+          return baseBr + " · " + (urlBr.length > 96 ? urlBr.slice(0, 95) + "…" : urlBr);
+        }
+      }
+      case "gateway.supervisor.bifrost.starting": {
+        var bitsBs = ["BiFrost subprocess starting."];
+        if (flat.bin != null && String(flat.bin).trim() !== "") {
+          var bbs = String(flat.bin).replace(/\\/g, "/").split("/").pop();
+          if (bbs) bitsBs.push(bbs);
+        }
+        var appD = flat.app_dir != null ? String(flat.app_dir).trim() : flat.dir != null ? String(flat.dir).trim() : "";
+        if (appD) bitsBs.push("data " + (appD.length > 40 ? appD.slice(0, 39) + "…" : appD));
+        if (flat.host != null && String(flat.host).trim() !== "") bitsBs.push("host " + String(flat.host).trim());
+        if (flat.port != null && String(flat.port).trim() !== "") bitsBs.push("port " + String(flat.port).trim());
+        return bitsBs.join(" · ");
+      }
+      case "gateway.supervisor.qdrant.ready": {
+        var baseQr = "Qdrant passed health check — ready.";
+        var urlQr = flat.url != null ? String(flat.url).trim() : "";
+        if (!urlQr) return baseQr;
+        try {
+          var uQr = new URL(urlQr);
+          var tailQr = (uQr.host + (uQr.pathname === "/" ? "" : uQr.pathname)).slice(0, 96);
+          return baseQr + " · " + tailQr;
+        } catch (eQr) {
+          return baseQr + " · " + (urlQr.length > 96 ? urlQr.slice(0, 95) + "…" : urlQr);
+        }
+      }
+      case "gateway.supervisor.qdrant.starting": {
+        var bitsQs = ["Qdrant subprocess starting."];
+        if (flat.bin != null && String(flat.bin).trim() !== "") {
+          var bqs = String(flat.bin).replace(/\\/g, "/").split("/").pop();
+          if (bqs) bitsQs.push(bqs);
+        }
+        var stor = flat.storage != null ? String(flat.storage).trim() : "";
+        if (stor) bitsQs.push("storage " + (stor.length > 40 ? stor.slice(0, 39) + "…" : stor));
+        if (flat.http_port != null) bitsQs.push("http " + String(flat.http_port));
+        if (flat.grpc_port != null) bitsQs.push("grpc " + String(flat.grpc_port));
+        if (flat.host != null && String(flat.host).trim() !== "") bitsQs.push("host " + String(flat.host).trim());
+        return bitsQs.join(" · ");
+      }
+      case "gateway.startup.seed":
+        return "Gateway startup seed (early init before full serve).";
+      case "gateway.startup.disk_log": {
+        var phaseD = flat.phase != null ? String(flat.phase).trim() : "";
+        var pathD = flat.path != null ? String(flat.path).trim() : "";
+        var dirD = flat.dir != null ? String(flat.dir).trim() : "";
+        var errD = flat.err != null ? String(flat.err).replace(/\s+/g, " ").trim() : "";
+        if (errD.length > 120) errD = errD.slice(0, 119) + "…";
+        if (phaseD === "mkdir" || phaseD === "open") {
+          var locD = pathD || dirD || "";
+          if (locD.length > 72) locD = locD.slice(0, 71) + "…";
+          return (
+            "Disk log setup failed (" +
+            phaseD +
+            ")" +
+            (locD ? " · " + locD : "") +
+            (errD ? " · " + errD : "")
+          );
+        }
+        if (pathD) return "Disk logging enabled · " + (pathD.length > 100 ? pathD.slice(0, 99) + "…" : pathD);
+        return "Disk logging enabled.";
+      }
+      case "gateway.startup.config_resolved": {
+        var bitsCfg = ["Gateway configuration paths resolved."];
+        var fpCfg = flat.filePath != null ? String(flat.filePath).trim() : "";
+        if (fpCfg) bitsCfg.push("gateway " + (fpCfg.length > 56 ? fpCfg.slice(0, 55) + "…" : fpCfg));
+        var akCfg =
+          flat.api_keys_path != null
+            ? String(flat.api_keys_path).trim()
+            : flat.tokens_path != null
+              ? String(flat.tokens_path).trim()
+              : "";
+        if (akCfg) bitsCfg.push("keys " + (akCfg.length > 48 ? akCfg.slice(0, 47) + "…" : akCfg));
+        var rpCfg = flat.routingPolicyPath != null ? String(flat.routingPolicyPath).trim() : "";
+        if (rpCfg) bitsCfg.push("routing " + (rpCfg.length > 48 ? rpCfg.slice(0, 47) + "…" : rpCfg));
+        return bitsCfg.join(" · ");
+      }
       default:
         return "";
     }
   }
 
-  function primaryLogMessage(parsed, rawText) {
+  function primaryLogMessage(parsed, rawText, opts) {
+    opts = opts || {};
+    var forEventLog = opts.forEventLog === true;
     var rf = getFlat(parsed);
     var sh = parsed.shape || "";
     if (sh === "http.access" && rf.statusCode !== undefined && rf.statusCode !== null) {
@@ -671,8 +829,7 @@ globalThis.ClaudiaLogs.Main = function () {
         (rf.method || "?") +
         " " +
         (rf.path || "") +
-        " → " +
-        rf.statusCode +
+        (forEventLog ? "" : " → " + rf.statusCode) +
         (rf.responseTimeMs != null ? " · " + rf.responseTimeMs + " ms" : "");
       return line.length > MAX_PRIMARY_MSG_CHARS ? line.slice(0, MAX_PRIMARY_MSG_CHARS - 1) + "…" : line;
     }
@@ -685,7 +842,7 @@ globalThis.ClaudiaLogs.Main = function () {
       ClaudiaLogs.Derive &&
       typeof ClaudiaLogs.Derive.bifrostOperatorLine === "function"
     ) {
-      var bifrostLine = ClaudiaLogs.Derive.bifrostOperatorLine(rf);
+      var bifrostLine = ClaudiaLogs.Derive.bifrostOperatorLine(rf, forEventLog ? { forEventLog: true } : undefined);
       if (bifrostLine && String(bifrostLine).trim() !== "") {
         var bl = String(bifrostLine).trim();
         return bl.length > MAX_PRIMARY_MSG_CHARS ? bl.slice(0, MAX_PRIMARY_MSG_CHARS - 1) + "…" : bl;
@@ -694,7 +851,7 @@ globalThis.ClaudiaLogs.Main = function () {
     if (sh === "chat.bifrost" || (rf.upstreamModel && (rf.statusCode != null || rf.status != null))) {
       var scB = rf.statusCode != null ? rf.statusCode : rf.status;
       var parts = [];
-      if (scB !== undefined && scB !== null && scB !== "") parts.push(String(scB));
+      if (!forEventLog && scB !== undefined && scB !== null && scB !== "") parts.push(String(scB));
       if (rf.upstreamModel) parts.push(String(rf.upstreamModel));
       var pathHint = rf.path || "";
       if (!pathHint && rf.target) {
@@ -715,7 +872,7 @@ globalThis.ClaudiaLogs.Main = function () {
       if (rf.msg != null || rf.message != null) bitsR.push(String(rf.msg != null ? rf.msg : rf.message));
       if (rf.upstreamModel) bitsR.push("model " + rf.upstreamModel);
       if (rf.attempt != null) bitsR.push("attempt " + rf.attempt);
-      if (rf.statusCode != null) bitsR.push("HTTP " + rf.statusCode);
+      if (!forEventLog && rf.statusCode != null) bitsR.push("HTTP " + rf.statusCode);
       var lineR = bitsR.filter(Boolean).join(" · ") || "routing";
       return lineR.length > MAX_PRIMARY_MSG_CHARS ? lineR.slice(0, MAX_PRIMARY_MSG_CHARS - 1) + "…" : lineR;
     }
@@ -727,7 +884,11 @@ globalThis.ClaudiaLogs.Main = function () {
       ClaudiaLogs.Derive &&
       typeof ClaudiaLogs.Derive.qdrantOperatorLine === "function"
     ) {
-      var qOpLine = ClaudiaLogs.Derive.qdrantOperatorLine(rf, qdrantCollectionScopeLabelForLogs);
+      var qOpLine = ClaudiaLogs.Derive.qdrantOperatorLine(
+        rf,
+        qdrantCollectionScopeLabelForLogs,
+        forEventLog ? { forEventLog: true } : undefined
+      );
       if (qOpLine && String(qOpLine).trim() !== "") {
         var mqQ = String(qOpLine).trim();
         return mqQ.length > MAX_PRIMARY_MSG_CHARS ? mqQ.slice(0, MAX_PRIMARY_MSG_CHARS - 1) + "…" : mqQ;
@@ -854,6 +1015,390 @@ globalThis.ClaudiaLogs.Main = function () {
     );
   }
 
+  function formatLogRelativeAgo(ms) {
+    if (ms == null || !isFinite(Number(ms))) return "—";
+    var now = Date.now();
+    var sec = Math.round((now - Number(ms)) / 1000);
+    if (sec < 0) return "in the future";
+    if (sec < 10) return "just now";
+    if (sec < 60) return "about " + sec + " seconds ago";
+    if (sec < 3600) {
+      var m = Math.floor(sec / 60);
+      return m === 1 ? "about 1 minute ago" : "about " + m + " minutes ago";
+    }
+    if (sec < 86400) {
+      var h = Math.floor(sec / 3600);
+      return h === 1 ? "about 1 hour ago" : "about " + h + " hours ago";
+    }
+    var d = Math.floor(sec / 86400);
+    return d === 1 ? "about 1 day ago" : "about " + d + " days ago";
+  }
+
+  function sumEvlogHttpStatusNumber(v) {
+    if (v == null || v === "") return null;
+    var n = Number(v);
+    if (isNaN(n) || n < 100 || n > 599) return null;
+    return n;
+  }
+
+  /**
+   * HTTP status for summarized full-event-log row styling and Status column.
+   * Includes gateway http.access plus bifrost/qdrant REST rows that carry http_status.
+   */
+  function sumEvlogHttpCode(parsed, flatOpt) {
+    if (!parsed) return null;
+    var flat = flatOpt != null ? flatOpt : getFlat(parsed);
+    if (parsed.shape === "http.access" && flat) {
+      var sc0 = flat.statusCode;
+      if (sc0 != null && sc0 !== "") {
+        var n0 = Number(sc0);
+        if (!isNaN(n0)) return n0;
+      }
+      return null;
+    }
+    if (!flat) return null;
+    var msgRaw = flat.msg != null ? flat.msg : flat.message != null ? flat.message : "";
+    var msgL = String(msgRaw).toLowerCase();
+    if (
+      msgL === "bifrost.http.access" ||
+      msgL === "bifrost.rate_limit" ||
+      msgL === "qdrant.http.collection_meta" ||
+      msgL === "qdrant.http.points_upsert_ok" ||
+      msgL === "qdrant.http.points_upsert_rejected" ||
+      msgL === "qdrant.http.points_delete" ||
+      msgL === "qdrant.http.vector_search"
+    ) {
+      var hs = sumEvlogHttpStatusNumber(flat.http_status != null ? flat.http_status : flat.httpStatus);
+      if (hs != null) return hs;
+    }
+    if (
+      msgL === "chat.bifrost.response" ||
+      msgL === "upstream chat response" ||
+      msgL === "chat.routing.fallback" ||
+      msgL === "chat.routing.resolved" ||
+      msgL === "virtual model routing resolved"
+    ) {
+      var c = sumEvlogHttpStatusNumber(
+        flat.statusCode != null ? flat.statusCode : flat.status_code != null ? flat.status_code : flat.status
+      );
+      if (c != null) return c;
+    }
+    return null;
+  }
+
+  /** Stable row id for selection across client filters: prefer log line seq, else row index + ts under card scope. */
+  function sumEvlogStableRowId(cardScope, entLike, rowIndex) {
+    var scope = String(cardScope || "s");
+    if (entLike.seq != null && entLike.seq !== "") return scope + ":n:" + String(entLike.seq);
+    return scope + ":i:" + String(rowIndex) + ":t:" + String(entLike.ts != null ? entLike.ts : "");
+  }
+
+  function sumEvlogLevelKey(levelStr) {
+    var s = levelStr == null ? "" : String(levelStr).trim();
+    return s === "" ? "_NONE" : s.toUpperCase();
+  }
+
+  function sumEvlogIsWarnish(levelCanon, http) {
+    var lk = sumEvlogLevelKey(levelCanon);
+    if (lk === "WARN") return true;
+    if (http === 429) return true;
+    return false;
+  }
+
+  function sumEvlogIsFailish(levelCanon, http) {
+    var lk = sumEvlogLevelKey(levelCanon);
+    if (lk === "ERROR") return true;
+    if (http == null) return false;
+    if (http >= 200 && http <= 299) return false;
+    return true;
+  }
+
+  function sumEvlogCountWarnFailFromEntries(entries) {
+    var warn = 0;
+    var fail = 0;
+    for (var i = 0; i < entries.length; i++) {
+      var p = entries[i].parsed;
+      var http = sumEvlogHttpCode(p, getFlat(p));
+      var lk = p.levelCanon || (p.levelLabel && p.levelLabel !== "—" ? p.levelLabel : "");
+      if (sumEvlogIsWarnish(lk, http)) warn++;
+      if (sumEvlogIsFailish(lk, http)) fail++;
+    }
+    return { warn: warn, fail: fail };
+  }
+
+  function sumEvlogStatusInnerHtml(parsed) {
+    var flat = getFlat(parsed);
+    var http = sumEvlogHttpCode(parsed, flat);
+    var lk = sumEvlogLevelKey(
+      parsed.levelCanon || (parsed.levelLabel && parsed.levelLabel !== "—" ? parsed.levelLabel : "")
+    );
+    var parts = [];
+    if (lk === "TRACE") {
+      parts.push('<span class="sum-evlog-status__pill sum-evlog-status__lvl--TRACE">TRACE</span>');
+    } else if (lk === "WARN") {
+      parts.push('<span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN">WARN</span>');
+    } else if (lk === "ERROR") {
+      parts.push('<span class="sum-evlog-status__pill sum-evlog-status__lvl--ERROR">ERROR</span>');
+    }
+    if (http != null) {
+      if (http === 304) {
+        parts.push('<span class="chip">' + escapeHtml(String(http)) + "</span>");
+      } else {
+        var pcl = statusPillClass(http);
+        parts.push('<span class="' + pcl + '">' + escapeHtml(String(http)) + "</span>");
+      }
+    }
+    if (!parts.length) {
+      return '<span class="sum-evlog-status__empty" aria-hidden="true"></span>';
+    }
+    return parts.join("");
+  }
+
+  function sumEvlogMsgCellInnerHtml(ev, badgeOpt, opts) {
+    opts = opts || {};
+    var parsed = ev.parsed;
+    var badgeHtml = "";
+    var hideIxBadge = opts.suppressIndexerBadge && badgeOpt && badgeOpt.lab === "indexer";
+    var hideQBadge = opts.suppressQdrantBadge && badgeOpt && badgeOpt.lab === "qdrant";
+    var hideGwBadge = opts.suppressGatewayBadge && badgeOpt && badgeOpt.lab === "gateway";
+    if (badgeOpt && badgeOpt.lab && !hideIxBadge && !hideQBadge && !hideGwBadge) {
+      badgeHtml =
+        '<span class="sum-svc-badge ' +
+        badgeOpt.cls +
+        '">' +
+        escapeHtml(badgeOpt.lab) +
+        "</span>";
+    }
+    var tierHtml = "";
+    if (opts.convJoinTier && opts.convJoinTier !== "direct") {
+      var tl = String(opts.convJoinTier);
+      var safeTl = tl.replace(/[^a-z0-9_-]/gi, "");
+      if (!safeTl) safeTl = "tier";
+      var tierTitle = "Join tier";
+      if (opts.qdrantSpanID) {
+        tierTitle += " · span " + String(opts.qdrantSpanID);
+      }
+      if (opts.qdrantTurnIndex != null && opts.qdrantTurnIndex !== "") {
+        tierTitle += " · turn " + String(opts.qdrantTurnIndex);
+      }
+      tierHtml =
+        '<span class="sum-conv-tier sum-conv-tier--' +
+        safeTl +
+        '" title="' +
+        escapeHtml(tierTitle) +
+        '">' +
+        escapeHtml(tl.replace(/_/g, " ")) +
+        "</span>";
+    }
+    var msg = escapeHtml(primaryLogMessage(parsed, ev.text, { forEventLog: true }));
+    return badgeHtml + tierHtml + msg;
+  }
+
+  function sumEvlogRowTrHtml(entLike, cardScope, rowIndex, badgeOpt, summaryOpts) {
+    summaryOpts = summaryOpts || {};
+    var parsed = entLike.parsed;
+    var flat = getFlat(parsed);
+    var http = sumEvlogHttpCode(parsed, flat);
+    var lvlRaw = parsed.levelCanon || (parsed.levelLabel && parsed.levelLabel !== "—" ? parsed.levelLabel : "");
+    var lvlStr = lvlRaw ? String(lvlRaw).trim() : "";
+    var lvlAttr = escapeHtml(lvlStr.toUpperCase());
+    var httpAttr = http == null ? "" : ' data-evlog-http="' + escapeHtml(String(http)) + '"';
+    var rowId = escapeHtml(sumEvlogStableRowId(cardScope, entLike, rowIndex));
+    var iso = toIsoDatetimeAttr(entLike.ts);
+    var dt = formatLogDateTimeLocal(entLike.ts);
+    var rel = formatLogRelativeAgo(entLike.ts);
+    var msgInner = sumEvlogMsgCellInnerHtml(entLike, badgeOpt, summaryOpts);
+    var statusInner = sumEvlogStatusInnerHtml(parsed);
+    return (
+      '<tr class="sum-evlog__row" data-evlog-id="' +
+      rowId +
+      '" data-evlog-level="' +
+      lvlAttr +
+      '"' +
+      httpAttr +
+      ">" +
+      '<td class="sum-evlog__cell--time"><time' +
+      (iso ? ' datetime="' + escapeHtml(iso) + '"' : "") +
+      ' title="' +
+      escapeHtml(rel) +
+      '">' +
+      escapeHtml(dt) +
+      "</time></td>" +
+      '<td class="sum-evlog__cell--msg">' +
+      msgInner +
+      "</td>" +
+      '<td class="sum-evlog__cell--status"><div class="sum-evlog-status">' +
+      statusInner +
+      "</div></td></tr>"
+    );
+  }
+
+  function sumEvlogToolbarStaticHtml() {
+    return (
+      '<div class="sum-evlog__toolbar">' +
+      '<input class="sum-evlog__search" type="search" placeholder="Search…" aria-label="Search log entries" autocomplete="off" />' +
+      '<label class="sum-evlog__lvl-label" style="margin-left:auto">' +
+      '<span class="sum-evlog__level-filters-label" style="margin-right:0.35rem">Status</span>' +
+      '<select class="sum-evlog__filter-select" data-evlog-filter-status aria-label="Filter by severity">' +
+      '<option value="all">All</option>' +
+      '<option value="warnings">⚠ Warnings</option>' +
+      '<option value="errors">✖ Errors</option>' +
+      "</select></label>" +
+      '<button type="button" class="sum-evlog__copy-btn" title="Copy as TSV — selected rows, or all visible if none selected" aria-label="Copy as TSV: selected rows, or all visible if none selected">' +
+      '<svg class="sum-evlog__copy-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>' +
+      '<span class="sr-only"></span></button></div>'
+    );
+  }
+
+  function sumEvlogPanelHtml(o) {
+    o = o || {};
+    var scrollTbodyId = o.scrollTbodyId || "sum-evlog-tb";
+    var warnN = o.warnN != null ? o.warnN : 0;
+    var failN = o.failN != null ? o.failN : 0;
+    var tbodyInner = o.tbodyInnerHtml || "";
+    var title = o.title != null ? o.title : "Full event log";
+    var titleRightHtml = o.titleRightHtml || "";
+    var titleBlock = titleRightHtml
+      ? '<div class="sum-conv-full-log-head sum-evlog__title-row">' +
+          '<div class="sum-section-label">' + escapeHtml(title) + "</div>" +
+          '<div class="sum-conv-services-after-log-hdr">' + titleRightHtml + "</div>" +
+        "</div>"
+      : '<div class="sum-section-label">' + escapeHtml(title) + "</div>";
+    return (
+      '<div class="sum-evlog sum-evlog--in-card" data-sum-evlog-root>' +
+      titleBlock +
+      sumEvlogToolbarStaticHtml() +
+      '<div class="sum-metrics-table-wrap sum-evlog__table-scroll">' +
+      '<table class="sum-metrics-table sum-evlog__table">' +
+      '<colgroup><col class="sum-evlog__col-time" /><col class="sum-evlog__col-msg" /><col class="sum-evlog__col-status" /></colgroup>' +
+      '<thead><tr><th class="sum-evlog__cell--time" scope="col">Time</th><th scope="col">Message</th><th class="sum-evlog__th-status" scope="col">' +
+      '<div class="sum-evlog__th-status-head" role="group" aria-label="Status: warning and error counts in this slice">' +
+      '<span class="sum-evlog__th-status-label">Status</span>' +
+      '<span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN sum-evlog-metric-num" data-sum-evlog-metric-warn title="Lines with WARN or HTTP 429 in this card">' +
+      escapeHtml(String(warnN)) +
+      "</span>" +
+      '<span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN sum-evlog__metric-icon" aria-hidden="true">⚠</span>' +
+      '<span class="sum-evlog-status__pill sum-evlog-status__lvl--ERROR sum-evlog-metric-num" data-sum-evlog-metric-fail title="Lines with ERROR or HTTP non-2xx in this card">' +
+      escapeHtml(String(failN)) +
+      "</span>" +
+      '<span class="sum-evlog-status__pill sum-evlog-status__lvl--ERROR sum-evlog__metric-icon" aria-hidden="true">✖</span>' +
+      "</div></th></tr></thead>" +
+      '<tbody id="' +
+      escapeHtml(scrollTbodyId) +
+      '" data-sum-evlog-tbody>' +
+      tbodyInner +
+      "</tbody></table></div>" +
+      '<div class="sum-evlog__footer-row">' +
+      '<div class="sum-evlog__footer-left">' +
+      '<p class="sum-evlog__footer" data-sum-evlog-oldest></p></div>' +
+      '<p class="sum-evlog__toast sum-gallery-evlog__toast-align" data-sum-evlog-toast></p></div>' +
+      "</div>"
+    );
+  }
+
+  function sumEvlogBuildTbodyFromConvEvents(evs, turnGroups, cardScope) {
+    var parts = [];
+    var rowIdx = 0;
+    function pushEvent(evT) {
+      var evLine = {
+        parsed: evT.parsed,
+        text: evT.text != null && evT.text !== undefined ? evT.text : "",
+        ts: evT.ts,
+        source: evT.source,
+        seq: evT.seq
+      };
+      var bd = inferServiceBadge(evLine);
+      parts.push(
+        sumEvlogRowTrHtml(evLine, cardScope, rowIdx, bd, {
+          convJoinTier: evT.convJoinTier,
+          qdrantSpanID: evT.qdrantSpanID,
+          qdrantTurnIndex: evT.qdrantTurnIndex
+        })
+      );
+      rowIdx++;
+    }
+    if (turnGroups && turnGroups.length > 1) {
+      for (var tgi = 0; tgi < turnGroups.length; tgi++) {
+        var tg = turnGroups[tgi];
+        parts.push(
+          '<tr class="sum-evlog__section"><td colspan="3" class="sum-evlog__section-cell">' +
+          escapeHtml(tg.label) +
+          "</td></tr>"
+        );
+        for (var ti2 = tg.events.length - 1; ti2 >= 0; ti2--) {
+          pushEvent(tg.events[ti2]);
+        }
+      }
+    } else {
+      for (var u = evs.length - 1; u >= 0; u--) {
+        pushEvent(evs[u]);
+      }
+    }
+    return parts.join("");
+  }
+
+  function sumEvlogBuildTbodyFromServiceEntries(name, arr, opts) {
+    opts = opts || {};
+    var cardScope = opts.cardScope || strHash("svc:" + name);
+    var parts = [];
+    var rowIdx = 0;
+    for (var u = arr.length - 1; u >= 0; u--) {
+      var ent2 = arr[u];
+      if (
+        opts.filterGatewayProbe &&
+        !gatewayPanelShowProbes &&
+        globalThis.ClaudiaLogs &&
+        ClaudiaLogs.Derive &&
+        typeof ClaudiaLogs.Derive.gatewayPanelHideRow === "function" &&
+        ClaudiaLogs.Derive.gatewayPanelHideRow(ent2, function (p) {
+          return getFlat(p);
+        })
+      ) {
+        continue;
+      }
+      var ev2 = {
+        parsed: ent2.parsed,
+        text: ent2.text,
+        ts: ent2.ts,
+        source: ent2.source,
+        seq: ent2.seq
+      };
+      var summaryOpts =
+        name === "indexer"
+          ? { suppressIndexerBadge: true }
+          : name === "qdrant"
+            ? { suppressQdrantBadge: true }
+            : name === "gateway"
+              ? { suppressGatewayBadge: true }
+              : {};
+      var bd2 = opts.indexerRunLine ? badgeForIndexerRunLine(ent2) : badgeForServicePanel(name, ev2);
+      parts.push(sumEvlogRowTrHtml(ev2, cardScope, rowIdx, bd2, summaryOpts));
+      rowIdx++;
+    }
+    return parts.join("");
+  }
+
+  function sumEvlogVisibleEntriesForService(name, arr, filterProbe) {
+    var vis = [];
+    for (var u = arr.length - 1; u >= 0; u--) {
+      var ent2 = arr[u];
+      if (
+        filterProbe &&
+        !gatewayPanelShowProbes &&
+        globalThis.ClaudiaLogs &&
+        ClaudiaLogs.Derive &&
+        typeof ClaudiaLogs.Derive.gatewayPanelHideRow === "function" &&
+        ClaudiaLogs.Derive.gatewayPanelHideRow(ent2, function (p) {
+          return getFlat(p);
+        })
+      ) {
+        continue;
+      }
+      vis.push(ent2);
+    }
+    return vis;
+  }
+
   function eventOneLiner(ev) {
     return primaryLogMessage(ev.parsed, ev.text);
   }
@@ -929,9 +1474,35 @@ globalThis.ClaudiaLogs.Main = function () {
     }
   }
 
+  function summarizedEvlogInteractionBlocksRebuild() {
+    if (Date.now() < sumEvlogPointerSuppressedUntil) return true;
+    var a = document.activeElement;
+    if (!a || !a.closest) return false;
+    if (!a.closest("#panel-summarized")) return false;
+    if (a.classList && a.classList.contains("sum-evlog__search")) return true;
+    if (a.matches && a.matches("[data-evlog-filter-status]")) return true;
+    return false;
+  }
+
+  function scheduleDeferredSummarizedRefresh() {
+    if (sumEvlogUiDeferTimer) clearTimeout(sumEvlogUiDeferTimer);
+    sumEvlogUiDeferTimer = setTimeout(function deferredSumEvlogRefresh() {
+      sumEvlogUiDeferTimer = null;
+      if (summarizedEvlogInteractionBlocksRebuild()) {
+        sumEvlogUiDeferTimer = setTimeout(deferredSumEvlogRefresh, 300);
+        return;
+      }
+      refreshSummarizedPanel();
+    }, 300);
+  }
+
   function refreshSummarizedPanel() {
     var psu = document.getElementById("panel-summarized");
     if (viewMode !== "summarized" || !psu) return;
+    if (summarizedEvlogInteractionBlocksRebuild()) {
+      scheduleDeferredSummarizedRefresh();
+      return;
+    }
     var prevScrollTop = psu.scrollTop;
     var prevScrollH = psu.scrollHeight;
     var nearPanelBottom =
@@ -954,13 +1525,23 @@ globalThis.ClaudiaLogs.Main = function () {
       }
     } catch (e1) { }
 
+    /** Scroll for .sum-full-log[id] only; evlog tbody scroll lives in sumEvlog panel state (search/filter changes row height). */
     var fullLogScroll = {};
     try {
-      var fls = psu.querySelectorAll(".sum-full-log");
+      var fls = psu.querySelectorAll(".sum-full-log[id]");
       for (var fk = 0; fk < fls.length; fk++) {
         if (fls[fk] && fls[fk].id) fullLogScroll[fls[fk].id] = fls[fk].scrollTop;
       }
     } catch (e2) { }
+
+    var sumEvlogPanelSave = {};
+    try {
+      if (typeof globalThis.sumEvlogCapturePanelState === "function") {
+        sumEvlogPanelSave = globalThis.sumEvlogCapturePanelState(psu) || {};
+      }
+    } catch (eEvCap) {
+      sumEvlogPanelSave = {};
+    }
 
     var gatewayMetricsTableScroll = [];
     try {
@@ -977,10 +1558,22 @@ globalThis.ClaudiaLogs.Main = function () {
 
     hydrateIndexerServiceSummaryFromApi();
 
+    if (typeof globalThis.sumEvlogHydrateAllIn === "function") {
+      try {
+        globalThis.sumEvlogHydrateAllIn(psu);
+      } catch (eEv) {}
+    }
+
     for (var ri = 0; ri < openDetailIds.length; ri++) {
       var d = document.getElementById(openDetailIds[ri]);
       if (d && d.tagName === "DETAILS") d.open = true;
     }
+
+    try {
+      if (typeof globalThis.sumEvlogApplyPanelState === "function") {
+        globalThis.sumEvlogApplyPanelState(psu, sumEvlogPanelSave, { scroll: false });
+      }
+    } catch (eEvApply) {}
 
     /** Best-effort outer scroll before paint: avoids scrollTop 0 flash while content height is still settling. */
     function applySummarizedOuterScrollSync() {
@@ -1025,6 +1618,11 @@ globalThis.ClaudiaLogs.Main = function () {
         var dh = psu.scrollHeight - prevScrollH;
         psu.scrollTop = Math.max(0, prevScrollTop + dh);
       }
+      try {
+        if (typeof globalThis.sumEvlogApplyPanelState === "function") {
+          globalThis.sumEvlogApplyPanelState(psu, sumEvlogPanelSave, { scrollOnly: true });
+        }
+      } catch (eEvScroll) {}
     }
     window.requestAnimationFrame(finalizeSummarizedScrollAfterLayout);
   }
@@ -1494,12 +2092,12 @@ globalThis.ClaudiaLogs.Main = function () {
     var prVal = escapeHtml(String(d.projectId != null ? d.projectId : ""));
     var fvVal = escapeHtml(String(d.flavorId != null ? d.flavorId : ""));
     return (
-      '<details class="sum-card sum-card--workspace-draft" id="' +
+      '<article class="sum-card sum-card--workspace-draft" id="' +
       escapeHtml(uid) +
-      '" open data-workspace-draft="' +
+      '" data-workspace-draft="' +
       String(d.id) +
       '">' +
-      "<summary>" +
+      '<header class="sum-card__workspace-draft-hdr">' +
       '<span class="sum-avatar sum-av-c" title="New workspace">+</span>' +
       '<span class="sum-main sum-main--workspace-draft">' +
       '<span class="sum-title">' +
@@ -1510,8 +2108,7 @@ globalThis.ClaudiaLogs.Main = function () {
       '<button type="button" class="ws-draft-btn ws-draft-btn-cancel">Cancel</button>' +
       '<button type="button" class="ws-draft-btn ws-draft-btn-save">Save</button>' +
       "</span>" +
-      '<span class="sum-chev"></span>' +
-      "</summary>" +
+      "</header>" +
       '<div class="sum-body">' +
       '<div class="ws-draft-fields">' +
       '<div class="ws-draft-field">' +
@@ -1551,7 +2148,7 @@ globalThis.ClaudiaLogs.Main = function () {
       "</div>" +
       '<p class="muted ws-draft-hint">Folder picker requires the Claudia desktop shell (or an environment that exposes <code>claudiaPickFolder</code>).</p>' +
       "</div>" +
-      "</details>"
+      "</article>"
     );
   }
 
@@ -3598,17 +4195,6 @@ globalThis.ClaudiaLogs.Main = function () {
     return t0 && t1 ? t1.getTime() - t0.getTime() : 0;
   }
 
-  /** One line in a conversation card full log — same shape as gateway / service cards (no extras grid). */
-  function conversationFullLogLineHtml(ev) {
-    var evLine = { parsed: ev.parsed, text: ev.text != null && ev.text !== undefined ? ev.text : "", ts: ev.ts, source: ev.source };
-    var bd = inferServiceBadge(evLine);
-    return logSummaryHtml(evLine, bd, {
-      convJoinTier: ev.convJoinTier,
-      qdrantSpanID: ev.qdrantSpanID,
-      qdrantTurnIndex: ev.qdrantTurnIndex
-    });
-  }
-
   function renderExpandedConv(g) {
     var evs = g.events;
     var cardModel = conversationCardModelForGroup(evs);
@@ -3655,33 +4241,26 @@ globalThis.ClaudiaLogs.Main = function () {
     ) {
       turnGroups = ClaudiaLogs.Derive.conversationTurnGroupsForExpanded(evs, getFlat);
     }
-    var full = '<div class="sum-full-log">';
-    if (turnGroups && turnGroups.length > 1) {
-      for (var tgi = 0; tgi < turnGroups.length; tgi++) {
-        var tg = turnGroups[tgi];
-        full +=
-          '<div class="sum-conv-turn"' +
-          (tg.turnIndex != null ? ' data-turn-index="' + escapeHtml(String(tg.turnIndex)) + '"' : "") +
-          ">" +
-          '<div class="sum-section-label sum-section-label--conv-turn">' +
-          escapeHtml(tg.label) +
-          "</div><ul>";
-        for (var ti2 = tg.events.length - 1; ti2 >= 0; ti2--) {
-          var evT = tg.events[ti2];
-          full += '<li class="sum-ev-item">' + conversationFullLogLineHtml(evT) + "</li>";
-        }
-        full += "</ul></div>";
-      }
-    } else {
-      full += "<ul>";
-      for (var u = evs.length - 1; u >= 0; u--) {
-        var ev2 = evs[u];
-        full += '<li class="sum-ev-item">' + conversationFullLogLineHtml(ev2) + "</li>";
-      }
-      full += "</ul>";
-    }
-    full += "</div>";
+    var cardKey =
+      Array.isArray(g.cids) && g.cids.length > 1
+        ? g.pid + "\0" + g.cids.slice().sort().join("\0")
+        : g.pid + "\0" + g.cid;
+    var convScope = strHash(cardKey);
+    var scrollTbodyId = "conv-log-" + convScope;
+    var tbodyInner = sumEvlogBuildTbodyFromConvEvents(evs, turnGroups, convScope);
+    var mc = sumEvlogCountWarnFailFromEntries(evs);
     var servicesStrip = serviceStripHtml(evs);
+    var full =
+      '<div class="sum-full-log sum-full-log--evlog">' +
+      sumEvlogPanelHtml({
+        scrollTbodyId: scrollTbodyId,
+        warnN: mc.warn,
+        failN: mc.fail,
+        tbodyInnerHtml: tbodyInner,
+        title: "Full event log",
+        titleRightHtml: servicesStrip || ""
+      }) +
+      "</div>";
     var contextStrip = SHOW_CONV_EXPANDED_CONTEXT_STRIP ? contextGrowthStripHtml(evs) : "";
     return (
       '<div class="sum-body">' +
@@ -3692,10 +4271,6 @@ globalThis.ClaudiaLogs.Main = function () {
       mini +
       (contextStrip ? '<div class="sum-section-label">Context</div>' + contextStrip : "") +
       ingestBlock +
-      '<div class="sum-conv-full-log-head">' +
-      '<div class="sum-section-label">Full event log</div>' +
-      (servicesStrip ? '<div class="sum-conv-services-after-log-hdr">' + servicesStrip + "</div>" : "") +
-      "</div>" +
       full +
       "</div>"
     );
@@ -4321,60 +4896,27 @@ globalThis.ClaudiaLogs.Main = function () {
         escapeHtml(String(err2)) +
         "</strong></div></div>";
     }
-    var gwFullLogToolbar = "";
-    if (name === "gateway") {
-      gwFullLogToolbar =
-        '<div class="sum-full-log-toolbar sum-full-log-toolbar--gateway" role="toolbar" aria-label="Full event log view">' +
-        '<span class="sum-full-log-toolbar-title">Log view</span>' +
-        '<div class="sum-full-log-toolbar-actions">' +
-        '<label class="sum-full-log-toolbar-label">' +
-        '<input type="checkbox"' +
-        (gatewayPanelShowProbes ? " checked" : "") +
-        ' onchange="if(window.__claudiaToggleGatewayProbes)window.__claudiaToggleGatewayProbes(this.checked)"/>' +
-        "<span>Show probe HTTP rows (/health, /status, logs API…)</span>" +
-        "</label>" +
-        "</div>" +
-        "</div>";
-    }
-    var fullLogClass = isBifrost ? "sum-full-log sum-full-log--bifrost" : "sum-full-log";
-    var full = '<div class="' + fullLogClass + '"><ul>';
-    for (var u = arr.length - 1; u >= 0; u--) {
-      var ent2 = arr[u];
-      if (
-        name === "gateway" &&
-        !gatewayPanelShowProbes &&
-        globalThis.ClaudiaLogs &&
-        ClaudiaLogs.Derive &&
-        typeof ClaudiaLogs.Derive.gatewayPanelHideRow === "function" &&
-        ClaudiaLogs.Derive.gatewayPanelHideRow(ent2, function (p) { return getFlat(p); })
-      ) {
-        continue;
-      }
-      var ev2 = { parsed: ent2.parsed, text: ent2.text, ts: ent2.ts, source: ent2.source };
-      if (isBifrost) {
-        full +=
-          '<li class="sum-ev-item">' +
-          logSummaryHtml(ev2, null, {}) +
-          "</li>";
-      } else {
-        var bd2 = badgeForServicePanel(name, ev2);
-        full +=
-          '<li class="sum-ev-item">' +
-          logSummaryHtml(
-            ev2,
-            bd2,
-            name === "indexer"
-              ? { suppressIndexerBadge: true }
-              : name === "qdrant"
-                ? { suppressQdrantBadge: true }
-                : name === "gateway"
-                  ? { suppressGatewayBadge: true }
-                  : undefined
-          ) +
-          "</li>";
-      }
-    }
-    full += "</ul></div>";
+    var fullLogClass = isBifrost
+      ? "sum-full-log sum-full-log--bifrost sum-full-log--evlog"
+      : "sum-full-log sum-full-log--evlog";
+    var scrollTbodyId = "svc-log-" + strHash(name);
+    var cardScope = strHash("svc:" + name);
+    var visEnt = sumEvlogVisibleEntriesForService(name, arr, name === "gateway");
+    var mc = sumEvlogCountWarnFailFromEntries(visEnt);
+    var tbodyInner = sumEvlogBuildTbodyFromServiceEntries(name, arr, {
+      cardScope: cardScope,
+      filterGatewayProbe: name === "gateway"
+    });
+    var full =
+      '<div class="' + fullLogClass + '">' +
+      sumEvlogPanelHtml({
+        scrollTbodyId: scrollTbodyId,
+        warnN: mc.warn,
+        failN: mc.fail,
+        tbodyInnerHtml: tbodyInner,
+        title: "Full event log"
+      }) +
+      "</div>";
     return (
       '<div class="sum-body">' +
       timelineBlock +
@@ -4382,8 +4924,6 @@ globalThis.ClaudiaLogs.Main = function () {
       indexerSummaryKv +
       aggregateIndexerProgressBlock +
       mini +
-      '<div class="sum-section-label">Full event log</div>' +
-      gwFullLogToolbar +
       full +
       "</div>"
     );
@@ -4684,29 +5224,37 @@ globalThis.ClaudiaLogs.Main = function () {
       ? '<div class="sum-section-label">Recently evaluated files</div>' + recentFiles
       : "";
     var fullId = "ix-full-" + strHash(run.id);
-    var full = '<div class="sum-full-log" id="' + escapeHtml(fullId) + '"><ul>';
+    var ixScope = strHash("ixrun:" + run.id);
+    var tbodyInner;
+    var mc;
     if (!evsFull.length) {
-      full +=
-        '<li class="sum-ev-item muted">No scope-specific lines in the loaded window (shared lines appear under Services → Indexer).</li>';
+      tbodyInner =
+        '<tr class="sum-evlog__row"><td colspan="3" class="muted">No scope-specific lines in the loaded window (shared lines appear under Services → Indexer).</td></tr>';
+      mc = { warn: 0, fail: 0 };
     } else {
-      for (var u = evsFull.length - 1; u >= 0; u--) {
-        var ent2 = evsFull[u];
-        var ev2 = { parsed: ent2.parsed, text: ent2.text, ts: ent2.ts, source: ent2.source };
-        var bd2 = badgeForIndexerRunLine(ent2);
-        full +=
-          '<li class="sum-ev-item">' +
-          logSummaryHtml(ev2, bd2, { suppressIndexerBadge: true }) +
-          "</li>";
-      }
+      tbodyInner = sumEvlogBuildTbodyFromServiceEntries("indexer", evsFull, {
+        cardScope: ixScope,
+        filterGatewayProbe: false,
+        indexerRunLine: true
+      });
+      mc = sumEvlogCountWarnFailFromEntries(evsFull);
     }
-    full += "</ul></div>";
+    var full =
+      '<div class="sum-full-log sum-full-log--evlog">' +
+      sumEvlogPanelHtml({
+        scrollTbodyId: fullId,
+        warnN: mc.warn,
+        failN: mc.fail,
+        tbodyInnerHtml: tbodyInner,
+        title: "Full event log"
+      }) +
+      "</div>";
     return (
       '<div class="sum-body">' +
       '<div class="sum-section-label">Summary</div>' +
       summaryRows +
       afterSummary +
       recentSection +
-      '<div class="sum-section-label">Full event log</div>' +
       full +
       "</div>"
     );
@@ -6644,6 +7192,473 @@ globalThis.ClaudiaLogs.Main = function () {
     esRef: { value: es },
     pollTimerRef: { value: pollTimer }
   };
+
+  (function wireSummarizedEvlogPanels() {
+    if (globalThis.__claudiaLogsSumEvlogWired) return;
+    globalThis.__claudiaLogsSumEvlogWired = true;
+    var searchTimers = typeof WeakMap !== "undefined" ? new WeakMap() : null;
+    /** Pixels from tbody bottom to treat as "stuck to tail" when summarized panel is rebuilt. */
+    var SUM_EVLOG_TB_TAIL_SLACK = 6;
+
+    globalThis.sumEvlogCapturePanelState = function (container) {
+      var out = {};
+      if (!container || !container.querySelectorAll) return out;
+      var roots = container.querySelectorAll("[data-sum-evlog-root]");
+      for (var i = 0; i < roots.length; i++) {
+        var root = roots[i];
+        var tb = root.querySelector("tbody[data-sum-evlog-tbody]");
+        if (!tb || !tb.id) continue;
+        var q = "";
+        try {
+          var inpCap = root.querySelector(".sum-evlog__search");
+          q = inpCap && inpCap.value != null ? String(inpCap.value) : "";
+        } catch (eInC) {}
+        var mode = "all";
+        try {
+          var stCap = root.querySelector("[data-evlog-filter-status]");
+          mode = stCap && stCap.value ? String(stCap.value) : "all";
+        } catch (eStC) {}
+        var selectedIds = [];
+        try {
+          var picked = tb.querySelectorAll("tr[data-evlog-id].sum-evlog__row--selected");
+          for (var pi = 0; pi < picked.length; pi++) {
+            var did = picked[pi].getAttribute("data-evlog-id");
+            if (did) selectedIds.push(did);
+          }
+        } catch (ePk) {}
+        var anchorId = null;
+        try {
+          if (root._sumEvlogAnchor != null && root._sumEvlogAnchor >= 0) {
+            var rowsA = tb.querySelectorAll("tr[data-evlog-id]");
+            var ar = rowsA[root._sumEvlogAnchor];
+            if (ar) anchorId = ar.getAttribute("data-evlog-id");
+          }
+        } catch (eAnc) {}
+        var st = tb.scrollTop;
+        var sh = tb.scrollHeight;
+        var ch = tb.clientHeight;
+        var nearBottom = sh - st - ch <= SUM_EVLOG_TB_TAIL_SLACK;
+        out[tb.id] = {
+          q: q,
+          mode: mode,
+          selectedIds: selectedIds,
+          anchorId: anchorId,
+          scrollTop: st,
+          nearBottom: nearBottom
+        };
+      }
+      return out;
+    };
+
+    globalThis.sumEvlogApplyPanelState = function (container, saved, opts) {
+      opts = opts || {};
+      var scrollOnly = !!opts.scrollOnly;
+      if (!container || !saved || typeof saved !== "object") return;
+      var keys = Object.keys(saved);
+      for (var ki = 0; ki < keys.length; ki++) {
+        var tid = keys[ki];
+        var pack = saved[tid];
+        if (!pack || typeof pack !== "object") continue;
+        var tb = document.getElementById(tid);
+        /* Boolean attribute `data-sum-evlog-tbody` has no value; getAttribute returns "" which is falsy. */
+        if (!tb || !tb.hasAttribute || !tb.hasAttribute("data-sum-evlog-tbody")) {
+          continue;
+        }
+        if (!container.contains(tb)) {
+          continue;
+        }
+        var root = tb.closest("[data-sum-evlog-root]");
+        if (!root) continue;
+
+        if (scrollOnly) {
+          var maxSo = Math.max(0, tb.scrollHeight - tb.clientHeight);
+          if (pack.nearBottom) {
+            tb.scrollTop = maxSo;
+          } else {
+            var wantSo = Number(pack.scrollTop);
+            if (isNaN(wantSo)) wantSo = 0;
+            tb.scrollTop = Math.min(wantSo, maxSo);
+          }
+          continue;
+        }
+
+        var inpAp = root.querySelector(".sum-evlog__search");
+        if (inpAp) inpAp.value = pack.q != null ? String(pack.q) : "";
+        var stSelAp = root.querySelector("[data-evlog-filter-status]");
+        if (stSelAp && pack.mode) stSelAp.value = String(pack.mode);
+        sumEvlogRebuildRoot(root);
+
+        var selIds = pack.selectedIds;
+        if (selIds && selIds.length) {
+          var allR = tb.querySelectorAll("tr[data-evlog-id]");
+          for (var ui = 0; ui < allR.length; ui++) {
+            allR[ui].classList.remove("sum-evlog__row--selected");
+          }
+          for (var sj = 0; sj < selIds.length; sj++) {
+            var wantId = selIds[sj];
+            for (var sk = 0; sk < allR.length; sk++) {
+              if (allR[sk].getAttribute("data-evlog-id") === wantId) {
+                allR[sk].classList.add("sum-evlog__row--selected");
+                break;
+              }
+            }
+          }
+        } else {
+          var prevSel = tb.querySelectorAll("tr[data-evlog-id].sum-evlog__row--selected");
+          for (var u2 = 0; u2 < prevSel.length; u2++) prevSel[u2].classList.remove("sum-evlog__row--selected");
+        }
+
+        var aid = pack.anchorId;
+        if (aid != null && String(aid) !== "") {
+          var rows2 = tb.querySelectorAll("tr[data-evlog-id]");
+          root._sumEvlogAnchor = null;
+          for (var ax = 0; ax < rows2.length; ax++) {
+            if (rows2[ax].getAttribute("data-evlog-id") === aid) {
+              root._sumEvlogAnchor = ax;
+              break;
+            }
+          }
+        } else {
+          root._sumEvlogAnchor = null;
+        }
+
+        sumEvlogSyncFooter(root);
+
+        if (opts.scroll !== false) {
+          var maxT2 = Math.max(0, tb.scrollHeight - tb.clientHeight);
+          if (pack.nearBottom) {
+            tb.scrollTop = maxT2;
+          } else {
+            var want2 = Number(pack.scrollTop);
+            if (isNaN(want2)) want2 = 0;
+            tb.scrollTop = Math.min(want2, maxT2);
+          }
+        }
+      }
+    };
+    function parseHttpAttr(attr) {
+      if (attr == null || String(attr).trim() === "") return null;
+      var n = parseInt(String(attr).trim(), 10);
+      return isNaN(n) ? null : n;
+    }
+    function rowTimespec(tr) {
+      var tEl = tr.querySelector("time[datetime]");
+      if (!tEl || !tEl.getAttribute("datetime")) return NaN;
+      var ms = Date.parse(tEl.getAttribute("datetime"));
+      return isNaN(ms) ? NaN : ms;
+    }
+    function rowSearchBlob(tr) {
+      var blob = "";
+      try {
+        var t = tr.querySelector("time");
+        if (t) blob += " " + t.textContent.trim();
+        var iso = tr.querySelector("time[datetime]");
+        if (iso && iso.getAttribute("datetime")) blob += " " + iso.getAttribute("datetime");
+        var msg = tr.querySelector(".sum-evlog__cell--msg");
+        if (msg) blob += " " + msg.textContent.trim();
+        var stat = tr.querySelector(".sum-evlog__cell--status");
+        if (stat) blob += " " + stat.textContent.trim();
+        var lk = (tr.getAttribute("data-evlog-level") || "").trim().toLowerCase();
+        blob += " " + lk;
+      } catch (e0) {}
+      return blob.toLowerCase().replace(/\s+/g, " ").trim();
+    }
+    function rowPassesStatus(tr, mode) {
+      var http = parseHttpAttr(tr.getAttribute("data-evlog-http"));
+      var lk = (tr.getAttribute("data-evlog-level") || "").trim();
+      if (mode === "all") return true;
+      if (mode === "warnings") return sumEvlogIsWarnish(lk, http);
+      if (mode === "errors") return sumEvlogIsFailish(lk, http);
+      return true;
+    }
+    function ensureSearchEmptyRow(tbody) {
+      var existing = tbody.querySelector("[data-sum-evlog-search-empty]");
+      if (existing) return existing;
+      var tr = document.createElement("tr");
+      tr.className = "sum-evlog__row sum-evlog__search-empty-row";
+      tr.setAttribute("data-sum-evlog-search-empty", "");
+      tr.setAttribute("hidden", "");
+      tr.setAttribute("role", "status");
+      var td = document.createElement("td");
+      td.className = "sum-evlog__search-empty-cell";
+      td.colSpan = 3;
+      td.appendChild(document.createTextNode("No matching entries for your search. "));
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "sum-evlog__clear-inline-search";
+      btn.setAttribute("data-sum-evlog-clear-search", "");
+      btn.appendChild(document.createTextNode("Clear search"));
+      td.appendChild(btn);
+      tr.appendChild(td);
+      tbody.insertBefore(tr, tbody.firstChild);
+      return tr;
+    }
+    function sumEvlogSyncFooter(root) {
+      var foot = root.querySelector("[data-sum-evlog-oldest]");
+      var tbody = root.querySelector("[data-sum-evlog-tbody]");
+      if (!foot || !tbody) return;
+      var picked = tbody.querySelector(
+        "tr[data-evlog-id].sum-evlog__row--selected:not(.sum-evlog__row--hidden)"
+      );
+      if (picked) {
+        var msSel = rowTimespec(picked);
+        var absSel = formatLogDateTimeLocal(msSel);
+        var relSel = formatLogRelativeAgo(msSel);
+        var tEl = picked.querySelector("time[datetime]");
+        var dtAttr = tEl && tEl.getAttribute("datetime") ? tEl.getAttribute("datetime") : "";
+        if (!dtAttr && isFinite(msSel)) {
+          try {
+            dtAttr = new Date(msSel).toISOString();
+          } catch (eIso) {
+            dtAttr = "";
+          }
+        }
+        var timeOpen = dtAttr
+          ? '<time datetime="' + escapeHtml(dtAttr) + '" title="' + escapeHtml(relSel) + '">'
+          : '<time title="' + escapeHtml(relSel) + '">';
+        foot.innerHTML =
+          "Selected entry: " +
+          timeOpen +
+          escapeHtml(absSel) +
+          "</time> <span class=\"sum-evlog__footer-rel\">(" +
+          escapeHtml(relSel) +
+          ")</span>";
+        return;
+      }
+      var oldestMs = root._sumEvlogOldestVisible;
+      foot.innerHTML =
+        "Oldest <strong>visible</strong> entry: <time title=\"" +
+        escapeHtml(formatLogRelativeAgo(oldestMs)) +
+        "\">" +
+        escapeHtml(formatLogDateTimeLocal(isFinite(oldestMs) ? oldestMs : null)) +
+        "</time>";
+    }
+    function sumEvlogRebuildRoot(root) {
+      var tbody = root.querySelector("[data-sum-evlog-tbody]");
+      if (!tbody) return;
+      var select = root.querySelector("[data-evlog-filter-status]");
+      var mode = select && select.value ? select.value : "all";
+      var q = "";
+      try {
+        var inp = root.querySelector(".sum-evlog__search");
+        q = inp && inp.value ? String(inp.value).trim().toLowerCase() : "";
+      } catch (eIn) {}
+      var rows = Array.prototype.slice.call(tbody.querySelectorAll("tr[data-evlog-id]"), 0);
+      var oldest = Infinity;
+      var visibleCount = 0;
+      var i;
+      for (i = 0; i < rows.length; i++) {
+        var tr = rows[i];
+        var show =
+          rowPassesStatus(tr, mode) &&
+          (q === "" || rowSearchBlob(tr).indexOf(q) !== -1);
+        tr.classList.toggle("sum-evlog__row--hidden", !show);
+        if (show) {
+          visibleCount++;
+          var ts = rowTimespec(tr);
+          if (isFinite(ts) && ts < oldest) oldest = ts;
+        }
+      }
+      var searchEmptyRow = tbody.querySelector("[data-sum-evlog-search-empty]");
+      if (searchEmptyRow) {
+        searchEmptyRow.hidden = !(q !== "" && visibleCount === 0);
+      }
+      root._sumEvlogOldestVisible = oldest === Infinity ? NaN : oldest;
+      sumEvlogSyncFooter(root);
+    }
+    function sumEvlogCopyFromRoot(root) {
+      var tbody = root.querySelector("[data-sum-evlog-tbody]");
+      var toast = root.querySelector("[data-sum-evlog-toast]");
+      if (!tbody) return;
+      var lines = [];
+      var picked = tbody.querySelectorAll("tr[data-evlog-id].sum-evlog__row--selected");
+      var allVisible = false;
+      if (picked.length === 0) {
+        picked = tbody.querySelectorAll("tr[data-evlog-id]:not(.sum-evlog__row--hidden)");
+        allVisible = true;
+      }
+      for (var i = 0; i < picked.length; i++) {
+        var tr = picked[i];
+        var t = tr.querySelector("time");
+        var timeStr = t ? t.textContent.trim() : "";
+        var msg = tr.querySelector(".sum-evlog__cell--msg");
+        var msgStr = msg ? msg.textContent.trim().replace(/\s+/g, " ") : "";
+        var stat = tr.querySelector(".sum-evlog__cell--status");
+        var statStr = stat ? stat.textContent.trim().replace(/\s+/g, " ") : "";
+        lines.push(timeStr + "\t" + msgStr + "\t" + statStr);
+      }
+      var text = lines.join("\n");
+      function showToast(ok, msg) {
+        if (!toast) return;
+        toast.classList.toggle("sum-evlog__toast--error", !ok);
+        toast.textContent = msg;
+      }
+      if (!text) {
+        showToast(false, allVisible ? "No visible rows." : "No rows selected.");
+        return;
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(
+          function () {
+            var suffix = allVisible ? " visible line(s)." : " line(s).";
+            showToast(true, "Copied " + lines.length + suffix);
+          },
+          function () {
+            showToast(false, "Clipboard blocked.");
+          }
+        );
+      } else {
+        showToast(false, "Clipboard API unavailable in this browser.");
+      }
+    }
+    function sumEvlogHydrateRoot(root) {
+      var tbody = root.querySelector("[data-sum-evlog-tbody]");
+      if (!tbody) return;
+      ensureSearchEmptyRow(tbody);
+      sumEvlogRebuildRoot(root);
+    }
+    globalThis.sumEvlogHydrateAllIn = function (container) {
+      if (!container || !container.querySelectorAll) return;
+      var roots = container.querySelectorAll("[data-sum-evlog-root]");
+      for (var r = 0; r < roots.length; r++) {
+        sumEvlogHydrateRoot(roots[r]);
+      }
+    };
+    function debounceSearch(root) {
+      if (searchTimers && searchTimers.get) {
+        var prev = searchTimers.get(root);
+        if (prev) window.clearTimeout(prev);
+        searchTimers.set(
+          root,
+          window.setTimeout(function () {
+            searchTimers.delete(root);
+            sumEvlogRebuildRoot(root);
+          }, 120)
+        );
+      } else {
+        window.setTimeout(function () {
+          sumEvlogRebuildRoot(root);
+        }, 120);
+      }
+    }
+    document.body.addEventListener(
+      "input",
+      function (ev) {
+        var el = ev.target;
+        if (!el || !el.classList || !el.classList.contains("sum-evlog__search")) return;
+        var root = el.closest("[data-sum-evlog-root]");
+        if (!root || !root.closest("#panel-summarized")) return;
+        debounceSearch(root);
+      },
+      false
+    );
+    document.body.addEventListener(
+      "change",
+      function (ev) {
+        var el = ev.target;
+        if (!el || !el.closest) return;
+        var root = el.closest("[data-sum-evlog-root]");
+        if (!root || !root.closest("#panel-summarized")) return;
+        if (el.matches("[data-evlog-filter-status]")) {
+          sumEvlogRebuildRoot(root);
+        }
+      },
+      false
+    );
+    document.body.addEventListener(
+      "click",
+      function (ev) {
+        var t = ev.target;
+        if (!t || typeof t.closest !== "function") return;
+        var root = t.closest("[data-sum-evlog-root]");
+        if (!root || !root.closest("#panel-summarized")) return;
+        if (t.closest(".sum-evlog__copy-btn")) {
+          ev.preventDefault();
+          sumEvlogCopyFromRoot(root);
+          return;
+        }
+        var clr = t.closest("[data-sum-evlog-clear-search]");
+        if (clr) {
+          ev.preventDefault();
+          var inp = root.querySelector(".sum-evlog__search");
+          if (inp) inp.value = "";
+          sumEvlogRebuildRoot(root);
+          if (inp) inp.focus();
+          return;
+        }
+        var tr = t.closest("tr[data-evlog-id]");
+        if (!tr || !root.contains(tr)) return;
+        var tbody = tr.parentNode;
+        if (!tbody || !tbody.hasAttribute || !tbody.hasAttribute("data-sum-evlog-tbody")) return;
+        var rows = Array.prototype.slice.call(tbody.querySelectorAll("tr[data-evlog-id]"), 0);
+        function rowIndex(rowsArr, trg) {
+          for (var ri = 0; ri < rowsArr.length; ri++) {
+            if (rowsArr[ri] === trg) return ri;
+          }
+          return -1;
+        }
+        function clearSel() {
+          var sel = tbody.querySelectorAll(".sum-evlog__row--selected");
+          for (var si = 0; si < sel.length; si++) sel[si].classList.remove("sum-evlog__row--selected");
+        }
+        function setRange(lo, hi, on) {
+          var j;
+          for (j = lo; j <= hi && j < rows.length; j++) {
+            if (on) rows[j].classList.add("sum-evlog__row--selected");
+            else rows[j].classList.remove("sum-evlog__row--selected");
+          }
+        }
+        var idx = rowIndex(rows, tr);
+        if (idx < 0) return;
+        if (ev.shiftKey && root._sumEvlogAnchor != null && root._sumEvlogAnchor >= 0) {
+          clearSel();
+          var a = root._sumEvlogAnchor;
+          setRange(Math.min(a, idx), Math.max(a, idx), true);
+          sumEvlogSyncFooter(root);
+          return;
+        }
+        if (ev.ctrlKey || ev.metaKey) {
+          tr.classList.toggle("sum-evlog__row--selected");
+          root._sumEvlogAnchor = idx;
+          sumEvlogSyncFooter(root);
+          return;
+        }
+        clearSel();
+        tr.classList.add("sum-evlog__row--selected");
+        root._sumEvlogAnchor = idx;
+        sumEvlogSyncFooter(root);
+      },
+      false
+    );
+    document.body.addEventListener(
+      "pointerdown",
+      function (ev) {
+        var t = ev.target;
+        if (!t || typeof t.closest !== "function") return;
+        var root = t.closest("[data-sum-evlog-root]");
+        if (!root || !root.closest("#panel-summarized")) return;
+        sumEvlogPointerSuppressedUntil = Date.now() + 480;
+      },
+      true
+    );
+    document.body.addEventListener(
+      "focusout",
+      function (ev) {
+        var t = ev.target;
+        if (!t || !t.closest) return;
+        if (!t.closest("#panel-summarized")) return;
+        var isSearch = t.classList && t.classList.contains("sum-evlog__search");
+        var isStat = t.matches && t.matches("[data-evlog-filter-status]");
+        if (!isSearch && !isStat) return;
+        if (sumEvlogUiDeferTimer) {
+          clearTimeout(sumEvlogUiDeferTimer);
+          sumEvlogUiDeferTimer = null;
+        }
+        if (viewMode === "summarized") scheduleStoryRebuild();
+      },
+      true
+    );
+  })();
 
   (function wireWorkspaceDraftUi() {
     if (globalThis.__claudiaLogsWorkspaceDraftUiWired) return;

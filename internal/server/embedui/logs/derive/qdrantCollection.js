@@ -64,12 +64,14 @@ function qdrantCollectionDisplay(collRaw, resolveColl) {
   return r;
 }
 
-function qdrantOperatorLine(flat, resolveColl) {
+function qdrantOperatorLine(flat, resolveColl, opts) {
+  opts = opts || {};
+  var omitHttpInMsg = opts.forEventLog === true;
   if (!flat || typeof flat !== "object") return "—";
   var msg = String(flat.msg != null ? flat.msg : "").toLowerCase();
   var coll = qdrantCollectionDisplay(flat.collection != null ? flat.collection : "", resolveColl);
   var st = flat.http_status != null ? Number(flat.http_status) : NaN;
-  var stLab = !isNaN(st) ? String(Math.round(st)) : "";
+  var stLab = !omitHttpInMsg && !isNaN(st) ? String(Math.round(st)) : "";
   var prog = flat.progress_detail != null ? String(flat.progress_detail) : "";
   var ver = flat.qdrant_version != null ? String(flat.qdrant_version).trim() : "";
 

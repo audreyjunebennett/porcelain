@@ -2,7 +2,7 @@
  * Pure metrics derivation for the bifrost service card.
  *
  * Exports:
- * - ClaudiaLogs.Derive.bifrostOperatorLine(flat)
+ * - ClaudiaLogs.Derive.bifrostOperatorLine(flat, opts?)
  * - ClaudiaLogs.Derive.bifrostEntryHasRateLimit(ent, getFlat)
  * - ClaudiaLogs.Derive.bifrostSliceSinceLastBanner(arr, getFlat)
  * - ClaudiaLogs.Derive.bifrostCardModel(arr, getFlat)
@@ -44,7 +44,9 @@ function bifrostTrimDetail(flat, maxLen) {
   return t.length > maxLen ? t.slice(0, maxLen - 1) + "…" : t;
 }
 
-function bifrostHttpInboundLine(flat, rateLimit) {
+function bifrostHttpInboundLine(flat, rateLimit, opts) {
+  opts = opts || {};
+  var omitStatus = opts.forEventLog === true;
   var meth = flat.http_method != null ? String(flat.http_method).trim() : "?";
   var tgt = flat.http_target != null ? flat.http_target : flat.httpTarget;
   var path = bifrostPathFromTarget(tgt);
@@ -56,7 +58,7 @@ function bifrostHttpInboundLine(flat, rateLimit) {
   var bits = [];
   bits.push(rateLimit ? "Rate limited" : "Inbound");
   bits.push(meth + " " + path);
-  bits.push("→ " + st);
+  if (!omitStatus) bits.push("→ " + st);
   if (!isNaN(ms) && ms >= 0) bits.push(Math.round(ms) + " ms");
   return bits.join(" · ");
 }
@@ -65,7 +67,9 @@ function bifrostHttpInboundLine(flat, rateLimit) {
  * One-line operator headline for summarized logs and detail headlines.
  * Returns "" when this row is not part of the BiFrost / relay vocabulary.
  */
-function bifrostOperatorLine(flat) {
+function bifrostOperatorLine(flat, opts) {
+  opts = opts || {};
+  var omitHttpInMsg = opts.forEventLog === true;
   if (!flat || typeof flat !== "object") return "";
   var msg = String(flat.msg != null ? flat.msg : flat.message != null ? flat.message : "").trim();
   if (!msg) return "";
@@ -88,8 +92,8 @@ function bifrostOperatorLine(flat) {
     ml === "skipping upstream model (provider limits)";
   if (!isBifrostSlug && !isRelayMsg) return "";
 
-  if (msg === "bifrost.http.access") return bifrostHttpInboundLine(flat, false);
-  if (msg === "bifrost.rate_limit") return bifrostHttpInboundLine(flat, true);
+  if (msg === "bifrost.http.access") return bifrostHttpInboundLine(flat, false, opts);
+  if (msg === "bifrost.rate_limit") return bifrostHttpInboundLine(flat, true, opts);
 
   if (msg === "chat.bifrost.available_models") {
     var nAvail = Number(flat.catalog_model_count != null ? flat.catalog_model_count : flat.catalogModelCount);
@@ -111,7 +115,7 @@ function bifrostOperatorLine(flat) {
   if (msg === "chat.bifrost.response" || ml === "upstream chat response") {
     var bitsRes = ["Relay response"];
     var scR = Number(flat.statusCode != null ? flat.statusCode : flat.status_code);
-    if (!isNaN(scR) && scR > 0) bitsRes.push("HTTP " + scR);
+    if (!omitHttpInMsg && !isNaN(scR) && scR > 0) bitsRes.push("HTTP " + scR);
     var ut = usageTokensFromFlat(flat);
     if (!isNaN(ut)) bitsRes.push(ut + " usage tok");
     var rb = Number(flat.responseBytes != null ? flat.responseBytes : flat.response_bytes);
@@ -131,7 +135,7 @@ function bifrostOperatorLine(flat) {
     var modFb = bifrostShortTailModel(flat.upstreamModel);
     if (modFb) bitsFb.push(modFb);
     var stFb = Number(flat.status != null ? flat.status : flat.statusCode != null ? flat.statusCode : NaN);
-    if (!isNaN(stFb) && stFb > 0) bitsFb.push("HTTP " + stFb);
+    if (!omitHttpInMsg && !isNaN(stFb) && stFb > 0) bitsFb.push("HTTP " + stFb);
     var wr = flat.willRetry;
     if (wr === false) bitsFb.push("no retry");
     return bitsFb.join(" · ");
@@ -155,7 +159,7 @@ function bifrostOperatorLine(flat) {
     var chainR = Number(flat.chainLen);
     if (!isNaN(attR) && !isNaN(chainR) && chainR > 0) bitsVr.push("attempt " + attR + "/" + chainR);
     var scV = Number(flat.statusCode != null ? flat.statusCode : flat.status);
-    if (!isNaN(scV) && scV > 0) bitsVr.push("HTTP " + scV);
+    if (!omitHttpInMsg && !isNaN(scV) && scV > 0) bitsVr.push("HTTP " + scV);
     return bitsVr.join(" · ");
   }
 
