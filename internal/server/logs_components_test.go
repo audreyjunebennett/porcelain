@@ -1017,9 +1017,9 @@ func TestLogsDerive_qdrantOperatorLine_forEventLog(t *testing.T) {
 		t.Fatal("missing qdrantOperatorLine")
 	}
 	flat := map[string]any{
-		"msg":          "qdrant.http.collection_meta",
-		"collection":   "lynn:rimworld",
-		"http_status":  200,
+		"msg":         "qdrant.http.collection_meta",
+		"collection":  "lynn:rimworld",
+		"http_status": 200,
 	}
 	v, err := fn(goja.Undefined(), vm.ToValue(flat), goja.Undefined(), goja.Undefined())
 	if err != nil {

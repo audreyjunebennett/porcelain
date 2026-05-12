@@ -508,8 +508,8 @@ func (a *adminUI) handleRoutingPolicySavePOST(w http.ResponseWriter, r *http.Req
 	a.rt.Sync()
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"ok":                    true,
-		"saved":                 true,
+		"ok":                  true,
+		"saved":               true,
 		"routing_policy_yaml": strings.TrimSpace(string(rb)),
 	})
 }
@@ -589,8 +589,8 @@ func (a *adminUI) handleRoutingFallbackChainSavePOST(w http.ResponseWriter, r *h
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"ok":              true,
-		"saved":           true,
+		"ok":             true,
+		"saved":          true,
 		"fallback_chain": fb,
 	})
 }
