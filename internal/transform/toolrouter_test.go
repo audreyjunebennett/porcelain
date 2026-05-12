@@ -51,7 +51,10 @@ func TestApplyToolRouter_disabled_noop(t *testing.T) {
 	body := map[string]json.RawMessage{
 		"tools": json.RawMessage(`[{"type":"function","function":{"name":"x","description":""}}]`),
 	}
-	out := ApplyToolRouter(context.Background(), body, Config{Enabled: false, RouterModels: []string{"m"}})
+	out, sum := ApplyToolRouter(context.Background(), body, Config{Enabled: false, RouterModels: []string{"m"}})
+	if sum.Ran {
+		t.Fatal("expected router not to run when disabled")
+	}
 	if out["tools"] == nil || string(out["tools"]) != string(body["tools"]) {
 		t.Fatal("expected unchanged")
 	}

@@ -9,6 +9,27 @@ import (
 	"testing"
 )
 
+func TestResolve_AllowEmptyRoots(t *testing.T) {
+	env := func(k string) string {
+		if k == EnvGatewayToken {
+			return "tok"
+		}
+		return ""
+	}
+	fc := FileConfig{GatewayURL: "http://127.0.0.1:3000"}
+	r, err := Resolve(fc, env, Overrides{AllowEmptyRoots: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Roots) != 0 {
+		t.Fatalf("expected zero roots, got %d", len(r.Roots))
+	}
+	_, err = Resolve(fc, env, Overrides{})
+	if err == nil || !strings.Contains(err.Error(), "watch root") {
+		t.Fatalf("expected watch root error without AllowEmptyRoots, got %v", err)
+	}
+}
+
 func TestResolve_RequiresURLAndToken(t *testing.T) {
 	dir := t.TempDir()
 	env := func(string) string { return "" }
@@ -39,9 +60,15 @@ func TestResolve_SyncStateDefaultNextToExplicitConfig(t *testing.T) {
 		}
 		return ""
 	}
-	r, err := Resolve(fc, env, Overrides{ExplicitConfigPath: cfgFile})
+	r, err := Resolve(fc, env, Overrides{ExplicitConfigPath: cfgFile, AllowEmptyRoots: true})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if !r.SupervisedLayer {
+		t.Fatalf("SupervisedLayer: want true")
+	}
+	if len(r.Roots) != 0 {
+		t.Fatalf("supervised mode ignores YAML roots, got %d roots", len(r.Roots))
 	}
 	want := filepath.Join(sub, "indexer.sync-state.json")
 	if r.SyncStatePath != want {

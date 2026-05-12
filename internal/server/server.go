@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -17,6 +16,7 @@ import (
 	"github.com/lynn/claudia-gateway/internal/chat"
 	"github.com/lynn/claudia-gateway/internal/config"
 	"github.com/lynn/claudia-gateway/internal/conversationmerge"
+	"github.com/lynn/claudia-gateway/internal/conversationwitness"
 	"github.com/lynn/claudia-gateway/internal/platform"
 	"github.com/lynn/claudia-gateway/internal/platform/requestid"
 	"github.com/lynn/claudia-gateway/internal/rag"
@@ -182,46 +182,18 @@ func publicGatewayURL(res *config.Resolved, overlay *StatusOverlay) string {
 
 // mergedUpstreamModelStats returns merged model count (virtual + filtered upstream) and distinct provider
 // prefixes from upstream model ids, when the upstream /v1/models call succeeds.
+//
+// Thin wrapper over [buildCatalogSnapshot] that preserves the historical (count, providers, ok)
+// shape used by the gateway home page and `chat.bifrost.available_models` log emission. Side
+// effect: emits the slog line, matching the prior behavior. Prefer [RefreshAvailableModels]
+// when you also want the snapshot cached on the runtime.
 func mergedUpstreamModelStats(ctx context.Context, res *config.Resolved, apiKey string, timeout time.Duration, log *slog.Logger) (count int, providers []string, ok bool) {
-	if apiKey == "" || res == nil {
+	snap := buildCatalogSnapshot(ctx, res, apiKey, timeout, log)
+	emitAvailableModelsLog(snap, log)
+	if snap == nil || !snap.OK {
 		return 0, nil, false
 	}
-	_, body, fetchOK := upstream.FetchOpenAIModels(ctx, res.UpstreamBaseURL, apiKey, timeout, log)
-	if !fetchOK {
-		return 0, nil, false
-	}
-	var list map[string]any
-	if err := json.Unmarshal(body, &list); err != nil {
-		return 0, nil, false
-	}
-	data, _ := list["data"].([]any)
-	if data == nil {
-		data = []any{}
-	}
-	data = filterOpenAIModelDataByFreeTier(data, res)
-	provSet := map[string]struct{}{}
-	for _, raw := range data {
-		m, mOK := raw.(map[string]any)
-		if !mOK {
-			continue
-		}
-		id, _ := m["id"].(string)
-		prov := ""
-		if slash := strings.Index(id, "/"); slash > 0 {
-			prov = id[:slash]
-		} else if ob, ok := m["owned_by"].(string); ok {
-			prov = strings.TrimSpace(ob)
-		}
-		if prov != "" {
-			provSet[prov] = struct{}{}
-		}
-	}
-	out := make([]string, 0, len(provSet))
-	for p := range provSet {
-		out = append(out, p)
-	}
-	sort.Strings(out)
-	return 1 + len(data), out, true
+	return snap.CatalogModelCount, snap.Providers, true
 }
 
 var gatewayIndexTmpl = template.Must(template.New("gatewayIndex").Parse(`<!DOCTYPE html>
@@ -287,7 +259,7 @@ var gatewayIndexTmpl = template.Must(template.New("gatewayIndex").Parse(`<!DOCTY
     <dt>Qdrant (vector store)</dt>
     <dd><span class="{{.QdrantClass}}">{{.QdrantState}}</span> · <a href="{{.QdrantURL}}">{{.QdrantURL}}</a></dd>
     <dt>Indexer (supervised)</dt>
-    <dd>config: <span class="muted">{{.IndexerConfig}}</span> · worker: <span class="{{.IndexerWorkerClass}}">{{.IndexerWorker}}</span></dd>
+    <dd><span class="{{.IndexerWorkerClass}}">{{.IndexerWorker}}</span> · config: <span class="muted">{{.IndexerConfig}}</span></dd>
   </dl>
 
   <h2>Configuration</h2>
@@ -530,6 +502,13 @@ func NewMux(rt *Runtime, log *slog.Logger, overlay *StatusOverlay, ui *UIOptions
 		}
 		handleIndexerConfig(w, r, rt, log)
 	})
+	mux.HandleFunc("/v1/indexer/workspaces", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		handleIndexerWorkspaces(w, r, rt, log)
+	})
 	mux.HandleFunc("/v1/indexer/storage/health", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -643,6 +622,70 @@ func writeMergedModelsResponse(w http.ResponseWriter, ctx context.Context, res *
 	_ = json.NewEncoder(w).Encode(map[string]any{"object": "list", "data": out})
 }
 
+func emitConversationRequestWitness(routeLog *slog.Logger, res *config.Resolved, raw map[string]json.RawMessage) {
+	if routeLog == nil {
+		return
+	}
+	conversationwitness.LogRequestWitness(routeLog, raw)
+	if res == nil || !res.ShouldEmitPayloadSample() {
+		return
+	}
+	b, err := json.Marshal(raw)
+	if err != nil || len(b) == 0 {
+		return
+	}
+	conversationwitness.LogPayloadSample(routeLog, true, res.WitnessSampleMaxRunes(), "request", b)
+}
+
+func chatRouteLogger(log *slog.Logger, rid, cid, tenant string, turnIndex int) *slog.Logger {
+	if log == nil {
+		return nil
+	}
+	return log.With(
+		"request_id", rid,
+		"conversation_id", cid,
+		"service", "gateway",
+		"principal_id", tenant,
+		"turn_index", turnIndex,
+	)
+}
+
+func lifecycleErrorType(status int) string {
+	switch status {
+	case http.StatusBadRequest:
+		return "invalid_request"
+	case http.StatusUnauthorized:
+		return "invalid_api_key"
+	case http.StatusTooManyRequests:
+		return "gateway_provider_limits"
+	case http.StatusServiceUnavailable:
+		return "gateway_config"
+	default:
+		return "gateway_upstream"
+	}
+}
+
+func attachConversationDelivery(routeLog *slog.Logger, opts **chat.ProxyOpts) {
+	dfn := func(st int, stream bool, nb int64, elapsedMs int64) {
+		if routeLog == nil {
+			return
+		}
+		if st >= 200 && st < 300 {
+			routeLog.Info("conversation delivered", "msg", "conversation.delivered",
+				"statusCode", st, "stream", stream, "bytes", nb, "total_ms", elapsedMs,
+				"timeline_kind", "upstream")
+			return
+		}
+		routeLog.Warn("conversation errored", "msg", "conversation.errored",
+			"statusCode", st, "errorType", lifecycleErrorType(st), "timeline_kind", "upstream")
+	}
+	if *opts == nil {
+		*opts = &chat.ProxyOpts{OnChatDelivery: dfn}
+		return
+	}
+	(*opts).OnChatDelivery = dfn
+}
+
 func handleV1Chat(w http.ResponseWriter, r *http.Request, rt *Runtime, log *slog.Logger) {
 	rt.Sync()
 	res, tokStore, pol := rt.Snapshot()
@@ -681,6 +724,7 @@ func handleV1Chat(w http.ResponseWriter, r *http.Request, rt *Runtime, log *slog
 		})
 		return
 	}
+	flowStart := time.Now()
 
 	var stream bool
 	if s, ok := raw["stream"]; ok {
@@ -707,23 +751,7 @@ func handleV1Chat(w http.ResponseWriter, r *http.Request, rt *Runtime, log *slog
 	if rtDur < 5*time.Second {
 		rtDur = 5 * time.Second
 	}
-	tempLog := log
-	if tempLog != nil {
-		tempLog = log.With("request_id", rid, "service", "gateway", "principal_id", sess.TenantID)
-	}
-	raw = transform.ApplyToolRouter(ctx, raw, transform.Config{
-		Enabled:      res.ToolRouterEnabled && !skipToolRouter,
-		RouterModels: res.RouterModels,
-		Threshold:    th,
-		BaseURL:      res.UpstreamBaseURL,
-		APIKey:       apiKey,
-		HTTPTimeout:  rtDur,
-		Log:          tempLog,
-		OnAttempt: func(model string, err error) {
-			rt.NoteToolRouterAttempt(model, err)
-		},
-	})
-
+	headerCID := optionalConversationIDFromHeader(r)
 	proj := resolveProject(r.Header.Get(headerProject), res.RAG.DefaultProject)
 	flav := resolveFlavor(r.Header.Get(headerFlavor), res.RAG.DefaultFlavor)
 	lastUser := rag.LastUserText(raw["messages"])
@@ -733,13 +761,16 @@ func handleV1Chat(w http.ResponseWriter, r *http.Request, rt *Runtime, log *slog
 		mergeSvc = conversationmerge.NewService(res.ConversationMerge, ms.DB(), res.UpstreamBaseURL, apiKey, res.RAG, log)
 	}
 
-	headerCID := optionalConversationIDFromHeader(r)
 	incomingFP := strings.TrimSpace(r.Header.Get(headerRequestFingerprint))
 
 	var cid string
+	var cidSource string
+	var mergeTurn int
+
 	switch {
 	case headerCID != "":
 		cid = headerCID
+		cidSource = "header"
 	case mergeSvc != nil:
 		out, err := mergeSvc.Resolve(ctx, conversationmerge.ResolveInput{
 			TenantID:             sess.TenantID,
@@ -748,39 +779,94 @@ func handleV1Chat(w http.ResponseWriter, r *http.Request, rt *Runtime, log *slog
 			LastUserText:         lastUser,
 			IncomingFingerprint:  incomingFP,
 			ClientConversationID: "",
+			RequestID:            rid,
+			NextTurnIndex:        rt.NextChatTurnIndex,
 		})
 		if err != nil && log != nil {
-			log.Debug("conversation merge resolve failed", "err", err)
+			log.With("request_id", rid, "service", "gateway", "principal_id", sess.TenantID).
+				Debug("conversation merge resolve failed", "msg", "conversation.merge.resolve_failed", "err", err)
 		}
 		if len(out.DedupJSON) > 0 {
-			w.Header().Set(headerConversationID, out.ConversationID)
-			if fp := mergeSvc.RollingFingerprint(ctx, out.ConversationID); fp != "" {
+			cid = out.ConversationID
+			turnIdx := out.TurnIndex
+			if turnIdx <= 0 {
+				turnIdx = rt.NextChatTurnIndex(cid)
+			}
+			dedupLog := chatRouteLogger(log, rid, cid, sess.TenantID, turnIdx)
+			w.Header().Set(headerConversationID, cid)
+			if dedupLog != nil {
+				dedupLog.Info("conversation received", "msg", "conversation.received",
+					"clientModel", clientModel, "stream", stream, "tenant", sess.TenantID,
+					"project", proj, "flavor", flav, "cid_source", "merge", "timeline_kind", "upstream")
+				emitConversationRequestWitness(dedupLog, res, raw)
+			}
+			if fp := mergeSvc.RollingFingerprint(ctx, cid); fp != "" {
 				w.Header().Set(headerRollingFingerprint, fp)
 			}
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write(out.DedupJSON)
+			n, _ := w.Write(out.DedupJSON)
+			if dedupLog != nil {
+				conversationwitness.LogResponseWitness(dedupLog, false, out.DedupJSON)
+				if res.ShouldEmitPayloadSample() {
+					conversationwitness.LogPayloadSample(dedupLog, true, res.WitnessSampleMaxRunes(), "response", out.DedupJSON)
+				}
+				dedupLog.Info("conversation delivered", "msg", "conversation.delivered",
+					"statusCode", http.StatusOK, "stream", false, "bytes", int64(n),
+					"total_ms", time.Since(flowStart).Milliseconds(), "timeline_kind", "upstream")
+			}
 			return
 		}
 		cid = out.ConversationID
+		mergeTurn = out.TurnIndex
+		cidSource = "merge"
 	default:
 		cid = uuid.NewString()
+		cidSource = "generated"
 	}
 
-	routeLog := log
-	if log != nil {
-		routeLog = log.With(
-			"request_id", rid,
-			"conversation_id", cid,
-			"service", "gateway",
-			"principal_id", sess.TenantID,
-		)
+	turnIdx := mergeTurn
+	if turnIdx <= 0 {
+		turnIdx = rt.NextChatTurnIndex(cid)
 	}
+
+	routeLog := chatRouteLogger(log, rid, cid, sess.TenantID, turnIdx)
 	w.Header().Set(headerConversationID, cid)
 
+	raw, trSum := transform.ApplyToolRouter(ctx, raw, transform.Config{
+		Enabled:      res.ToolRouterEnabled && !skipToolRouter,
+		RouterModels: res.RouterModels,
+		Threshold:    th,
+		BaseURL:      res.UpstreamBaseURL,
+		APIKey:       apiKey,
+		HTTPTimeout:  rtDur,
+		Log:          routeLog,
+		OnAttempt: func(model string, err error) {
+			rt.NoteToolRouterAttempt(model, err)
+		},
+	})
+
 	if routeLog != nil {
-		routeLog.Info("chat completion request", "msg", "chat.request", "clientModel", clientModel, "stream", stream, "tenant", sess.TenantID)
+		routeLog.Info("conversation received", "msg", "conversation.received",
+			"clientModel", clientModel, "stream", stream, "tenant", sess.TenantID,
+			"project", proj, "flavor", flav, "cid_source", cidSource, "timeline_kind", "upstream")
+		routeLog.Info("chat completion request", "msg", "chat.request", "clientModel", clientModel, "stream", stream, "tenant", sess.TenantID, "timeline_kind", "upstream")
 	}
+	if routeLog != nil && trSum.Ran {
+		errStr := ""
+		if trSum.Err != nil {
+			errStr = trSum.Err.Error()
+			if len(errStr) > 300 {
+				errStr = errStr[:300] + "…"
+			}
+		}
+		routeLog.Debug("conversation tool router", "msg", "conversation.tool.router",
+			"tools_before", trSum.ToolsBefore, "tools_after", trSum.ToolsAfter,
+			"router_model", trSum.RouterModel,
+			"err", errStr,
+			"timeline_kind", "upstream")
+	}
+	LogConversationIncomingToolMessages(routeLog, raw["messages"])
 
 	var chatOpts *chat.ProxyOpts
 	if mergeSvc != nil && !stream {
@@ -793,46 +879,86 @@ func handleV1Chat(w http.ResponseWriter, r *http.Request, rt *Runtime, log *slog
 				if status < 200 || status >= 300 {
 					return
 				}
-				fp := ms.RecordTurn(ctx, ccTenant, proj, flav, ccid, lu, jsonBody, time.Now().UTC())
+				fp := ms.RecordTurn(ctx, ccTenant, proj, flav, ccid, lu, jsonBody, time.Now().UTC(), rid)
 				if fp != "" {
 					w.Header().Set(headerRollingFingerprint, fp)
 				}
 			},
 		}
 	}
+	attachConversationDelivery(routeLog, &chatOpts)
+	chatOpts.UpstreamRequestID = rid
+	chatOpts.WitnessEmitPayloadSample = res.ShouldEmitPayloadSample()
+	chatOpts.WitnessPayloadSampleMaxRunes = res.WitnessSampleMaxRunes()
 
 	if clientModel == res.VirtualModelID {
-		// v0.2: when RAG is enabled, retrieve top-k chunks for the last user
-		// message and inject them as a single system message before chat.
-		if res.RAG.Enabled && rt.RAG() != nil {
-			coords := vectorstore.Coords{
-				TenantID:  sess.TenantID,
-				ProjectID: resolveProject(r.Header.Get(headerProject), res.RAG.DefaultProject),
-				FlavorID:  resolveFlavor(r.Header.Get(headerFlavor), res.RAG.DefaultFlavor),
+		coords := vectorstore.Coords{
+			TenantID:  sess.TenantID,
+			ProjectID: resolveProject(r.Header.Get(headerProject), res.RAG.DefaultProject),
+			FlavorID:  resolveFlavor(r.Header.Get(headerFlavor), res.RAG.DefaultFlavor),
+		}
+		collection := vectorstore.CollectionName(coords)
+		if !res.RAG.Enabled || rt.RAG() == nil {
+			if routeLog != nil {
+				routeLog.Debug("conversation RAG skipped", "msg", "conversation.rag.skipped",
+					"reason", "disabled", "timeline_kind", "qdrant")
 			}
-			if q := rag.LastUserText(raw["messages"]); strings.TrimSpace(q) != "" {
-				hits, rerr := rt.RAG().Retrieve(ctx, rag.RetrieveRequest{
-					Coords:         coords,
-					Query:          q,
-					RequestID:      rid,
-					ConversationID: cid,
-				})
-				if rerr != nil {
-					if routeLog != nil {
-						routeLog.Warn("rag retrieve failed; proceeding without context", "msg", "rag.retrieve.error", "err", rerr,
-							"tenant", coords.TenantID, "project", coords.ProjectID)
-					}
-				} else if ctxBlock := rag.FormatRetrievedContext(hits); ctxBlock != "" {
-					if routeLog != nil {
-						routeLog.Debug("rag context injected", "msg", "rag.retrieve.ok", "tenant", coords.TenantID,
-							"project", coords.ProjectID, "flavor", coords.FlavorID, "hits", len(hits))
-					}
-					rag.InjectSystemMessage(raw, ctxBlock)
+		} else if q := rag.LastUserText(raw["messages"]); strings.TrimSpace(q) == "" {
+			if routeLog != nil {
+				routeLog.Debug("conversation RAG skipped", "msg", "conversation.rag.skipped",
+					"reason", "empty_query", "timeline_kind", "qdrant")
+			}
+		} else {
+			hits, rerr := rt.RAG().Retrieve(ctx, rag.RetrieveRequest{
+				Coords:         coords,
+				Query:          q,
+				RequestID:      rid,
+				ConversationID: cid,
+				TurnIndex:      turnIdx,
+				LifecycleLog:   routeLog,
+			})
+			if rerr != nil {
+				if routeLog != nil {
+					routeLog.Warn("rag retrieve failed; proceeding without context", "msg", "rag.retrieve.error", "err", rerr,
+						"tenant", coords.TenantID, "project", coords.ProjectID, "timeline_kind", "qdrant")
 				}
+			} else if ctxBlock := rag.FormatRetrievedContext(hits); ctxBlock != "" {
+				if routeLog != nil {
+					bySrc := rag.HitsBySourceCount(hits)
+					for _, rel := range rag.SortedSources(bySrc) {
+						routeLog.Debug("rag retrieved hits from source",
+							"msg", "rag.retrieve.source",
+							"rel", rel,
+							"source_hits", bySrc[rel],
+							"tenant_id", coords.TenantID,
+							"project_id", coords.ProjectID,
+							"flavor_id", coords.FlavorID,
+							"timeline_kind", "qdrant",
+						)
+					}
+				}
+				rag.InjectSystemMessage(raw, ctxBlock)
+				if routeLog != nil {
+					routeLog.Info("conversation RAG attached", "msg", "conversation.rag.attached",
+						"tenant", coords.TenantID,
+						"project", coords.ProjectID,
+						"flavor", coords.FlavorID,
+						"hits", len(hits),
+						"collection", collection,
+						"timeline_kind", "qdrant")
+				}
+			} else if routeLog != nil {
+				routeLog.Debug("conversation RAG skipped", "msg", "conversation.rag.skipped",
+					"reason", "no_hits", "timeline_kind", "qdrant")
 			}
 		}
+		emitConversationRequestWitness(routeLog, res, raw)
 		initial, _ := pol.PickInitialModel(raw, res.FallbackChain, res.VirtualModelID)
 		if initial == "" {
+			if routeLog != nil {
+				routeLog.Warn("conversation errored", "msg", "conversation.errored",
+					"statusCode", http.StatusServiceUnavailable, "errorType", "gateway_config", "timeline_kind", "upstream")
+			}
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusServiceUnavailable)
 			_ = json.NewEncoder(w).Encode(map[string]any{
@@ -927,7 +1053,13 @@ func handleV1Chat(w http.ResponseWriter, r *http.Request, rt *Runtime, log *slog
 		return
 	}
 
+	emitConversationRequestWitness(routeLog, res, raw)
+
 	if clientModel == "" {
+		if routeLog != nil {
+			routeLog.Warn("conversation errored", "msg", "conversation.errored",
+				"statusCode", http.StatusBadRequest, "errorType", "invalid_request", "timeline_kind", "upstream")
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -1003,10 +1135,14 @@ func chatTimeout(res *config.Resolved) time.Duration {
 }
 
 // httpAccessLogLevel picks the slog level for access-style "http response" lines.
-// High-frequency UI polling routes are DEBUG so default INFO logs stay readable.
-func httpAccessLogLevel(path string) slog.Level {
+// Successful probe and UI polling routes are DEBUG so default INFO logs stay readable.
+func httpAccessLogLevel(path string, status int) slog.Level {
+	if status < 200 || status >= 300 {
+		return slog.LevelInfo
+	}
 	switch path {
-	case "/ui/logs", "/api/ui/metrics":
+	case "/health", "/status", "/api/ui/logs", "/api/ui/logs/stream",
+		"/ui/logs", "/api/ui/metrics":
 		return slog.LevelDebug
 	default:
 		return slog.LevelInfo
@@ -1025,17 +1161,19 @@ func loggingMiddleware(log *slog.Logger, next http.Handler) http.Handler {
 			}
 			rid := requestid.FromContext(r.Context())
 			args := []any{
+				"msg", "gateway.http.access",
 				"method", r.Method,
 				"path", r.URL.Path,
 				"statusCode", st,
 				"responseTimeMs", time.Since(start).Milliseconds(),
 				"authorization", redactAuth(r.Header.Get("Authorization")),
 				"service", "gateway",
+				"timeline_kind", timelineKindForGatewayHTTPPath(r.URL.Path),
 			}
 			if rid != "" {
 				args = append(args, "request_id", rid)
 			}
-			log.Log(r.Context(), httpAccessLogLevel(r.URL.Path), "http response", args...)
+			log.Log(r.Context(), httpAccessLogLevel(r.URL.Path, st), "http response", args...)
 		}
 	})
 }

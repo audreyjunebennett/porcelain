@@ -350,3 +350,72 @@ func TestClient_IndexRunIDHeader(t *testing.T) {
 		t.Fatalf("header: %q", saw)
 	}
 }
+
+func TestClient_FetchWorkspaces_BuildsRoots(t *testing.T) {
+	rootDir := t.TempDir()
+	payload := map[string]any{
+		"object":    "indexer.workspaces",
+		"tenant_id": "tenantA",
+		"workspaces": []map[string]any{
+			{
+				"workspace_id": int64(7),
+				"project_id":   "p1",
+				"flavor_id":    "f1",
+				"paths": []map[string]any{
+					{"path_id": int64(2), "path": rootDir},
+				},
+			},
+		},
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v1/indexer/workspaces", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer tok" {
+			http.Error(w, "auth", http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(raw)
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	c := NewGatewayClient(srv.URL, "tok", 5*time.Second)
+	ctx := context.Background()
+	resp, err := c.FetchWorkspaces(ctx, nil, SessionRetryPolicy{MaxAttempts: 3, BaseDelay: time.Millisecond, MaxDelay: time.Millisecond})
+	if err != nil {
+		t.Fatal(err)
+	}
+	roots, err := RootsFromWorkspacesResponse(resp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(roots) != 1 {
+		t.Fatalf("roots=%+v", roots)
+	}
+	if roots[0].Scope.ProjectID != "p1" || roots[0].Scope.FlavorID != "f1" || roots[0].Scope.WorkspaceID != "7" {
+		t.Fatalf("scope=%+v", roots[0].Scope)
+	}
+	if roots[0].AbsPath != filepath.Clean(rootDir) {
+		t.Fatalf("path=%q", roots[0].AbsPath)
+	}
+
+	cfg := Resolved{
+		SupervisedLayer:  true,
+		GatewayURL:       srv.URL,
+		Token:            "tok",
+		RequestTimeout:   5 * time.Second,
+		RetryMaxAttempts: 3,
+		RetryBaseDelay:   time.Millisecond,
+		RetryMaxDelay:    time.Millisecond,
+	}
+	if err := MaterializeRootsFromGateway(ctx, c, &cfg, RetryPolicyFromResolved(cfg)); err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Roots) != 1 || cfg.Roots[0].Scope.WorkspaceID != "7" {
+		t.Fatalf("cfg.Roots=%+v", cfg.Roots)
+	}
+}

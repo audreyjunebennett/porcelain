@@ -64,6 +64,8 @@ function indexerFlatMsg(fl) {
   if (raw === "scan fan-out budget" && fl.n_scopes != null) return "indexer.scan.complete";
   if (raw === "gateway.indexer.config" || raw.indexOf("gateway.indexer.config") === 0) return "gateway.indexer.config";
   if (raw === "gateway indexer config" && (fl.gateway_version != null || fl.embedding_model != null)) return "gateway.indexer.config";
+  if (raw === "indexer.supervised.wait_roots" || raw.indexOf("indexer.supervised.wait_roots") === 0)
+    return "indexer.supervised.wait_roots";
   if (raw === "indexer.run.start" || raw.indexOf("indexer.run.start") === 0) return "indexer.run.start";
   if (
     raw === "indexer run start" &&
@@ -89,6 +91,9 @@ function indexerFlatMsg(fl) {
   if (raw === "indexer.sync_state.write_failed" || raw.indexOf("indexer.sync_state.write_failed") === 0)
     return "indexer.sync_state.write_failed";
   if (raw === "sync state write failed" && fl.rel != null) return "indexer.sync_state.write_failed";
+  if (raw === "rag.retrieve.source" || raw.indexOf("rag.retrieve.source") === 0) return "rag.retrieve.source";
+  if (raw === "rag retrieved hits from source" && fl.rel != null && fl.source_hits != null)
+    return "rag.retrieve.source";
   return raw;
 }
 
@@ -96,6 +101,7 @@ function indexerSlugHistogramBucket(msgLower) {
   var m = String(msgLower || "").trim();
   if (!m) return "other";
   if (m.indexOf("indexer.run.") === 0) return "lifecycle";
+  if (m.indexOf("indexer.supervised.") === 0) return "lifecycle";
   if (m.indexOf("indexer.discovery") === 0 || m.indexOf("indexer.reconcile") === 0) return "discovery";
   if (m.indexOf("indexer.job.") === 0) return "jobs";
   if (m.indexOf("indexer.queue") === 0) return "queue";
@@ -136,8 +142,13 @@ function indexerGroupKeyFromFlat(fl) {
       ""
   ).trim();
   var fav = String(fl.flavor_id || fl.defaults_flavor_id || "").trim();
+  // flavor_id is allowed to be empty (default flavor); keep it in the key so
+  // gateway retrieval lines can bucket with indexer scope cards.
   if (uid !== "" && proj !== "" && fav !== "") {
     return "ig\x1e" + uid + "\x1e" + proj + "\x1e" + fav;
+  }
+  if (uid !== "" && proj !== "" && fav === "") {
+    return "ig\x1e" + uid + "\x1e" + proj + "\x1e";
   }
   var rid =
     fl.index_run_id != null && String(fl.index_run_id).trim() !== ""
@@ -191,10 +202,29 @@ function indexerProseSummary(flat) {
   if (!flat || typeof flat !== "object") return null;
   var m = indexerFlatMsg(flat);
   var svc = String(flat.service || "").toLowerCase();
-  var indexerish = svc === "indexer" || m.indexOf("indexer.") === 0 || m.indexOf("gateway.indexer") === 0;
+  var indexerish =
+    svc === "indexer" ||
+    m.indexOf("indexer.") === 0 ||
+    m.indexOf("gateway.indexer") === 0 ||
+    (svc === "gateway" && m === "rag.retrieve.source");
   if (!indexerish) return null;
 
   switch (m) {
+    case "rag.retrieve.source": {
+      var nRag = numOrDash(flat.source_hits);
+      return (
+        "RAG retrieved · " +
+        (nRag != null ? nRag + " hit(s) · " : "") +
+        String(flat.rel != null ? flat.rel : "?")
+      );
+    }
+    case "indexer.supervised.wait_roots":
+      return (
+        "Waiting for at least one watch root" +
+        (flat.config_path != null && String(flat.config_path).trim() !== ""
+          ? " in " + String(flat.config_path).trim()
+          : "")
+      );
     case "indexer.state": {
       var st = indexerDeclaredStateLabel(flat.state);
       var bits = [];

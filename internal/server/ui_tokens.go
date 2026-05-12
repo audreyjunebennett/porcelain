@@ -69,7 +69,7 @@ func (a *adminUI) handleTokensCreate(w http.ResponseWriter, r *http.Request) {
 	plain, tenant, err := tokens.AppendToken(tokStore.Path(), label)
 	if err != nil {
 		if a.log != nil {
-			a.log.Error("append token", "err", err)
+			a.log.Error("append token", "msg", "gateway.auth.append_failed", "surface", "ui", "err", err)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)

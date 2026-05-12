@@ -76,3 +76,42 @@ func DistinctIndexerTargetKeys(r Resolved, gw *IndexerConfig) []string {
 	sort.Strings(out)
 	return out
 }
+
+// DistinctEffectiveStorageStatsScopes returns deduplicated (project_id, flavor_id) pairs
+// matching effective ingest headers per watched root (defaults + gateway defaults).
+// Used for GET /v1/indexer/storage/stats polling — one request per distinct scope.
+func DistinctEffectiveStorageStatsScopes(r Resolved, gw *IndexerConfig) []ScopeFragment {
+	seen := make(map[string]struct{})
+	var out []ScopeFragment
+	for _, root := range r.Roots {
+		_, proj, flav := effectiveIngestTriple(r, root, gw)
+		proj = strings.TrimSpace(proj)
+		flav = strings.TrimSpace(flav)
+		sk := ScopeKey(proj, flav)
+		if _, ok := seen[sk]; ok {
+			continue
+		}
+		seen[sk] = struct{}{}
+		out = append(out, ScopeFragment{ProjectID: proj, FlavorID: flav})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		pi, pj := out[i].ProjectID, out[j].ProjectID
+		if pi != pj {
+			return pi < pj
+		}
+		return out[i].FlavorID < out[j].FlavorID
+	})
+	return out
+}
+
+// StorageStatsRequestHeaders builds optional X-Claudia-* headers for storage stats.
+func StorageStatsRequestHeaders(s ScopeFragment) map[string]string {
+	m := map[string]string{}
+	if p := strings.TrimSpace(s.ProjectID); p != "" {
+		m["X-Claudia-Project"] = p
+	}
+	if f := strings.TrimSpace(s.FlavorID); f != "" {
+		m["X-Claudia-Flavor-Id"] = f
+	}
+	return m
+}

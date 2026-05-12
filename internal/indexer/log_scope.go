@@ -16,7 +16,7 @@ func (ix *Indexer) logScopeFieldsForRootRel(root Root, rel string) []any {
 	proj, flav := ix.cfg.IngestHeaders(root, rel)
 	tid := ix.tenantIDForLogs()
 	ik := IndexerKey(tid, proj, flav)
-	return []any{
+	out := []any{
 		"tenant_id", tid,
 		"project_id", proj,
 		"ingest_project", proj,
@@ -24,6 +24,10 @@ func (ix *Indexer) logScopeFieldsForRootRel(root Root, rel string) []any {
 		"indexer_target_key", ik,
 		"root", root.ID,
 	}
+	if ws := strings.TrimSpace(root.Scope.WorkspaceID); ws != "" {
+		out = append(out, "scope_workspace_id", ws)
+	}
+	return out
 }
 
 // logScopeFieldsForTaggedSlice annotates fan-out chunks that may contain multiple scopes.

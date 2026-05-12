@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Embed UI component gallery (Phase 2)</title>
+  <link rel="stylesheet" href="../internal/server/embedui/theme-tokens.css" />
+  <link rel="stylesheet" href="../internal/server/embedui/logs.css" />
+  <link rel="stylesheet" href="gallery-shell.css" />
+</head>
+<body class="logs-summarized styleguide-body">
+  <nav class="styleguide-nav" aria-label="Gallery sections">
+    <a href="#sg-typography">Typography</a><span class="styleguide-nav-sep">·</span>
+    <a href="#sg-chrome">Chrome</a><span class="styleguide-nav-sep">·</span>
+    <a href="#sg-pills">Pills &amp; badges</a><span class="styleguide-nav-sep">·</span>
+    <a href="#sg-status">Status</a><span class="styleguide-nav-sep">·</span>
+    <a href="#sg-loglines">Log lines</a><span class="styleguide-nav-sep">·</span>
+    <a href="#sg-progress">Progress</a><span class="styleguide-nav-sep">·</span>
+    <a href="#sg-tables">Tables</a><span class="styleguide-nav-sep">·</span>
+    <a href="#sg-lists">Lists</a><span class="styleguide-nav-sep">·</span>
+    <a href="#sg-kv">Key–value</a><span class="styleguide-nav-sep">·</span>
+    <a href="#sg-cards">Cards</a><span class="styleguide-nav-sep">·</span>
+    <a href="#sg-workspace-draft">Workspace draft</a>
+    <span class="styleguide-nav-sep">|</span>
+    <a href="sample.html">Phase 1 tokens</a>
+  </nav>
+
+  <header class="styleguide-hero">
+    <h1>Embed UI component gallery</h1>
+    <p>
+      Static reference for <code>internal/server/embedui/logs.css</code> class names used by
+      <code>logs.js</code>. Loads production CSS from the repo via relative paths — reload after editing CSS
+      (no Go build). Theme tokens load first; <code>logs.css</code> still uses literals until Phase 3.
+    </p>
+  </header>
+
+  <div class="styleguide-toolbar" role="radiogroup" aria-label="Color theme">
+    <span style="font-size:0.78rem;color:#555;font-weight:600">Theme:</span>
+    <button type="button" id="theme-default" role="radio" aria-checked="true">Default</button>
+    <button type="button" id="theme-porcelain" role="radio" aria-checked="false">Porcelain</button>
+  </div>
+
+  <div id="panel-summarized" class="styleguide-panel">
+
+    <section id="sg-typography" class="styleguide-section">
+      <h2>Typography &amp; labels</h2>
+      <p class="styleguide-sub">Summary titles, subtitles, section labels, monospace IDs, muted text.</p>
+      <div class="styleguide-demo-bg" style="max-width:28rem">
+        <span class="sum-title">sum-title — Gateway summary</span>
+        <span class="sum-sub">sum-sub — Last structured line in the loaded window with optional wrapping.</span>
+        <div class="sum-section-label">sum-section-label</div>
+        <p style="margin:0.35rem 0 0;font-size:0.8rem"><span class="muted">muted</span> beside <code class="sum-mono-id">sum-mono-id-model-name</code></p>
+      </div>
+    </section>
+
+    <section id="sg-chrome" class="styleguide-section">
+      <h2>Filters &amp; log toolbar</h2>
+      <p class="styleguide-sub">Same IDs/classes as raw log filters and full-log toolbar (<code>#filters-bar</code>, <code>#filters</code>, <code>sum-full-log-toolbar</code>).</p>
+      <div id="filters-bar" class="styleguide-demo-bg">
+        <span class="filters-heading">Filters</span>
+        <div id="filters">
+          <label><span>App</span>
+            <select><option>gateway</option><option>indexer</option></select>
+          </label>
+          <label><span>Level</span>
+            <select><option>INFO</option><option>WARN</option><option>ERROR</option></select>
+          </label>
+        </div>
+      </div>
+      <div class="sum-full-log-toolbar sum-full-log-toolbar--gateway" role="toolbar" aria-label="Demo toolbar">
+        <span class="sum-full-log-toolbar-title">Log view</span>
+        <div class="sum-full-log-toolbar-actions">
+          <label class="sum-full-log-toolbar-label">
+            <input type="checkbox" checked disabled />
+            <span>Structured</span>
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <section id="sg-pills" class="styleguide-section">
+      <h2>Pills, chips, conversation tiers, service badges</h2>
+      <p class="styleguide-sub">Exhaustive small primitives (HTTP pills, chips, conv chips, tier variants, service outline + filled).</p>
+      <div class="styleguide-demo-bg">
+        <div class="sum-section-label" style="margin-top:0">HTTP pills</div>
+        <p style="margin:0.25rem 0 0.5rem">
+          <span class="pill-2xx">2xx</span>
+          <span class="pill-4xx">4xx</span>
+          <span class="pill-5xx">5xx</span>
+        </p>
+        <div class="sum-section-label">service-chips / chip</div>
+        <div class="service-chips">
+          <span class="chip">web</span>
+          <span class="chip">gateway</span>
+          <span class="chip">indexer</span>
+        </div>
+        <div class="sum-section-label">sum-conv-chip</div>
+        <div class="sum-conv-chip-row">
+          <span class="sum-conv-chip">Tools · 3</span>
+          <span class="sum-conv-chip">Fallback · 1</span>
+        </div>
+        <div class="sum-section-label">sum-conv-tier</div>
+        <p style="margin:0.25rem 0;font-size:0.85rem">
+          <span class="sum-conv-tier sum-conv-tier--request_id">request_id</span>
+          <span class="sum-conv-tier sum-conv-tier--ingest">ingest</span>
+          <span class="sum-conv-tier sum-conv-tier--inferred">inferred</span>
+          <span class="sum-conv-tier sum-conv-tier--anchored_inferred">anchored_inferred</span>
+        </p>
+        <div class="sum-section-label">sum-svc-badge (outline)</div>
+        <p style="margin:0.25rem 0;display:flex;flex-wrap:wrap;gap:0.35rem;align-items:center">
+          <span class="sum-svc-badge sum-svc-web">web</span>
+          <span class="sum-svc-badge sum-svc-qdrant">qdrant</span>
+          <span class="sum-svc-badge sum-svc-indexer">indexer</span>
+          <span class="sum-svc-badge sum-svc-gateway">gateway</span>
+          <span class="sum-svc-badge sum-svc-upstream">upstream</span>
+        </p>
+        <div class="sum-section-label">sum-svc-badge (filled)</div>
+        <p style="margin:0.25rem 0;display:flex;flex-wrap:wrap;gap:0.35rem;align-items:center">
+          <span class="sum-svc-badge sum-svc-badge-filled sum-svc-qdrant sum-svc-qdrant-filled">qdrant</span>
+          <span class="sum-svc-badge sum-svc-badge-filled sum-svc-indexer sum-svc-indexer-filled">indexer</span>
+          <span class="sum-svc-badge sum-svc-badge-filled sum-svc-upstream sum-svc-upstream-filled">upstream</span>
+        </p>
+      </div>
+    </section>
+
+    <section id="sg-status" class="styleguide-section">
+      <h2>sum-status</h2>
+      <p class="styleguide-sub">Collapsed-card status capsule classes.</p>
+      <div class="styleguide-row">
+        <span class="sum-status sum-st-active sum-pulse">active</span>
+        <span class="sum-status sum-st-active">active</span>
+        <span class="sum-status sum-st-complete">complete</span>
+        <span class="sum-status sum-st-retrieved">retrieved</span>
+        <span class="sum-status sum-st-indexing">indexing</span>
+        <span class="sum-status sum-st-error">error</span>
+        <span class="sum-status sum-st-monitor">monitor</span>
+      </div>
+    </section>
+
+    <section id="sg-loglines" class="styleguide-section">
+      <h2>log-line-sum</h2>
+      <p class="styleguide-sub">Datetime, levels, service badge, message clamp.</p>
+      <div class="styleguide-demo-bg" style="max-width:40rem">
+        <div class="log-line-sum">
+          <span class="log-line-sum__meta">
+            <time class="log-line-sum__time">2026-05-10 14:32:01.004Z</time>
+            <span class="log-line-sum__lvl log-line-sum__lvl--none">—</span>
+            <span class="sum-svc-badge sum-svc-gateway">gateway</span>
+          </span>
+          <span class="log-line-sum__msg">No level — gateway line with neutral dash.</span>
+        </div>
+        <div class="log-line-sum" style="margin-top:0.5rem">
+          <span class="log-line-sum__meta">
+            <time class="log-line-sum__time">2026-05-10 14:32:02.881Z</time>
+            <span class="log-line-sum__lvl lvl-DEBUG">DEBUG</span>
+            <span class="sum-svc-badge sum-svc-web">web</span>
+          </span>
+          <span class="log-line-sum__msg">Debug noise that can run long when describing internal routing decisions and cache keys.</span>
+        </div>
+        <div class="log-line-sum" style="margin-top:0.5rem">
+          <span class="log-line-sum__meta">
+            <time class="log-line-sum__time">2026-05-10 14:32:05.102Z</time>
+            <span class="log-line-sum__lvl lvl-INFO">INFO</span>
+            <span class="sum-svc-badge sum-svc-qdrant">qdrant</span>
+          </span>
+          <span class="log-line-sum__msg">Collection heartbeat OK; vectors committed for workspace slice.</span>
+        </div>
+        <div class="log-line-sum" style="margin-top:0.5rem">
+          <span class="log-line-sum__meta">
+            <time class="log-line-sum__time">2026-05-10 14:32:08.440Z</time>
+            <span class="log-line-sum__lvl lvl-WARN">WARN</span>
+            <span class="sum-svc-badge sum-svc-upstream">upstream</span>
+          </span>
+          <span class="log-line-sum__msg">429 rate limit approaching for provider batch; retry scheduled.</span>
+        </div>
+        <div class="log-line-sum" style="margin-top:0.5rem">
+          <span class="log-line-sum__meta">
+            <time class="log-line-sum__time">2026-05-10 14:32:11.003Z</time>
+            <span class="log-line-sum__lvl lvl-ERROR">ERROR</span>
+            <span class="sum-svc-badge sum-svc-indexer">indexer</span>
+          </span>
+          <span class="log-line-sum__msg">Ingest failed after retries — see indexer card for path and exception hint.</span>
+        </div>
+        <div class="log-line-sum" style="margin-top:0.5rem">
+          <span class="log-line-sum__meta">
+            <time class="log-line-sum__time">2026-05-10 14:32:14.200Z</time>
+            <span class="log-line-sum__lvl lvl-TRACE">TRACE</span>
+          </span>
+          <span class="log-line-sum__msg">Trace span exit; correlation id propagated.</span>
+        </div>
+      </div>
+    </section>
+
+    <section id="sg-progress" class="styleguide-section">
+      <h2>Progress bars &amp; captions</h2>
+      <p class="styleguide-sub"><code>sum-timeline-bar</code>, conversation lifecycle (full + compact), indexer scope bar.</p>
+      <div class="sum-section-label">sum-timeline-bar + legend + caption</div>
+      <div class="styleguide-demo-bg" style="max-width:36rem">
+        <p class="sum-timeline-caption muted">Segment width is illustrative share of lines in view.</p>
+        <div class="sum-timeline-bar" title="Demo mix">
+          <span class="sum-timeline-seg" style="width:38%;background:#66bb6a"></span>
+          <span class="sum-timeline-seg" style="width:22%;background:#ffca28"></span>
+          <span class="sum-timeline-seg" style="width:15%;background:#bdbdbd"></span>
+          <span class="sum-timeline-seg" style="width:25%;background:#ef5350"></span>
+        </div>
+        <div class="sum-timeline-legend">
+          <span class="sum-timeline-legend-item" title="ok">
+            <span class="sum-timeline-legend-swatch" style="background:#66bb6a"></span>
+            <span class="sum-timeline-legend-label">ok</span>
+          </span>
+          <span class="sum-timeline-legend-item" title="pending">
+            <span class="sum-timeline-legend-swatch" style="background:#ffca28"></span>
+            <span class="sum-timeline-legend-label">pending</span>
+          </span>
+        </div>
+      </div>
+      <div class="sum-section-label" style="margin-top:1rem">sum-conv-lifecycle-bar (full)</div>
+      <div class="styleguide-demo-bg" style="max-width:36rem">
+        <div class="sum-conv-lifecycle-bar" role="group" aria-label="Lifecycle demo">
+          <div class="sum-conv-lifecycle-bar-track">
+            <span class="sum-conv-lifecycle-seg sum-conv-lifecycle-seg--done" title="Accepted: done"></span>
+            <span class="sum-conv-lifecycle-seg sum-conv-lifecycle-seg--done" title="Context: done"></span>
+            <span class="sum-conv-lifecycle-seg sum-conv-lifecycle-seg--pending" title="Routed: pending"></span>
+            <span class="sum-conv-lifecycle-seg sum-conv-lifecycle-seg--skipped" title="Upstream: skipped"></span>
+            <span class="sum-conv-lifecycle-seg sum-conv-lifecycle-seg--failed" title="Delivered: failed"></span>
+          </div>
+          <div class="sum-conv-lifecycle-bar-labels">
+            <span class="sum-conv-lifecycle-bar-label">Accepted</span>
+            <span class="sum-conv-lifecycle-bar-label">Context</span>
+            <span class="sum-conv-lifecycle-bar-label">Routed</span>
+            <span class="sum-conv-lifecycle-bar-label">Upstream</span>
+            <span class="sum-conv-lifecycle-bar-label">Delivered</span>
+          </div>
+        </div>
+      </div>
+      <div class="sum-section-label" style="margin-top:1rem">sum-conv-lifecycle-bar--compact (conversation summary row)</div>
+      <div class="styleguide-demo-bg" style="max-width:14rem">
+        <div class="sum-conv-lifecycle-bar sum-conv-lifecycle-bar--compact" role="group" aria-label="Compact lifecycle">
+          <div class="sum-conv-lifecycle-bar-track">
+            <span class="sum-conv-lifecycle-seg sum-conv-lifecycle-seg--done"></span>
+            <span class="sum-conv-lifecycle-seg sum-conv-lifecycle-seg--done"></span>
+            <span class="sum-conv-lifecycle-seg sum-conv-lifecycle-seg--done"></span>
+            <span class="sum-conv-lifecycle-seg sum-conv-lifecycle-seg--pending"></span>
+            <span class="sum-conv-lifecycle-seg sum-conv-lifecycle-seg--pending"></span>
+          </div>
+        </div>
+      </div>
+      <div class="sum-section-label" style="margin-top:1rem">indexer-scope-progress + indexer-scope-caption</div>
+      <div class="styleguide-demo-bg" style="max-width:36rem">
+        <div class="indexer-scope-progress" title="Demo scope bar">
+          <div class="sum-timeline-bar">
+            <span class="sum-timeline-seg" style="width:55%;background:#42a5f5"></span>
+            <span class="sum-timeline-seg" style="width:45%;background:#e0e0e0"></span>
+          </div>
+        </div>
+        <span class="indexer-scope-caption">Ingest queue + fan-out rows vs workspace files (illustrative).</span>
+        <p class="indexer-progress-caption muted">indexer-progress-caption — smaller footnote under aggregate bars.</p>
+      </div>
+    </section>
+
+    <section id="sg-tables" class="styleguide-section">
+      <h2>sum-metrics-table</h2>
+      <p class="styleguide-sub">Gateway usage style table with <code>td.num</code> and <code>code.sum-mono-id</code>.</p>
+      <div class="sum-metrics-table-wrap">
+        <table class="sum-metrics-table">
+          <thead>
+            <tr>
+              <th>Provider</th>
+              <th>Model</th>
+              <th>HTTP</th>
+              <th class="num">Calls</th>
+              <th class="num">Est. tokens</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>groq</td>
+              <td><code class="sum-mono-id">llama-3.3-70b</code></td>
+              <td><span class="pill-2xx">200</span></td>
+              <td class="num">1 284</td>
+              <td class="num">402 991</td>
+            </tr>
+            <tr>
+              <td>gemini</td>
+              <td><code class="sum-mono-id">gemini-2.0-flash</code></td>
+              <td><span class="pill-4xx">429</span></td>
+              <td class="num">42</td>
+              <td class="num">18 204</td>
+            </tr>
+            <tr>
+              <td>ollama</td>
+              <td><code class="sum-mono-id">qwen2.5:14b</code></td>
+              <td><span class="pill-5xx">502</span></td>
+              <td class="num">3</td>
+              <td class="num">0</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="sg-lists" class="styleguide-section">
+      <h2>sum-full-log &amp; indexer recent rows</h2>
+      <p class="styleguide-sub">Scrollable event list and recent-files row layout.</p>
+      <div class="sum-section-label">sum-full-log / sum-ev-item</div>
+      <div class="sum-full-log" style="max-height:10rem">
+        <ul>
+          <li class="sum-ev-item">
+            <div class="log-line-sum">
+              <span class="log-line-sum__meta">
+                <time class="log-line-sum__time">2026-05-10 14:00:01Z</time>
+                <span class="log-line-sum__lvl lvl-INFO">INFO</span>
+                <span class="sum-svc-badge sum-svc-gateway">gateway</span>
+              </span>
+              <span class="log-line-sum__msg">Request accepted; routing policy version 12 applied.</span>
+            </div>
+          </li>
+          <li class="sum-ev-item">
+            <div class="log-line-sum">
+              <span class="log-line-sum__meta">
+                <time class="log-line-sum__time">2026-05-10 14:00:02Z</time>
+                <span class="log-line-sum__lvl lvl-WARN">WARN</span>
+              </span>
+              <span class="log-line-sum__msg">Soft quota advisory — no action required.</span>
+            </div>
+          </li>
+          <li class="sum-ev-item muted">Empty tail line example (muted).</li>
+        </ul>
+      </div>
+      <div class="sum-section-label" style="margin-top:1rem">indexer-recent-files row</div>
+      <div class="sum-full-log indexer-recent-files" style="max-height:8rem">
+        <ul>
+          <li class="sum-ev-item indexer-recent-row">
+            <span class="muted indexer-recent-time">2026-05-10 13:59:58.102Z</span>
+            <span class="log-line-sum__lvl indexer-recent-op lvl-INFO">ingested</span>
+            <code class="sum-mono-id indexer-recent-path">internal/server/embedui/logs.css</code>
+            <span class="muted indexer-recent-detail">sha256 verified</span>
+          </li>
+          <li class="sum-ev-item indexer-recent-row">
+            <span class="muted indexer-recent-time">2026-05-10 13:59:57.881Z</span>
+            <span class="log-line-sum__lvl indexer-recent-op lvl-WARN">skipped</span>
+            <code class="sum-mono-id indexer-recent-path">temp/theme/gallery.html</code>
+            <span class="muted indexer-recent-detail">binary file</span>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="sg-kv" class="styleguide-section">
+      <h2>Key–value blocks</h2>
+      <p class="styleguide-sub"><code>sum-conv-kv</code> (conversation) and <code>indexer-run-kv</code> (service summary), including error tint on values.</p>
+      <div class="styleguide-demo-bg" style="max-width:32rem">
+        <div class="sum-section-label">Conversation</div>
+        <div class="sum-conv-kv">
+          <dl class="sum-conv-kv-grid">
+            <div class="sum-conv-kv-row"><dt>Turn</dt><dd>14</dd></div>
+            <div class="sum-conv-kv-row"><dt>Client model</dt><dd><code class="sum-mono-id">claude-3-5-sonnet</code></dd></div>
+            <div class="sum-conv-kv-row"><dt>Upstream model</dt><dd><span class="muted">—</span></dd></div>
+            <div class="sum-conv-kv-row"><dt>Stream</dt><dd>true</dd></div>
+          </dl>
+        </div>
+        <div class="sum-section-label" style="margin-top:0.75rem">Gateway summary KV</div>
+        <dl class="indexer-run-kv indexer-run-kv--gateway-summary">
+          <dt>listening</dt><dd><code class="sum-mono-id">127.0.0.1:8080</code></dd>
+          <dt>upstream</dt><dd><span class="muted">—</span></dd>
+          <dt>API keys</dt><dd class="gateway-kv-dd gateway-kv-dd--error">GROQ_API_KEY unset</dd>
+          <dt>routing rules</dt><dd>42</dd>
+        </dl>
+      </div>
+    </section>
+
+    <section id="sg-cards" class="styleguide-section">
+      <h2>Cards — avatars, conversation, stale indexer, lorem body</h2>
+      <p class="styleguide-sub">
+        Collapsed <code>sum-card</code> rows show left stripe + chevron hover hues per <code>sum-avatar</code> class.
+        Conversation cards use a 6-column summary grid including compact lifecycle + status.
+      </p>
+
+      <div class="sum-section-label">Avatar hue matrix (collapsed — hover stripe / chevron)</div>
+      <div class="styleguide-row" style="gap:0.5rem">
+        <details class="sum-card" style="flex:1 1 12rem;min-width:10rem;margin-bottom:0">
+          <summary>
+            <span class="sum-avatar sum-av-a">Aa</span>
+            <span class="sum-main"><span class="sum-title">Hue A</span><span class="sum-sub">sum-av-a</span></span>
+            <span class="sum-chev"></span>
+          </summary>
+          <div class="sum-body"><p class="muted">Open body uses tint when avatar matches production rules.</p></div>
+        </details>
+        <details class="sum-card" style="flex:1 1 12rem;min-width:10rem;margin-bottom:0">
+          <summary>
+            <span class="sum-avatar sum-av-b">Bb</span>
+            <span class="sum-main"><span class="sum-title">Hue B</span><span class="sum-sub">sum-av-b</span></span>
+            <span class="sum-chev"></span>
+          </summary>
+          <div class="sum-body"><p>Body</p></div>
+        </details>
+        <details class="sum-card" style="flex:1 1 12rem;min-width:10rem;margin-bottom:0">
+          <summary>
+            <span class="sum-avatar sum-av-c">Cc</span>
+            <span class="sum-main"><span class="sum-title">Hue C</span><span class="sum-sub">sum-av-c</span></span>
+            <span class="sum-chev"></span>
+          </summary>
+          <div class="sum-body"><p>Body</p></div>
+        </details>
+        <details class="sum-card" style="flex:1 1 12rem;min-width:10rem;margin-bottom:0">
+          <summary>
+            <span class="sum-avatar sum-av-d">Dd</span>
+            <span class="sum-main"><span class="sum-title">Hue D</span><span class="sum-sub">sum-av-d</span></span>
+            <span class="sum-chev"></span>
+          </summary>
+          <div class="sum-body"><p>Body</p></div>
+        </details>
+      </div>
+      <div class="styleguide-row" style="gap:0.5rem;margin-top:0.5rem">
+        <details class="sum-card" style="flex:1 1 12rem;min-width:10rem;margin-bottom:0">
+          <summary>
+            <span class="sum-avatar sum-av-e">Ee</span>
+            <span class="sum-main"><span class="sum-title">Hue E</span><span class="sum-sub">sum-av-e</span></span>
+            <span class="sum-chev"></span>
+          </summary>
+          <div class="sum-body"><p>Body</p></div>
+        </details>
+        <details class="sum-card" style="flex:1 1 12rem;min-width:10rem;margin-bottom:0">
+          <summary>
+            <span class="sum-avatar sum-av-f">Ff</span>
+            <span class="sum-main"><span class="sum-title">Hue F</span><span class="sum-sub">sum-av-f</span></span>
+            <span class="sum-chev"></span>
+          </summary>
+          <div class="sum-body"><p>Body</p></div>
+        </details>
+        <details class="sum-card" style="flex:1 1 12rem;min-width:10rem;margin-bottom:0">
+          <summary>
+            <span class="sum-avatar sum-av-svc-gateway">Gw</span>
+            <span class="sum-main"><span class="sum-title">Gateway</span><span class="sum-sub">sum-av-svc-gateway</span></span>
+            <span class="sum-chev"></span>
+          </summary>
+          <div class="sum-body"><p>Body</p></div>
+        </details>
+        <details class="sum-card" style="flex:1 1 12rem;min-width:10rem;margin-bottom:0">
+          <summary>
+            <span class="sum-avatar sum-av-svc-bifrost">Bf</span>
+            <span class="sum-main"><span class="sum-title">BiFrost</span><span class="sum-sub">sum-av-svc-bifrost</span></span>
+            <span class="sum-chev"></span>
+          </summary>
+          <div class="sum-body"><p>Body</p></div>
+        </details>
+      </div>
+      <div class="styleguide-row" style="gap:0.5rem;margin-top:0.5rem">
+        <details class="sum-card" style="flex:1 1 12rem;min-width:10rem;margin-bottom:0">
+          <summary>
+            <span class="sum-avatar sum-av-svc-qdrant">Qd</span>
+            <span class="sum-main"><span class="sum-title">Qdrant</span><span class="sum-sub">sum-av-svc-qdrant</span></span>
+            <span class="sum-chev"></span>
+          </summary>
+          <div class="sum-body"><p>Body</p></div>
+        </details>
+        <details class="sum-card" style="flex:1 1 12rem;min-width:10rem;margin-bottom:0">
+          <summary>
+            <span class="sum-avatar sum-av-svc-indexer">Ix</span>
+            <span class="sum-main"><span class="sum-title">Indexer</span><span class="sum-sub">sum-av-svc-indexer</span></span>
+            <span class="sum-chev"></span>
+          </summary>
+          <div class="sum-body"><p>Body</p></div>
+        </details>
+        <details class="sum-card" style="flex:1 1 12rem;min-width:10rem;margin-bottom:0">
+          <summary>
+            <span class="sum-avatar sum-av-indexer-idle">✓</span>
+            <span class="sum-main"><span class="sum-title">Indexer idle</span><span class="sum-sub">sum-av-indexer-idle</span></span>
+            <span class="sum-chev"></span>
+          </summary>
+          <div class="sum-body"><p>Idle checkmark avatar.</p></div>
+        </details>
+      </div>
+
+      <div class="sum-section-label" style="margin-top:1.25rem">Conversation card (collapsed + open)</div>
+      <details class="sum-card sum-card--conversation" id="sg-demo-conv-closed">
+        <summary>
+          <span class="sum-avatar sum-av-d">Ac</span>
+          <span class="sum-main">
+            <span class="sum-title">Tenant · conversation <span class="sum-conv-tier sum-conv-tier--request_id">request_id</span></span>
+            <span class="sum-sub sum-sub--clamp">Last user message preview truncated when it exceeds two lines in the summary row.</span>
+            <div class="sum-conv-chip-row sum-conv-chip-row--summary">
+              <span class="sum-conv-chip">Tools · 2</span>
+            </div>
+          </span>
+          <span class="sum-metrics"><span class="sum-metric">1.2s</span></span>
+          <div class="sum-conv-lifecycle-bar sum-conv-lifecycle-bar--compact" role="group" aria-label="Lifecycle">
+            <div class="sum-conv-lifecycle-bar-track">
+              <span class="sum-conv-lifecycle-seg sum-conv-lifecycle-seg--done"></span>
+              <span class="sum-conv-lifecycle-seg sum-conv-lifecycle-seg--done"></span>
+              <span class="sum-conv-lifecycle-seg sum-conv-lifecycle-seg--done"></span>
+              <span class="sum-conv-lifecycle-seg sum-conv-lifecycle-seg--pending"></span>
+              <span class="sum-conv-lifecycle-seg sum-conv-lifecycle-seg--pending"></span>
+            </div>
+          </div>
+          <span class="sum-status sum-st-retrieved">streaming</span>
+          <span class="sum-chev"></span>
+        </summary>
+        <div class="sum-body">
+          <div class="sum-section-label">Expanded body</div>
+          <p style="margin:0 0 0.5rem">
+            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer cursus urna id lacus interdum,
+            vitae faucibus magna pharetra. <strong>Metrics:</strong> turn latency p95 <code class="sum-mono-id">842ms</code>,
+            tokens in <span class="muted">12 400</span>, out <span class="muted">1 880</span>.
+          </p>
+          <div class="sum-conv-lifecycle-bar" role="group" aria-label="Full lifecycle">
+            <div class="sum-conv-lifecycle-bar-track">
+              <span class="sum-conv-lifecycle-seg sum-conv-lifecycle-seg--done"></span>
+              <span class="sum-conv-lifecycle-seg sum-conv-lifecycle-seg--done"></span>
+              <span class="sum-conv-lifecycle-seg sum-conv-lifecycle-seg--done"></span>
+              <span class="sum-conv-lifecycle-seg sum-conv-lifecycle-seg--done"></span>
+              <span class="sum-conv-lifecycle-seg sum-conv-lifecycle-seg--pending"></span>
+            </div>
+            <div class="sum-conv-lifecycle-bar-labels">
+              <span class="sum-conv-lifecycle-bar-label">Accepted</span>
+              <span class="sum-conv-lifecycle-bar-label">Context</span>
+              <span class="sum-conv-lifecycle-bar-label">Routed</span>
+              <span class="sum-conv-lifecycle-bar-label">Upstream</span>
+              <span class="sum-conv-lifecycle-bar-label">Delivered</span>
+            </div>
+          </div>
+          <div class="sum-metrics-table-wrap">
+            <table class="sum-metrics-table">
+              <thead><tr><th>Step</th><th class="num">ms</th></tr></thead>
+              <tbody>
+                <tr><td>rag.retrieve</td><td class="num">124</td></tr>
+                <tr><td>upstream.first_token</td><td class="num">612</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </details>
+
+      <details class="sum-card sum-card--conversation" open style="margin-top:0.65rem">
+        <summary>
+          <span class="sum-avatar sum-av-a">Op</span>
+          <span class="sum-main">
+            <span class="sum-title">Open by default</span>
+            <span class="sum-sub">Compact lifecycle hidden in CSS when open; grid loses one column.</span>
+          </span>
+          <span class="sum-metrics"><span class="sum-metric">88ms</span></span>
+          <div class="sum-conv-lifecycle-bar sum-conv-lifecycle-bar--compact" role="presentation">
+            <div class="sum-conv-lifecycle-bar-track">
+              <span class="sum-conv-lifecycle-seg sum-conv-lifecycle-seg--done"></span>
+              <span class="sum-conv-lifecycle-seg sum-conv-lifecycle-seg--done"></span>
+              <span class="sum-conv-lifecycle-seg sum-conv-lifecycle-seg--done"></span>
+              <span class="sum-conv-lifecycle-seg sum-conv-lifecycle-seg--done"></span>
+              <span class="sum-conv-lifecycle-seg sum-conv-lifecycle-seg--done"></span>
+            </div>
+          </div>
+          <span class="sum-status sum-st-complete">done</span>
+          <span class="sum-chev"></span>
+        </summary>
+        <div class="sum-body">
+          <p style="margin:0">Conversation body tint follows <code>sum-av-a</code> when open.</p>
+        </div>
+      </details>
+
+      <div class="sum-section-label" style="margin-top:1.25rem">Service-style card + stale indexer variant</div>
+      <div class="styleguide-row" style="align-items:stretch">
+        <details class="sum-card" style="flex:1 1 18rem;margin-bottom:0">
+          <summary>
+            <span class="sum-avatar sum-av-svc-gateway">Gw</span>
+            <span class="sum-main">
+              <span class="sum-title">Gateway <span class="pill-2xx">200</span> <span class="sum-metric">1.1k lines</span></span>
+              <span class="sum-sub sum-sub--clamp">Relay health, routing, and ingest counters from structured logs in this view.</span>
+            </span>
+            <span class="sum-metrics"><span class="sum-metric">Σ 4.2s</span></span>
+            <span class="sum-status sum-st-monitor">monitor</span>
+            <span class="sum-chev"></span>
+          </summary>
+          <div class="sum-body">
+            <dl class="indexer-run-kv indexer-run-kv--gateway-summary">
+              <dt>listening</dt><dd><code class="sum-mono-id">:8080</code></dd>
+              <dt>routing rules</dt><dd>18</dd>
+            </dl>
+          </div>
+        </details>
+        <details class="sum-card sum-card--indexer-stale" style="flex:1 1 18rem;margin-bottom:0">
+          <summary>
+            <span class="sum-avatar sum-av-svc-indexer">Ix</span>
+            <span class="sum-main">
+              <span class="sum-title sum-title--service-indexer">Indexer <span class="sum-metric sum-metric--title-pill">stale</span></span>
+              <span class="sum-sub sum-sub--clamp muted">No heartbeats recently — dashed border and muted subtitle.</span>
+            </span>
+            <span class="sum-metrics"><span class="sum-metric">idle</span></span>
+            <span class="sum-status sum-st-error">error</span>
+            <span class="sum-chev"></span>
+          </summary>
+          <div class="sum-body">
+            <p class="muted" style="margin:0">sum-card--indexer-stale — expanded body still picks up indexer service tint when avatar class matches.</p>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <section id="sg-workspace-draft" class="styleguide-section">
+      <h2>Workspace draft card</h2>
+      <p class="styleguide-sub">
+        <code>sum-card--workspace-draft</code> — unsaved indexer workspace row from Logs → Workspaces → Create.
+        Summary grid reserves space for Cancel / Save; body uses <code>ws-draft-fields</code> + path list + Add / Remove.
+      </p>
+      <div class="styleguide-demo-bg" style="max-width:42rem">
+        <details class="sum-card sum-card--workspace-draft" open data-workspace-draft="0">
+          <summary>
+            <span class="sum-avatar sum-av-c" title="New workspace">+</span>
+            <span class="sum-main sum-main--workspace-draft">
+              <span class="sum-title">
+                <span class="ws-draft-head-inline">
+                  <span class="ws-draft-lbl ws-draft-lbl-user">Operator label</span>
+                  <span class="ws-draft-sep muted">·</span>
+                  <span class="ws-draft-lbl ws-draft-lbl-proj">my-project</span>
+                  <span class="ws-draft-sep muted">·</span>
+                  <span class="ws-draft-lbl ws-draft-lbl-flav"></span>
+                </span>
+              </span>
+            </span>
+            <span class="ws-draft-actions">
+              <button type="button" class="ws-draft-btn ws-draft-btn-cancel" tabindex="-1">Cancel</button>
+              <button type="button" class="ws-draft-btn ws-draft-btn-save" tabindex="-1">Save</button>
+            </span>
+            <span class="sum-chev"></span>
+          </summary>
+          <div class="sum-body">
+            <div class="ws-draft-fields">
+              <div class="ws-draft-field">
+                <label class="ws-draft-field-label">Workspace id</label>
+                <input class="ws-draft-input" type="text" value="repo" readonly tabindex="-1" />
+              </div>
+              <div class="ws-draft-field">
+                <label class="ws-draft-field-label">Project id</label>
+                <input class="ws-draft-input" type="text" value="my-project" readonly tabindex="-1" />
+              </div>
+              <div class="ws-draft-field">
+                <label class="ws-draft-field-label">Flavor id</label>
+                <input class="ws-draft-input" type="text" value="" readonly tabindex="-1" />
+              </div>
+            </div>
+            <div class="sum-section-label">Watched paths</div>
+            <div class="ws-draft-paths-row">
+              <select class="ws-draft-paths-select" size="4" aria-label="Watched paths demo">
+                <option>C:\src\example</option>
+              </select>
+              <div class="ws-draft-path-btns">
+                <button type="button" class="ws-draft-btn ws-draft-btn-add" tabindex="-1">Add</button>
+                <button type="button" class="ws-draft-btn ws-draft-btn-remove" tabindex="-1">Remove</button>
+              </div>
+            </div>
+            <p class="muted ws-draft-hint" style="margin-bottom:0">Static demo — interactive behavior lives in <code>logs.js</code>.</p>
+          </div>
+        </details>
+      </div>
+    </section>
+
+  </div>
+
+  <script>
+    (function () {
+      var root = document.documentElement;
+      var bDef = document.getElementById("theme-default");
+      var bPor = document.getElementById("theme-porcelain");
+      function setTheme(name) {
+        if (name === "porcelain") {
+          root.setAttribute("data-theme", "porcelain");
+          bDef.setAttribute("aria-checked", "false");
+          bPor.setAttribute("aria-checked", "true");
+        } else {
+          root.removeAttribute("data-theme");
+          bDef.setAttribute("aria-checked", "true");
+          bPor.setAttribute("aria-checked", "false");
+        }
+      }
+      bDef.addEventListener("click", function () { setTheme("default"); });
+      bPor.addEventListener("click", function () { setTheme("porcelain"); });
+    })();
+  </script>
+</body>
+</html>

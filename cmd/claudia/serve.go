@@ -20,7 +20,10 @@ import (
 	"github.com/lynn/claudia-gateway/internal/platform"
 	"github.com/lynn/claudia-gateway/internal/server"
 	"github.com/lynn/claudia-gateway/internal/servicelogs"
+	"github.com/lynn/claudia-gateway/internal/servicelogs/bifrostline"
+	"github.com/lynn/claudia-gateway/internal/servicelogs/qdrantline"
 	"github.com/lynn/claudia-gateway/internal/supervisor"
+	"github.com/lynn/claudia-gateway/internal/upstream"
 )
 
 func gatewayPublicURL(ln net.Addr) string {
@@ -74,7 +77,7 @@ func waitForChildExit(name string, cmd *exec.Cmd, waitCh <-chan error, timeout t
 	select {
 	case werr := <-waitCh:
 		if werr != nil && log != nil {
-			log.Debug(name+" process finished", "err", werr)
+			log.Debug(name+" process finished", "msg", "gateway.supervisor.child.exited", "child", name, "err", werr)
 		}
 		return
 	case <-time.After(timeout):
@@ -82,21 +85,22 @@ func waitForChildExit(name string, cmd *exec.Cmd, waitCh <-chan error, timeout t
 
 	if cmd != nil && cmd.Process != nil {
 		if log != nil {
-			log.Warn(name+" did not exit after context cancel; forcing kill", "pid", cmd.Process.Pid, "timeout", timeout)
+			log.Warn(name+" did not exit after context cancel; forcing kill",
+				"msg", "gateway.shutdown.child_force_kill", "child", name, "pid", cmd.Process.Pid, "timeout", timeout)
 		}
 		if err := cmd.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) && log != nil {
-			log.Warn(name+" kill failed", "err", err)
+			log.Warn(name+" kill failed", "msg", "gateway.shutdown.child_force_kill", "child", name, "err", err, "detail", "kill_send_failed")
 		}
 	}
 
 	select {
 	case werr := <-waitCh:
 		if werr != nil && log != nil {
-			log.Debug(name+" process finished after kill", "err", werr)
+			log.Debug(name+" process finished after kill", "msg", "gateway.supervisor.child.exited", "child", name, "err", werr)
 		}
 	case <-time.After(5 * time.Second):
 		if log != nil {
-			log.Warn(name + " still has not exited after forced kill")
+			log.Warn(name+" still has not exited after forced kill", "msg", "gateway.shutdown.child_stuck", "child", name)
 		}
 	}
 }
@@ -111,7 +115,7 @@ func runServe(args []string, openWebview bool) {
 	bifrostDataDir := fs.String("bifrost-data-dir", defaultSupervisorDataSubdir("bifrost"), "BiFrost working directory (created; SQLite and config live here)")
 	bifrostBind := fs.String("bifrost-bind", "127.0.0.1", "BiFrost bind address (-host)")
 	bifrostPort := fs.Int("bifrost-port", 8080, "BiFrost listen port (-port)")
-	bifrostLogLevel := fs.String("bifrost-log-level", "info", "BiFrost -log-level (debug, info, warn, error)")
+	bifrostLogLevel := fs.String("bifrost-log-level", "", "BiFrost -log-level; empty uses upstream.bifrost_log_level from gateway.yaml, then info")
 	bifrostLogStyle := fs.String("bifrost-log-style", "json", "BiFrost -log-style (json or pretty)")
 	upstreamHost := fs.String("upstream-host", "127.0.0.1", "Host for gateway upstream.base_url (Claudia → BiFrost); use 127.0.0.1 when bifrost-bind is 0.0.0.0")
 	waitTimeout := fs.Duration("wait-bifrost", 60*time.Second, "Max time to poll BiFrost /health before exit")
@@ -125,6 +129,7 @@ func runServe(args []string, openWebview bool) {
 	qdrantHealthHost := fs.String("qdrant-health-host", "127.0.0.1", "Host for GET /readyz probe (use 127.0.0.1 when qdrant-bind is 0.0.0.0)")
 	waitQdrant := fs.Duration("wait-qdrant", 60*time.Second, "Max time to poll Qdrant /readyz before exit")
 	noWaitQdrant := fs.Bool("no-wait-qdrant", false, "Skip Qdrant readiness poll")
+	qdrantLogLevelFlag := fs.String("qdrant-log-level", "", "Qdrant QDRANT__LOGGER__LOG_LEVEL; empty uses rag.qdrant.log_level from gateway.yaml")
 
 	_ = fs.Parse(args)
 
@@ -151,20 +156,32 @@ func runServe(args []string, openWebview bool) {
 	}
 	res, _, _ := rt.Snapshot()
 
+	bifrostLvl := strings.TrimSpace(*bifrostLogLevel)
+	if bifrostLvl == "" {
+		bifrostLvl = strings.TrimSpace(res.BifrostLogLevel)
+	}
+	if bifrostLvl == "" {
+		bifrostLvl = "info"
+	}
+	qdrantLvl := strings.TrimSpace(*qdrantLogLevelFlag)
+	if qdrantLvl == "" {
+		qdrantLvl = strings.TrimSpace(res.RAG.QdrantLogLevel)
+	}
+
 	var diskLog *os.File
 	if openWebview {
 		dir := filepath.Dir(res.MetricsSQLitePath)
 		if mkErr := os.MkdirAll(dir, 0755); mkErr != nil {
-			log.Warn("disk log: mkdir", "dir", dir, "err", mkErr)
+			log.Warn("disk log: mkdir", "msg", "gateway.startup.disk_log", "phase", "mkdir", "dir", dir, "err", mkErr)
 		} else {
 			p := filepath.Join(dir, "claudia-desktop.log")
 			f, oerr := os.OpenFile(p, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 			if oerr != nil {
-				log.Warn("disk log: open", "path", p, "err", oerr)
+				log.Warn("disk log: open", "msg", "gateway.startup.disk_log", "phase", "open", "path", p, "err", oerr)
 			} else {
 				diskLog = f
 				logStore.SetMirror(f)
-				log.Info("disk logging enabled", "path", p)
+				log.Info("disk logging enabled", "msg", "gateway.startup.disk_log", "path", p)
 			}
 		}
 	}
@@ -177,10 +194,14 @@ func runServe(args []string, openWebview bool) {
 
 	// Ensure the operator UI log buffer is never empty, even in GUI builds
 	// where stdout/stderr may not be visible/attached (also seeds disk log on desktop).
-	_, _ = fmt.Fprintln(gwSink, "claudia.start")
+	log.Info("gateway startup seed", "msg", "gateway.startup.seed")
 
 	bootstrap := server.BootstrapMode(rt)
 	qBin := strings.TrimSpace(*qdrantBin)
+	qdrantReadyzURL := ""
+	if qBin != "" {
+		qdrantReadyzURL = fmt.Sprintf("http://%s:%d/readyz", strings.TrimSpace(*qdrantHealthHost), *qdrantHTTPPort)
+	}
 
 	childCtx, stopChildren := context.WithCancel(context.Background())
 	var qdrantProc *exec.Cmd
@@ -192,13 +213,14 @@ func runServe(args []string, openWebview bool) {
 
 	if !bootstrap {
 		if qBin != "" {
-			qSink := logStore.Writer("qdrant")
+			qSink := qdrantline.NewWriter(logStore.Writer("qdrant"))
 			qcfg := supervisor.QdrantConfig{
 				Bin:        qBin,
 				StorageDir: *qdrantStorage,
 				BindHost:   strings.TrimSpace(*qdrantBind),
 				HTTPPort:   *qdrantHTTPPort,
 				GRPCPort:   *qdrantGRPCPort,
+				LogLevel:   qdrantLvl,
 				Stdout:     platform.StdoutTee(qSink),
 				Stderr:     platform.StderrTee(qSink),
 			}
@@ -214,9 +236,8 @@ func runServe(args []string, openWebview bool) {
 				qdrantWait <- qdrantProc.Wait()
 			}()
 			if !*noWaitQdrant {
-				qHealth := fmt.Sprintf("http://%s:%d/readyz", strings.TrimSpace(*qdrantHealthHost), *qdrantHTTPPort)
 				wCtx, wCancel := context.WithTimeout(context.Background(), *waitQdrant)
-				err := supervisor.WaitHealthy(wCtx, qHealth, *waitQdrant, log)
+				err := supervisor.WaitHealthy(wCtx, qdrantReadyzURL, *waitQdrant, log, "qdrant")
 				wCancel()
 				if err != nil {
 					stopChildren()
@@ -227,14 +248,14 @@ func runServe(args []string, openWebview bool) {
 			}
 		}
 
-		bSink := logStore.Writer("bifrost")
+		bSink := bifrostline.NewWriter(logStore.Writer("bifrost"))
 		bcfg := supervisor.BifrostConfig{
 			Bin:        *bifrostBin,
 			ConfigJSON: *bifrostConfig,
 			DataDir:    *bifrostDataDir,
 			BindHost:   strings.TrimSpace(*bifrostBind),
 			Port:       *bifrostPort,
-			LogLevel:   strings.TrimSpace(*bifrostLogLevel),
+			LogLevel:   bifrostLvl,
 			LogStyle:   strings.TrimSpace(*bifrostLogStyle),
 			Stdout:     platform.StdoutTee(bSink),
 			Stderr:     platform.StderrTee(bSink),
@@ -264,7 +285,7 @@ func runServe(args []string, openWebview bool) {
 
 		if !*noWait {
 			wCtx, wCancel := context.WithTimeout(context.Background(), *waitTimeout)
-			err := supervisor.WaitHealthy(wCtx, healthURL, *waitTimeout, log)
+			err := supervisor.WaitHealthy(wCtx, healthURL, *waitTimeout, log, "bifrost")
 			wCancel()
 			if err != nil {
 				stopChildren()
@@ -286,7 +307,7 @@ func runServe(args []string, openWebview bool) {
 			wd, werr := os.Getwd()
 			if werr != nil {
 				if log != nil {
-					log.Warn("indexer supervised: getwd", "err", werr)
+					log.Warn("indexer supervised: getwd", "msg", "gateway.supervisor.indexer.not_started", "err", werr, "detail", "getwd")
 				}
 			} else {
 				idxSink := logStore.Writer("indexer")
@@ -303,7 +324,7 @@ func runServe(args []string, openWebview bool) {
 				}, log)
 				if ierr != nil {
 					if log != nil {
-						log.Warn("indexer supervised not started", "err", ierr, "bin", idxBin)
+						log.Warn("indexer supervised not started", "msg", "gateway.supervisor.indexer.not_started", "err", ierr, "bin", idxBin)
 					}
 				} else {
 					indexerWait = make(chan error, 1)
@@ -314,7 +335,10 @@ func runServe(args []string, openWebview bool) {
 			}
 		}
 	} else if log != nil {
-		log.Info("claudia serve: bootstrap mode (create gateway token at /ui/setup, then restart)", "tokens_path", res.TokensPath)
+		log.Info("gateway bootstrap mode",
+			"msg", "gateway.startup.bootstrap",
+			"api_keys_path", res.TokensPath, "tokens_path", res.TokensPath,
+			"hint", "create gateway token at /ui/setup, then restart")
 	}
 
 	addr := server.ListenAddrOverride(res, *listen)
@@ -367,7 +391,7 @@ func runServe(args []string, openWebview bool) {
 				<-bifrostWaitErr
 			}
 			if log != nil {
-				log.Error("listen", "addrs", addrs, "err", lerr)
+				log.Error("listen", "msg", "gateway.listen.failed", "addrs", addrs, "err", lerr)
 			}
 			fmt.Fprintf(os.Stderr, "claudia serve: listen: %v\n", lerr)
 			os.Exit(1)
@@ -382,10 +406,11 @@ func runServe(args []string, openWebview bool) {
 			shCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			defer cancel()
 			if err := shut(shCtx); err != nil && log != nil {
-				log.Warn("http shutdown", "err", err)
+				log.Info("http shutdown", "msg", "gateway.shutdown.http", "err", err)
 			}
 		}()
-		log.Info("claudia serve: gateway listening (bootstrap)", "addr", prim.String(), "ui", entryURL, "config", path)
+		log.Info("gateway listening", "msg", "gateway.startup.listening",
+			"bootstrap", true, "addr", prim.String(), "ui", entryURL, "config", path)
 		runDesktopWebview(openWebview, entryURL, stopRoot, rootCtx)
 		<-stopped
 	} else {
@@ -400,7 +425,7 @@ func runServe(args []string, openWebview bool) {
 				<-bifrostWaitErr
 			}
 			if log != nil {
-				log.Error("listen", "addr", addr, "err", lerr)
+				log.Error("listen", "msg", "gateway.listen.failed", "addr", addr, "err", lerr)
 			}
 			fmt.Fprintf(os.Stderr, "claudia serve: listen %s: %v\n", addr, lerr)
 			os.Exit(1)
@@ -418,10 +443,40 @@ func runServe(args []string, openWebview bool) {
 			shCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			defer cancel()
 			if err := srv.Shutdown(shCtx); err != nil && log != nil {
-				log.Warn("http shutdown", "err", err)
+				log.Info("http shutdown", "msg", "gateway.shutdown.http", "err", err)
 			}
 		}()
-		log.Info("claudia serve: gateway listening", "addr", ln.Addr().String(), "ui", entryURL, "upstream", upstreamURL, "bifrost_data", *bifrostDataDir, "qdrant_supervised", qBin != "", "indexer_supervised", indexerWait != nil, "config", path)
+		log.Info("gateway listening", "msg", "gateway.startup.listening",
+			"addr", ln.Addr().String(), "ui", entryURL, "upstream", upstreamURL, "bifrost_data", *bifrostDataDir, "qdrant_supervised", qBin != "", "indexer_supervised", indexerWait != nil, "config", path)
+		// Periodic BiFrost `/v1/models` poll. The catalog snapshot drives the Provider health
+		// strip (logs UI) and is the anchor for future routing-rule / fallback-chain /
+		// embedding-model / router-model auditors registered via server.RegisterCatalogAuditor.
+		// Period configurable via gateway.yaml `health.available_models_poll_ms`; <=0 disables.
+		var pollInterval time.Duration
+		if rtRes, _, _ := rt.Snapshot(); rtRes != nil {
+			pollInterval = time.Duration(rtRes.AvailableModelsPollMs) * time.Millisecond
+		}
+		// Defer the first refresh briefly so BiFrost has a chance to come up healthy.
+		go func() {
+			time.Sleep(500 * time.Millisecond)
+			server.StartCatalogPoller(rootCtx, rt, log, pollInterval)
+		}()
+		upstream.RunGatewayUpstreamHealthMonitor(rootCtx, log, 15*time.Second, 30*time.Second,
+			func(pctx context.Context) (string, string, time.Duration, bool) {
+				r, _, _ := rt.Snapshot()
+				if r == nil || strings.TrimSpace(r.HealthUpstreamURL) == "" {
+					return "", "", 0, false
+				}
+				to := time.Duration(r.HealthTimeoutMs) * time.Millisecond
+				if to <= 0 {
+					to = 5 * time.Second
+				}
+				return r.HealthUpstreamURL, rt.UpstreamAPIKey(), to, true
+			})
+		upstream.RunSupervisedChildHealthMonitor(rootCtx, log, "bifrost", healthURL, 15*time.Second, 30*time.Second, !*noWait)
+		if qdrantReadyzURL != "" {
+			upstream.RunSupervisedChildHealthMonitor(rootCtx, log, "qdrant", qdrantReadyzURL, 15*time.Second, 30*time.Second, !*noWaitQdrant)
+		}
 		runDesktopWebview(openWebview, entryURL, stopRoot, rootCtx)
 		serveErr = <-serveErrCh
 	}
@@ -432,7 +487,7 @@ func runServe(args []string, openWebview bool) {
 	waitForChildExit("indexer", indexerProc, indexerWait, 10*time.Second, log)
 
 	if serveErr != nil && serveErr != http.ErrServerClosed {
-		log.Error("http server", "err", serveErr)
+		log.Error("http server", "msg", "gateway.http.server_error", "err", serveErr)
 		stopRoot()
 		os.Exit(1)
 	}

@@ -28,6 +28,8 @@ func CloneResolved(r *Resolved) *Resolved {
 	n.EnsembleAutoTriggerMinUserChars = r.EnsembleAutoTriggerMinUserChars
 	n.EnsembleSynthesisEnabled = r.EnsembleSynthesisEnabled
 	n.EnsembleSynthesisModel = r.EnsembleSynthesisModel
+	n.WitnessSampleMaxChars = r.WitnessSampleMaxChars
+	n.WitnessSampleForceAtDebug = r.WitnessSampleForceAtDebug
 	return &n
 }
 

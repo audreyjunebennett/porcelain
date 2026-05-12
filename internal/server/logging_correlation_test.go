@@ -11,6 +11,27 @@ import (
 	"github.com/lynn/claudia-gateway/internal/platform/requestid"
 )
 
+func TestHTTPAccessLogLevel_probesAndErrors(t *testing.T) {
+	cases := []struct {
+		path   string
+		status int
+		want   slog.Level
+	}{
+		{"/health", 200, slog.LevelDebug},
+		{"/status", 204, slog.LevelDebug},
+		{"/api/ui/logs", 200, slog.LevelDebug},
+		{"/api/ui/logs/stream", 200, slog.LevelDebug},
+		{"/health", 503, slog.LevelInfo},
+		{"/v1/chat/completions", 200, slog.LevelInfo},
+		{"/v1/chat/completions", 500, slog.LevelInfo},
+	}
+	for _, tc := range cases {
+		if got := httpAccessLogLevel(tc.path, tc.status); got != tc.want {
+			t.Fatalf("path=%q status=%d: got %v want %v", tc.path, tc.status, got, tc.want)
+		}
+	}
+}
+
 func TestLoggingMiddleware_emitsRequestID(t *testing.T) {
 	var buf bytes.Buffer
 	log := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -27,8 +48,8 @@ func TestLoggingMiddleware_emitsRequestID(t *testing.T) {
 	if !strings.Contains(out, "service=gateway") {
 		t.Fatalf("missing service=gateway: %q", out)
 	}
-	if !strings.Contains(out, "statusCode=418") {
-		t.Fatalf("missing status: %q", out)
+	if !strings.Contains(out, "timeline_kind=web") {
+		t.Fatalf("missing timeline_kind=web for /health: %q", out)
 	}
 }
 

@@ -65,6 +65,12 @@ Gateway YAML uses `upstream.*` for the OpenAI-compatible hop (BiFrost or any com
 | `routing.fallback_chain` | Ordered BiFrost model ids as `provider/model`. |
 | `paths.tokens` / `paths.routing_policy` | Gateway auth and routing policy. |
 
+### Request correlation for operator logs
+
+The gateway sets upstream `X-Request-Id` to its structured `request_id` on each `/v1/chat/completions` relay. This is the only request header Phase 5 depends on for BiFrost correlation because common clients such as VS Code Continue and Cline do not reliably send or preserve custom Claudia headers.
+
+BiFrost subprocess rows may join a conversation only if BiFrost exposes `X-Request-Id` in its own logs. When it does not, the gateway's in-process relay logs (`chat.bifrost.*`, `chat.routing.*`, and `conversation.upstream.*`) remain canonical for the conversation card; BiFrost subprocess rows stay on the BiFrost service card.
+
 ---
 
 ## Compatibility notes (BiFrost behind Claudia)

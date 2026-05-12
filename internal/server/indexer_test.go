@@ -51,6 +51,56 @@ func TestIndexerConfig_HappyPath(t *testing.T) {
 	}
 }
 
+func TestIndexerWorkspaces_HappyPath_LegacyTenant(t *testing.T) {
+	rt, _, srv := setupRAGServer(t)
+	dir := t.TempDir()
+	st := rt.OperatorStore()
+	if st == nil {
+		t.Fatal("operator store unavailable")
+	}
+	ctx := context.Background()
+	if _, err := st.CreateWorkspace(ctx, "", "projW", "flW", []string{dir}); err != nil {
+		t.Fatal(err)
+	}
+
+	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/v1/indexer/workspaces", nil)
+	req.Header.Set("Authorization", "Bearer ingest-tok")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(res.Body)
+		t.Fatalf("status %d %s", res.StatusCode, b)
+	}
+	var doc struct {
+		Object     string `json:"object"`
+		TenantID   string `json:"tenant_id"`
+		Workspaces []struct {
+			WorkspaceID int64  `json:"workspace_id"`
+			ProjectID   string `json:"project_id"`
+			FlavorID    string `json:"flavor_id"`
+			Paths       []struct {
+				PathID int64  `json:"path_id"`
+				Path   string `json:"path"`
+			} `json:"paths"`
+		} `json:"workspaces"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&doc); err != nil {
+		t.Fatal(err)
+	}
+	if doc.Object != "indexer.workspaces" {
+		t.Fatalf("object=%q", doc.Object)
+	}
+	if len(doc.Workspaces) != 1 || doc.Workspaces[0].ProjectID != "projW" {
+		t.Fatalf("workspaces=%+v", doc.Workspaces)
+	}
+	if len(doc.Workspaces[0].Paths) != 1 || filepath.Clean(doc.Workspaces[0].Paths[0].Path) != filepath.Clean(dir) {
+		t.Fatalf("paths=%+v", doc.Workspaces[0].Paths)
+	}
+}
+
 func TestIndexerHealth_OK(t *testing.T) {
 	_, _, srv := setupRAGServer(t)
 	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/v1/indexer/storage/health", nil)

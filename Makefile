@@ -1,8 +1,4 @@
 # Claudia Gateway — see docs/plans/makefile-plan.md and README.md
-#
-# clean:      removes launcher binaries + dist/ only.
-# clean-all:  also removes bin/, packaging/qdrant-bundles/, packages/, node_modules/, .deps/, run/, logs/ (requires CONFIRM=1; runs clean first).
-# clean-data: removes data/bifrost/, data/qdrant/, data/gateway/ — fresh BiFrost + Qdrant + gateway metrics state (requires CONFIRM=1).
 
 ifeq ($(OS),Windows_NT)
   # Same bash as scripts/*.sh (Git for Windows). MSYS2-only: set GITBASH, e.g.
@@ -23,6 +19,25 @@ ifeq ($(OS),Windows_NT)
   BIFROST_BIN := bin/bifrost-http.exe
   QDRANT_BIN := bin/qdrant.exe
   DESKTOP_BIN := porcelain.exe
+  # Paths for Bash (clean-data): inherit from CMD/PowerShell/IDE env, then ask cmd/ps for defaults.
+  # GNU Make parses this file—not PowerShell—so $$ becomes $ for ps -Command "...".
+  _APPDATA := $(strip $(or $(APPDATA),$(appdata),$(AppData)))
+  ifeq ($(_APPDATA),)
+    _APPDATA := $(subst \,/,$(strip $(shell cmd.exe /d /v:off /c "if defined APPDATA (echo.%APPDATA%)")))
+  endif
+  ifeq ($(_APPDATA),)
+    _APPDATA := $(subst \,/,$(strip $(shell powershell.exe -NoProfile -NonInteractive -Command "$$env:APPDATA" 2>/dev/null)))
+  endif
+  APPDATA := $(_APPDATA)
+
+  _WIN_HOME := $(strip $(or $(HOME),$(USERPROFILE),$(userprofile),$(UserProfile)))
+  ifeq ($(_WIN_HOME),)
+    _WIN_HOME := $(subst \,/,$(strip $(shell cmd.exe /d /v:off /c "if defined USERPROFILE (echo.%USERPROFILE%)")))
+  endif
+  ifeq ($(_WIN_HOME),)
+    _WIN_HOME := $(subst \,/,$(strip $(shell powershell.exe -NoProfile -NonInteractive -Command "$$env:USERPROFILE" 2>/dev/null)))
+  endif
+  HOME := $(_WIN_HOME)
 else
   ifeq ($(origin GITBASH),undefined)
     GITBASH := bash
@@ -52,6 +67,7 @@ endif
 
 .PHONY: help up configure install claudia-install clean clean-all clean-data fmt fmt-check logs \
 	bash \
+	save-state \
 	build claudia-build tokencount-file desktop-install desktop-build desktop-run run \
 	claudia-run claudia-serve claudia-start claudia-stop claudia-status \
 	indexer-build indexer-run indexer-install \
@@ -92,16 +108,25 @@ claudia-status:
 logs:
 	$(GITBASH) scripts/logs.sh
 
+# clean:      removes ./claudia[.exe], claudia-desktop[.exe], dist/ only.
 clean:
 	$(GITBASH) scripts/clean.sh
 
+# clean-all:  also removes bin/, packaging/qdrant-bundles/, packages/, node_modules/, .deps/, run/, logs/ (requires CONFIRM=1; runs clean first).
 clean-all:
 	$(GITBASH) scripts/clean-all-confirm.sh $(CONFIRM)
-	$(MAKE) clean
-	$(GITBASH) scripts/clean-all.sh
+	$(MAKE) clean clean-data "APPDATA=$(APPDATA)" "HOME=$(HOME)"
 
+# clean-data: removes data/bifrost/, data/qdrant/, data/gateway/ — fresh BiFrost + Qdrant + gateway metrics state (requires CONFIRM=1).
+clean-data: export APPDATA := $(APPDATA)
+clean-data: export HOME := $(HOME)
 clean-data:
 	$(GITBASH) scripts/clean-data.sh $(CONFIRM)
+
+# Snapshot ./data into temp/sessions/<sortable-id>/data and record a comment (optional).
+# Usage: make save-state COMMENT="what you did"
+save-state:
+	$(GITBASH) scripts/save-state.sh
 
 fmt:
 	gofmt -w cmd internal

@@ -40,7 +40,7 @@ func SmokeChatCompletion(ctx context.Context, baseURL, apiKey, model string, tim
 	res, err := client.Do(req)
 	if err != nil {
 		if log != nil {
-			log.Info("smoke chat completion failed", "err", err, "target", url)
+			log.Debug("smoke chat completion failed", "msg", "upstream.smoke_chat.failed", "err", err, "target", url)
 		}
 		return 0, false, err.Error()
 	}

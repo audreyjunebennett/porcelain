@@ -158,7 +158,7 @@ func handleSetupTokenPOST(rt *Runtime, log *slog.Logger) http.HandlerFunc {
 		plain, tenant, err := tokens.AppendToken(path, label)
 		if err != nil {
 			if log != nil {
-				log.Error("setup append token", "err", err)
+				log.Error("setup append token", "msg", "gateway.auth.append_failed", "surface", "bootstrap", "err", err)
 			}
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusInternalServerError)

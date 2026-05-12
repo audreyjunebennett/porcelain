@@ -3,6 +3,7 @@ package rag
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 	"sync"
@@ -280,5 +281,40 @@ func TestService_Retrieve_EmptyQuery(t *testing.T) {
 	})
 	if err != nil || hits != nil {
 		t.Fatalf("expected nil/nil for empty query, got %v %v", hits, err)
+	}
+}
+
+func TestService_Retrieve_logContainsPrincipalId(t *testing.T) {
+	st := newFakeStore()
+	em := &fakeEmbedder{dim: 8, model: "test-embed"}
+	var buf strings.Builder
+	log := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	s, err := New(Options{
+		Store: st, Embedder: em, EmbeddingDim: 8, ChunkSize: 64, ChunkOverlap: 16, TopK: 4, ScoreThreshold: 0.5, Log: log,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := vectorstore.Coords{TenantID: "tenant-principal-test", ProjectID: "p"}
+	if _, err := s.Ingest(context.Background(), IngestRequest{Coords: c, Source: "s.txt", Text: strings.Repeat("w ", 100)}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Retrieve(context.Background(), RetrieveRequest{
+		Coords:         c,
+		Query:          "hello w",
+		RequestID:      "rid-principal-test",
+		ConversationID: "conv-principal-test",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "principal_id=tenant-principal-test") {
+		t.Fatalf("missing principal_id in RAG retrieve logs:\n%s", out)
+	}
+	if !strings.Contains(out, "request_id=rid-principal-test") || !strings.Contains(out, "conversation_id=conv-principal-test") {
+		t.Fatalf("missing request/conversation correlation:\n%s", out)
+	}
+	if !strings.Contains(out, "msg=conversation.rag.span") || !strings.Contains(out, "window_ms=10000") {
+		t.Fatalf("missing fallback lifecycle RAG span:\n%s", out)
 	}
 }

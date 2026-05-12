@@ -52,6 +52,7 @@ echo
 echo "  make clean              remove launcher binaries + dist/"
 echo "  make clean-all          remove clean + bin/ + packaging/qdrant-bundles + packages + node_modules + .deps + run + logs (CONFIRM=1)"
 echo "  make clean-data         remove data/bifrost + data/qdrant + data/gateway (fresh BiFrost/Qdrant/metrics; needs CONFIRM=1)"
+echo "  make save-state         copy ./data -> temp/sessions/<timestamp>_<sha>/data (optional COMMENT=...)"
 echo
 echo "  make precommit          fmt-check, vet, test (SKIP_DESKTOP=1 skips desktop vet/test)"
 echo "  make bash               interactive bash (-il); Windows: Git for Windows bash"

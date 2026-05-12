@@ -4,17 +4,64 @@ gateway:
   semver: "0.2.0"
   listen_port: 3000
   listen_host: "0.0.0.0"
-  log_level: "info"           # one of: trace | debug | info | warn | error
+  # Gateway process logger (text slog to stdout and the in-memory log ring for /ui/logs).
+  # Allowed: trace | debug | info | warn | error. Empty or unknown → info.
+  #
+  # Rough verbosity (lower = more chatty):
+  #   trace — includes very chatty traces (e.g. RAG) and Phase 8 `conversation.payload.sample`
+  #           (redacted head/tail of request/response JSON when that path is enabled).
+  #   debug — developer detail without full trace noise.
+  #   info  — default for production-style runs; still includes Phase 8 witness *summaries*
+  #           (`conversation.request.witness` / `conversation.response.witness`: counts, sizes,
+  #           role histograms — no raw body text).
+  #   warn | error — quieter.
+  #
+  # Override (takes precedence over this file): environment variable LOG_LEVEL with the same names.
+  # Example: LOG_LEVEL=trace claudia serve
+  #
+  # BiFrost (upstream proxy) logging is separate: see upstream.bifrost_log_level below.
+  log_level: "debug"
+  #
+  # Optional: *payload samples* only (`msg` = conversation.payload.sample).
+  # Witness *summaries* at info are unaffected; they always follow chat paths when implemented.
+  #
+  #   payload_sample_max_chars — max UTF-8 runes for each of head and tail after redaction
+  #     (default 256 if you omit `log_witness`; clamped between 32 and 4096 when set).
+  #   force_payload_sample_at_debug — if true, allow emitting payload samples when log_level is
+  #     debug (still redacted; dev-only). When false, samples are only *attempted* when
+  #     log_level is trace. Note: each sample line is logged at slog "trace" (-8), so it only
+  #     appears in output if the effective logger level includes trace — typically set
+  #     log_level: trace or LOG_LEVEL=trace when you want to see samples.
+  #
+  # Examples (uncomment and adjust):
+  #   # Dev: see redacted JSON snippets in logs.
+  #   log_level: trace
+  #   log_witness:
+  #     payload_sample_max_chars: 512
+  #     force_payload_sample_at_debug: false
+  #
+  #   # Dev: keep log_level at debug but opt in to sample emission (still need trace visible;
+  #   # use LOG_LEVEL=trace if samples do not appear).
+  #   log_level: trace
+  #   log_witness:
+  #     payload_sample_max_chars: 256
+  #     force_payload_sample_at_debug: true
 
 upstream:
   # OpenAI-compatible upstream (BiFrost on the host).
   base_url: "http://127.0.0.1:8080"
   api_key_env: "CLAUDIA_UPSTREAM_API_KEY"
+  # BiFrost subprocess only (not the Go gateway). Typical: info | debug. CLI `-bifrost-log-level` overrides when non-empty.
+  bifrost_log_level: "info"
   # api_key: optional Bearer for upstream /v1/*. If omitted and api_key_env is unset/empty, a secret is generated and written here on first gateway start.
 
 health:
   timeout_ms: 5000
   chat_timeout_ms: 300000
+  # Period (ms) for the BiFrost `/v1/models` poll that drives the Provider health
+  # strip in /ui/logs and runtime catalog auditors. 0 disables periodic polling
+  # (one-shot startup refresh and per-home-page-load refresh still happen).
+  available_models_poll_ms: 30000
 
 paths:
   tokens: "./tokens.yaml"
@@ -53,13 +100,13 @@ routing:
     - "gemini/gemini-embedding-2-preview"
     - "gemini/gemini-robotics-er-1.5-preview"
     - "groq/groq/compound-mini"
-    # Local backup candidates (enable after BiFrost exposes matching ids):
-    # - "openai/local-vllm-qwen2.5-14b-instruct"
-    # - "openai/local-llamacpp-phi-4-mini-instruct"
+
   # Ordered list of upstream models used for the tool-router transformer (try in order; see docs/plans/version-v0.1.1.md).
   # Leave empty to skip router calls. When non-empty, POST /v1/chat/completions may call the first working model
   # to score tools before the main upstream completion.
   router_models: []
+    # - "ollama/llama3.2:3b"
+    # - "ollama/qwen3.5:9b"
     # - "groq/groq/compound-mini"
     # - "groq/groq/compound"
     # - "gemini/gemini-3.1-flash-lite-preview"
@@ -93,17 +140,17 @@ metrics:
 
 # Merge chat sessions per tenant + X-Claudia-Project / X-Claudia-Flavor when the client omits
 # X-Claudia-Conversation-Id, using embeddings (rag.embedding) + SQLite state. Requires metrics.enabled.
-# conversation_merge:
-#   enabled: true
-#   match_threshold: 0.75
-#   recent_window_minutes: 10
-#   candidate_limit: 32
-#   max_idle_hours: 168
-#   # When enabled, defaults attach follow-ups to the latest session within 45m if cosine ≥ 0.18
-#   # or the user message is short (≤220 runes). Set session_attach_minutes: 0 to disable only sticky attach.
-#   # session_attach_minutes: 45
-#   # session_attach_min_cosine: 0.18
-#   # session_short_follow_up_runes: 220
+conversation_merge:
+  enabled: true
+  match_threshold: 0.75
+  recent_window_minutes: 10
+  candidate_limit: 32
+  max_idle_hours: 168
+  # When enabled, defaults attach follow-ups to the latest session within 45m if cosine ≥ 0.18
+  # or the user message is short (≤220 runes). Set session_attach_minutes: 0 to disable only sticky attach.
+  # session_attach_minutes: 45
+  # session_attach_min_cosine: 0.18
+  # session_short_follow_up_runes: 220
 
 # Optional: supervise claudia-index under `claudia serve` / claudia-desktop (v0.5+).
 # When enabled, the gateway starts the file indexer after BiFrost is healthy; the child
@@ -146,3 +193,13 @@ rag:
   defaults:
     project_id: "default"
     flavor_id: ""
+# Gateway metrics (SQLite under ../data/gateway/ relative to this file; see docs/plans/version-v0.1.1.md §3.6).
+metrics:
+  enabled: true
+  # sqlite_path: "../data/gateway/metrics.sqlite"
+  # migrations_dir: "../migrations/gateway"
+
+# Operator SQLite: supervised indexer workspaces (paths + project/flavor). Separate file from metrics.
+# operator:
+#   sqlite_path: "../data/gateway/operator.sqlite"
+#   migrations_dir: "../migrations/operator"

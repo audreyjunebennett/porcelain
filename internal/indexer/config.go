@@ -214,6 +214,10 @@ type Resolved struct {
 
 	// ScopeActiveFileLogMinInterval rate-limits indexer.scope.active_file lines per scope.
 	ScopeActiveFileLogMinInterval time.Duration
+
+	// SupervisedLayer is true when --config names an explicit YAML file (desktop supervised).
+	// Effective watch roots come from GET /v1/indexer/workspaces; YAML roots and --root are ignored.
+	SupervisedLayer bool
 }
 
 // Root is a watched directory and its stable, slug-form identifier used in
@@ -269,6 +273,9 @@ type Overrides struct {
 	// supervised desktop). When sync_state_path is unset in merged YAML, Resolve
 	// defaults sync state to filepath.Join(filepath.Dir(absExplicit), "indexer.sync-state.json").
 	ExplicitConfigPath string
+	// AllowEmptyRoots, when true, skips the "at least one watch root" check so supervised
+	// mode can stay alive and wait for the UI to append roots (desktop bootstrap).
+	AllowEmptyRoots bool
 }
 
 // Resolve produces a Resolved config from merged YAML (see LoadLayeredConfig),
@@ -397,8 +404,14 @@ func Resolve(fc FileConfig, env func(string) string, ov Overrides) (Resolved, er
 	}
 	r.Token = strings.TrimSpace(env(EnvGatewayToken))
 
+	supervised := strings.TrimSpace(ov.ExplicitConfigPath) != ""
+	r.SupervisedLayer = supervised
+
 	var rootEntries []RootYAML
-	if ov.Roots != nil {
+	if supervised {
+		// Phase 2: supervised --config uses gateway workspaces API only (no YAML roots, no --root).
+		rootEntries = nil
+	} else if ov.Roots != nil {
 		for _, p := range ov.Roots {
 			p = strings.TrimSpace(p)
 			if p != "" {
@@ -440,7 +453,7 @@ func Resolve(fc FileConfig, env func(string) string, ov Overrides) (Resolved, er
 	if r.Token == "" {
 		return r, errors.New("gateway bearer token is required (set " + EnvGatewayToken + ")")
 	}
-	if len(r.Roots) == 0 {
+	if len(r.Roots) == 0 && !ov.AllowEmptyRoots {
 		return r, errors.New("at least one watch root is required (config roots or --root)")
 	}
 	if r.SyncStatePath == "" {

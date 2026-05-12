@@ -353,6 +353,13 @@ function startStreaming(ctx) {
 }
 
 function init(ctx) {
+  /** Prevent stacked listeners + duplicate EventSource if ClaudiaLogs.Main ran more than once (e.g. stray re-entry). */
+  if (typeof document !== "undefined" && document.documentElement) {
+    if (document.documentElement.getAttribute("data-claudia-logs-transport-init") === "1") {
+      return;
+    }
+    document.documentElement.setAttribute("data-claudia-logs-transport-init", "1");
+  }
   window.addEventListener("scroll", function () {
     if (ctx.getViewMode() === "summarized") return;
     if (window.scrollY > 260) return;

@@ -14,10 +14,9 @@ const defaultSessionTTL = 24 * time.Hour
 
 // uiSessionStore holds short-lived admin UI sessions after gateway token login.
 type uiSessionStore struct {
-	mu     sync.Mutex
-	ttl    time.Duration
-	byID   map[string]time.Time
-	tokens map[string]string // session id -> gateway token (plaintext, for Continue snippet only)
+	mu   sync.Mutex
+	ttl  time.Duration
+	byID map[string]time.Time
 }
 
 func newUISessionStore(ttl time.Duration) *uiSessionStore {
@@ -25,14 +24,13 @@ func newUISessionStore(ttl time.Duration) *uiSessionStore {
 		ttl = defaultSessionTTL
 	}
 	return &uiSessionStore{
-		ttl:    ttl,
-		byID:   make(map[string]time.Time),
-		tokens: make(map[string]string),
+		ttl:  ttl,
+		byID: make(map[string]time.Time),
 	}
 }
 
-// issue creates a session and remembers gatewayToken for this browser session (Continue config snippet).
-func (s *uiSessionStore) issue(gatewayToken string) (id string, err error) {
+// issue creates a session id after the caller has validated the gateway token.
+func (s *uiSessionStore) issue() (id string, err error) {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
 		return "", err
@@ -42,23 +40,7 @@ func (s *uiSessionStore) issue(gatewayToken string) (id string, err error) {
 	defer s.mu.Unlock()
 	s.pruneLocked()
 	s.byID[id] = time.Now().Add(s.ttl)
-	s.tokens[id] = gatewayToken
 	return id, nil
-}
-
-// GatewayToken returns the token stored at login for this session id, or "" if unknown/expired.
-func (s *uiSessionStore) GatewayToken(sessionID string) string {
-	if sessionID == "" {
-		return ""
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.pruneLocked()
-	exp, ok := s.byID[sessionID]
-	if !ok || time.Now().After(exp) {
-		return ""
-	}
-	return s.tokens[sessionID]
 }
 
 func (s *uiSessionStore) valid(id string) bool {
@@ -79,7 +61,6 @@ func (s *uiSessionStore) revoke(id string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.byID, id)
-	delete(s.tokens, id)
 }
 
 func (s *uiSessionStore) pruneLocked() {
@@ -87,7 +68,6 @@ func (s *uiSessionStore) pruneLocked() {
 	for k, exp := range s.byID {
 		if now.After(exp) {
 			delete(s.byID, k)
-			delete(s.tokens, k)
 		}
 	}
 }

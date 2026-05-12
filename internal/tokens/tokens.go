@@ -55,7 +55,7 @@ func (s *Store) ReloadIfStale() {
 	st, err := os.Stat(s.path)
 	if err != nil {
 		if s.log != nil {
-			s.log.Error("tokens file missing", "path", s.path, "err", err)
+			s.log.Error("tokens file missing", "msg", "gateway.auth.file_missing", "path", s.path, "err", err)
 		}
 		s.byToken = make(map[string]Record)
 		s.mtimeNs = 0
@@ -70,14 +70,14 @@ func (s *Store) ReloadIfStale() {
 	raw, err := os.ReadFile(s.path)
 	if err != nil {
 		if s.log != nil {
-			s.log.Error("read tokens yaml", "path", s.path, "err", err)
+			s.log.Error("read tokens yaml", "msg", "gateway.auth.read_failed", "path", s.path, "err", err)
 		}
 		return
 	}
 	var doc yamlDoc
 	if err := yaml.Unmarshal(raw, &doc); err != nil {
 		if s.log != nil {
-			s.log.Error("failed to parse tokens yaml", "path", s.path, "err", err)
+			s.log.Error("failed to parse tokens yaml", "msg", "gateway.auth.parse_failed", "path", s.path, "err", err)
 		}
 		s.byToken = make(map[string]Record)
 		s.mtimeNs = mt
@@ -96,7 +96,7 @@ func (s *Store) ReloadIfStale() {
 	}
 	s.byToken = next
 	if s.log != nil {
-		s.log.Info("reloaded gateway API tokens", "path", s.path, "count", len(s.byToken))
+		s.log.Info("gateway client credentials reloaded", "msg", "gateway.auth.reloaded", "path", s.path, "count", len(s.byToken))
 	}
 }
 

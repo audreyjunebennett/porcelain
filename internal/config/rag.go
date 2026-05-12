@@ -15,8 +15,9 @@ type RAG struct {
 	Enabled bool
 
 	// Vector store (Qdrant HTTP REST in v0.2; one adapter per scheme).
-	QdrantURL    string
-	QdrantAPIKey string
+	QdrantURL      string
+	QdrantAPIKey   string
+	QdrantLogLevel string // supervised native Qdrant: QDRANT__LOGGER__LOG_LEVEL when non-empty; `-qdrant-log-level` overrides.
 
 	// Embedding configuration. EmbeddingBaseURL falls back to upstream.base_url
 	// when empty; EmbeddingPath is appended (default "/v1/embeddings").
@@ -58,6 +59,7 @@ func (d ragDoc) effective() RAG {
 		Enabled:           d.Enabled != nil && *d.Enabled,
 		QdrantURL:         strings.TrimSpace(d.Qdrant.URL),
 		QdrantAPIKey:      strings.TrimSpace(d.Qdrant.APIKey),
+		QdrantLogLevel:    strings.TrimSpace(d.Qdrant.LogLevel),
 		EmbeddingBaseURL:  strings.TrimSpace(d.Embedding.BaseURL),
 		EmbeddingPath:     strings.TrimSpace(d.Embedding.Path),
 		EmbeddingModel:    strings.TrimSpace(d.Embedding.Model),
@@ -154,8 +156,9 @@ func (r RAG) Validate() error {
 type ragDoc struct {
 	Enabled *bool `yaml:"enabled"`
 	Qdrant  struct {
-		URL    string `yaml:"url"`
-		APIKey string `yaml:"api_key"`
+		URL      string `yaml:"url"`
+		APIKey   string `yaml:"api_key"`
+		LogLevel string `yaml:"log_level"`
 	} `yaml:"qdrant"`
 	Embedding struct {
 		BaseURL string `yaml:"base_url"`

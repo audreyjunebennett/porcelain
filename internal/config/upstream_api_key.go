@@ -44,7 +44,7 @@ func EnsureGeneratedUpstreamAPIKey(gatewayPath string, res *Resolved, log *slog.
 		return nil, err
 	}
 	if log != nil {
-		log.Info("wrote auto-generated upstream.api_key to gateway.yaml", "path", gatewayPath)
+		log.Info("wrote auto-generated upstream.api_key to gateway.yaml", "msg", "gateway.auth.upstream_api_key.autogen", "path", gatewayPath)
 	}
 	out := CloneResolved(res)
 	out.UpstreamAPIKey = key
