@@ -67,8 +67,6 @@ These names are **roles**, not four separate shipping binaries unless noted:
 - **Config table copy:** **Chimera** substitutes for “Claudia” where it describes **client auth** (`tokens.yaml`), `gateway.yaml` (“Chimera listen + upstream”), `.env` (Chimera↔BiFrost key line), and **desktop** install note (“admin UI for Chimera”).
 - `**cmd/claudia/gateway.go`:** structured startup logs use `Chimera (go) listening` (and bootstrap variant) instead of `claudia (go) listening`.
 
-**Intentionally unchanged on that branch (decide for v0.3):** binary name `claudia`, `make claudia-`* targets, `CLAUDIA_*` env vars, `claudia serve` stderr prefixes, virtual model `Claudia-<semver>`, and routing-policy references—so “Claudia” may remain as a **legacy technical identifier** until a later milestone.
-
 ### Scope buckets
 
 - **Operator-facing branding** — Primary headings and overview docs should say **Chimera** for this service and **Porcelain** for the suite; use **Locus** where workspace clients are meant. Avoid presenting “Claudia Gateway” as the product name on first-run surfaces unless migration docs require it.
