@@ -5508,7 +5508,7 @@ def web_chat():
       </div>
     </div>
     <div class="sb-search-row" style="display:flex;align-items:center;gap:6px;padding:4px 8px 0">
-      <div class="sb-search" style="flex:1"><input type="text" id="sbSearch" placeholder="Search or â­ for starred" autocomplete="off"></div>
+      <div class="sb-search" style="flex:1"><input type="text" id="sbSearch" placeholder="Search or ⭐ for starred" autocomplete="off"></div>
       <button type="button" id="semanticToggle" title="Semantic search via Chimera (vector search)" onclick="toggleSemanticSearch(this)" style="flex-shrink:0;background:none;border:1px solid var(--border);border-radius:8px;color:#888;font-size:14px;padding:4px 7px;cursor:pointer;transition:all .2s;line-height:1">âœ¨</button>
     </div>
     <div class="sb-list" id="sbList"></div>
@@ -5617,9 +5617,7 @@ def web_chat():
   </div>
   <div id="tabBar" role="tablist">
     <span id="tabIndicator" class="tab-indicator" aria-hidden="true"></span>
-    <button type="button" class="tab active" data-tab="chat" role="tab" aria-selected="true">ðŸ’¬ Chat</button>
-    <button type="button" class="tab" data-tab="social" role="tab" aria-selected="false">ðŸ‘¥ Social</button>
-    <button type="button" class="tab" data-tab="room" role="tab" aria-selected="false">ðŸ›ï¸ Room</button>
+    <button type="button" class="tab active" data-tab="chat" role="tab" aria-selected="true"> Chat</button>
   </div>
   <div id="pwaVersion" class="pwa-version" aria-hidden="true">v39 __BUILD_ID__</div>
     <script src="/web_app.js?v=39__BUILD_ID__"></script>
