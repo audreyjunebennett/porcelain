@@ -127,7 +127,8 @@ func startAllServices(repoRoot string) []Service {
 	chimeraLogPath := filepath.Join(repoRoot, ".data", "logs", "chimera.log")
 	chimeraLog, _ := os.OpenFile(chimeraLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	configPath := filepath.Join(repoRoot, "chimera", "config", "gateway.yaml")
-	chimeraCmd := exec.Command("chimera/bin/chimera.exe", "desktop", "-config", configPath)
+	bifrostConfigPath := filepath.Join(repoRoot, "chimera", "config", "bifrost.config.json")
+	chimeraCmd := exec.Command("chimera/bin/chimera.exe", "desktop", "-config", configPath, "-bifrost-config", bifrostConfigPath)
 	chimeraCmd.Dir = repoRoot
 	chimeraCmd.Stdout = chimeraLog
 	chimeraCmd.Stderr = chimeraLog
