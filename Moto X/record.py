@@ -8,7 +8,17 @@ from datetime import datetime
 import requests
 
 
-PC_BASE_URL = os.environ.get("CLAUDIA_PC_URL", "http://100.104.150.77:8765")
+# Try URLs in order until one responds. Set CLAUDIA_PC_URL to override entirely.
+# Default: local WiFi first (no Tailscale needed), Tailscale as fallback.
+_PC_URL_OVERRIDE = os.environ.get("CLAUDIA_PC_URL", "")
+_PC_URL_CANDIDATES = (
+    [_PC_URL_OVERRIDE] if _PC_URL_OVERRIDE
+    else [
+        "http://192.168.8.170:8765",   # local WiFi
+        "http://100.104.150.77:8765",  # Tailscale fallback
+    ]
+)
+PC_BASE_URL = _PC_URL_CANDIDATES[0]
 TRANSCRIBE_URL = f"{PC_BASE_URL.rstrip('/')}/transcribe"
 PING_URL = f"{PC_BASE_URL.rstrip('/')}/ping"
 
@@ -75,16 +85,30 @@ def wait_until_file_stable(path, timeout=15):
     return os.path.exists(path) and os.path.getsize(path) > 1000
 
 
-def check_connection():
-    record_log("Checking connection to PC...")
+def _try_url(base_url: str, timeout: int = 8) -> bool:
+    """Ping one candidate URL. Returns True if receiver responds."""
+    global PC_BASE_URL, TRANSCRIBE_URL, PING_URL
     try:
-        response = requests.get(PING_URL, timeout=8)
-        if response.status_code == 200 and response.text.strip() == "ok":
-            record_log("✓ ping OK — receiver reachable.")
+        resp = requests.get(f"{base_url.rstrip('/')}/ping", timeout=timeout)
+        if resp.status_code == 200 and resp.text.strip() == "ok":
+            if base_url != PC_BASE_URL:
+                record_log(f"✓ switched to {base_url}")
+                PC_BASE_URL = base_url
+                TRANSCRIBE_URL = f"{PC_BASE_URL.rstrip('/')}/transcribe"
+                PING_URL = f"{PC_BASE_URL.rstrip('/')}/ping"
             return True
-        record_log(f"✗ ping unexpected: HTTP {response.status_code} {response.text[:120]}")
-    except Exception as exc:
-        record_log(f"✗ ping failed: {exc} (is receiver.py running? Tailscale/Wi-Fi OK?)")
+    except Exception:
+        pass
+    return False
+
+
+def check_connection() -> bool:
+    record_log("Checking connection to PC...")
+    for url in _PC_URL_CANDIDATES:
+        if _try_url(url):
+            record_log(f"✓ ping OK — receiver reachable at {PC_BASE_URL}")
+            return True
+    record_log("✗ ping failed on all candidates — is receiver.py running? WiFi connected?")
     return False
 
 
