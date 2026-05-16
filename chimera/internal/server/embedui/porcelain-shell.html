@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Porcelain</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, sans-serif; overflow: hidden; background: #f5f5f5; }
+    body {
+      display: flex;
+      flex-direction: column;
+      color: #1a1a1a;
+    }
+
+    /* Navigation tabs */
+    nav#tabs {
+      flex: 0 0 auto;
+      display: flex;
+      gap: 0;
+      background: white;
+      border-bottom: 1px solid #ddd;
+      padding: 0;
+      align-items: stretch;
+      position: relative;
+      z-index: 2;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+
+    nav#tabs button {
+      border: none;
+      background: transparent;
+      padding: 0.75rem 1.25rem;
+      cursor: pointer;
+      font-size: 0.95rem;
+      color: #666;
+      border-bottom: 3px solid transparent;
+      font-weight: 500;
+      transition: all 0.2s ease;
+    }
+
+    nav#tabs button:hover {
+      background: #fafafa;
+      color: #333;
+    }
+
+    nav#tabs button.active {
+      border-bottom-color: #6366f1;
+      font-weight: 600;
+      color: #6366f1;
+      background: #f8f8ff;
+    }
+
+    nav#tabs button.admin-tab {
+      opacity: 0;
+      max-width: 0;
+      padding: 0;
+      overflow: hidden;
+      transition: all 0.3s ease;
+    }
+
+    nav#tabs button.admin-tab.visible {
+      opacity: 1;
+      max-width: 200px;
+      padding: 0.75rem 1.25rem;
+    }
+
+    /* Advanced button */
+    #advanced-toggle {
+      margin-left: auto;
+      background: transparent;
+      border: 1px solid #ddd;
+      padding: 0.5rem 0.75rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      color: #666;
+      transition: all 0.2s ease;
+      margin-right: 0.5rem;
+    }
+
+    #advanced-toggle:hover {
+      background: #f0f0f0;
+      border-color: #999;
+    }
+
+    #advanced-toggle.active {
+      background: #6366f1;
+      color: white;
+      border-color: #6366f1;
+    }
+
+    /* Content area */
+    #frame-wrap {
+      flex: 1 1 auto;
+      min-height: 0;
+      position: relative;
+      z-index: 1;
+      overflow: hidden;
+      display: flex;
+    }
+
+    iframe {
+      display: none;
+      width: 100%;
+      height: 100%;
+      border: none;
+      z-index: 0;
+    }
+
+    iframe.visible {
+      display: block;
+      z-index: 1;
+    }
+
+    /* Setup tab content (inline) */
+    #setup-content {
+      display: none;
+      flex: 1;
+      overflow-y: auto;
+      padding: 2rem;
+    }
+
+    #setup-content.visible {
+      display: block;
+    }
+
+    .setup-section {
+      background: white;
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+
+    .setup-section h2 {
+      margin: 0 0 1rem 0;
+      font-size: 1.1rem;
+      color: #1a1a1a;
+    }
+
+    .status-badge {
+      display: inline-block;
+      padding: 0.35rem 0.75rem;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    .status-running {
+      background: #e6ffed;
+      color: #0d6832;
+    }
+
+    .status-pending {
+      background: #fff3cd;
+      color: #664d03;
+    }
+
+    .status-error {
+      background: #f8d7da;
+      color: #842029;
+    }
+
+    .qr-container {
+      text-align: center;
+      padding: 2rem 0;
+    }
+
+    .qr-code {
+      max-width: 250px;
+      height: auto;
+      border: 2px solid #ddd;
+      border-radius: 8px;
+    }
+
+    .qr-hint {
+      margin-top: 1rem;
+      font-size: 0.9rem;
+      color: #666;
+    }
+
+    .status-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.75rem 0;
+      border-bottom: 1px solid #eee;
+    }
+
+    .status-item:last-child {
+      border-bottom: none;
+    }
+
+    .status-label {
+      font-weight: 600;
+      color: #1a1a1a;
+    }
+
+    .log-viewer {
+      background: #1e1e1e;
+      color: #d4d4d4;
+      border-radius: 6px;
+      padding: 1rem;
+      font-family: 'Courier New', monospace;
+      font-size: 0.85rem;
+      max-height: 300px;
+      overflow-y: auto;
+      line-height: 1.4;
+    }
+
+    .log-line {
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .log-error { color: #f48771; }
+    .log-warn { color: #dcdcaa; }
+    .log-info { color: #9cdcfe; }
+
+    .port-info {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+
+    .port-item {
+      padding: 0.75rem;
+      background: #f8f8ff;
+      border-radius: 4px;
+      border-left: 3px solid #6366f1;
+    }
+
+    .port-item-label {
+      font-size: 0.8rem;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .port-item-value {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #1a1a1a;
+      margin-top: 0.25rem;
+      font-family: monospace;
+    }
+
+    /* Recorder tab */
+    #recorder-content {
+      display: none;
+      flex: 1;
+      overflow-y: auto;
+      padding: 2rem;
+    }
+
+    #recorder-content.visible {
+      display: block;
+    }
+
+    .transcription-item {
+      background: white;
+      border-radius: 6px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      border-left: 4px solid #6366f1;
+    }
+
+    .transcription-speaker {
+      font-weight: 600;
+      color: #6366f1;
+      font-size: 0.9rem;
+    }
+
+    .transcription-text {
+      margin-top: 0.5rem;
+      color: #333;
+      line-height: 1.5;
+    }
+
+    .transcription-time {
+      font-size: 0.8rem;
+      color: #999;
+      margin-top: 0.5rem;
+    }
+
+    .queue-stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .stat-box {
+      background: white;
+      border-radius: 6px;
+      padding: 1rem;
+      text-align: center;
+    }
+
+    .stat-label {
+      font-size: 0.85rem;
+      color: #666;
+      text-transform: uppercase;
+    }
+
+    .stat-value {
+      font-size: 2rem;
+      font-weight: 600;
+      color: #6366f1;
+      margin-top: 0.5rem;
+    }
+
+    .hint {
+      background: #f0f7ff;
+      border-left: 3px solid #6366f1;
+      padding: 1rem;
+      border-radius: 4px;
+      margin: 1.5rem 0;
+      color: #333;
+    }
+
+    .hint-title {
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+  <nav id="tabs" role="tablist">
+    <!-- Porcelain tabs (always visible) -->
+    <button type="button" role="tab" data-tab="setup" class="active" aria-selected="true">Setup</button>
+    <button type="button" role="tab" data-tab="workspace" aria-selected="false">Workspace</button>
+    <button type="button" role="tab" data-tab="recorder" aria-selected="false">Recorder</button>
+    <button type="button" role="tab" data-tab="logs" aria-selected="false">Logs</button>
+
+    <!-- Admin tabs (hidden by default, toggle with Advanced button or Ctrl+Shift+A) -->
+    <button type="button" role="tab" data-tab="main" class="admin-tab" aria-selected="false">Main</button>
+    <button type="button" role="tab" data-tab="indexer" class="admin-tab" aria-selected="false">Indexer</button>
+    <button type="button" role="tab" data-tab="continue" class="admin-tab" aria-selected="false">VS Code</button>
+    <button type="button" role="tab" data-tab="admin" class="admin-tab" aria-selected="false">Admin</button>
+
+    <!-- Advanced button -->
+    <button id="advanced-toggle" type="button" aria-label="Toggle advanced/admin features">Advanced</button>
+  </nav>
+
+  <div id="frame-wrap">
+    <!-- Setup tab: inline content -->
+    <div id="setup-content" class="visible">
+      <!-- Status overview -->
+      <div class="setup-section">
+        <h2>System Status</h2>
+        <div class="status-item">
+          <span class="status-label">Chimera Gateway</span>
+          <span id="status-chimera" class="status-badge status-running">✓ Running</span>
+        </div>
+        <div class="status-item">
+          <span class="status-label">Relay Server</span>
+          <span id="status-relay" class="status-badge status-pending">Checking...</span>
+        </div>
+        <div class="status-item">
+          <span class="status-label">Locus Creative Space</span>
+          <span id="status-locus" class="status-badge status-pending">Checking...</span>
+        </div>
+        <div class="status-item">
+          <span class="status-label">Moto X Receiver</span>
+          <span id="status-motox" class="status-badge status-pending">Checking...</span>
+        </div>
+      </div>
+
+      <!-- Local access -->
+      <div class="setup-section">
+        <h2>Local WiFi Access</h2>
+        <p>On the same WiFi, open your iPhone and visit:</p>
+        <div class="port-info">
+          <div class="port-item">
+            <div class="port-item-label">Locus PWA</div>
+            <div class="port-item-value" id="local-url">http://192.168.x.x:11435</div>
+          </div>
+          <div class="port-item">
+            <div class="port-item-label">Your PC IP</div>
+            <div class="port-item-value" id="local-ip">192.168.x.x</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Remote access via QR -->
+      <div class="setup-section">
+        <h2>Remote Access (Away from Home)</h2>
+        <p>Scan this QR code with your iPhone to access Locus remotely:</p>
+        <div class="qr-container">
+          <img id="qr-code" class="qr-code" src="" alt="QR code for remote access">
+          <div class="qr-hint">Scan to get relay token & connection info</div>
+        </div>
+        <div>
+          <label style="display: block; font-weight: 600; margin-top: 1rem; font-size: 0.9rem;">Relay Token (keep secret):</label>
+          <div style="background: #f8f8ff; padding: 0.75rem; border-radius: 4px; margin-top: 0.5rem; font-family: monospace; font-size: 0.85rem; word-break: break-all;">
+            <span id="relay-token-display">••••••••</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Service logs -->
+      <div class="setup-section">
+        <h2>Recent Activity</h2>
+        <div class="log-viewer" id="log-viewer">
+          <div class="log-line log-info">Waiting for logs...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recorder tab: inline content -->
+    <div id="recorder-content">
+      <div class="hint">
+        <div class="hint-title">💬 Live Transcription</div>
+        <p>Audio from your Moto X watch is automatically transcribed and appears here in real-time.</p>
+      </div>
+
+      <div class="setup-section">
+        <h2>Ingestion Queue</h2>
+        <div class="queue-stats">
+          <div class="stat-box">
+            <div class="stat-label">Pending</div>
+            <div class="stat-value" id="queue-pending">0</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Transcribing</div>
+            <div class="stat-value" id="queue-processing">0</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Total Today</div>
+            <div class="stat-value" id="queue-total">0</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="setup-section">
+        <h2>Recent Transcriptions</h2>
+        <div id="transcriptions-list">
+          <p style="color: #999; text-align: center; padding: 2rem;">No transcriptions yet today</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Workspace tab: Locus PWA iframe -->
+    <iframe id="f-workspace" title="Locus Workspace" src="http://localhost:11435/web"></iframe>
+
+    <!-- Logs tab: Dedicated logs viewer -->
+    <iframe id="f-logs" title="Service Logs" data-lazy-src="/ui/logs?embed=1"></iframe>
+
+    <!-- Admin tabs: Hidden by default -->
+    <iframe id="f-main" title="Gateway main" data-lazy-src="/"></iframe>
+    <iframe id="f-indexer" title="Indexer" data-lazy-src="/ui/indexer"></iframe>
+    <iframe id="f-continue" title="VS Code Continue" data-lazy-src="/ui/continue"></iframe>
+    <iframe id="f-admin" title="Admin" data-lazy-src="/ui/panel"></iframe>
+  </div>
+
+  <script>
+(function () {
+  const origin = window.location.origin;
+  const tabs = document.querySelectorAll("nav#tabs button");
+  const advancedToggle = document.getElementById("advanced-toggle");
+  const adminTabs = document.querySelectorAll("nav#tabs button.admin-tab");
+
+  const frames = {
+    setup: document.getElementById("setup-content"),
+    workspace: document.getElementById("f-workspace"),
+    recorder: document.getElementById("recorder-content"),
+    logs: document.getElementById("f-logs"),
+    main: document.getElementById("f-main"),
+    indexer: document.getElementById("f-indexer"),
+    continue: document.getElementById("f-continue"),
+    admin: document.getElementById("f-admin")
+  };
+
+  // Load advanced mode from localStorage
+  let advancedMode = localStorage.getItem("porcelain-advanced-mode") === "true";
+  updateAdvancedMode();
+
+  // Toggle advanced mode
+  advancedToggle.addEventListener("click", () => {
+    advancedMode = !advancedMode;
+    localStorage.setItem("porcelain-advanced-mode", advancedMode);
+    updateAdvancedMode();
+  });
+
+  // Keyboard shortcut: Ctrl+Shift+A
+  document.addEventListener("keydown", (e) => {
+    if (e.ctrlKey && e.shiftKey && e.key.toUpperCase() === "A") {
+      e.preventDefault();
+      advancedMode = !advancedMode;
+      localStorage.setItem("porcelain-advanced-mode", advancedMode);
+      updateAdvancedMode();
+    }
+  });
+
+  function updateAdvancedMode() {
+    adminTabs.forEach(btn => {
+      btn.classList.toggle("visible", advancedMode);
+    });
+    advancedToggle.classList.toggle("active", advancedMode);
+  }
+
+  // Load initial config
+  async function loadConfig() {
+    try {
+      const resp = await fetch("/api/config/status");
+      if (!resp.ok) throw new Error("HTTP " + resp.status);
+      const data = await resp.json();
+
+      document.getElementById("status-relay").textContent =
+        data.relayStatus === "running" ? "✓ Running" : "⊘ " + (data.relayStatus || "Unknown");
+      document.getElementById("status-relay").className =
+        "status-badge status-" + (data.relayStatus === "running" ? "running" : "pending");
+
+      document.getElementById("status-locus").textContent =
+        data.locusStatus === "running" ? "✓ Running" : "⊘ " + (data.locusStatus || "Unknown");
+      document.getElementById("status-locus").className =
+        "status-badge status-" + (data.locusStatus === "running" ? "running" : "pending");
+
+      if (data.localIP) {
+        document.getElementById("local-ip").textContent = data.localIP;
+        document.getElementById("local-url").textContent = "http://" + data.localIP + ":11435";
+      }
+    } catch (e) {
+      console.error("Failed to load config:", e);
+    }
+  }
+
+  // Load QR code
+  async function loadQR() {
+    try {
+      const resp = await fetch("/api/config/qr");
+      if (!resp.ok) throw new Error("HTTP " + resp.status);
+      const data = await resp.json();
+
+      if (data.qrCode) {
+        document.getElementById("qr-code").src = "data:image/png;base64," + data.qrCode;
+      }
+
+      if (data.token) {
+        const first4 = data.token.substring(0, 4);
+        const last4 = data.token.substring(Math.max(0, data.token.length - 4));
+        document.getElementById("relay-token-display").textContent = first4 + "••••" + last4;
+      }
+    } catch (e) {
+      console.error("Failed to load QR:", e);
+    }
+  }
+
+  // Load Moto X status
+  async function loadMotoXStatus() {
+    try {
+      const resp = await fetch("/api/moto-x/status");
+      if (!resp.ok) throw new Error("HTTP " + resp.status);
+      const data = await resp.json();
+
+      document.getElementById("status-motox").textContent =
+        data.status === "running" ? "✓ Running" : "⊘ " + (data.status || "Unknown");
+      document.getElementById("status-motox").className =
+        "status-badge status-" + (data.status === "running" ? "running" : "pending");
+
+      // Update recorder tab
+      if (data.queue) {
+        document.getElementById("queue-pending").textContent = data.queue.pending || 0;
+        document.getElementById("queue-processing").textContent = data.queue.processing || 0;
+        document.getElementById("queue-total").textContent = data.queue.total || 0;
+      }
+
+      if (data.recent && Array.isArray(data.recent)) {
+        const list = document.getElementById("transcriptions-list");
+        if (data.recent.length === 0) {
+          list.innerHTML = '<p style="color: #999; text-align: center; padding: 2rem;">No transcriptions yet today</p>';
+        } else {
+          list.innerHTML = data.recent
+            .map(item => `
+              <div class="transcription-item">
+                <div class="transcription-speaker">${item.speaker || "Unknown"}</div>
+                <div class="transcription-text">${item.text}</div>
+                <div class="transcription-time">${item.time || ""}</div>
+              </div>
+            `)
+            .join("");
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load Moto X status:", e);
+    }
+  }
+
+  // Load recent logs
+  async function loadLogs() {
+    try {
+      const resp = await fetch("/api/logs/recent");
+      if (!resp.ok) throw new Error("HTTP " + resp.status);
+      const data = await resp.json();
+
+      if (data.logs && Array.isArray(data.logs)) {
+        const viewer = document.getElementById("log-viewer");
+        viewer.innerHTML = data.logs
+          .slice(-20)
+          .map(log => {
+            const cls = log.level === "error" ? "log-error" :
+                       log.level === "warn" ? "log-warn" : "log-info";
+            return '<div class="log-line ' + cls + '">' +
+                   (log.message || log).replace(/</g, "&lt;").replace(/>/g, "&gt;") +
+                   '</div>';
+          })
+          .join("");
+        viewer.scrollTop = viewer.scrollHeight;
+      }
+    } catch (e) {
+      console.error("Failed to load logs:", e);
+    }
+  }
+
+  // Tab switching
+  function show(name) {
+    Object.keys(frames).forEach(k => {
+      const el = frames[k];
+      const isVisible = k === name;
+      if (el.classList) {
+        el.classList.toggle("visible", isVisible);
+      } else {
+        el.style.display = isVisible ? "block" : "none";
+      }
+
+      // Load lazy iframes on first show
+      if (isVisible && el.dataset && el.dataset.lazySrc && !el.src) {
+        el.src = el.dataset.lazySrc;
+      }
+    });
+
+    tabs.forEach(btn => {
+      const isActive = btn.dataset.tab === name;
+      btn.classList.toggle("active", isActive);
+      btn.setAttribute("aria-selected", isActive ? "true" : "false");
+    });
+  }
+
+  // Event listeners
+  tabs.forEach(btn => {
+    btn.addEventListener("click", () => {
+      show(btn.dataset.tab);
+    });
+  });
+
+  // Initial load
+  loadConfig();
+  loadQR();
+  loadMotoXStatus();
+  loadLogs();
+
+  // Refresh every 5 seconds
+  setInterval(() => {
+    loadConfig();
+    loadMotoXStatus();
+    loadLogs();
+  }, 5000);
+
+  // Refresh QR every 30 seconds
+  setInterval(loadQR, 30000);
+})();
+  </script>
+</body>
+</html>

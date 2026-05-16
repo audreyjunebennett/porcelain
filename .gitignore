@@ -49,10 +49,53 @@ temp/
 __pycache__/
 scripts/__pycache__/
 chat_indexer/
-chimera/
-Moto X/
 assets/bomb/
 assets/bucket tree flowers/
 assets/file/
 assets/horns/
 assets/pencil/
+
+# Go caches (never commit these)
+.gocache/
+.gomodcache/
+
+# Moto X — ignore audio/data, track only receiver.py and record.py
+Moto X/claudia_motoxaudio_data/
+Moto X/claudia_unsent/
+Moto X/claudia_record_log.md
+Moto X/receiver_log.md
+Moto X/Android/
+Moto X/Alarms/
+Moto X/Movies/
+Moto X/Music/
+Moto X/Notifications/
+Moto X/Podcasts/
+Moto X/Ringtones/
+Moto X/RustDesk/
+Moto X/bluetooth/
+Moto X/alt_autocycle/
+Moto X/phone-scripts/
+
+# Claude chat archives
+claude_chat_archive/
+
+# Syncthing state (local machine config, not shared)
+.stfolder/
+.stignore
+
+# chimera build artifacts and local runtime state
+chimera/bin/
+chimera/data/
+chimera/config/gateway.yaml
+chimera/config/indexer.yaml
+chimera/config/tokens.yaml
+chimera/config/bifrost.config.json
+chimera/*.exe
+chimera/cmd/porcelain/*.exe
+chimera/cmd/porcelain-desktop/*.exe
+chimera/cmd/porcelain/rsrc.syso
+chimera/cmd/porcelain/resource.rc
+
+# Porcelain root binaries
+/porcelain.exe
+/porcelain
