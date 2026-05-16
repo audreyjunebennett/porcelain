@@ -139,14 +139,37 @@ func startAllServices(repoRoot string) []Service {
 	services = append(services, Service{"chimera", chimeraCmd})
 	defer chimeraLog.Close()
 
-	// Open Locus workspace in Edge PWA mode (frameless, app-like window)
-	go openLocusPWA()
+	// Open Locus and Chimera shell as Edge PWA windows
+	go openPWAs()
 
 	return services
 }
 
-func openLocusPWA() {
-	// Poll Locus until it responds (up to 30s)
+func openPWAs() {
+	edgePaths := []string{
+		`C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`,
+		`C:\Program Files\Microsoft\Edge\Application\msedge.exe`,
+	}
+	edgeBin := ""
+	for _, p := range edgePaths {
+		if _, err := os.Stat(p); err == nil {
+			edgeBin = p
+			break
+		}
+	}
+
+	openInEdge := func(url string) {
+		if edgeBin != "" {
+			cmd := exec.Command(edgeBin, "--app="+url)
+			cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x08000000}
+			if cmd.Start() == nil {
+				return
+			}
+		}
+		exec.Command("cmd", "/c", "start", url).Start()
+	}
+
+	// Poll Locus until ready (up to 30s), then open
 	locusURL := "http://127.0.0.1:11435/web"
 	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
@@ -156,24 +179,19 @@ func openLocusPWA() {
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
+	openInEdge(locusURL)
 
-	// Try Edge first (supports --app= mode for frameless PWA window)
-	edgePaths := []string{
-		`C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`,
-		`C:\Program Files\Microsoft\Edge\Application\msedge.exe`,
-	}
-	for _, edgePath := range edgePaths {
-		if _, err := os.Stat(edgePath); err == nil {
-			cmd := exec.Command(edgePath, "--app="+locusURL)
-			cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x08000000}
-			if cmd.Start() == nil {
-				return
-			}
+	// Poll Chimera gateway until ready (up to 30s), then open its shell
+	chimeraURL := "http://127.0.0.1:3000/ui/desktop"
+	deadline = time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		if resp, err := http.Get("http://127.0.0.1:3000/"); err == nil {
+			resp.Body.Close()
+			break
 		}
+		time.Sleep(500 * time.Millisecond)
 	}
-
-	// Fallback: open in default browser
-	exec.Command("cmd", "/c", "start", locusURL).Start()
+	openInEdge(chimeraURL)
 }
 
 func shutdownAllServices(ctx context.Context, services []Service) {
