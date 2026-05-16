@@ -158,18 +158,7 @@ func openPWAs() {
 		}
 	}
 
-	openInEdge := func(url string) {
-		if edgeBin != "" {
-			cmd := exec.Command(edgeBin, "--app="+url)
-			cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x08000000}
-			if cmd.Start() == nil {
-				return
-			}
-		}
-		exec.Command("cmd", "/c", "start", url).Start()
-	}
-
-	// Poll Locus until ready (up to 30s), then open
+	// Poll Locus until ready (up to 30s), then open as frameless PWA window
 	locusURL := "http://127.0.0.1:11435/web"
 	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
@@ -179,19 +168,15 @@ func openPWAs() {
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
-	openInEdge(locusURL)
 
-	// Poll Chimera gateway until ready (up to 30s), then open its shell
-	chimeraURL := "http://127.0.0.1:3000/ui/desktop"
-	deadline = time.Now().Add(30 * time.Second)
-	for time.Now().Before(deadline) {
-		if resp, err := http.Get("http://127.0.0.1:3000/"); err == nil {
-			resp.Body.Close()
-			break
+	if edgeBin != "" {
+		cmd := exec.Command(edgeBin, "--app="+locusURL)
+		cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x08000000}
+		if cmd.Start() == nil {
+			return
 		}
-		time.Sleep(500 * time.Millisecond)
 	}
-	openInEdge(chimeraURL)
+	exec.Command("cmd", "/c", "start", locusURL).Start()
 }
 
 func shutdownAllServices(ctx context.Context, services []Service) {
