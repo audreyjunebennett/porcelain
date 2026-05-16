@@ -123,20 +123,50 @@ func startAllServices(repoRoot string) []Service {
 		defer receiverLog.Close()
 	}
 
-	// Start Chimera (desktop mode opens the PWA)
+	// Start Chimera (gateway mode — webview is opened separately via Edge PWA)
 	chimeraLogPath := filepath.Join(repoRoot, ".data", "logs", "chimera.log")
 	chimeraLog, _ := os.OpenFile(chimeraLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	configPath := filepath.Join(repoRoot, "chimera", "config", "gateway.yaml")
-	bifrostConfigPath := filepath.Join(repoRoot, "chimera", "config", "bifrost.config.json")
-	chimeraCmd := exec.Command("chimera/bin/chimera.exe", "desktop", "-config", configPath, "-bifrost-config", bifrostConfigPath)
+	chimeraCmd := exec.Command("chimera/bin/chimera.exe", "gateway", "-config", configPath)
 	chimeraCmd.Dir = repoRoot
 	chimeraCmd.Stdout = chimeraLog
 	chimeraCmd.Stderr = chimeraLog
+	chimeraCmd.SysProcAttr = &syscall.SysProcAttr{
+		CreationFlags: 0x08000000,
+	}
 	chimeraCmd.Start()
 	services = append(services, Service{"chimera", chimeraCmd})
 	defer chimeraLog.Close()
 
+	// Open Locus workspace in Edge PWA mode (frameless, app-like window)
+	go openLocusPWA()
+
 	return services
+}
+
+func openLocusPWA() {
+	// Wait for Locus to be ready before opening
+	time.Sleep(4 * time.Second)
+
+	locusURL := "http://127.0.0.1:11435/web"
+
+	// Try Edge first (supports --app= mode for frameless PWA window)
+	edgePaths := []string{
+		`C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`,
+		`C:\Program Files\Microsoft\Edge\Application\msedge.exe`,
+	}
+	for _, edgePath := range edgePaths {
+		if _, err := os.Stat(edgePath); err == nil {
+			cmd := exec.Command(edgePath, "--app="+locusURL)
+			cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x08000000}
+			if cmd.Start() == nil {
+				return
+			}
+		}
+	}
+
+	// Fallback: open in default browser
+	exec.Command("cmd", "/c", "start", locusURL).Start()
 }
 
 func shutdownAllServices(ctx context.Context, services []Service) {
