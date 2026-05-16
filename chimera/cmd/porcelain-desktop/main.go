@@ -123,16 +123,15 @@ func startAllServices(repoRoot string) []Service {
 		defer receiverLog.Close()
 	}
 
-	// Start Chimera (Go, port 3000) - with webview
+	// Start Chimera gateway (headless — no webview, no BiFrost/Qdrant wait)
 	chimeraLogPath := filepath.Join(repoRoot, ".data", "logs", "chimera.log")
 	chimeraLog, _ := os.OpenFile(chimeraLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	configPath := filepath.Join(repoRoot, "chimera", "config", "gateway.yaml")
-	bifrostConfigPath := filepath.Join(repoRoot, "chimera", "config", "bifrost.config.json")
-	chimeraCmd := exec.Command("chimera/bin/chimera.exe", "desktop", "-config", configPath, "-bifrost-config", bifrostConfigPath)
+	chimeraCmd := exec.Command("chimera/bin/chimera.exe", "gateway", "-config", configPath)
 	chimeraCmd.Dir = repoRoot
 	chimeraCmd.Stdout = chimeraLog
 	chimeraCmd.Stderr = chimeraLog
-	// Chimera desktop mode should open webview, not console
+	chimeraCmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x08000000}
 	chimeraCmd.Start()
 	services = append(services, Service{"chimera", chimeraCmd})
 	defer chimeraLog.Close()
