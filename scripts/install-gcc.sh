@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Install a C compiler for CGO (BiFrost) using the OS package manager when possible.
 # Idempotent: no-op if gcc or clang is already on PATH.
-# Set SKIP_AUTO_GCC=1 to skip this script (install.sh will fail if still no compiler).
+# Set SKIP_AUTO_GCC=1 to skip this script (installers will fail if still no compiler).
 # Windows: winget/chocolatey installs use a UAC elevation prompt when not already Administrator
 # unless SKIP_WIN_ELEVATE=1 (then run Git Bash / make chimera-install as Administrator yourself).
-# Sourced by install.sh so PATH shims (e.g. WinGet WinLibs) apply to the same shell.
+# Sourced by installer scripts so PATH shims (e.g. WinGet WinLibs) apply to the same shell.
 # On Windows, discovered compiler bin dirs are also appended to the User PATH (registry) when missing.
 set -euo pipefail
 

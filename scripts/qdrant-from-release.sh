@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 # Install pinned Qdrant into ./bin/qdrant (or qdrant.exe on Windows). Used by install-bootstrap.sh; run directly to refresh Qdrant only.
-# Version: QDRANT_RELEASE in repo-root deps.lock.
+# Version: QDRANT_RELEASE in chimera/deps.lock.
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=deps-lock.sh
 source "$REPO_ROOT/scripts/deps-lock.sh"
 VER="$(deps_lock_get QDRANT_RELEASE)"
 ROOT="$REPO_ROOT"
+QDRANT_BIN_DIR="${QDRANT_BIN_DIR:-$ROOT/bin}"
 BASE="https://github.com/qdrant/qdrant/releases/download/${VER}"
-mkdir -p "$ROOT/bin"
+mkdir -p "$QDRANT_BIN_DIR"
 
 os="$(uname -s | tr '[:upper:]' '[:lower:]')"
 arch="$(uname -m)"
@@ -29,13 +30,13 @@ mingw*|msys*|cygwin*)
   curl -fsSL "${BASE}/${asset}" -o "$tmp/q.zip"
   unzip -q "$tmp/q.zip" -d "$tmp"
   if [[ -f "$tmp/qdrant.exe" ]]; then
-    mv "$tmp/qdrant.exe" "$ROOT/bin/qdrant.exe"
+    mv "$tmp/qdrant.exe" "$QDRANT_BIN_DIR/qdrant.exe"
   else
     echo "qdrant-from-release: expected qdrant.exe in ${asset}" >&2
     exit 1
   fi
   rm -rf "$tmp"
-  echo "Installed $ROOT/bin/qdrant.exe ($VER)"
+  echo "Installed $QDRANT_BIN_DIR/qdrant.exe ($VER)"
   ;;
 linux)
   case "$arch" in
@@ -45,10 +46,10 @@ linux)
   esac
   tmp="$(mktemp -d)"
   curl -fsSL "${BASE}/${asset}" | tar xz -C "$tmp"
-  mv "$tmp/qdrant" "$ROOT/bin/qdrant"
-  chmod +x "$ROOT/bin/qdrant"
+  mv "$tmp/qdrant" "$QDRANT_BIN_DIR/qdrant"
+  chmod +x "$QDRANT_BIN_DIR/qdrant"
   rm -rf "$tmp"
-  echo "Installed $ROOT/bin/qdrant ($VER)"
+  echo "Installed $QDRANT_BIN_DIR/qdrant ($VER)"
   ;;
 darwin)
   case "$arch" in
@@ -58,10 +59,10 @@ darwin)
   esac
   tmp="$(mktemp -d)"
   curl -fsSL "${BASE}/${asset}" | tar xz -C "$tmp"
-  mv "$tmp/qdrant" "$ROOT/bin/qdrant"
-  chmod +x "$ROOT/bin/qdrant"
+  mv "$tmp/qdrant" "$QDRANT_BIN_DIR/qdrant"
+  chmod +x "$QDRANT_BIN_DIR/qdrant"
   rm -rf "$tmp"
-  echo "Installed $ROOT/bin/qdrant ($VER)"
+  echo "Installed $QDRANT_BIN_DIR/qdrant ($VER)"
   ;;
 *)
   echo "qdrant-from-release: unsupported OS/kernel: $(uname -s) (try Git Bash on Windows, WSL, Linux, or macOS; or download manually from ${BASE})" >&2

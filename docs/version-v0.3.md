@@ -18,8 +18,8 @@ Make the gateway easier to set up, friendlier to share between operators, and cl
 
 | Theme                                                                                      | Outcome                                                                                                                                  | Status        |
 | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
-| [Product naming](#product-naming)                                                          | Layered names in docs, UI, and startup logs; legacy `Claudia` strings documented                                                         | `todo`        |
-| [Credential file naming](#credential-file-naming)                                          | `api-keys.yaml` / `api_keys` / `secret`; reserve "token" for tokenizer counts                                                            | `todo`        |
+| [Product naming](#product-naming)                                                          | Layered names in docs, UI, and startup logs with hard-cut naming contracts                                                                | `done`        |
+| [Credential file naming](#credential-file-naming)                                          | `api-keys.yaml` / `api_keys` / `secret`; reserve "token" for tokenizer counts                                                            | `done`        |
 | [Internal embedding provider (exploration)](#internal-embedding-provider-exploration)      | Optional in-repo or first-install embedding runtime to reduce reliance on Ollama for `/embeddings`                                       | `exploration` |
 | [Workspace embedding scope (project + flavor)](#workspace-embedding-scope-project--flavor) | Ingestion keys `(user, project, flavor)`; project-only = base corpus; flavored queries union base + flavor; multi-workspace request pool | `todo`        |
 | [First-run token handoff](#first-run-token-handoff)                                        | Show, copy, and optionally save the gateway token; restart-friendly                                                                      | `todo`        |
@@ -32,17 +32,17 @@ Make the gateway easier to set up, friendlier to share between operators, and cl
 
 ## What this version is
 
-This document is the **working plan for v0.3** for this repository (**Chimera**: intelligent routing and memory layer; see [Product naming](#product-naming)). Body **sections are ordered** for delivery narrative: [Product naming](#product-naming) and [Credential file naming](#credential-file-naming) first; then [Internal embedding provider (exploration)](#internal-embedding-provider-exploration) and [Workspace embedding scope (project + flavor)](#workspace-embedding-scope-project--flavor); then [First-run token handoff](#first-run-token-handoff) and [Setup wizard](#setup-wizard); then [IDE integration (VS Code Cline)](#ide-integration-vs-code-cline) (operator samples and wizard step 7 target **Cline** instead of **Continue**); then [Peer backends](#peer-backends) from the master product plan (`[claudia-gateway.plan.md](claudia-gateway.plan.md)`). **v0.3** targets **layered product naming** (**Porcelain**, **Chimera**, **Locus**), **api-keys** language, optional **in-repo / first-install** embedding weights **within license**, and **RAG** rules for **project + flavor** unions and **multi-workspace** pools. Naming and README wording in line with branch `origin/feat/chimera-branding` should be folded into this release unless superseded by a written decision.
+This document is the **working plan for v0.3** for this repository (**Chimera**: intelligent routing and memory layer; see [Product naming](#product-naming)). Body **sections are ordered** for delivery narrative: [Product naming](#product-naming) and [Credential file naming](#credential-file-naming) first; then [Internal embedding provider (exploration)](#internal-embedding-provider-exploration) and [Workspace embedding scope (project + flavor)](#workspace-embedding-scope-project--flavor); then [First-run token handoff](#first-run-token-handoff) and [Setup wizard](#setup-wizard); then [IDE integration (VS Code Cline)](#ide-integration-vs-code-cline) (operator samples and wizard step 7 target **Cline** instead of **Continue**); then [Peer backends](#peer-backends) from the master product plan (`[porcelain.plan.md](porcelain.plan.md)`). **v0.3** targets **layered product naming** (**Porcelain**, **Chimera**, **Locus**), **api-keys** language, optional **in-repo / first-install** embedding weights **within license**, and **RAG** rules for **project + flavor** unions and **multi-workspace** pools. Naming and README wording in line with branch `origin/feat/chimera-branding` should be folded into this release unless superseded by a written decision.
 
-**Companion docs:** `[claudia-gateway.plan.md](claudia-gateway.plan.md)`, `[configuration.md](configuration.md)`, `[plans/indexer.md](plans/indexer.md)`.
+**Companion docs:** `[porcelain.plan.md](porcelain.plan.md)`, `[configuration.md](configuration.md)`, `[plans/indexer.md](plans/indexer.md)`.
 
-Authoritative **architecture and numbered requirements** remain in `[claudia-gateway.plan.md](claudia-gateway.plan.md)` unless this plan explicitly revises them. **Indexer** milestones labeled “v0.3” in `[plans/indexer.md](plans/indexer.md)` (e.g. scoped overrides, headers) are **indexer product versions**, not necessarily the same shipping train as **gateway desktop v0.3**; cross-link when both touch the same API.
+Authoritative **architecture and numbered requirements** remain in `[porcelain.plan.md](porcelain.plan.md)` unless this plan explicitly revises them. **Indexer** milestones labeled “v0.3” in `[plans/indexer.md](plans/indexer.md)` (e.g. scoped overrides, headers) are **indexer product versions**, not necessarily the same shipping train as **gateway desktop v0.3**; cross-link when both touch the same API.
 
 ---
 
 ## Product naming
 
-**Goal:** Align operator-visible language and implementation logging with the **layered architecture** introduced on `origin/feat/chimera-branding`, while retiring ambiguous “Claudia Gateway” wording where it meant “this binary / service.” Minimize breakage for existing operators (CLI names, env vars, virtual model strings, and URLs may stay compatible for one or more releases per explicit decisions).
+**Goal:** Align operator-visible language and implementation logging with the **layered architecture** introduced on `origin/feat/chimera-branding`, while retiring ambiguous “chimera-gateway” wording where it meant “this binary / service.”
 
 **Scope**
 
@@ -63,35 +63,37 @@ These names are **roles**, not four separate shipping binaries unless noted:
 
 **Concrete deltas already modeled on `origin/feat/chimera-branding`:**
 
-- **README** title and lede: **“Chimera: Intelligent Routing & Memory Layer”**; first paragraph states membership in **Porcelain** and assigns Chimera (not “the gateway” generically) as the component that owns BiFrost-facing behavior, RAG, and `claudia serve` supervision wording where updated.
-- **Config table copy:** **Chimera** substitutes for “Claudia” where it describes **client auth** (`tokens.yaml`), `gateway.yaml` (“Chimera listen + upstream”), `.env` (Chimera↔BiFrost key line), and **desktop** install note (“admin UI for Chimera”).
-- `**cmd/claudia/gateway.go`:** structured startup logs use `Chimera (go) listening` (and bootstrap variant) instead of `claudia (go) listening`.
+- **README** title and lede: **“Chimera: Intelligent Routing & Memory Layer”**; first paragraph states membership in **Porcelain** and assigns Chimera (not “the gateway” generically) as the component that owns BiFrost-facing behavior, RAG, and `chimera serve` supervision wording where updated.
+- **Config table copy:** **Chimera** substitutes for “Chimera” where it describes **client auth** (`tokens.yaml`), `gateway.yaml` (“Chimera listen + upstream”), `.env` (Chimera↔BiFrost key line), and **desktop** install note (“admin UI for Chimera”).
+- `**cmd/chimera/gateway.go`:** structured startup logs use `Chimera (go) listening` (and bootstrap variant) instead of `chimera (go) listening`.
 
 ### Scope buckets
 
-- **Operator-facing branding** — Primary headings and overview docs should say **Chimera** for this service and **Porcelain** for the suite; use **Locus** where workspace clients are meant. Avoid presenting “Claudia Gateway” as the product name on first-run surfaces unless migration docs require it.
-- **Technical identifiers** — Separate **marketing names** from **interop strings**: renaming `**make` targets**, binary, module path, `CLAUDIA_`*, or Compose service labels may trail README/UI by one release; document aliases if env vars gain `CHIMERA_*` / `PORCELAIN_*` equivalents.
-- **HTTP / API ergonomics** — Custom headers (`X-Claudia-`* and similar), log fields, and claims should move toward agreed **Chimera-** or **Porcelain-** prefixes with **dual read** for deprecated names where indexer/IDE plugins still send old headers—exact matrix belongs in implementation and indexer docs.
+- **Operator-facing branding** — Primary headings and overview docs should say **Chimera** for this service and **Porcelain** for the suite; use **Locus** where workspace clients are meant. Avoid presenting “chimera-gateway” as the product name on first-run surfaces unless migration docs require it.
+- **Technical identifiers** — Use canonical runtime identifiers for this train: `CHIMERA_*` env names, `X-Chimera-*` headers, and current `chimera`/`chimera-indexer`/`chimera-supervisor`/`locus-desktop` build + package names.
+- **HTTP / API ergonomics** — Use only `X-Chimera-*` header contracts for current behavior. Historical `X-Chimera-*` strings are documentation history only.
 - **Repository naming** — GitHub org/repo or Go module path changes remain optional for v0.3; if deferred, checklist explicitly “no repo rename this train.”
 
 ### Deliverables checklist
 
-- Written **naming decision**: when **Chimera** vs **Porcelain** appears (gateway-only vs suite), **Locus** copy guidelines, and whether legacy **Claudia** strings (virtual model, CLI) persist through v0.3.
+- Written **naming decision**: when **Chimera** vs **Porcelain** appears (gateway-only vs suite), **Locus** copy guidelines, and canonical names for env/header/bin/path surfaces.
 - UI, installer, about screens, and packaged artifacts match the layered story (**Chimera** gateway inside **Porcelain**).
-- Documentation set (README, onboarding, `[claudia-gateway.plan.md](claudia-gateway.plan.md)` release row when updated) reflects the architecture narrative; historical “Claudia Gateway” OK in release notes only when labeled historical.
+- Documentation set (README, onboarding, `[porcelain.plan.md](porcelain.plan.md)` release row when updated) reflects the architecture narrative; historical “chimera-gateway” OK in release notes only when labeled historical.
 - Companion components (**indexer**, desktop app, Compose samples) updated for any new headers/env aliases called out above.
 - Make tasks are updated to use a variable name for the product name
 - Product name is defined in a minimum number of locations
 
 **Acceptance**
 
-Treat this theme as satisfied when **first-touch** operator docs and UI consistently present **Chimera** + **Porcelain** + **Locus** as described above, startup logs match the Chimera wording where implemented, and any remaining **Claudia** identifiers are **documented** (either accepted legacy or scheduled removal). No silent breaks: migrations note dual-read periods for headers/env.
+Treat this theme as satisfied when **first-touch** operator docs and UI consistently present **Chimera** + **Porcelain** + **Locus** as described above, startup logs match the Chimera wording where implemented, and legacy identifiers are treated as historical context only.
 
-**Status:** `todo`
+**Status:** `done`
+
+**Final cutover note:** v0.3 is hard cut. Legacy naming aliases are retired and unsupported in current runtime behavior.
 
 ### Supervised-process shutdown
 
-`origin/feat/chimera-branding` also adjusts `claudia serve` so supervised **Qdrant**, **BiFrost**, and **indexer** children don’t hang after context cancel: wait with a **timeout**, then **kill** if needed, with structured `slog` diagnostics. When merging or reimplementing v0.3 desktop supervision, preserve this behavior so window-close / shutdown reliably tears down children.
+`origin/feat/chimera-branding` also adjusts `chimera serve` so supervised **Qdrant**, **BiFrost**, and **indexer** children don’t hang after context cancel: wait with a **timeout**, then **kill** if needed, with structured `slog` diagnostics. When merging or reimplementing v0.3 desktop supervision, preserve this behavior so window-close / shutdown reliably tears down children.
 
 ---
 
@@ -134,15 +136,15 @@ In `gateway.yaml`, the path that points at this file should use `paths.api_keys`
 ### Implementation notes
 
 - **Code:** loader package names, struct fields, and log messages should prefer **api key** / **gateway client secret** language where they refer to this file; reserve **token** in logs and metrics for tokenizer / usage paths where applicable.
-- **Migration:** Decide whether v0.3 accepts **only** the new keys/filenames or supports a **transition** (read legacy `tokens:` / `token:` and old path key with deprecation warnings). Document the chosen behavior in `[configuration.md](configuration.md)` and operator migration notes when implemented.
+- **Migration policy:** v0.3 is hard cut. Use only `api_keys` / `secret` and `paths.api_keys` for current behavior.
 
 **Acceptance**
 
 - Example and runtime credential files use `api-keys.yaml`, `api_keys`, and `secret` where implemented.
-- `gateway.yaml` uses `paths.api_keys` or documents a compatibility period for the legacy `paths.tokens` key.
-- Docs and logs reserve "token" for tokenizer/model-token usage except where explicitly discussing legacy compatibility.
+- `gateway.yaml` uses `paths.api_keys` for current behavior.
+- Docs and logs reserve "token" for tokenizer/model-token usage except in explicitly historical notes.
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 
@@ -312,7 +314,7 @@ Then retrieval must query embeddings from **both**:
 
 **Multi-workspace request pool**
 
-- The client may specify **any number** of workspace selectors **(project + optional flavor)** on a request (exact header or body shape belongs in API design; align with existing `X-Claudia-*` / Chimera header migration in [Product naming](#product-naming)).
+- The client may specify **any number** of workspace selectors **(project + optional flavor)** on a request (exact header or body shape belongs in API design; align with the `X-Chimera-*` header contract in [Product naming](#product-naming)).
 - **All valid** declared workspaces for that authenticated user are included in the **embedding search pool** for that request (union of hits across those scopes, with deduplication by chunk identity where the same file appears under multiple selectors only if product allows—**v0.3 default:** dedupe by stable chunk id / source key so overlapping paths do not double-count unless intentionally indexed twice).
 - **Invalid** or unknown workspace references should fail **loudly** (clear error to the client) or be **ignored** with a warning in logs—pick one behavior in implementation and document it; do not silently drop **all** scopes.
 
@@ -350,11 +352,11 @@ Then retrieval must query embeddings from **both**:
 
 1. The application displays an **API key** (gateway-issued token) that the user can **copy**.
 2. Below the key:
-  - Optional action: **Save key** — when pressed, **upsert** into a **dotenv** file (project/agreed path): if `CLAUDIA_GATEWAY_TOKEN` is **not** already defined, set it to this key; if already defined, do **not** overwrite without an explicit future “replace” flow (this plan: **only set when absent**).
+  - Optional action: **Save key** — when pressed, **upsert** into a **dotenv** file (project/agreed path): if `CHIMERA_GATEWAY_TOKEN` is **not** already defined, set it to this key; if already defined, do **not** overwrite without an explicit future “replace” flow (this plan: **only set when absent**).
 3. User guidance: copy and/or save, then **close** the application.
 4. On next launch, the user either:
   - Pastes the key into the app when prompted, or  
-  - Relies on `CLAUDIA_GATEWAY_TOKEN` being read from the environment / dotenv load order as implemented.
+  - Relies on `CHIMERA_GATEWAY_TOKEN` being read from the environment / dotenv load order as implemented.
 
 **Acceptance**
 
@@ -515,7 +517,7 @@ Then retrieval must query embeddings from **both**:
 
 **Scope**
 
-This theme summarizes what `[claudia-gateway.plan.md](claudia-gateway.plan.md)` already assigns to **v0.3** so implementation and docs stay aligned.
+This theme summarizes what `[porcelain.plan.md](porcelain.plan.md)` already assigns to **v0.3** so implementation and docs stay aligned.
 
 ### Release-roadmap slice
 
@@ -523,13 +525,13 @@ From the master **Release roadmap** table:
 
 - **Peer-to-peer model backends**: call **another operator’s BiFrost** (or compatible OpenAI proxy) over a **host-routable** URL and **published** port (not Compose-internal DNS from another machine).
 - **Proxy-issued credentials** (e.g. virtual keys where the upstream supports them) for **cross-host** authentication.
-- **Gateway / upstream configuration** and **operator documentation** for peer paths: *Peer topology · 1–3*, *Model selection and routing policy · 3* (peer as `base_url` / `api_base`), and *Deployment · 3* (cross-host publishing vs intra-stack DNS)—see `[claudia-gateway.plan.md](claudia-gateway.plan.md)`.
+- **Gateway / upstream configuration** and **operator documentation** for peer paths: *Peer topology · 1–3*, *Model selection and routing policy · 3* (peer as `base_url` / `api_base`), and *Deployment · 3* (cross-host publishing vs intra-stack DNS)—see `[porcelain.plan.md](porcelain.plan.md)`.
 - **Per-key / usage observability** (*Resilience · 1*): track which key/backend was used and exposure to RPM/TPM-style limits where upstream headers exist.
 
 ### Product rules
 
 - **Peer = their upstream (BiFrost / compatible proxy), not their Gateway** (*Peer topology · 2*): configure OpenAI-compatible `api_base` / `base_url` to the **peer’s published upstream** (e.g. Tailscale/LAN IP + **published** proxy port + `/v1`). Use credentials **they** issue (virtual keys or equivalent when supported). Do **not** chain **Gateway → peer Gateway** as the default integration (same bullet).
-- **Independent stacks** (*Peer topology · 1*): each operator has their own Chimera instance, client-auth secrets (`tokens.yaml` until the credential naming migration), and policy; no assumption that one gateway “owns” another’s RAG.
+- **Independent stacks** (*Peer topology · 1*): each operator has their own Chimera instance, client-auth secrets (`api-keys.yaml`), and policy; no assumption that one gateway “owns” another’s RAG.
 - **Document ports per host** (*Peer topology · 3*): distinguish **Chimera** (IDE-facing OpenAI-compatible entry) vs **peer upstream** (`api_base` / `base_url` target); firewall/VPN expectations; TLS/mTLS deferred to **v0.7** unless operators add their own terminator.
 - **Cloud vs local policy** (*Model selection and routing policy · 3*): **Peer upstream** appears as a **remote-runner** entry in routing policy.
 - **Graceful degradation** (*Resilience · 2*): same fail-over / fail-fast behavior when a peer upstream is in the chain; **no** gateway queue until **v0.8**.
@@ -556,7 +558,7 @@ From the master **Release roadmap** table:
 - Do not route Gateway -> peer Gateway as the default peer integration; peer routes target a host-routable upstream proxy.
 - Do not make TLS/mTLS or untrusted-network hardening a v0.3 requirement; that remains a later hardening release.
 - Do not add a gateway queue or priority scheduler; graceful degradation remains the v0.3 behavior.
-- Do not silently break legacy `claudia`, `CLAUDIA_`*, `X-Claudia-*`, or virtual model identifiers unless a migration decision explicitly says to.
+- Do not reintroduce legacy `chimera`, `CHIMERA_*`, or `X-Chimera-*` identifiers in current operator-facing behavior.
 
 ---
 
@@ -575,14 +577,14 @@ From the master **Release roadmap** table:
 | Peer backends                    | Peer upstream + credentials + docs meet the peer scope checklist.                                                                                                  |
 
 
-When this plan is implemented, update `[claudia-gateway.plan.md](claudia-gateway.plan.md)` **Release roadmap** row for v0.3 if the shipped scope differs (e.g. split peer backends vs onboarding into separate releases).
+When this plan is implemented, update `[porcelain.plan.md](porcelain.plan.md)` **Release roadmap** row for v0.3 if the shipped scope differs (e.g. split peer backends vs onboarding into separate releases).
 
 ---
 
 ## See also
 
 - `[version-v0.2.md](version-v0.2.md)` - previous version
-- `[claudia-gateway.plan.md](claudia-gateway.plan.md)` - product roadmap and requirements
+- `[porcelain.plan.md](porcelain.plan.md)` - product roadmap and requirements
 - `[configuration.md](configuration.md)` - configuration reference
 - `[plans/indexer.md](plans/indexer.md)` - indexer milestones that may cross-link with this release
 - `[plans/_template.md](plans/_template.md)` - phase-level plan template

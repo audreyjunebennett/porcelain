@@ -1,0 +1,6 @@
+# qdrant uses env vars by default in chimera-vectorstore.
+# This file is reserved for future wrapper-owned config materialization.
+service:
+  host: 127.0.0.1
+  http_port: 6333
+  grpc_port: 6334

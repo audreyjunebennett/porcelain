@@ -21,7 +21,7 @@ Cut the size of upstream tool payloads, give operators an opinionated routing li
 
 ---
 
-**Product:** Claudia Gateway — OpenAI-compatible LLM gateway with **BiFrost** upstream.
+**Product:** chimera-gateway — OpenAI-compatible LLM gateway with **BiFrost** upstream.
 
 **Audience:** Implementing agents should treat this doc as the **source of truth** for *what* v0.1.1 delivers, *constraints*, *order of work*, and *how to verify*.
 
@@ -38,15 +38,15 @@ Cut the size of upstream tool payloads, give operators an opinionated routing li
 | G2  | **Done** | **Smaller upstream `tools` payloads**            | When the tool-router is enabled and `tools` is present, the gateway **replaces** `tools` with the subset whose router-assigned **confidence ≥ threshold** before normal routing/upstream (fail-open keeps all tools on any router error).                                                                                                                                                                       |
 | G3  | **Done** | **Configurable router model + admin visibility** | Operators set ordered `routing.router_models` and `routing.tool_router` in `gateway.yaml`; admin **Routing & fallback** shows the list, threshold, enable flag, **last router call** (model, time, error), and **catalog-missing** ids after save.                                                                                                                                                      |
 | G4  | **Done** | **Transformer pipeline on chat completions**     | `POST /v1/chat/completions` runs the **tool-router transformer** first (see §3.5.1), then the existing virtual-model / direct proxy path unchanged.                                                                                                                                                                                            |
-| G5  | **Partial** | **413-aware behavior with cooldowns**            | **Shipped:** **Quota admission** (same as before). **Virtual Claudia:** on upstream **HTTP 413**, the gateway **records metrics** for that attempt then walks `routing.fallback_chain` from the policy-aligned start, **skipping any model id that already returned 413** on the same request, and retries the **same** client payload on the next candidate (same behavior class as 429/5xx fallback). **Direct** upstream id: **413** is returned to the client (**no** fallback). **Not shipped:** time-based **413 cooldown** / backoff config, TPM vs payload classification (§3.3). |
+| G5  | **Partial** | **413-aware behavior with cooldowns**            | **Shipped:** **Quota admission** (same as before). **Virtual Chimera:** on upstream **HTTP 413**, the gateway **records metrics** for that attempt then walks `routing.fallback_chain` from the policy-aligned start, **skipping any model id that already returned 413** on the same request, and retries the **same** client payload on the next candidate (same behavior class as 429/5xx fallback). **Direct** upstream id: **413** is returned to the client (**no** fallback). **Not shipped:** time-based **413 cooldown** / backoff config, TPM vs payload classification (§3.3). |
 | G6  | **Done** | **Observability path**                           | The gateway **records** metrics for upstream outcomes because **Go plugins are not portable** on **Windows**. Persistence is **SQLite** under `data/gateway/` (§3.6); `make clean-data` removes it. Operators can inspect rollups and recent events via **admin** `/ui/metrics` (JSON `/api/ui/metrics`) and the desktop shell **Stats** tab. `config/provider-model-limits.yaml` (§3.7) is **loaded** and **wired into chat** for pre-flight quota checks (see G5 **Partial**). |
 
 
-**Operator verification (G1)** — Claudia **desktop** → **admin** → generate routing/fallback: chain included **Ollama** models as expected under free-tier patterns.
+**Operator verification (G1)** — Chimera **desktop** → **admin** → generate routing/fallback: chain included **Ollama** models as expected under free-tier patterns.
 
-**Implementation check (G2–G4)** — **Done.** `handleV1Chat` calls `transform.ApplyToolRouter` (after JSON decode, before routing) so `tools` may be slimmed. Package `internal/transform` implements the contract in §3.1 / §3.5.1. Config: `routing.router_models`, `routing.tool_router.enabled`, `routing.tool_router.confidence_threshold` (see `config/gateway.example.yaml`). Admin: `internal/server/embedui/panel.html` section **Router models (tool slimming)** + `POST /api/ui/routing/router_tooling`. Per-request overrides: headers `X-Claudia-Tool-Router: skip` and `X-Claudia-Tool-Confidence-Threshold` (see panel copy).
+**Implementation check (G2–G4)** — **Done.** `handleV1Chat` calls `transform.ApplyToolRouter` (after JSON decode, before routing) so `tools` may be slimmed. Package `internal/transform` implements the contract in §3.1 / §3.5.1. Config: `routing.router_models`, `routing.tool_router.enabled`, `routing.tool_router.confidence_threshold` (see `config/gateway.example.yaml`). Admin: `internal/server/embedui/panel.html` section **Router models (tool slimming)** + `POST /api/ui/routing/router_tooling`. Per-request overrides: headers `X-Chimera-Tool-Router: skip` and `X-Chimera-Tool-Confidence-Threshold` (see panel copy).
 
-**Implementation check (G6)** — **Done** (baseline + operator UI): `internal/gatewaymetrics` opens `data/gateway/metrics.sqlite` (paths from `metrics.*` in `gateway.yaml` — `docs/configuration.md`). `migrations/gateway/*.sql` apply **only at process start** (§3.6.2). `internal/chat` records **one event per upstream HTTP outcome** (provider prefix, full model id, status, **tiktoken `cl100k_base`** estimate of the **proxied JSON body**). Tables: `upstream_call_events`, `upstream_rollup_minute` / `upstream_rollup_day` (UTC minute / UTC day per status). `internal/gatewaymetrics/query.go` exposes rollups + recent events for `internal/server/ui_metrics.go` (`GET /api/ui/metrics`, session-auth) and `internal/server/embedui/metrics.html`; the desktop `shell.html` includes a **Stats** tab (`/ui/metrics?embed=1`). Failed open → **no** metrics; `Runtime.LimitsGuard()` is **nil** without a store, so **quota YAML does not enforce** until metrics work. **413 cooldown** logic still **not** implemented (separate from quota admission).
+**Implementation check (G6)** — **Done** (baseline + operator UI): `internal/gatewaymetrics` opens `data/gateway/metrics.sqlite` (paths from `metrics.*` in `gateway.yaml` — `docs/configuration.md`). `porcelain/migrations/chimera-gateway/metrics/*.sql` apply **only at process start** (§3.6.2). `internal/chat` records **one event per upstream HTTP outcome** (provider prefix, full model id, status, **tiktoken `cl100k_base`** estimate of the **proxied JSON body**). Tables: `upstream_call_events`, `upstream_rollup_minute` / `upstream_rollup_day` (UTC minute / UTC day per status). `internal/gatewaymetrics/query.go` exposes rollups + recent events for `internal/server/ui_metrics.go` (`GET /api/ui/metrics`, session-auth) and `internal/server/embedui/metrics.html`; the desktop `shell.html` includes a **Stats** tab (`/ui/metrics?embed=1`). Failed open → **no** metrics; `Runtime.LimitsGuard()` is **nil** without a store, so **quota YAML does not enforce** until metrics work. **413 cooldown** logic still **not** implemented (separate from quota admission).
 
 **Explicitly out of scope for v0.1.1**
 
@@ -61,7 +61,7 @@ Cut the size of upstream tool payloads, give operators an opinionated routing li
   - **Ollama patterns (G1)** — **done**; **tool slimming (G2)**, **router config + UI (G3)**, **transformer + tool router (G4)** — **done** in gateway (§3.5.1).
   - **413 handling:** **Virtual** path: **fallback after 413** + per-request **exclude-413-models** — **shipped** in `internal/chat`. **Direct** 413: **no** fallback (unchanged). **Cooldown** timers / cross-request 413 memory still **open**.
 2. **Router model available in config** — Tool slimming **requires** a working router model id and a call path (same BiFrost base + key as chat, per decision).
-3. **Continue / client** — Tool slimming assumes tools arrive in the JSON `tools` array with **unique `function.name`** fields. Per-request **threshold override** is the header `X-Claudia-Tool-Confidence-Threshold`; `X-Claudia-Tool-Router: skip` disables slimming for one call.
+3. **Continue / client** — Tool slimming assumes tools arrive in the JSON `tools` array with **unique `function.name`** fields. Per-request **threshold override** is the header `X-Chimera-Tool-Confidence-Threshold`; `X-Chimera-Tool-Router: skip` disables slimming for one call.
 
 ---
 
@@ -72,7 +72,7 @@ Cut the size of upstream tool payloads, give operators an opinionated routing li
 - **Input to router:** User prompt + context as needed (and optionally merged tool list vs MCP later); **source of truth** for definitions is the request `**tools`** array.
 - **Router output (JSON):** array of `{ "name": "<string>", "confidence": <number> }` where `name` matches a tool in the incoming list.
 - **Selection:** Keep tools where `confidence >= threshold`.
-- **Threshold:** Default `routing.tool_router.confidence_threshold` in `gateway.yaml` (default **0.5**); **optional per-request override** via `X-Claudia-Tool-Confidence-Threshold` (0–1).
+- **Threshold:** Default `routing.tool_router.confidence_threshold` in `gateway.yaml` (default **0.5**); **optional per-request override** via `X-Chimera-Tool-Confidence-Threshold` (0–1).
 - **Failure** (timeout, non-200, invalid JSON, missing names): **do not slim** — pass **all** client `tools` upstream.
 - **No** extra chat messages and **no** new routing-policy rules for this step — only mutate `**tools`** on the outbound body.
 
@@ -84,7 +84,7 @@ Cut the size of upstream tool payloads, give operators an opinionated routing li
 
 ### 3.3 413 behavior
 
-- **Virtual Claudia** (policy + `routing.fallback_chain`): on upstream **HTTP 413** (`Request Entity Too Large`), the gateway **records** the outcome in **gateway metrics** (status **413** for that model id), then continues along the **same** fallback chain order as for 429/5xx, using the **unchanged** client JSON body. Any model id that **already returned 413** on that request is **not** invoked again (so duplicate ids in the chain are skipped without a second upstream call). **Not yet implemented:** configurable **cooldown timers**, **last-success vs last-request** clock mode, and **longer backoff** after repeated 413 on a model across requests (tracked for a later iteration).
+- **Virtual Chimera** (policy + `routing.fallback_chain`): on upstream **HTTP 413** (`Request Entity Too Large`), the gateway **records** the outcome in **gateway metrics** (status **413** for that model id), then continues along the **same** fallback chain order as for 429/5xx, using the **unchanged** client JSON body. Any model id that **already returned 413** on that request is **not** invoked again (so duplicate ids in the chain are skipped without a second upstream call). **Not yet implemented:** configurable **cooldown timers**, **last-success vs last-request** clock mode, and **longer backoff** after repeated 413 on a model across requests (tracked for a later iteration).
 - **Direct** request with a **concrete** upstream model id: **413 is expected** for that model — **do not** fall back or change model; return the error to the client.
 - **Classification:** Prefer parsing response body where needed to distinguish **TPM/quota 413** vs **payload-too-large** semantics (TBD per provider).
 
@@ -96,7 +96,7 @@ Cut the size of upstream tool payloads, give operators an opinionated routing li
 - **Invocation:** same BiFrost **base URL** and **Bearer API key** as normal chat proxy (`POST /v1/chat/completions` on the router model, **non-streaming**).
 - **Admin panel:** list, threshold, enable flag, in-process **last router attempt** (model, RFC3339 time, error string), and **ids not found** in upstream `GET /v1/models` after save.
 - **Routing preview / generate:** the same admin flow that builds `routing-policy.yaml` and `routing.fallback_chain` also recomputes `routing.router_models` (up to **8** ids) via `routinggen.OrderRouterModels`: prefer **smaller/faster** models (inverse of fallback “strength” heuristics), add **RPM** and **TPM** bonuses from `config/provider-model-limits.yaml` when loaded, and rank **hosted** slightly above `ollama/` at equal score. `tool_router.enabled` / `confidence_threshold` are **not** changed by generate (only the model list is patched).
-- **Skip one request:** client header `X-Claudia-Tool-Router: skip` disables slimming for that call only.
+- **Skip one request:** client header `X-Chimera-Tool-Router: skip` disables slimming for that call only.
 
 ### 3.5 Transformers
 
@@ -111,7 +111,7 @@ Cut the size of upstream tool payloads, give operators an opinionated routing li
 
 1. Gateway validates the gateway **Bearer** token and parses the JSON body into a generic `map[string]json.RawMessage` (same as today).
 2. **Transformer stage:** if tool-router is **effective** (see §3.4), `ApplyToolRouter` may replace `tools` on that map; otherwise the map is unchanged.
-3. **Routing stage:** unchanged — virtual `Claudia-<semver>` uses routing policy + fallback chain; **direct** model id skips policy pick but still receives the **post-transform** body.
+3. **Routing stage:** unchanged — virtual `chimera-<semver>` uses routing policy + fallback chain; **direct** model id skips policy pick but still receives the **post-transform** body.
 
 ```mermaid
 flowchart LR
@@ -119,7 +119,7 @@ flowchart LR
   B --> C{Routing + upstream}
 ```
 
-**Effective tool-router** means: `routing.tool_router.enabled` is true, `routing.router_models` is non-empty, the request is not opted out with `X-Claudia-Tool-Router: skip`, and the body contains a non-empty `tools` JSON array of `type: function` tools each with a `function.name`.
+**Effective tool-router** means: `routing.tool_router.enabled` is true, `routing.router_models` is non-empty, the request is not opted out with `X-Chimera-Tool-Router: skip`, and the body contains a non-empty `tools` JSON array of `type: function` tools each with a `function.name`.
 
 **Router call (internal)**
 
@@ -136,7 +136,7 @@ The gateway POSTs that payload to `{upstream.base_url}/v1/chat/completions` with
 
 - The assistant `message.content` is trimmed; optional **``` / ```json** fences are stripped, then JSON is parsed as either the **array** form or the `{tools:[…]}` wrapper.
 - For each original tool, `confidence` is read by `function.name`. If a **name** is **missing** from the router output, that tool is **kept** (conservative default).
-- **Threshold:** keep tools with `confidence ≥ threshold` (threshold from config, optionally overridden per request via `X-Claudia-Tool-Confidence-Threshold`).
+- **Threshold:** keep tools with `confidence ≥ threshold` (threshold from config, optionally overridden per request via `X-Chimera-Tool-Confidence-Threshold`).
 - If **no** tool would remain (all below threshold), the gateway **does not slim** — it passes **all** tools upstream (same fail-open spirit as a bad router response).
 - **Failure** (transport error, non-2xx, invalid JSON, empty scores, or all router models exhausted): **do not slim** — pass **all** client `tools`.
 
@@ -157,7 +157,7 @@ The gateway POSTs that payload to `{upstream.base_url}/v1/chat/completions` with
 
 #### 3.6.2 Migrations (file-based, not DDL in Go)
 
-- **Authoring rule:** Schema changes live in **committed SQL migration files** under a **standard, top-level directory** (e.g. `migrations/gateway/`). **Do not** define migrations as string literals or ad-hoc `Exec` of DDL scattered in application code — only a small **runner** in Go (open DB, apply pending files in order, record version).
+- **Authoring rule:** Schema changes live in **committed SQL migration files** under a gateway-owned migrations directory (e.g. `porcelain/migrations/chimera-gateway/metrics/`). **Do not** define migrations as string literals or ad-hoc `Exec` of DDL scattered in application code — only a small **runner** in Go (open DB, apply pending files in order, record version).
 - **Acceptable:** The runner may use `//go:embed` **only** to bundle those same committed `.sql` files for single-binary convenience, as long as the **source of truth** remains the filesystem paths in the repo (reviewable diffs, no hand-written DDL in `.go`).
 - **Startup behavior:** On gateway **process start**, before accepting traffic that depends on metrics: if the DB file is **missing**, **create** it and apply **all** migrations through **latest**. If the DB exists, run **only pending** migrations through **latest**.
 - **No hot migration:** While the process is **live**, **do not** poll the filesystem for new migration files, **do not** re-run the migrator on a timer, and **do not** treat “DB deleted / tables missing / schema behind” as a signal to auto-heal in place. If the file disappears or is corrupted at runtime, **log clearly** and **disable or degrade** metrics recording for that process lifetime (or exit, if the product prefers fail-hard — pick one behavior in implementation and test it). **Operator fix:** restart after restoring or wiping `data/gateway/`; migration runs again on **next** startup. (This matches common embedded-SQLite practice and avoids surprising mid-flight schema locks.)
@@ -272,7 +272,7 @@ Agents should confirm paths with the repo; starting points:
 | Free-tier / patterns                | `internal/providerfreetier/`, `config/provider-free-tier.yaml`, `internal/server/ui_routing_generate.go`, routing gen                                                                |
 | Chat proxy + retries                | `internal/chat/chat.go` (e.g. `retryStatuses`), `internal/server/` handlers for `/v1/chat/completions`                                                                               |
 | 413 / TPM metrics + cooldown inputs | **Quota:** `internal/gatewaymetrics` + `internal/providerlimits` + chat (§3.7.6). **Virtual 413 → next fallback:** `internal/chat` `WithVirtualModelFallback` (§3.3). **413 cooldown** (timers / cross-request): still **open** |
-| SQLite metrics + migrations | **Shipped:** `internal/gatewaymetrics/` (`Open`, `ApplyMigrations`, `RecordUpstreamResponse`, `QueryMinuteRollups` / `QueryDayRollups` / `QueryRecentEvents`, `UsageForModelWindow`); `migrations/gateway/*.sql`; `gateway.yaml` → `data/gateway/metrics.sqlite`; `internal/server/ui_metrics.go`, `embedui/metrics.html`, `/ui/metrics` + `/api/ui/metrics` |
+| SQLite metrics + migrations | **Shipped:** `internal/gatewaymetrics/` (`Open`, `ApplyMigrations`, `RecordUpstreamResponse`, `QueryMinuteRollups` / `QueryDayRollups` / `QueryRecentEvents`, `UsageForModelWindow`); `porcelain/migrations/chimera-gateway/metrics/*.sql`; `gateway.yaml` → `data/gateway/metrics.sqlite`; `internal/server/ui_metrics.go`, `embedui/metrics.html`, `/ui/metrics` + `/api/ui/metrics` |
 | Provider/model limits               | **Shipped:** `internal/providerlimits/` + `internal/chat` (`LimitsGuard()` before upstream; `chat_limits_test.go`); `paths.provider_model_limits` in `config.LoadGatewayYAML` → `Runtime.LimitsGuard()`; `config/provider-model-limits.yaml` (+ `.example.yaml`) |
 | Config load / validation            | `internal/config/config.go`, `docs/configuration.md` (`metrics.*`, `paths.provider_model_limits`)                                                                                                                       |
 | Transformers                        | `internal/transform` (`ApplyToolRouter`); `handleV1Chat` runs it before routing/upstream                                                                                      |
@@ -295,10 +295,10 @@ Agents should confirm paths with the repo; starting points:
 
 | Item                  | Notes                                                                                             |
 | --------------------- | ------------------------------------------------------------------------------------------------- |
-| Per-request threshold | **Shipped:** headers `X-Claudia-Tool-Confidence-Threshold` and `X-Claudia-Tool-Router: skip` (see §3.4 / panel).                                                            |
+| Per-request threshold | **Shipped:** headers `X-Chimera-Tool-Confidence-Threshold` and `X-Chimera-Tool-Router: skip` (see §3.4 / panel).                                                            |
 | 413 timer values      | Defaults in YAML; driven by gateway-recorded 413/TPM signals.                                     |
 | TPM vs payload 413    | Parser rules per upstream error format.                                                           |
-| Metrics persistence   | **Shipped (baseline):** SQLite + `migrations/gateway/`; see §3.6 and **Implementation check (G6)**. |
+| Metrics persistence   | **Shipped (baseline):** SQLite + `porcelain/migrations/chimera-gateway/metrics/`; see §3.6 and **Implementation check (G6)**. |
 | Provider limits file    | **Shipped:** `config/provider-model-limits.yaml`; `internal/providerlimits` + `internal/chat` (guard before upstream; fallback skip; **429** when no candidate allowed). Requires metrics SQLite (see §3.7.6). **413 cooldown** still open. |
 
 
@@ -310,13 +310,13 @@ Agents should confirm paths with the repo; starting points:
 | Topic            | Decision                                                                                                             |
 | ---------------- | -------------------------------------------------------------------------------------------------------------------- |
 | Tool definitions | Client `**tools`** array only for slimming; no synthetic messages.                                                   |
-| Router output    | `{ name, confidence }[]` (or `{tools:[…]}`); threshold in `gateway.yaml` + optional header `X-Claudia-Tool-Confidence-Threshold`. |
+| Router output    | `{ name, confidence }[]` (or `{tools:[…]}`); threshold in `gateway.yaml` + optional header `X-Chimera-Tool-Confidence-Threshold`. |
 | Router models    | Ordered `routing.router_models`; try **in order** until scores parse; then main chat path.                      |
 | Router failure   | Pass **all** tools.                                                                                                  |
 | Ollama           | `**patterns:`** e.g. `ollama/*`; **allow-all-local** matching catalog.                                               |
 | Dedup            | **Out of scope.**                                                                                                    |
 | Direct model 413 | **No fallback.**                                                                                                     |
-| Observability    | **Gateway-owned metrics** (**SQLite** + `migrations/gateway/*.sql`); **no** Go **plugins**. **No hot migration** while live (§3.6.2). **Shipped:** record on chat path + **admin `/ui/metrics`** + desktop **Stats** tab. **Open:** 413-only **cooldown** consumer of the same store. |
+| Observability    | **Gateway-owned metrics** (**SQLite** + `porcelain/migrations/chimera-gateway/metrics/*.sql`); **no** Go **plugins**. **No hot migration** while live (§3.6.2). **Shipped:** record on chat path + **admin `/ui/metrics`** + desktop **Stats** tab. **Open:** 413-only **cooldown** consumer of the same store. |
 | Provider quotas  | `config/provider-model-limits.yaml` (§3.7): merge order **model > provider > defaults**; `usage_day_timezone` for RPD/TPD windows. **Shipped:** `LimitsGuard()` + chat pre-flight vs `upstream_call_events`; **`nil` guard** if metrics disabled or DB missing. **Open:** tie-in to **413** cooldown (§3.3). |
 | RAG transformer  | **Stub** until v0.2.                                                                                                 |
 

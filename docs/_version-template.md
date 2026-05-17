@@ -25,7 +25,7 @@ One to three short sentences that explain the value of this version for the oper
 
 Describe the release in a paragraph or two: the problem it solves, the operator workflow it improves, and the boundaries that make this version distinct from the previous one.
 
-**Companion docs:** [`claudia-gateway.plan.md`](claudia-gateway.plan.md), [`configuration.md`](configuration.md), [`plans/example.md`](plans/example.md).
+**Companion docs:** [`porcelain.plan.md`](porcelain.plan.md), [`configuration.md`](configuration.md), [`plans/example.md`](plans/example.md).
 
 ---
 

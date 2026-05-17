@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # MSYS2 MinGW GCC on PATH for Windows CGO (Fyne). Source from other scripts.
-# Non-interactive shells (e.g. make desktop-build) do not load ~/.bashrc; call msys2_prepend_gcc_path.
+# Non-interactive shells (e.g. make locus-desktop-build) do not load ~/.bashrc; call msys2_prepend_gcc_path.
 # shellcheck shell=bash
 
 _msys2_gcc_path_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -27,10 +27,10 @@ msys2_resolve_root() {
 }
 
 # If gcc is already visible, no-op (exit 0). Else prepend ucrt64/mingw64 bin when gcc.exe exists there.
-# Sets CLAUDIA_MSYS2_TOOLCHAIN_ROOT and CLAUDIA_MSYS2_TOOLCHAIN_ENV when prepended (for gui-install ~/.bashrc).
+# Sets CHIMERA_MSYS2_TOOLCHAIN_ROOT and CHIMERA_MSYS2_TOOLCHAIN_ENV when prepended (for gui-install ~/.bashrc).
 # Returns 0 if has_cc after this runs, else 1.
 msys2_prepend_gcc_path() {
-  unset CLAUDIA_MSYS2_TOOLCHAIN_ROOT CLAUDIA_MSYS2_TOOLCHAIN_ENV 2>/dev/null || true
+  unset CHIMERA_MSYS2_TOOLCHAIN_ROOT CHIMERA_MSYS2_TOOLCHAIN_ENV 2>/dev/null || true
   case "$(uname -s 2>/dev/null)" in
   MINGW* | MSYS* | CYGWIN*) ;;
   *) return 0 ;;
@@ -46,8 +46,8 @@ msys2_prepend_gcc_path() {
   for env in ucrt64 mingw64; do
     if [[ -f "$mroot/$env/bin/gcc.exe" ]]; then
       export PATH="$mroot/$env/bin:$mroot/usr/bin:$PATH"
-      export CLAUDIA_MSYS2_TOOLCHAIN_ROOT="$mroot"
-      export CLAUDIA_MSYS2_TOOLCHAIN_ENV="$env"
+      export CHIMERA_MSYS2_TOOLCHAIN_ROOT="$mroot"
+      export CHIMERA_MSYS2_TOOLCHAIN_ENV="$env"
       if has_cc; then
         return 0
       fi

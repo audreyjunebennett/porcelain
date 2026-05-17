@@ -13,7 +13,7 @@
 
 ## At a glance
 
-**v0.2** gives chat **memory of your code**: operators index workspace folders through `**claudia-index`** and gateway `**POST /v1/ingest**`; at chat time the virtual model **retrieves** from **Qdrant** and injects context into the prompt. **Tenant isolation** is enforced by the bearer token; **project** and **flavor** headers pick the corpus.
+**v0.2** gives chat **memory of your code**: operators index workspace folders through `**chimera-indexer`** and gateway `**POST /v1/ingest**`; at chat time the virtual model **retrieves** from **Qdrant** and injects context into the prompt. **Tenant isolation** is enforced by the bearer token; **project** and **flavor** headers pick the corpus.
 
 The **workspace indexer** pairs watch-mode ingest with a **queue-safe** scan and fan-out model so large trees and **multiple roots** stay fair and observable—see § **File indexer** (**Themes — indexer runtime and queue**).
 
@@ -23,7 +23,7 @@ The **workspace indexer** pairs watch-mode ingest with a **queue-safe** scan and
 
 The **chat path** records **tiktoken-compatible `cl100k_base`** estimates on the **proxied JSON body**, aggregates **request counts and estimated tokens** into **per-minute and per-day** windows in **SQLite**, and enforces **vendor-style caps** from `**provider-model-limits.yaml`** before calling upstream—see § **Token counting (chat path)** and § **Usage metrics and provider limits**.
 
-**Also in v0.2:** **chunked ingest sessions** for oversized files; **custom headers** (including `**X-Claudia-Conversation-Id`**) documented for **Continue** in `**vscode-continue/`**; **chat robustness** (fallback, quotas, tool-router) carried forward from v0.1.x; **Make-driven catalog tools** that refresh **free-tier / limits snapshots** and `**provider-free-tier`** YAML—see § **Additional operator themes** below.
+**Also in v0.2:** **chunked ingest sessions** for oversized files; **custom headers** (including `**X-Chimera-Conversation-Id`**) documented for **Continue** in `**vscode-continue/`**; **chat robustness** (fallback, quotas, tool-router) carried forward from v0.1.x; **Make-driven catalog tools** that refresh **free-tier / limits snapshots** and `**provider-free-tier`** YAML—see § **Additional operator themes** below.
 
 
 | Theme                                                                                  | Outcome                                                                                                                                       | Status |
@@ -35,10 +35,10 @@ The **chat path** records **tiktoken-compatible `cl100k_base`** estimates on the
 | [Token counting (chat path)](#token-counting-chat-path)                                | `cl100k_base` estimate on outbound chat JSON; structured log (`outgoingTokens`); same estimate drives metrics + quota admission               | `done` |
 | [Usage metrics and provider limits](#usage-metrics-and-provider-limits)                | SQLite minute/day rollups; RPM/RPD/TPM/TPD from YAML; **429** `gateway_provider_limits` when a call would exceed                              | `done` |
 | [Health probe](#health-and-operations)                                                 | `/health` adds a Qdrant probe when RAG is enabled                                                                                             | `done` |
-| [Workspace indexer (`claudia-index` v0.2)](#file-indexer-v02)                          | Watch roots, ignore rules, queue-safe scan/fan-out, ingest aligned with v0.2 APIs                                                             | `done` |
+| [Workspace indexer (`chimera-indexer` v0.2)](#file-indexer-v02)                          | Watch roots, ignore rules, queue-safe scan/fan-out, ingest aligned with v0.2 APIs                                                             | `done` |
 | [Operator logs UI](#operator-logs-ui-correlation--summarized-views)                    | Correlation + tagging; conversation / subsystem views; Indexers cards; SSE/poll; desktop shell — **Themes** subsections                       | `done` |
 | [Indexer chunked ingestion](#themes-indexer-chunked-ingestion)                         | Session API when files exceed `**max_whole_file_bytes`**; indexer uses whole POST or chunked transport per config                             | `done` |
-| [Conversation headers & Continue](#themes-conversation-headers-and-continue-templates) | `**X-Claudia-Conversation-Id**` (+ project/flavor); gateway accepts or generates; templates in `**vscode-continue/**`                         | `done` |
+| [Conversation headers & Continue](#themes-conversation-headers-and-continue-templates) | `**X-Chimera-Conversation-Id**` (+ project/flavor); gateway accepts or generates; templates in `**vscode-continue/**`                         | `done` |
 | [Chat robustness](#themes-chat-robustness)                                             | Virtual-model **429/5xx** fallback chain; **413** skip-to-next on virtual path; **tool-router** slimming; **gateway_provider_limits** **429** | `done` |
 | [Catalog & limits tooling (Make)](#themes-catalog-and-limits-tooling-make)             | `**catalog-free`**, `**catalog-available**`, `**config-provider-free-tier**`; snapshots inform `**provider-model-limits.yaml**` maintenance   | `done` |
 | [Qdrant log classification](#theme--qdrant-log-classification)                         | Normalize supervised Qdrant JSON into stable `qdrant.*` slugs and operator-friendly card summaries                                            | `done` |
@@ -51,9 +51,9 @@ The **chat path** records **tiktoken-compatible `cl100k_base`** estimates on the
 
 **Status:** The capabilities below are **shipped** in the **v0.2.0** baseline and subsequent patches (**v0.2.1** logging/UI/conversation merge, **v0.2.2** supervised indexer + shell). Per-patch operator detail lives in § **[Shipped releases: v0.2.0 through v0.2.2](#shipped-releases-v020-through-v022)** below.
 
-This document pulls together **everything scoped to product v0.2** from `[claudia-gateway.plan.md](claudia-gateway.plan.md)` (authoritative product roadmap), `[overview.md](overview.md)`, `[network.md](network.md)`, `[configuration.md](configuration.md)`, and cross-links the **file indexer** work in a **separate** plan: `[plans/indexer.md](plans/indexer.md)`.
+This document pulls together **everything scoped to product v0.2** from `[porcelain.plan.md](porcelain.plan.md)` (authoritative product roadmap), `[overview.md](overview.md)`, `[network.md](network.md)`, `[configuration.md](configuration.md)`, and cross-links the **file indexer** work in a **separate** plan: `[plans/indexer.md](plans/indexer.md)`.
 
-**Tone:** normative items below track **locked** product decisions in the gateway plan; where the **in-tree** stack differs from the original LiteLLM + TypeScript + Compose description, treat this document as the **capability target** and align the Go gateway + BiFrost implementation to the same **HTTP contracts** and **behavior**. Cross-reference topical requirements in `[claudia-gateway.plan.md](claudia-gateway.plan.md)` using *Section · item* notation (e.g. *Workspace indexing · 10*).
+**Tone:** normative items below track **locked** product decisions in the gateway plan; where the **in-tree** stack differs from the original LiteLLM + TypeScript + Compose description, treat this document as the **capability target** and align the Go gateway + BiFrost implementation to the same **HTTP contracts** and **behavior**. Cross-reference topical requirements in `[porcelain.plan.md](porcelain.plan.md)` using *Section · item* notation (e.g. *Workspace indexing · 10*).
 
 **Companion:** v0.1 working notes and checklist live in `[version-v0.1.md](version-v0.1.md)`.
 
@@ -61,15 +61,15 @@ This document pulls together **everything scoped to product v0.2** from `[claudi
 
 ## What v0.2 is
 
-**v0.2** is the **RAG baseline**: gateway-mediated **ingestion**, **query-time retrieval**, **Qdrant** (or another backend behind the **vector-store adapter**), **tenant-scoped** access to ingested data, and **indexer-facing REST** so an external `claudia-index` (and operators) can drive indexing without embedding locally.
+**v0.2** is the **RAG baseline**: gateway-mediated **ingestion**, **query-time retrieval**, **Qdrant** (or another backend behind the **vector-store adapter**), **tenant-scoped** access to ingested data, and **indexer-facing REST** so an external `chimera-indexer` (and operators) can drive indexing without embedding locally.
 
-**Release roadmap summary** (from `[claudia-gateway.plan.md](claudia-gateway.plan.md)`):
+**Release roadmap summary** (from `[porcelain.plan.md](porcelain.plan.md)`):
 
 - `POST /v1/ingest`
 - **Indexer REST:** `GET /v1/indexer/config`, `GET /v1/indexer/storage/health`, `GET /v1/indexer/storage/stats`, `GET /v1/indexer/corpus/inventory` (live Qdrant readings + paginated source/hash inventory; no persisted metric history in-gateway)
 - **Chunking defaults:** **512** UTF-8 code units, **128** overlap (configurable; surfaced via indexer config)
 - **Qdrant adapter** + **query-time retrieval** + **prompt assembly**
-- **Collection** naming rules; `X-Claudia-Project` / `X-Claudia-Flavor-Id` headers
+- **Collection** naming rules; `X-Chimera-Project` / `X-Chimera-Flavor-Id` headers
 - `GET /health` includes **Qdrant** probe when **RAG is enabled**
 - **Chat token estimates** (`cl100k_base`) on the proxied body; **usage rollups** (minute/day) and `**provider-model-limits.yaml`** admission on the chat path (see § **Token counting (chat path)** and § **Usage metrics and provider limits**)
 
@@ -80,23 +80,23 @@ This document pulls together **everything scoped to product v0.2** from `[claudi
 ### Authentication, tenant, and headers
 
 - **Bearer token** (same as chat) defines **tenant**; **from v0.2** the token **authorizes RAG** so retrieval and ingested memory are **only** for that tenant’s data (gateway plan *Tenant authentication · 1*).
-- `X-Claudia-Project: <slug>` on chat (when RAG applies) and on **ingestion**; falls back to token default (*Tenant authentication · 2*).
-- Optional `X-Claudia-Flavor-Id: <key>` (or token default `flavor_id`) selects the **corpus** within tenant + project.
-- Optional `**X-Claudia-Conversation-Id`** on chat — stable **conversation / thread** id for logs and `**/ui/logs`** (**Conversations** view); if omitted, the gateway **generates** one. Successful responses **echo** the id when the client should persist it. Operators wire these through IDE templates — see `**vscode-continue/`** (`[vscode-continue/README.md](../vscode-continue/README.md)`) and § **Themes: conversation headers and Continue templates** below.
+- `X-Chimera-Project: <slug>` on chat (when RAG applies) and on **ingestion**; falls back to token default (*Tenant authentication · 2*).
+- Optional `X-Chimera-Flavor-Id: <key>` (or token default `flavor_id`) selects the **corpus** within tenant + project.
+- Optional `**X-Chimera-Conversation-Id`** on chat — stable **conversation / thread** id for logs and `**/ui/logs`** (**Conversations** view); if omitted, the gateway **generates** one. Successful responses **echo** the id when the client should persist it. Operators wire these through IDE templates — see `**vscode-continue/`** (`[vscode-continue/README.md](../vscode-continue/README.md)`) and § **Themes: conversation headers and Continue templates** below.
 
 ### Virtual model and RAG
 
-- `GET /v1/models`: same virtual `Claudia-<semver>` id pattern as v0.1; **v0.2+** the virtual model **adds RAG when enabled** (explicit upstream model ids still **direct proxy**).
+- `GET /v1/models`: same virtual `chimera-<semver>` id pattern as v0.1; **v0.2+** the virtual model **adds RAG when enabled** (explicit upstream model ids still **direct proxy**).
 
 ### Ingestion API
 
 - `POST /v1/ingest` — **one document per request** (multipart `file` and/or JSON with `text`, `source`, etc.); finalize and document the **exact schema** in `docs/` and implementation.
-- **Chunked ingest session** — For payloads larger than `**rag.ingest.max_whole_file_bytes`** (surfaced via `**GET /v1/indexer/config**` as `**max_whole_file_bytes**`), `**claudia-index**` uses the gateway `**/v1/ingest/session**` flow (start, chunk upload, complete) instead of a single whole-body POST. See `[indexer.md](indexer.md)` and § **Themes: indexer chunked ingestion** below.
+- **Chunked ingest session** — For payloads larger than `**rag.ingest.max_whole_file_bytes`** (surfaced via `**GET /v1/indexer/config**` as `**max_whole_file_bytes**`), `**chimera-indexer**` uses the gateway `**/v1/ingest/session**` flow (start, chunk upload, complete) instead of a single whole-body POST. See `[indexer.md](indexer.md)` and § **Themes: indexer chunked ingestion** below.
 - Accept **client-supplied `content_hash`** (algorithm and field name per contract) for **inventory / change detection**; gateway stores it as specified in `[plans/indexer.md](plans/indexer.md)` (indexer v0.2–v0.3 uses client hash as local truth until server-authoritative hash lands in later milestones).
 
 ### Indexer REST (gateway-owned)
 
-- `GET /v1/indexer/config` — effective `chunk_size`, `chunk_overlap`, `embedding_model`, `ingest_method` + `ingest_path`, required/optional headers (`X-Claudia-Project`, `X-Claudia-Flavor-Id`), minimum Qdrant payload fields, collection naming summary, `gateway_version`, and related knobs from **running** config.
+- `GET /v1/indexer/config` — effective `chunk_size`, `chunk_overlap`, `embedding_model`, `ingest_method` + `ingest_path`, required/optional headers (`X-Chimera-Project`, `X-Chimera-Flavor-Id`), minimum Qdrant payload fields, collection naming summary, `gateway_version`, and related knobs from **running** config.
 - `GET /v1/indexer/storage/health` — vector store reachability; **degraded**/ok; scoped to token **tenant**.
 - `GET /v1/indexer/storage/stats` — **live** per-collection **point counts**, **vector dimension**, safe Qdrant metrics (document response fields).
 - Optional additional `GET` under `/v1/indexer/…` as needed; document paths and keep stable within a **minor** release.
@@ -117,7 +117,7 @@ This document pulls together **everything scoped to product v0.2** from `[claudi
 
 - **What gets counted:** After the gateway builds the **outbound** JSON body (client fields plus resolved `**model`** and `**stream**`), the **entire marshalled string** is passed through `**tokencount.Count`** — the same estimate feeds **structured logs**, **SQLite usage metrics**, and **provider limit** admission (`[docs/tokencount-talk.md](tokencount-talk.md)` discusses calibration vs upstream tokenizers).
 - **Logging:** Successful counts appear on the upstream relay line (e.g. structured field `**outgoingTokens`**, `**msg**` `chat.bifrost.request`). Count failures **do not** fail the request; they degrade to logging without the numeric field.
-- **CLI:** Operators can run `**claudia tokencount`** for ad-hoc counts (`cl100k_base`, optional `**o200k_base**` display for comparison) — not required for gateway operation.
+- **CLI:** Operators can run `**chimera tokencount`** for ad-hoc counts (`cl100k_base`, optional `**o200k_base**` display for comparison) — not required for gateway operation.
 - **Embedding / RAG paths:** Pre-embed counting for ingest chunks and retrieval query strings remains aligned with the same `**tokencount`** package where those code paths need estimates; product caveats about **approximate** counts vs non–cl100k upstream models still apply.
 
 ### Usage metrics and provider limits
@@ -169,9 +169,9 @@ The gateway plan requires `docs/` to cover overview, network, install, Docker co
 - Data flow **IDE → gateway → embed path → Qdrant** (and **indexer → gateway** for ingest).
 - **Ingest** and **indexer** API paths, auth, and headers.
 - **Operator Logs** (`/ui/logs`): summarized vs detailed views, correlation fields, themes under § **Operator logs UI** (**Themes — logs and operator observability**), and `**[plans/log-presentation-layer.md](plans/log-presentation-layer.md)`**; indexer card themes under § **File indexer**.
-- **Continue** (or client) samples: `**X-Claudia-Project`**, `**X-Claudia-Flavor-Id**`, and `**X-Claudia-Conversation-Id**` — see `**vscode-continue/**` and § **Themes: conversation headers and Continue templates**; gateway plan continues convention for RAG headers.
+- **Continue** (or client) samples: `**X-Chimera-Project`**, `**X-Chimera-Flavor-Id**`, and `**X-Chimera-Conversation-Id**` — see `**vscode-continue/**` and § **Themes: conversation headers and Continue templates**; gateway plan continues convention for RAG headers.
 
-`[network.md](network.md)` already notes **v0.2+**: Claudia → Qdrant for retrieval and indexer-backed workflows. `[configuration.md](configuration.md)` notes `tenant_id` in logs and **v0.2+** RAG scoping by tenant — keep these aligned as behavior lands.
+`[network.md](network.md)` already notes **v0.2+**: Chimera → Qdrant for retrieval and indexer-backed workflows. `[configuration.md](configuration.md)` notes `tenant_id` in logs and **v0.2+** RAG scoping by tenant — keep these aligned as behavior lands.
 
 ---
 
@@ -216,7 +216,7 @@ Gateway parent-process logs use a stable `gateway.*` taxonomy (plus tightened ex
 
 **Acceptance**
 
-- Grepping `internal/` + `cmd/claudia/` shows no `slog.Info/Warn/Error/Debug` calls that omit `"msg", "<slug>"` (within the intended audit scope).
+- Grepping `internal/` + `cmd/chimera/` shows no `slog.Info/Warn/Error/Debug` calls that omit `"msg", "<slug>"` (within the intended audit scope).
 - With `LOG_LEVEL=info`, cold start produces a compact operator narrative (config resolved, tokens loaded, listening, upstream/Qdrant/BiFrost supervised status).
 - `/ui/logs` Gateway card KV row populates (listening/upstream/config/tokens/routing/supervised children) without expanding individual rows.
 
@@ -270,23 +270,23 @@ Supervised BiFrost stdout/stderr is normalized in `internal/servicelogs/bifrostl
 
 ### Themes: indexer chunked ingestion
 
-- **Threshold:** Gateway `**rag.ingest.max_whole_file_bytes`** caps **single-request** whole-file ingest; effective ceiling is also exposed on `**GET /v1/indexer/config`** so `**claudia-index**` can choose **whole** vs **chunked** transport (`transport`: `**whole`**  `**chunked**` in structured logs — `[indexer.md](indexer.md)`).
+- **Threshold:** Gateway `**rag.ingest.max_whole_file_bytes`** caps **single-request** whole-file ingest; effective ceiling is also exposed on `**GET /v1/indexer/config`** so `**chimera-indexer**` can choose **whole** vs **chunked** transport (`transport`: `**whole`**  `**chunked**` in structured logs — `[indexer.md](indexer.md)`).
 - **Flow:** Chunked uploads use the `**/v1/ingest/session`** HTTP surface (session lifecycle + per-chunk writes + completion); correlates with `**index_run_id**` / ingest logging like simple ingest (`[plans/log-presentation-layer.md](plans/log-presentation-layer.md)` activity log).
 - **Operator story:** Large workspace files still index without blowing HTTP body limits; tune `**max_whole_file_bytes`** in `**gateway.yaml**` (and optional indexer YAML override per `[indexer.md](indexer.md)`).
 
 ### Themes: conversation headers and Continue templates
 
-- `**X-Claudia-Conversation-Id`:** Optional on `**POST /v1/chat/completions`**. When sent, the gateway uses it as the session key for **structured logs**, metrics joins, and `**/ui/logs`** conversation threading; when absent, it **generates** an id. Responses **echo** the header so clients can reuse it on follow-up turns.
-- **RAG scope headers:** `**X-Claudia-Project`** and `**X-Claudia-Flavor-Id**` remain required for correct corpus selection when RAG applies (same as gateway plan).
+- `**X-Chimera-Conversation-Id`:** Optional on `**POST /v1/chat/completions`**. When sent, the gateway uses it as the session key for **structured logs**, metrics joins, and `**/ui/logs`** conversation threading; when absent, it **generates** an id. Responses **echo** the header so clients can reuse it on follow-up turns.
+- **RAG scope headers:** `**X-Chimera-Project`** and `**X-Chimera-Flavor-Id**` remain required for correct corpus selection when RAG applies (same as gateway plan).
 - `**vscode-continue/`:** Example `**config.yml`** and `**[README.md](../vscode-continue/README.md)**` document how to attach **custom headers** for Continue (exact YAML keys vary by Continue version — `requestOptions.headers`, `defaultRequestOptions`, etc.). Operators should add **project**, **flavor**, and **conversation** headers there so IDE traffic matches gateway expectations and logs stay correlated.
 
 ### Themes: chat robustness
 
 *v0.2 builds on the v0.1 / v0.1.1 gateway path; this is a **summary** — authoritative detail lives in `[version-v0.1.md](version-v0.1.md)`, `[version-v0.1.1.md](version-v0.1.1.md)`, and `[configuration.md](configuration.md)`.*
 
-- **Virtual model (`Claudia-<semver>`):** On upstream **429** or **5xx**, the gateway walks `**routing.fallback_chain`** from the appropriate index and retries the **same** client payload against the next candidate (`[internal/chat](../internal/chat/chat.go)`).
+- **Virtual model (`chimera-<semver>`):** On upstream **429** or **5xx**, the gateway walks `**routing.fallback_chain`** from the appropriate index and retries the **same** client payload against the next candidate (`[internal/chat](../internal/chat/chat.go)`).
 - **Payload too large (413):** On the **virtual-model** path, an upstream **413** records metrics and triggers **fallback** (same request, next model), skipping models that already returned **413** for that request; **direct** upstream model ids return **413** to the client (`[version-v0.1.1.md](version-v0.1.1.md)` § G5).
-- **Tool payload size:** When enabled, `**transform.ApplyToolRouter`** may **trim** the `**tools`** array using `**routing.router_models**` / `**routing.tool_router**` before routing (`[version-v0.1.1.md](version-v0.1.1.md)`); per-request `**X-Claudia-Tool-Router: skip**` and `**X-Claudia-Tool-Confidence-Threshold**` remain supported.
+- **Tool payload size:** When enabled, `**transform.ApplyToolRouter`** may **trim** the `**tools`** array using `**routing.router_models**` / `**routing.tool_router**` before routing (`[version-v0.1.1.md](version-v0.1.1.md)`); per-request `**X-Chimera-Tool-Router: skip**` and `**X-Chimera-Tool-Confidence-Threshold**` remain supported.
 - **Provider quotas:** Before upstream HTTP, `**providerlimits.Guard`** may return **429** `**gateway_provider_limits`** when `**provider-model-limits.yaml**` would be exceeded (§ **Usage metrics and provider limits**).
 
 ### Themes: catalog and limits tooling (Make)
@@ -296,8 +296,8 @@ Operator-maintained `**config/provider-model-limits.yaml`** follows `**schema_ve
 
 | Target                               | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `**make catalog-free**`              | Runs `**cmd/catalog-write-free**`: fetches **Groq** + **Gemini** public docs, extracts **BiFrost-style model ids** and **rate-limit metadata**, writes `**config/catalog-free-tier.snapshot.yaml`** (override with `**OUT=**`). Optional `**INTERSECT=**` filters to a catalog file.                                                                                                                                                                                                       |
-| `**make catalog-available**`         | Runs `**cmd/catalog-write-available**`: `**GET**` BiFrost `**/v1/models**`, writes `**config/catalog-available.snapshot.yaml**` (**requires** BiFrost up; `**OUT=`** override).                                                                                                                                                                                                                                                                                                            |
+| `**make catalog-free**`              | Runs `**chimera/cmd/catalog-write-free**`: fetches **Groq** + **Gemini** public docs, extracts **BiFrost-style model ids** and **rate-limit metadata**, writes `**config/catalog-free-tier.snapshot.yaml`** (override with `**OUT=**`). Optional `**INTERSECT=**` filters to a catalog file.                                                                                                                                                                                                       |
+| `**make catalog-available**`         | Runs `**chimera/cmd/catalog-write-available**`: `**GET**` BiFrost `**/v1/models**`, writes `**config/catalog-available.snapshot.yaml**` (**requires** BiFrost up; `**OUT=`** override).                                                                                                                                                                                                                                                                                                            |
 | `**make config-provider-free-tier**` | Runs `**catalog-available**` then `**catalog-write-free**` with `**INTERSECT=**` the available snapshot; writes `**config/catalog-free-tier.snapshot.yaml**` and `**config/provider-free-tier.generated.yaml**` (override `**FREE_OUT=**`, `**PROVIDER_FT_OUT=**`). Produces `**provider-free-tier**` YAML (`**format_version**`, patterns such as `**ollama/***`, intersected Groq/Gemini ids) for **routing / free-tier filtering** — see `[docs/plans/makefile.md](plans/makefile.md)`. |
 
 
@@ -313,7 +313,7 @@ All **indexer** milestones, configuration schema, gateway client behavior, Makef
 
 `**[plans/indexer.md](plans/indexer.md)`**
 
-**Summary for this release:** the first shippable `claudia-index` **aligns with gateway v0.2** — whole-file `POST /v1/ingest`, `GET /v1/indexer/config`, storage **health** (and related APIs), client `content_hash`, env-based token, watch roots + ignore rules, **no symlink follow** by default, debouncing/backpressure, and documented behavior for **oversized files** under whole-file-only ingest until **indexer v0.4** dual-mode exists.
+**Summary for this release:** the first shippable `chimera-indexer` **aligns with gateway v0.2** — whole-file `POST /v1/ingest`, `GET /v1/indexer/config`, storage **health** (and related APIs), client `content_hash`, env-based token, watch roots + ignore rules, **no symlink follow** by default, debouncing/backpressure, and documented behavior for **oversized files** under whole-file-only ingest until **indexer v0.4** dual-mode exists.
 
 #### Themes — indexer runtime and queue
 
@@ -340,13 +340,13 @@ This is the **current** system the gateway plan targets for **v0.2** — the anc
 | Concept                      | Where it comes from                                                                          | Role                                                                                                                                                                                                                                                         |
 | ---------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `tenant_id`                  | Gateway-issued **Bearer token** (server-side; not chosen per request by the client for chat) | Scopes **all** RAG data; retrieval and ingest apply only within this tenant.                                                                                                                                                                                 |
-| `project_id`                 | `X-Claudia-Project` header on chat (when RAG applies) and on ingest, else **token default**  | Selects the **project** / corpus namespace within the tenant.                                                                                                                                                                                                |
-| `flavor_id`                  | Optional `X-Claudia-Flavor-Id`, else **token default**                                       | Selects a **variant** corpus (e.g. branch, profile) within tenant + project.                                                                                                                                                                                 |
-| **Qdrant collection**        | Derived **deterministically** by the gateway from `(tenant_id, project_id, flavor_id)`       | **One collection per triple**; naming follows encoding rules in `[claudia-gateway.plan.md](claudia-gateway.plan.md)` (lowercase, slug-safe, collision hash suffix). **No** reliance on payload filters for tenancy at v0.2 — isolation is by **collection**. |
+| `project_id`                 | `X-Chimera-Project` header on chat (when RAG applies) and on ingest, else **token default**  | Selects the **project** / corpus namespace within the tenant.                                                                                                                                                                                                |
+| `flavor_id`                  | Optional `X-Chimera-Flavor-Id`, else **token default**                                       | Selects a **variant** corpus (e.g. branch, profile) within tenant + project.                                                                                                                                                                                 |
+| **Qdrant collection**        | Derived **deterministically** by the gateway from `(tenant_id, project_id, flavor_id)`       | **One collection per triple**; naming follows encoding rules in `[porcelain.plan.md](porcelain.plan.md)` (lowercase, slug-safe, collision hash suffix). **No** reliance on payload filters for tenancy at v0.2 — isolation is by **collection**. |
 | `**source` (indexed paths)** | Indexer / ingest client                                                                      | **Relative path** under configured roots in `[plans/indexer.md](plans/indexer.md)`; avoids leaking absolute host paths in bodies.                                                                                                                            |
 
 
-**Operational note:** Operators still configure **how** the gateway reaches Qdrant (URL, API key, adapter). `[claudia-gateway.plan.md](claudia-gateway.plan.md)` defaults to an HTTP health probe (e.g. `6333` in Compose); a local **gRPC** client on `6334` remains compatible with the same **collection naming** and payload contract as long as the adapter uses one consistent Qdrant API mode.
+**Operational note:** Operators still configure **how** the gateway reaches Qdrant (URL, API key, adapter). `[porcelain.plan.md](porcelain.plan.md)` defaults to an HTTP health probe (e.g. `6333` in Compose); a local **gRPC** client on `6334` remains compatible with the same **collection naming** and payload contract as long as the adapter uses one consistent Qdrant API mode.
 
 ---
 
@@ -354,7 +354,7 @@ This is the **current** system the gateway plan targets for **v0.2** — the anc
 
 Operator-oriented summary of what landed in each **patch** on the v0.2 line (configuration knobs, HTTP surfaces, UI routes). Normative behavior across the line remains summarized above in **Gateway and stack** and companion plans.
 
-The virtual model id stays `**Claudia-<gateway.semver>`** (set in `config/gateway.yaml`); example configs may show an older patch until you bump semver locally.
+The virtual model id stays `**Chimera-<gateway.semver>`** (set in `config/gateway.yaml`); example configs may show an older patch until you bump semver locally.
 
 **Deeper references (beyond this section)**
 
@@ -364,14 +364,14 @@ The virtual model id stays `**Claudia-<gateway.semver>`** (set in `config/gatewa
 
 | Release                                                                         | Outcome                                                                     | Status |
 | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ------ |
-| [v0.2.0](#v020--rag-baseline-ingest-indexer-apis-claudia-index)                 | RAG baseline: ingest, retrieval, Qdrant, `claudia-index`                    | `done` |
+| [v0.2.0](#v020--rag-baseline-ingest-indexer-apis-chimera-indexer)                 | RAG baseline: ingest, retrieval, Qdrant, `chimera-indexer`                    | `done` |
 | [v0.2.1](#v021--logging-correlation-logs-ui-optional-conversation-merge)        | Per-request correlation, richer logs UI, optional conversation merge        | `done` |
-| [v0.2.2](#v022--desktop-shell-supervised-indexer-indexer--continue-operator-ui) | Desktop shell, supervised `claudia-index`, indexer and Continue admin pages | `done` |
+| [v0.2.2](#v022--desktop-shell-supervised-indexer-indexer--continue-operator-ui) | Desktop shell, supervised `chimera-indexer`, indexer and Continue admin pages | `done` |
 
 
-### v0.2.0 — RAG baseline, ingest, indexer APIs, `claudia-index`
+### v0.2.0 — RAG baseline, ingest, indexer APIs, `chimera-indexer`
 
-**Theme:** Gateway-mediated **retrieval-augmented generation** with **Qdrant**, **ingestion**, **indexer-facing REST**, and the `claudia-index` workspace indexer binary.
+**Theme:** Gateway-mediated **retrieval-augmented generation** with **Qdrant**, **ingestion**, **indexer-facing REST**, and the `chimera-indexer` workspace indexer binary.
 
 **Configuration (`config/gateway.yaml`)**
 
@@ -386,12 +386,12 @@ The virtual model id stays `**Claudia-<gateway.semver>`** (set in `config/gatewa
 
 **Chat**
 
-- Virtual model `Claudia-<semver>`: when RAG is enabled, **query-time retrieval** and **prompt assembly** (retrieved context injected ahead of the conversation).
-- Tenant scoping via gateway tokens; `X-Claudia-Project` and `X-Claudia-Flavor-Id` select project/corpus (with token defaults).
+- Virtual model `chimera-<semver>`: when RAG is enabled, **query-time retrieval** and **prompt assembly** (retrieved context injected ahead of the conversation).
+- Tenant scoping via gateway tokens; `X-Chimera-Project` and `X-Chimera-Flavor-Id` select project/corpus (with token defaults).
 
 **Indexer CLI**
 
-- `claudia-index` walks configured roots, respects ignore rules, hashes files, and calls `POST /v1/ingest` (or chunked session for large files). Build: `make indexer-build`.
+- `chimera-indexer` walks configured roots, respects ignore rules, hashes files, and calls `POST /v1/ingest` (or chunked session for large files). Build: `make indexer-build`.
 
 **Stack**
 
@@ -408,7 +408,7 @@ The virtual model id stays `**Claudia-<gateway.semver>`** (set in `config/gatewa
 
 **Chat and RAG logging**
 
-- `conversation_id`: from header `X-Claudia-Conversation-Id` or generated by the gateway.
+- `conversation_id`: from header `X-Chimera-Conversation-Id` or generated by the gateway.
 - `principal_id` on chat logs where applicable.
 - Stable `msg` slugs on chat / RAG / ingest paths for filtering and dashboards (see log-presentation docs).
 
@@ -424,7 +424,7 @@ The virtual model id stays `**Claudia-<gateway.semver>`** (set in `config/gatewa
 
 **Optional conversation merge (`conversation_merge` in `gateway.yaml`)**
 
-- When enabled (requires **gateway metrics** / SQLite migrations): merges chat turns into an existing session using **embedding similarity** and recent-window rules when `X-Claudia-Conversation-Id` is absent. Schema and defaults are documented in `config/gateway.example.yaml` and `[configuration.md](configuration.md)`.
+- When enabled (requires **gateway metrics** / SQLite migrations): merges chat turns into an existing session using **embedding similarity** and recent-window rules when `X-Chimera-Conversation-Id` is absent. Schema and defaults are documented in `config/gateway.example.yaml` and `[configuration.md](configuration.md)`.
 
 **Documentation added in-tree**
 
@@ -432,11 +432,11 @@ The virtual model id stays `**Claudia-<gateway.semver>`** (set in `config/gatewa
 
 ### v0.2.2 — Desktop shell, supervised indexer, indexer + Continue operator UI
 
-**Theme:** First-run / **main** shell experience, **supervised `claudia-index`**, dedicated **Indexer** and **Continue** admin pages, consolidated **observability** (stats surfaced alongside logs), and desktop polish.
+**Theme:** First-run / **main** shell experience, **supervised `chimera-indexer`**, dedicated **Indexer** and **Continue** admin pages, consolidated **observability** (stats surfaced alongside logs), and desktop polish.
 
 **Supervisor**
 
-- When `indexer.supervised.enabled` is set (and RAG or `start_when_rag_disabled` conditions are met), `claudia serve` / desktop can start `claudia-index` as a child with `CLAUDIA_GATEWAY_URL`, merged `--config`, and optional `--log-json`. See `[indexer.md](indexer.md)` § Supervised mode and `[supervisor.md](supervisor.md)`.
+- When `indexer.supervised.enabled` is set (and RAG or `start_when_rag_disabled` conditions are met), `chimera serve` / desktop can start `chimera-indexer` as a child with `CHIMERA_GATEWAY_URL`, merged `--config`, and optional `--log-json`. See `[indexer.md](indexer.md)` § Supervised mode and `[supervisor.md](supervisor.md)`.
 
 **Operator UI**
 
@@ -461,7 +461,7 @@ The virtual model id stays `**Claudia-<gateway.semver>`** (set in `config/gatewa
 | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **0.2.0** | `rag.enabled: true`, `GET /health` shows Qdrant when configured; `POST /v1/ingest` and `GET /v1/indexer/config` succeed with a valid token; virtual-model chat includes retrieved context when collections exist. |
 | **0.2.1** | Logs show `request_id` and `conversation_id`; `/ui/logs` view modes persist; optional `conversation_merge` behaves per config when metrics DB is enabled.                                                         |
-| **0.2.2** | With `indexer.supervised.enabled`, `claudia-index` appears in supervisor logs and `/ui/logs` (source **indexer**); `/ui/indexer` and Continue snippet pages load after login.                                     |
+| **0.2.2** | With `indexer.supervised.enabled`, `chimera-indexer` appears in supervisor logs and `/ui/logs` (source **indexer**); `/ui/indexer` and Continue snippet pages load after login.                                     |
 
 
 ### See also (releases context)
@@ -474,7 +474,7 @@ The virtual model id stays `**Claudia-<gateway.semver>`** (set in `config/gatewa
 
 ## Explicitly not v0.2
 
-Keep these on later roadmap entries (see `[claudia-gateway.plan.md](claudia-gateway.plan.md)` **Release roadmap**):
+Keep these on later roadmap entries (see `[porcelain.plan.md](porcelain.plan.md)` **Release roadmap**):
 
 - **v0.3** — Chimera branding/onboarding, optional **internal embedding** exploration (see `[version-v0.3.md](version-v0.3.md)`), peer LiteLLM, virtual keys, cross-host publishing, per-key observability (*Resilience · 1*), etc.
 - **v0.4** — ensembles, escalation, **dual-mode / streaming large-file ingest**, server-authoritative hash in ingest response (indexer plan **v0.4**).
@@ -495,7 +495,7 @@ Use this to track cross-cutting v0.2 work; gate detailed indexer items in `[plan
 | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Config**                 | Gateway config to enable/disable RAG, embedding model id, Qdrant (or adapter) connection, chunking knobs, retrieval thresholds, feature flags as needed.                                                                                                                                                                            |
 | **HTTP API**               | Implement `POST /v1/ingest`, `GET /v1/indexer/config`, `GET /v1/indexer/storage/health`, `GET /v1/indexer/storage/stats`; document schemas and limits (e.g. max body size for whole-file ingest).                                                                                                                                   |
-| **Chat path**              | Virtual model: when RAG enabled, run retrieval + prompt assembly; honor `X-Claudia-Project` / `X-Claudia-Flavor-Id`.                                                                                                                                                                                                                |
+| **Chat path**              | Virtual model: when RAG enabled, run retrieval + prompt assembly; honor `X-Chimera-Project` / `X-Chimera-Flavor-Id`.                                                                                                                                                                                                                |
 | **Token counting**         | Shipped: `**internal/tokencount`** + chat-path wiring; `**outgoingTokens**` on relay logs (§ **Token counting (chat path)**).                                                                                                                                                                                                       |
 | **Usage metrics & limits** | SQLite minute/day rollups; `**provider-model-limits.yaml`** + `**providerlimits.Guard**`; **429** `gateway_provider_limits` (§ **Usage metrics and provider limits**).                                                                                                                                                              |
 | **Qdrant / adapter**       | Collections per triple; payload fields; collection naming; cosine/dot and dimension checks.                                                                                                                                                                                                                                         |
@@ -512,8 +512,8 @@ Use this to track cross-cutting v0.2 work; gate detailed indexer items in `[plan
 
 | Document                                                                         | Role                                                                                           |
 | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `[claudia-gateway.plan.md](claudia-gateway.plan.md)`                             | Authoritative product requirements and roadmap                                                 |
-| `[plans/indexer.md](plans/indexer.md)`                                           | `claudia-index` milestones and gateway coordination                                            |
+| `[porcelain.plan.md](porcelain.plan.md)`                             | Authoritative product requirements and roadmap                                                 |
+| `[plans/indexer.md](plans/indexer.md)`                                           | `chimera-indexer` milestones and gateway coordination                                            |
 | `[version-v0.1.md](version-v0.1.md)`                                             | v0.1 delivery notes and exploration                                                            |
 | `[overview.md](overview.md)`                                                     | Repo-oriented product summary                                                                  |
 | `[network.md](network.md)`                                                       | Ports and v0.2+ Qdrant data path                                                               |

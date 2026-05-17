@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Invoked by install.sh (make chimera-install). Clone BiFrost at deps.lock ref, build bifrost-http, run qdrant-from-release.sh.
+# Shared bootstrap helper for Chimera installers: clone BiFrost at deps.lock ref, build bifrost-http, run qdrant-from-release.sh.
 # Requires: git, curl, tar, make (or mingw32-make), unzip on Windows, Node.js 20+ (BiFrost UI),
 # Go + CGO C compiler (gcc or clang on PATH). On Windows use Git Bash + MinGW-w64/MSYS2 gcc, or WSL.
 set -euo pipefail
@@ -125,6 +125,6 @@ QD_INSTALLED="$REPO_ROOT/bin/qdrant"
 echo ""
 echo "Done. Binaries: $BF_INSTALLED  $QD_INSTALLED"
 if [[ "$BF_INSTALLED" == *.exe ]] || [[ "$QD_INSTALLED" == *.exe ]]; then
-	echo "On Windows, run ${CHIMERA_GATEWAY_BIN_BASE} with e.g. -bifrost-bin ./bin/bifrost-http.exe -qdrant-bin ./bin/qdrant.exe"
+	echo "On Windows, run ${CHIMERA_SUPERVISOR_BIN_BASE} with e.g. -broker-backend-bin ./bin/bifrost-http.exe -vectorstore-backend-bin ./bin/qdrant.exe"
 fi
 echo "BiFrost checkout: $BIFROST_DIR (bump BIFROST_GIT_REF in deps.lock and re-run: make ${CHIMERA_MAKE_INSTALL_TARGET})"

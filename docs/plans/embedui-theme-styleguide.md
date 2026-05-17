@@ -25,7 +25,7 @@ Operators and contributors iterate faster on a consistent product color scheme w
 
 Summarized logs embed UI is built from string templates in `internal/server/embedui/logs.js` and styles in `internal/server/embedui/logs.css`. Today, many colors are hard-coded hex values. A static styleguide lets designers and developers tune surfaces, borders, and state colors in isolation. Anything under `temp/` must remain **unlinked** from shipping code: the Phase 1 page loads canonical tokens via a **relative path** into `internal/server/embedui/theme-tokens.css` (no `temp/` imports from `cmd/` or embed). Tokens are also embedded and served at `/ui/assets/theme-tokens.css` when the logs UI is enabled.
 
-**Related docs:** [`embedui-logs-workspaces-merge.md`](embedui-logs-workspaces-merge.md) (adjacent embed UI work), [`claudia-gateway.plan.md`](../claudia-gateway.plan.md).
+**Related docs:** [`embedui-logs-workspaces-merge.md`](embedui-logs-workspaces-merge.md) (adjacent embed UI work), [`porcelain.plan.md`](../porcelain.plan.md).
 
 ---
 
@@ -85,7 +85,7 @@ Summarized logs embed UI is built from string templates in `internal/server/embe
 
 **Acceptance**
 
-- Changing a token in the canonical shipped sheet changes both the app (after `claudia-build` per project rules) and, when the gallery imports or mirrors that sheet, the static gallery.
+- Changing a token in the canonical shipped sheet changes both the app (after `chimera-build` per project rules) and, when the gallery imports or mirrors that sheet, the static gallery.
 
 **Status:** `done`
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Install GNU Make when missing (repo bootstrap + BiFrost build need it).
 # Set SKIP_AUTO_MAKE=1 to skip. Idempotent if make is already GNU Make.
-# Safe to source from install.sh / install-toolchain-deps.sh (updates PATH in caller).
+# Safe to source from installer scripts / install-toolchain-deps.sh (updates PATH in caller).
 set -euo pipefail
 
 have_gnu_make() {

@@ -1,6 +1,6 @@
-# claudia-index (v0.5)
+# chimera-indexer (v0.5)
 
-`claudia-index` is the workspace file indexer that ships alongside the Claudia
+`chimera-indexer` is the workspace file indexer that ships alongside the Chimera
 Gateway v0.2+. It walks configured directory roots, applies ignore rules,
 hashes each file, and sends bytes via `POST /v1/ingest` (small/medium files)
 or the **chunked session API** when the file is larger than `max_whole_file_bytes`
@@ -12,13 +12,13 @@ chunks locally.
 See [`plans/indexer.plan.md`](plans/indexer.plan.md) for the full product plan and
 non-goals; this document is the operator-facing quick start.
 
-## Supervised mode (`claudia serve` / desktop) — indexer plan v0.5 / gateway v0.2.2+
+## Supervised mode (`chimera serve` / desktop) — indexer plan v0.5 / gateway v0.2.2+
 
 When `indexer.supervised.enabled: true` is set in `config/gateway.yaml`
-(and RAG is enabled, or `start_when_rag_disabled: true`), `claudia serve`
-starts `claudia-index` as a child process after BiFrost is healthy. The child
-inherits the parent environment and receives `CLAUDIA_GATEWAY_URL` pointing
-at this gateway instance; set `CLAUDIA_GATEWAY_TOKEN` in the environment so
+(and RAG is enabled, or `start_when_rag_disabled: true`), `chimera serve`
+starts `chimera-indexer` as a child process after BiFrost is healthy. The child
+inherits the parent environment and receives `CHIMERA_GATEWAY_URL` pointing
+at this gateway instance; set `CHIMERA_GATEWAY_TOKEN` in the environment so
 ingest can authenticate.
 
 - **Single config file:** `indexer.supervised.config_path` (default:
@@ -28,11 +28,11 @@ ingest can authenticate.
   **not** read from YAML `roots:` in supervised mode; they come from the
   gateway **`GET /v1/indexer/workspaces`** (operator SQLite), managed in the
   logs UI. When the supervised file changes on disk, the supervised
-  **`claudia-index` process detects the edit** (debounced), stops the
+  **`chimera-indexer` process detects the edit** (debounced), stops the
   current watcher session, and **starts a new session**—**no full desktop
   restart**. If the indexer binary is stale, or other gateway settings
-  change, you still restart **`claudia serve`/desktop**.
-- **Standalone `claudia-index`** (no `--config`): unchanged—roots come from
+  change, you still restart **`chimera serve`/desktop**.
+- **Standalone `chimera-indexer`** (no `--config`): unchanged—roots come from
   merged YAML and optional `--root` as before.
 - **Logs:** stderr/stdout are teed into the same ring buffer as BiFrost/Qdrant;
   open `/ui/logs` and filter source `indexer`.
@@ -74,8 +74,8 @@ After a successful `GET /v1/indexer/config`, the logger adds `tenant_id`, `princ
 ### Stderr level (`log_level`)
 
 Indexer YAML may set `log_level` to `debug`, `info`, `warn`, or `error`
-(minimum level for **stderr** `slog` output from `claudia-index`). When unset, it
-defaults to `info`. `claudia-index --log-level …` overrides YAML for the
+(minimum level for **stderr** `slog` output from `chimera-indexer`). When unset, it
+defaults to `info`. `chimera-indexer --log-level …` overrides YAML for the
 process (same values).
 
 ### Per-file skip / upload lines (`job_skip_log`)
@@ -92,38 +92,38 @@ Indexer YAML may set `job_skip_log` to `info`, `debug`, or `off`:
 unset after merge: **`true` → info**, **`false` → debug** (matching the old default
 where absent meant verbose INFO lines).
 
-- **Desktop folder picker:** the native shell binds `window.claudiaPickFolder`
+- **Desktop folder picker:** the native shell binds `window.chimeraPickFolder`
   (WebView + `dlgs` folder dialog); the Indexer tab calls it from `/ui/indexer`
-  (iframe uses `window.top.claudiaPickFolder`).
+  (iframe uses `window.top.chimeraPickFolder`).
 
-**Binary:** place `claudia-index` next to the **same executable** that runs
-supervision (`claudia`, `claudia-desktop`, etc.—see `executableDir` in
-`cmd/claudia/serve_defaults.go`), or set `indexer.supervised.bin`, or ensure
-it is on `PATH`. After `make indexer-build`, restart `claudia serve`
+**Binary:** place `chimera-indexer` next to the **same executable** that runs
+supervision (`chimera`, `locus-desktop`, etc.—see `executableDir` in
+`cmd/chimera/serve_defaults.go`), or set `indexer.supervised.bin`, or ensure
+it is on `PATH`. After `make chimera-indexer-build`, restart `chimera serve`
 or desktop so the child process is started again; otherwise you may still be
-running an older `claudia-index` on disk.
+running an older `chimera-indexer` on disk.
 
 ## Install / build
 
 ```sh
-make indexer-build   # produces ./claudia-index[.exe]
-make indexer-install # go install into $GOBIN
+make chimera-indexer-build   # produces ./chimera-indexer[.exe]
+make chimera-indexer-install # go install into $GOBIN
 ```
 
 ## Environment
 
 | Variable                | Purpose                                    |
 |-------------------------|--------------------------------------------|
-| `CLAUDIA_GATEWAY_URL`   | Base URL of a running Claudia Gateway      |
-| `CLAUDIA_GATEWAY_TOKEN` | Bearer token (required; never store in YAML) |
+| `CHIMERA_GATEWAY_URL`   | Base URL of a running Chimera Gateway      |
+| `CHIMERA_GATEWAY_TOKEN` | Bearer token (required; never store in YAML) |
 
 ## Configuration
 
-`claudia-index` loads **YAML config in layers** (each file optional except when
+`chimera-indexer` loads **YAML config in layers** (each file optional except when
 you pass `--config`, which must exist). Merge order (lowest → highest):
 
-1. `~/.claudia/indexer.config.yaml` (user-wide; `os.UserHomeDir()` / Windows `%USERPROFILE%`)
-2. `<cwd>/.claudia/indexer.config.yaml` (project-local)
+1. `~/.locus/indexer.config.yaml` (user-wide; `os.UserHomeDir()` / Windows `%USERPROFILE%`)
+2. `<cwd>/.locus/indexer.config.yaml` (project-local)
 3. `--config path` when set (highest among files)
 
 Later files override earlier ones for the same keys (see `MergeFileConfig` in
@@ -131,14 +131,14 @@ Later files override earlier ones for the same keys (see `MergeFileConfig` in
 `--config`, or add `--config` for an extra overlay. A starter overlay lives
 at [`config/indexer.example.yaml`](../config/indexer.example.yaml).
 
-After merged YAML: **environment** (`CLAUDIA_GATEWAY_URL`) overrides
+After merged YAML: **environment** (`CHIMERA_GATEWAY_URL`) overrides
 `gateway_url`; **CLI** `--gateway-url` and `--root` override merged YAML for
-those fields; `--log-level` overrides `log_level`. `CLAUDIA_GATEWAY_TOKEN` is always from the environment (never
+those fields; `--log-level` overrides `log_level`. `CHIMERA_GATEWAY_TOKEN` is always from the environment (never
 YAML).
 
 ```yaml
-# Claudia Gateway base URL (default listen_port is 3000 in config/gateway.yaml).
-# Do not point this at BiFrost (8080) — claudia-index talks to the gateway.
+# Chimera Gateway base URL (default listen_port is 3000 in config/gateway.yaml).
+# Do not point this at BiFrost (8080) — chimera-indexer talks to the gateway.
 gateway_url: "http://127.0.0.1:3000"
 roots:
   - "."
@@ -147,12 +147,12 @@ ignore_extra:
   - "*.snapshot"
 ```
 
-`tenant_id` is implied by the bearer token JSON response also returns `tenant_id`, `user_label` (from `tokens.yaml` / UI label), `principal_id` (same id as `tenant_id`) for indexer operator logs. **v0.3** adds optional
+`tenant_id` is implied by the bearer token JSON response also returns `tenant_id`, `user_label` (from `api-keys.yaml` / UI label), `principal_id` (same id as `tenant_id`) for indexer operator logs. **v0.3** adds optional
 `defaults`, per-root, and per-glob `project_id` / `flavor_id` / `workspace_id`
 in YAML. They are merged in order **defaults → root → overrides** (each
 `overrides[]` glob that matches the file’s root-relative path applies on top;
 later list entries win for the same field). Values are sent on every ingest as
-`X-Claudia-Project` and `X-Claudia-Flavor-Id`, and the merged **defaults** are
+`X-Chimera-Project` and `X-Chimera-Flavor-Id`, and the merged **defaults** are
 also sent on `GET /v1/indexer/config` at startup. Match the same headers (or
 Continue `config.yaml` project/flavor fields) as chat so RAG queries the same
 Qdrant collection the indexer wrote to.
@@ -160,7 +160,7 @@ Qdrant collection the indexer wrote to.
 **v0.4:** Successful ingests record **client** and **server** SHA-256 digests under
 `sync_state_path`. When omitted: **`indexer.sync-state.json` next to the `--config`
 file** if you pass `--config` (e.g. supervised `data/gateway/indexer.sync-state.json`
-alongside `indexer.supervised.yaml`), otherwise `.claudia/indexer.sync-state.json`
+alongside `indexer.supervised.yaml`), otherwise `.locus/indexer.sync-state.json`
 under the process working directory. If a file’s client hash matches the last
 recorded value, the indexer **skips** re-upload.
 Gateway responses include `content_sha256` (authoritative over UTF-8 text
@@ -174,8 +174,8 @@ as whole-file ingest (`retry_max_attempts`, `retry_base_delay_ms`,
 
 ## Corpus inventory (reconciliation)
 
-`GET /v1/indexer/corpus/inventory` (Bearer token; same `X-Claudia-Project`
-/`X-Claudia-Flavor-Id` headers as ingest) returns **deduplicated** sources
+`GET /v1/indexer/corpus/inventory` (Bearer token; same `X-Chimera-Project`
+/`X-Chimera-Flavor-Id` headers as ingest) returns **deduplicated** sources
 for the scoped Qdrant collection. Query params:
 
 - `limit` — max points to scan per page (default **256**, max **2000**).
@@ -188,7 +188,7 @@ Response JSON includes `entries[]` with `source`, `content_sha256`
 `next_cursor`. The gateway advertises the path on `GET /v1/indexer/config`
 as `corpus_inventory_path`.
 
-`claudia-index` loads all pages during the initial scan (after
+`chimera-indexer` loads all pages during the initial scan (after
 `GET /v1/indexer/config`) and skips files whose **client** hash matches the
 inventory when `client_content_hash` is set, or falls back to **sync state +
 server SHA** when only server digests exist on older points.
@@ -200,7 +200,7 @@ The matcher is a layered gitignore-style engine that combines:
 1. Built-in defaults (`.git/`, `node_modules/`, `*.bin`, `*.png`, secrets,
    etc.).
 2. `ignore_extra` from the YAML config.
-3. `.claudiaignore` at each root (created by you).
+3. `.locusignore` at each root (created by you).
 4. `.gitignore` at each root.
 
 Binary files are also excluded via a NUL-byte sniff over the first ~8 KB.
@@ -223,9 +223,9 @@ Per [§ Failure handling](plans/indexer.plan.md#failure-handling-normative):
 ## Modes
 
 ```sh
-claudia-index --config .claudia/indexer.config.yaml          # watch + ingest
-claudia-index --config .claudia/indexer.config.yaml --one-shot  # scan + exit
-claudia-index --root ./apps/web --gateway-url http://x:8080  # flag-only
+chimera-indexer --config .locus/indexer.config.yaml               # watch + ingest
+chimera-indexer --config .locus/indexer.config.yaml --one-shot    # scan + exit
+chimera-indexer --root ./apps/web --gateway-url http://x:8080     # flag-only
 ```
 
 In watch mode the indexer drains an initial scan, then incrementally ingests

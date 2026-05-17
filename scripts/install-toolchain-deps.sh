@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sourced by install.sh: auto-install git, GNU make, Go, Node when missing (session PATH + User PATH on Windows).
+# Sourced by Chimera installer scripts: auto-install git, GNU make, Go, Node when missing (session PATH + User PATH on Windows).
 # Opt out: SKIP_AUTO_GIT, SKIP_AUTO_MAKE, SKIP_AUTO_GO, SKIP_AUTO_NODE (same spirit as SKIP_AUTO_GCC).
 # Requires REPO_ROOT and is intended to run under set -euo pipefail from the parent.
 set -euo pipefail

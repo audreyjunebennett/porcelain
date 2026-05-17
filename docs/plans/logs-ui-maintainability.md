@@ -140,7 +140,7 @@ In README, list “DOM region → CSS section anchor” so agents do not grep-bl
 **D1 — Catalog and freeze public surface of modules**  
 For each file under `embedui/logs/**`, document:
 
-- Exports on `globalThis.ClaudiaLogs.*` vs internal IIFE-only.
+- Exports on `globalThis.ChimeraLogs.*` vs internal IIFE-only.
 
 Goal: reduce duplicate “helper” functions in `logs_main.js`.
 

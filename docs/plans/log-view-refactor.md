@@ -1,4 +1,4 @@
-# Plan: Log View Refactor (Claudia Gateway `/ui/logs`)
+# Plan: Log View Refactor (chimera-gateway `/ui/logs`)
 
 | Field | Value |
 |-------|-------|
@@ -54,9 +54,9 @@ Untangle the operator log page so future changes are safe. Split CSS, HTML, and 
 ### Log view modes (URL + localStorage)
 - View modes: `summarized`, `raw` (StructuredLogs), `raw_logs` (Raw Logs)
 - LocalStorage keys:
-  - `claudia_logs_view_mode`
-  - `claudia_logs_flt_app`
-  - `claudia_logs_flt_level`
+  - `chimera_logs_view_mode`
+  - `chimera_logs_flt_app`
+  - `chimera_logs_flt_level`
 - URL params (must remain compatible): `view`, `principal`, `conversation|conv`, `seq`, `embed`
 
 ### Known issue(s)
@@ -112,7 +112,7 @@ Before changing metrics logic, extract the code so it’s **testable and localiz
 - [x] Move filters into `filters/*`.
 - [x] Move transport/cache into `transport/*` (SSE/poll/backfill/dedupe).
 - [x] Move rendering into `render/*`, using reusable components. (Initial extraction: raw textarea renderer + clipboard; summarized feed + structured table still pending follow-up splits.)
-- [x] Keep a thin `index.js` bootstrap. (`/ui/assets/logs.js` is now a small bootstrap calling `ClaudiaLogs.Main()` from `/ui/assets/logs/main.js`.)
+- [x] Keep a thin `index.js` bootstrap. (`/ui/assets/logs.js` is now a small bootstrap calling `ChimeraLogs.Main()` from `/ui/assets/logs/main.js`.)
 
 ### Phase 5 — Separate “metrics derivation” from “rendering” (enables correctness work)
 - [x] Create `derive/*` pure functions producing stable “view models” for cards/tables. (Started with conversation metrics.)

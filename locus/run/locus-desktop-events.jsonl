@@ -1,0 +1,9 @@
+{"base_url":"http://127.0.0.1:3000","detail":"desktop launcher start","state":"desktop.init","timestamp_utc":"2026-05-15T12:35:26.3164853Z"}
+{"base_url":"http://127.0.0.1:3000","detail":"attach check failed; launch path","state":"desktop.attach.attempt","timestamp_utc":"2026-05-15T12:35:26.3185578Z"}
+{"detail":"starting owned supervisor","state":"desktop.launch.attempt","supervisor_bin":"C:\\Users\\lynnv\\src\\porcelain\\porcelain\\chimera\\bin\\chimera-supervisor.exe","timestamp_utc":"2026-05-15T12:35:26.3200911Z"}
+{"detail":"owned supervisor started","state":"desktop.launch.success","supervisor_pid":35588,"timestamp_utc":"2026-05-15T12:35:26.3640093Z"}
+{"detail":"waiting for supervisor liveness","state":"desktop.liveness.wait","timeout_ms":60000,"timestamp_utc":"2026-05-15T12:35:26.3650223Z"}
+{"base_url":"http://127.0.0.1:3000","detail":"desktop launcher start","state":"desktop.init","timestamp_utc":"2026-05-15T12:36:00.5521973Z"}
+{"base_url":"http://127.0.0.1:3000","detail":"attach check failed; launch path","state":"desktop.attach.attempt","timestamp_utc":"2026-05-15T12:36:00.5542448Z"}
+{"base_url":"http://127.0.0.1:3000","detail":"supervisor liveness timeout","state":"desktop.liveness.timeout","timestamp_utc":"2026-05-15T12:36:26.3967299Z"}
+{"base_url":"http://127.0.0.1:3000","detail":"Timed out waiting for chimera-supervisor startup","owned":true,"state":"desktop.unreachable.displayed","timestamp_utc":"2026-05-15T12:36:26.3973395Z"}

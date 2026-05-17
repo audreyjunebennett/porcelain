@@ -18,7 +18,7 @@ Operators need a single conversation timeline that tells the **whole story of ea
 | Phase | Outcome | Status |
 |-------|---------|--------|
 | [Phase 1 — Spec, fixtures, and frozen taxonomies](#phase-1--spec-fixtures-and-frozen-taxonomies) | Frozen slug lists, routing rules, payload policy, and fixture set agreed | `done` |
-| [Phase 2 — Correlation propagation](#phase-2--correlation-propagation) | Every gateway line that touches a chat request carries `conversation_id`, `request_id`, and `principal_id` where known; ingest lines carry `index_run_id` and optional `conversation_id` from `X-Claudia-Conversation-Id` | `done` |
+| [Phase 2 — Correlation propagation](#phase-2--correlation-propagation) | Every gateway line that touches a chat request carries `conversation_id`, `request_id`, and `principal_id` where known; ingest lines carry `index_run_id` and optional `conversation_id` from `X-Chimera-Conversation-Id` | `done` |
 | [Phase 3 — Lifecycle events](#phase-3--lifecycle-events) | Gateway emits the full `conversation.*` lifecycle at named call sites | `done` |
 | [Phase 4 — User interface fan-out and conversation card](#phase-4--user-interface-fan-out-and-conversation-card) | Conversation card uses tiers 1–4, tier 3 for ingest, pills, progress bar, and inferred-line labeling | `done` |
 | [Phase 5 — Subprocess linkage hardening](#phase-5--subprocess-linkage-hardening) | Gateway sets upstream `X-Request-Id`, BiFrost subprocess joins only when the platform exposes it, and Qdrant rows join by gateway RAG spans | `done` |
@@ -43,7 +43,7 @@ Heavy taxonomy tables and routing tiers live under Phase 1 as the single spec so
 | Area | Shipped structures to reuse when routing or labeling conversation logs |
 |------|-------------------------------------------------------------------------|
 | **Gateway (parent)** | Every gateway `slog` line carries **`msg`**; HTTP rows use **`gateway.http.access`** (`inferShape` still aliases legacy `http response`). Service card summarize path uses **`gatewayCardModel`** in [`gatewayCardModel.js`](../../internal/server/embedui/logs/derive/gatewayCardModel.js). Upstream / catalog / health slugs live under **`upstream.*`**, **`chat.bifrost.available_models`**, **`gateway.supervisor.*`**, **`gateway.health.*`** (see [`log-gateway.md`](log-gateway.md)). Merge failures today emit **`conversation.merge.resolve_failed`** (and related **`conversation.merge.*`**) — align any new **`conversation.merge.failed`** naming with that doc’s compatibility rules. |
-| **BiFrost (subprocess)** | Stdout is normalized in **`internal/servicelogs/bifrostline`** to stable **`bifrost.*`** slugs. Counter windows reset on **`bifrost.startup.banner`**. Summarized headlines use **`bifrostOperatorLine`** in [`bifrostMetrics.js`](../../internal/server/embedui/logs/derive/bifrostMetrics.js). Conversation **BiFrost · N** chip uses **`conversationBifrostRelayCount`** / **`conversationBifrostTimelineFlat`** ([`conversationBifrost.js`](../../internal/server/embedui/logs/derive/conversationBifrost.js)). Tier 5 conversation join for subprocess rows remains conditional on echoed **`X-Claudia-Conversation-Id`** / **`X-Claudia-Request-Id`** in normalized payloads ([`log-bifrost.md`](log-bifrost.md)). |
+| **BiFrost (subprocess)** | Stdout is normalized in **`internal/servicelogs/bifrostline`** to stable **`bifrost.*`** slugs. Counter windows reset on **`bifrost.startup.banner`**. Summarized headlines use **`bifrostOperatorLine`** in [`bifrostMetrics.js`](../../internal/server/embedui/logs/derive/bifrostMetrics.js). Conversation **BiFrost · N** chip uses **`conversationBifrostRelayCount`** / **`conversationBifrostTimelineFlat`** ([`conversationBifrost.js`](../../internal/server/embedui/logs/derive/conversationBifrost.js)). Tier 5 conversation join for subprocess rows remains conditional on echoed **`X-Chimera-Conversation-Id`** / **`X-Chimera-Request-Id`** in normalized payloads ([`log-bifrost.md`](log-bifrost.md)). |
 | **Qdrant (subprocess)** | Stdout is normalized in **`internal/servicelogs/qdrantline`** to **`qdrant.*`**. Collection names for UI routing match indexer / gateway rules (**`qdrantCollectionName`** in [`qdrantCollection.js`](../../internal/server/embedui/logs/derive/qdrantCollection.js), parity with `internal/vectorstore`). Counter windows reset on **`qdrant.version`**. Global Qdrant card metrics use **`qdrantCardModel`** (same module). Tier 4 joins from this plan should use the **same collection string** as that derive path so conversation RAG subsection stays consistent with Qdrant and indexer cards. |
 
 ---
@@ -57,7 +57,7 @@ Heavy taxonomy tables and routing tiers live under Phase 1 as the single spec so
 - This document as the authority for conversation logging (aligned with [`_template.md`](_template.md)).
 - Frozen **`conversation.*`** lifecycle list (table below) plus extensions for **turn**, **tool**, and **witness** slugs (tables below).
 - Frozen **routing tiers** (tiers 1–5) and **tier 4b** (gateway-anchored Qdrant window); default window constants documented with rationale.
-- Reference captures under repo-root **`temp/sessions`** (gitignored; operators drop exports there): single-turn chat, multi-turn merge, fallback chain, chat plus ingest, **multi-turn with tools**, **streamed completion** (if applicable). Example layout: `temp/sessions/<timestamp>_<git-sha>/data/gateway/claudia-desktop.log` plus `comment.txt`.
+- Reference captures under repo-root **`temp/sessions`** (gitignored; operators drop exports there): single-turn chat, multi-turn merge, fallback chain, chat plus ingest, **multi-turn with tools**, **streamed completion** (if applicable). Example layout: `temp/sessions/<timestamp>_<git-sha>/data/gateway/chimera-desktop.log` plus `comment.txt`.
 - A short **fixture map** (spreadsheet or markdown table) listing each fixture and which slugs and tiers it must exercise.
 - Cross-check with [`log-gateway.md`](log-gateway.md) and [`log-bifrost.md`](log-bifrost.md): no duplicate intent under conflicting names; renames go through those docs’ compatibility rules.
 
@@ -105,7 +105,7 @@ A dedup cache hit that does **not** call upstream is still a new inbound HTTP ch
 | Slug prefix | **`conversation.*`** for lifecycle, turn, tool, and witness events the gateway emits at named points in the request flow. |
 | Group key | **`principal_id + "\0" + conversation_id`** with fallback to **`tenant + "\0" + conversation_id`** when `principal_id` is absent. |
 | Eligibility | A line joins a conversation card when it matches **tier 1–5** (see Routing rules). |
-| Subprocess fan-out | BiFrost subprocess lines join only when normalized rows carry `request_id` from upstream `X-Request-Id` (**Phase 5**). Clients are not expected to send Claudia correlation headers, and gateway relay slugs remain canonical for the turn when BiFrost cannot expose request ids. |
+| Subprocess fan-out | BiFrost subprocess lines join only when normalized rows carry `request_id` from upstream `X-Request-Id` (**Phase 5**). Clients are not expected to send Chimera correlation headers, and gateway relay slugs remain canonical for the turn when BiFrost cannot expose request ids. |
 | Qdrant join | **Tier 4** uses collection plus time; **tier 4b** uses a gateway-emitted anchor line (**Phase 5**) so the window is tied to `request_id`, not only to `rag.query` timestamps. |
 | Log UI conversation cards | **One card per** `principal_id` + `conversation_id` (see [`sortConversationGroupsByRecency`](../../internal/server/embedui/logs.js)); never merge distinct `conversation_id` values by wall-clock gap. |
 | Counter window | **Tier 4** (Qdrant inferred join): default **±5 s** from anchor (`rag.query` / `rag.embed` time) unless `conversation.rag.span` supplies **`window_ms`** (default **10000** ms for tier 4b). Gateway process restart clears in-memory UI buffers. |
@@ -198,7 +198,7 @@ When `conversation.rag.span` is present for a `request_id`, tier 4 uses **`span_
 
 #### Tier 5 — BiFrost subprocess
 
-BiFrost subprocess lines join when normalized JSON carries a `request_id` that matches a gateway conversation request. The gateway sets upstream **`X-Request-Id`** to its `request_id`; custom `X-Claudia-*` headers are opportunistic only and must not be required because common clients do not send or preserve them. If BiFrost does not expose the upstream request id in subprocess logs, subprocess rows remain on the BiFrost service card only; **gateway relay** `chat.bifrost.*` / routing lines are already merged at tier 1 / tier 2 ([`conversationBifrost.js`](../../internal/server/embedui/logs/derive/conversationBifrost.js)) and stay canonical for the conversation **BiFrost · N** chip.
+BiFrost subprocess lines join when normalized JSON carries a `request_id` that matches a gateway conversation request. The gateway sets upstream **`X-Request-Id`** to its `request_id`; custom `X-Chimera-*` headers are opportunistic only and must not be required because common clients do not send or preserve them. If BiFrost does not expose the upstream request id in subprocess logs, subprocess rows remain on the BiFrost service card only; **gateway relay** `chat.bifrost.*` / routing lines are already merged at tier 1 / tier 2 ([`conversationBifrost.js`](../../internal/server/embedui/logs/derive/conversationBifrost.js)) and stay canonical for the conversation **BiFrost · N** chip.
 
 ### User interface contract — conversation card (summary)
 
@@ -230,9 +230,9 @@ Expanded: key-value row includes **last `turn_index`**, **upstream model**, **cl
 **Implementation notes (Phase 2 shipped)**
 
 - `conversationmerge.ResolveInput` includes `RequestID`; all `Resolve` and `RecordTurn` persistence warnings include `request_id`, `principal_id`, and `conversation_id` when known.
-- `handleV1Chat` passes `request_id` into `Resolve`, logs merge resolve failures with `request_id` + `principal_id`, passes `request_id` into `RecordTurn`, and attaches `conversation_id` to the tool-router logger when the client sends `X-Claudia-Conversation-Id` before merge resolves.
+- `handleV1Chat` passes `request_id` into `Resolve`, logs merge resolve failures with `request_id` + `principal_id`, passes `request_id` into `RecordTurn`, and attaches `conversation_id` to the tool-router logger when the client sends `X-Chimera-Conversation-Id` before merge resolves.
 - `internal/rag` `appendGatewayCorrelation` adds `principal_id` (from `Coords.TenantID`) on retrieve and ingest trace paths.
-- `ingest.go` / `ingest_session.go` pass optional `X-Claudia-Conversation-Id` through to `rag.IngestRequest` and emit it on `ingest.complete`, `ingest.failed`, and `ingest.chunked.error` when set.
+- `ingest.go` / `ingest_session.go` pass optional `X-Chimera-Conversation-Id` through to `rag.IngestRequest` and emit it on `ingest.complete`, `ingest.failed`, and `ingest.chunked.error` when set.
 - Tests: `internal/conversationmerge/merge_correlation_test.go`, `internal/chat/correlation_contract_test.go`, `internal/rag/service_test.go` (`TestService_Retrieve_logContainsPrincipalId`), `internal/server/ingest_test.go` (`TestIngest_JSON_logsConversationIDWhenHeaderPresent`), `internal/server/correlation_phase2_doc_test.go`.
 - **`internal/chat`:** production `/v1/chat/completions` uses a logger pre-wrapped by the gateway; contract test asserts relay logs inherit the triple. Static audit of every `slog` line in chat is not enforced (logger is injected per call site).
 
@@ -311,7 +311,7 @@ Expanded: key-value row includes **last `turn_index`**, **upstream model**, **cl
 
 **Implementation notes (Phase 5 shipped)**
 
-- Gateway upstream relay sets `X-Request-Id` from the gateway `request_id`; no client-provided Claudia header is required.
+- Gateway upstream relay sets `X-Request-Id` from the gateway `request_id`; no client-provided Chimera header is required.
 - `internal/rag`: `conversation.rag.span` default window is **10000** ms and emits through the RAG service logger when no conversation lifecycle logger is supplied.
 - Derive/UI: tier 4b returns span metadata through `joinQdrantLineConversationMatch`; overlapping Qdrant rows attribute to the most recent matching span while preserving the existing tier label.
 - Fixtures/tests: `internal/server/testdata/correlation/phase5-qdrant-tier4b.example.log` covers overlapping spans; focused Go tests cover upstream header propagation, fallback RAG span logging, and Qdrant attribution.
@@ -340,7 +340,7 @@ Expanded: key-value row includes **last `turn_index`**, **upstream model**, **cl
 
 - `Runtime.NextChatTurnIndex` (`internal/server/runtime.go`) is the in-process per-`conversation_id` counter; `chatRouteLogger` attaches `turn_index` to every chat-scoped logger so `conversation.*`, `chat.request`, `chat.bifrost.*`, `chat.routing.*`, `chat.provider_limits.*`, `rag.*`, and dedup short-circuits all inherit the value. Counter resets on gateway restart by design; no persistence.
 - Dedup short-circuit and merge `Resolve` paths reuse the assigned turn (`ResolveOutcome.TurnIndex`) so `conversation.dedup_hit` / `conversation.merged` agree with the downstream `conversation.received` for that HTTP request.
-- Derive: `ClaudiaLogs.Derive.conversationTurnGroupsForExpanded(events, getFlat)` (`internal/server/embedui/logs/derive/conversationCardModel.js`) attributes each event to a turn using `flat.turn_index`, then `ev.qdrantTurnIndex` from the tier-4b match, then inherited from the most recent prior attribution. Groups are returned most-recent-turn-first; events inside a turn keep ascending seq/ts so the UI reverses for display while keeping the global newest-first feel.
+- Derive: `ChimeraLogs.Derive.conversationTurnGroupsForExpanded(events, getFlat)` (`internal/server/embedui/logs/derive/conversationCardModel.js`) attributes each event to a turn using `flat.turn_index`, then `ev.qdrantTurnIndex` from the tier-4b match, then inherited from the most recent prior attribution. Groups are returned most-recent-turn-first; events inside a turn keep ascending seq/ts so the UI reverses for display while keeping the global newest-first feel.
 - UI: `renderExpandedConv` renders one `Turn N` sub-heading per group and falls back to the flat ordering when only one turn (or fewer) is present.
 - Fixtures: `internal/server/testdata/correlation/phase6-multi-turn.example.log`. Tests: `lifecycle_phase6_doc_test.go` (fixture content), `TestLogsDerive_conversationTurnGroupsForExpanded_*` in `internal/server/logs_components_test.go` (derive grouping, inheritance, unattributed events, tier-4b Qdrant attribution).
 

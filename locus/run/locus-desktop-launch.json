@@ -1,0 +1,12 @@
+{
+  "timestamp_utc": "2026-05-15T12:36:26.3967299Z",
+  "mode": "launch_failed",
+  "base_url": "http://127.0.0.1:3000",
+  "supervisor_bin": "C:\\Users\\lynnv\\src\\porcelain\\porcelain\\chimera\\bin\\chimera-supervisor.exe",
+  "supervisor_owned": false,
+  "supervisor_work_dir": "C:\\Users\\lynnv\\src\\porcelain\\porcelain\\locus",
+  "launch_args_redacted": [
+    "--headless"
+  ],
+  "error": "timed out waiting for chimera-supervisor"
+}

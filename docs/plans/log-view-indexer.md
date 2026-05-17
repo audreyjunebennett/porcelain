@@ -30,7 +30,7 @@ Make it easy to see what the indexer is doing in the operator log view. One card
 
 | Field | Value |
 |--------|--------|
-| Primary code owner | Gateway + embed UI in `claudia-gateway` |
+| Primary code owner | Gateway + embed UI in `porcelain` |
 | Last plan update | See git history for this file |
 | Log JSON contract | [`indexer.md`](../indexer.md) § Structured operator logs |
 
@@ -63,7 +63,7 @@ Make it easy to see what the indexer is doing in the operator log view. One card
 |------|-------------|--------|
 | P0.1 | `GET /v1/indexer/config` returns `tenant_id`, `user_label`, `principal_id` (`internal/server/indexer.go`) | done |
 | P0.2 | `IndexerKey(...)` stable id; `log.With` attaches `indexer_key`, `tenant_id`, `principal_id`, `user_label` after config fetch (`internal/indexer/key.go`, `indexer.go` `FetchAndLogConfig`) | done |
-| P0.3 | Startup order: `FetchAndLogConfig` → `LogIndexerRunStart` (`cmd/claudia-index/main.go`) | done |
+| P0.3 | Startup order: `FetchAndLogConfig` → `LogIndexerRunStart` (`cmd/chimera-indexer/main.go`) | done |
 | P0.4 | `indexer.run.start` includes `watch_root_paths` (absolute local paths) (`internal/indexer/observation.go`) | done |
 | P0.5 | Slug `gateway.indexer.config` on config line (was human-only string before) | done |
 | P0.6 | `GatewayClient.FetchStorageStats`; `EmitStorageStatsAndState` logs `indexer.storage.stats` + `indexer.state` (`internal/indexer/client.go`, `observation.go`) | done |
@@ -210,7 +210,7 @@ Make it easy to see what the indexer is doing in the operator log view. One card
 
 | Concern | Path |
 |---------|------|
-| Indexer binary entry | `cmd/claudia-index/main.go` |
+| Indexer binary entry | `cmd/chimera-indexer/main.go` |
 | Key, observation, ops, indexer core | `internal/indexer/key.go`, `observation.go`, `ops_events.go`, `indexer.go`, `client.go`, `config.go` |
 | Gateway indexer config/stat routes | `internal/server/indexer.go` |
 | Log cards + grouping | `internal/server/embedui/logs.js` |

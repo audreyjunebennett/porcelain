@@ -32,7 +32,7 @@ The supervised **BiFrost** subprocess (`bifrost-http`) writes JSON lines (`-log-
 
 ## Background
 
-- BiFrost is supervised by `claudia serve` (`internal/supervisor/bifrost.go`) and started with `-log-style json` (`internal/supervisor/bifrost.go` `StartBifrost`). Stdout / stderr go through **`bifrostline.NewWriter`** into **`logStore.Writer("bifrost")`** in `cmd/claudia/serve.gop` (same pattern as qdrant + `qdrantline`).
+- BiFrost is supervised by `chimera serve` (`internal/supervisor/bifrost.go`) and started with `-log-style json` (`internal/supervisor/bifrost.go` `StartBifrost`). Stdout / stderr go through **`bifrostline.NewWriter`** into **`logStore.Writer("bifrost")`** in `cmd/chimera/serve.gop` (same pattern as qdrant + `qdrantline`).
 - The bifrost card in the logs UI today (`internal/server/embedui/logs.js` `bifrostCardMetrics`, `bifrostCollapsedCardSubtitle`, `renderExpandedService` for `name === "bifrost"`) builds its mini-cards from **gateway**-side lines emitted in `internal/chat/chat.go`:
   - `chat.bifrost.request` (request relay started — outgoing tokens, stream flag, model, request body excerpt).
   - `chat.bifrost.response` (response received — status, usage tokens, response bytes/excerpt).
@@ -48,18 +48,18 @@ The supervised **BiFrost** subprocess (`bifrost-http`) writes JSON lines (`-log-
 | Topic | Decision |
 |-------|-----------|
 | Slug prefix | **`bifrost.*`** for subprocess-origin events (parallel to `qdrant.*`); **`chat.bifrost.*`** stays on gateway-origin relay events. Both feed the same card. |
-| Normalization location | **On ingest:** new `internal/servicelogs/bifrostline` package wraps the bifrost stdout/stderr writer in `cmd/claudia/serve.go`, mirroring `internal/servicelogs/qdrantline/`. |
+| Normalization location | **On ingest:** new `internal/servicelogs/bifrostline` package wraps the bifrost stdout/stderr writer in `cmd/chimera/serve.go`, mirroring `internal/servicelogs/qdrantline/`. |
 | Counter window | Aggregates use lines **at or after the last `bifrost.startup.banner`** in the buffer (detect bifrost restart while gateway stays up). Gateway restart clears the ring buffer. |
-| Summarized headlines | **`ClaudiaLogs.Derive.bifrostOperatorLine(flat)`** in [`bifrostMetrics.js`](../../internal/server/embedui/logs/derive/bifrostMetrics.js), parallel to **`qdrantOperatorLine`**; invoked from **`primaryLogMessage`** and **`buildHeadlineHtml`** in [`logs.js`](../../internal/server/embedui/logs.js). Stable **`msg`** in stored JSON unchanged. |
+| Summarized headlines | **`ChimeraLogs.Derive.bifrostOperatorLine(flat)`** in [`bifrostMetrics.js`](../../internal/server/embedui/logs/derive/bifrostMetrics.js), parallel to **`qdrantOperatorLine`**; invoked from **`primaryLogMessage`** and **`buildHeadlineHtml`** in [`logs.js`](../../internal/server/embedui/logs.js). Stable **`msg`** in stored JSON unchanged. |
 | HTTP success | Real status codes shown; **2xx** counts as success for relay/response counters; **4xx/5xx** as fail; **429** breaks out separately as **rate-limited**. |
 | Non-JSON lines | If a line is not JSON or schema is unknown, emit `bifrost.unparsed` with the raw text in `progress_detail` (mirrors `qdrant.unparsed`). |
 | Timeline | **Replace** the generic service-mix "Request timeline" on the bifrost panel (it was always 100% purple — every BiFrost row maps to `upstream`) with two purpose-built strips driven from the slug taxonomy: a **Provider health** strip (segment per loaded provider, colored by latest `bifrost.provider.health.*` / `bifrost.provider.key_missing`) **before** the Available models card, and a **Relay outcomes** strip (HTTP 2xx / 3xx / 429 / 4xx / 5xx / fetch-err / in-flight buckets from `chat.bifrost.{request,response,error}`) **after** it. `bifrost.rate_limit` (subprocess inbound HTTP, often `/v1/embeddings`) is excluded from the relay strip; the existing "Rate limits" mini-card still aggregates both. |
 | Badge in own panel | **Suppress** the **bifrost** source badge inside the bifrost expanded panel rows (parallel to `suppressQdrantBadge` / `suppressIndexerBadge`). Keep the **upstream** badge as today. |
-| Conversation correlation | Gateway relay rows are canonical for conversation cards. Phase 5 of [`log-conversations.md`](log-conversations.md) sets upstream `X-Request-Id` from the gateway `request_id`; subprocess `bifrost.*` rows join conversations only if BiFrost exposes that id in normalized logs. Custom `X-Claudia-*` headers are opportunistic only and not required. |
+| Conversation correlation | Gateway relay rows are canonical for conversation cards. Phase 5 of [`log-conversations.md`](log-conversations.md) sets upstream `X-Request-Id` from the gateway `request_id`; subprocess `bifrost.*` rows join conversations only if BiFrost exposes that id in normalized logs. Custom `X-Chimera-*` headers are opportunistic only and not required. |
 
 ### Code references
 
-- Go (today): [`internal/supervisor/bifrost.go`](../../internal/supervisor/bifrost.go), [`internal/chat/chat.go`](../../internal/chat/chat.go) (`chat.bifrost.*` slogs), [`cmd/claudia/serve.go`](../../cmd/claudia/serve.go) (`logStore.Writer("bifrost")`).
+- Go (today): [`internal/supervisor/bifrost.go`](../../internal/supervisor/bifrost.go), [`internal/chat/chat.go`](../../internal/chat/chat.go) (`chat.bifrost.*` slogs), [`cmd/chimera/serve.go`](../../cmd/chimera/serve.go) (`logStore.Writer("bifrost")`).
 - Go (new): `internal/servicelogs/bifrostline/` (`NormalizePayload`, `NewWriter`) — pattern from `internal/servicelogs/qdrantline/`.
 - JS: [`internal/server/embedui/logs.js`](../../internal/server/embedui/logs.js) (search `isBifrost`, `bifrostCardMetrics`, `bifrostCollapsedCardSubtitle`).
 - JS derive: [`internal/server/embedui/logs/derive/bifrostMetrics.js`](../../internal/server/embedui/logs/derive/bifrostMetrics.js): metrics plus **`bifrostOperatorLine`** (summarized headlines); [`internal/server/embedui/logs/derive/conversationBifrost.js`](../../internal/server/embedui/logs/derive/conversationBifrost.js) for **conversation** BiFrost chip counts (P5).
@@ -183,9 +183,9 @@ New / extended **key-value** fields (always show keys; values fill as events arr
 
 **Layout order** under the Summary KV table:
 
-1. `Provider health` strip (`sum-timeline-bar--provider-health`) — one segment per configured provider, colored by latest probe. Source preference: **(a)** live snapshot from **`GET /api/ui/bifrost/providers`** (gateway BFF: `internal/server/ui_bifrost_providers.go`, fetched every 30s, classifier `up | down | key_missing | unknown`), then **(b)** log-derived state via `ClaudiaLogs.Derive.bifrostProviderHealthList` (covers any future `bifrost.provider.health.*` / `bifrost.provider.key_missing` slugs the subprocess emits), then **(c)** empty caption ("BiFrost unreachable" or "No providers loaded yet"). Caption lists each provider id with its current state. <br/>**Live `/v1/models` override:** the BFF reads the runtime catalog snapshot maintained by `internal/server/availablemodels.go` (periodic poller in `cmd/claudia/serve.go`). When a provider is configured (`up`) but absent from the freshly polled `/v1/models` response, BiFrost is signalling that it can't reach the upstream — classifier downgrades the entry to `down` with `error="no models available in live catalog"`. Period configurable via gateway.yaml `health.available_models_poll_ms` (default 30 000; ≤0 disables periodic polling).
+1. `Provider health` strip (`sum-timeline-bar--provider-health`) — one segment per configured provider, colored by latest probe. Source preference: **(a)** live snapshot from **`GET /api/ui/bifrost/providers`** (gateway BFF: `internal/server/ui_bifrost_providers.go`, fetched every 30s, classifier `up | down | key_missing | unknown`), then **(b)** log-derived state via `ChimeraLogs.Derive.bifrostProviderHealthList` (covers any future `bifrost.provider.health.*` / `bifrost.provider.key_missing` slugs the subprocess emits), then **(c)** empty caption ("BiFrost unreachable" or "No providers loaded yet"). Caption lists each provider id with its current state. <br/>**Live `/v1/models` override:** the BFF reads the runtime catalog snapshot maintained by `internal/server/availablemodels.go` (periodic poller in `cmd/chimera/serve.go`). When a provider is configured (`up`) but absent from the freshly polled `/v1/models` response, BiFrost is signalling that it can't reach the upstream — classifier downgrades the entry to `down` with `error="no models available in live catalog"`. Period configurable via gateway.yaml `health.available_models_poll_ms` (default 30 000; ≤0 disables periodic polling).
 2. `Available models` mini-card (`sum-mini-row--bifrost-deck`) — catalog count from latest sync.
-3. `Relay outcomes` strip (`sum-timeline-bar--relay-outcome`) — HTTP-bucket strip over chat relay rows. Backed by `ClaudiaLogs.Derive.bifrostRelayOutcomeBuckets`. Buckets: 2xx / 3xx / 429 / 4xx / 5xx / fetch err / in-flight.
+3. `Relay outcomes` strip (`sum-timeline-bar--relay-outcome`) — HTTP-bucket strip over chat relay rows. Backed by `ChimeraLogs.Derive.bifrostRelayOutcomeBuckets`. Buckets: 2xx / 3xx / 429 / 4xx / 5xx / fetch err / in-flight.
 4. Counter row (`sum-mini-row--bifrost-deck2`) — four counter boxes:
 
 | Box | Behavior |
@@ -212,7 +212,7 @@ New / extended **key-value** fields (always show keys; values fill as events arr
 **Deliverables**
 
 - This file checked in.
-- `temp/bifrost-startup.log`, `temp/bifrost-mixed.log` captured from a live `claudia serve` cold start + chat round-trips (sanitized paths / org ids).
+- `temp/bifrost-startup.log`, `temp/bifrost-mixed.log` captured from a live `chimera serve` cold start + chat round-trips (sanitized paths / org ids).
 - Taxonomy reviewed against fixtures; outliers listed under **Open questions**.
 
 **Acceptance.** Reviewer can map every line in the two fixtures to a `msg` slug or to `bifrost.unparsed`.
@@ -227,12 +227,12 @@ New / extended **key-value** fields (always show keys; values fill as events arr
 
 **Deliverables**
 
-- `internal/servicelogs/bifrostline/normalize.go` (+ `_test.go`): `NormalizePayload(raw string) []byte` returns gateway-style JSON with `service:"bifrost"`, `_claudia_norm:1`, and the `bifrost.*` slug. Mirrors `qdrantline.NormalizePayload`.
+- `internal/servicelogs/bifrostline/normalize.go` (+ `_test.go`): `NormalizePayload(raw string) []byte` returns gateway-style JSON with `service:"bifrost"`, `_chimera_norm:1`, and the `bifrost.*` slug. Mirrors `qdrantline.NormalizePayload`.
 - `internal/servicelogs/bifrostline/writer.go`: `NewWriter(downstream io.Writer) io.Writer` line-buffers raw stdout and forwards normalized JSON.
-- `cmd/claudia/serve.go`: wrap `logStore.Writer("bifrost")` with `bifrostline.NewWriter(...)`.
+- `cmd/chimera/serve.go`: wrap `logStore.Writer("bifrost")` with `bifrostline.NewWriter(...)`.
 - Unit fixtures from P1 included in `internal/servicelogs/bifrostline/testdata/`.
 
-**Acceptance.** A `claudia serve` cold start writes only normalized JSON into the bifrost bucket; `bifrost.unparsed` count is 0 against both fixtures.
+**Acceptance.** A `chimera serve` cold start writes only normalized JSON into the bifrost bucket; `bifrost.unparsed` count is 0 against both fixtures.
 
 **Status:** `done`
 

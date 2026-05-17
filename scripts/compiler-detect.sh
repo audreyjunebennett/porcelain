@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared C compiler detection for install.sh and install-gcc.sh.
+# Shared C compiler detection for installer scripts and install-gcc.sh.
 # Git Bash often does not resolve `command -v gcc` when only gcc.exe is on PATH, or when
 # PATH uses `C:/...` instead of `/c/...`.
 

@@ -117,7 +117,7 @@ Sections are ordered roughly as operators scan: **overview** (from Main), then *
 
 **Deliverables**
 
-- Update [`internal/server/embedui/shell.html`](../../internal/server/embedui/shell.html) (and any desktop default URL in [`cmd/claudia`](../../cmd/claudia) if required) so the **default visible frame** is `/ui/logs` (or `/ui/desktop` loads logs directly without Main/Admin iframes).
+- Update [`internal/server/embedui/shell.html`](../../internal/server/embedui/shell.html) (and any desktop default URL in [`cmd/chimera`](../../cmd/chimera) if required) so the **default visible frame** is `/ui/logs` (or `/ui/desktop` loads logs directly without Main/Admin iframes).
 - Remove or hide **Main** and **Admin** tab buttons once their content is migrated (or reduce to a single optional overflow menu if product needs a transition period).
 - In [`internal/server/embedui/logs.html`](../../internal/server/embedui/logs.html) / [`logs.js`](../../internal/server/embedui/logs.js) (and modules under `embedui/logs/`), remove or fold the **logs header** when `embed=1` (and optionally in standalone) so the **log stream reads as the main view**; preserve critical controls (view mode, filters, reconnect) by moving them into a compact toolbar or card rail.
 - Adjust post-login redirects and links ([`internal/server/ui_handlers.go`](../../internal/server/ui_handlers.go), [`embedui/login.html`](../../internal/server/embedui/login.html), [`metrics.html`](../../internal/server/embedui/metrics.html)) so they do not assume `/ui/panel` or `GET /` as the primary home.

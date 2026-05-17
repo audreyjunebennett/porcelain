@@ -16,10 +16,14 @@ This inventory is the Phase 1 discovery artifact for the v0.3 naming migration. 
 | Phase | Outcome | Status |
 |-------|---------|--------|
 | [Phase 1 - Discovery and symbol inventory](#phase-1---discovery-and-symbol-inventory) | Symbol classes, binaries, paths, packaging, and decisions are documented with source references | `done` |
-| [Phase 2 - Constants and source naming contracts](#phase-2---constants-and-source-naming-contracts) | Centralize naming constants and define source-level rename contracts | `todo` |
-| [Phase 3 - Migration and operational surfaces](#phase-3---migration-and-operational-surfaces) | Config/data/rules/CI/assets migration and packaging updates | `todo` |
-| [Phase 4 - Go source and tests](#phase-4---go-source-and-tests) | Runtime source + tests updated to final naming contracts | `todo` |
-| [Phase 5 - Markdown documentation rename pass](#phase-5---markdown-documentation-rename-pass) | Markdown docs updated after source/folder churn settles | `todo` |
+| [Phase 2 - Constants and source naming contracts](#phase-2---constants-and-source-naming-contracts) | Centralize naming constants and define source-level rename contracts | `done` |
+| [Phase 3 - Migration and operational surfaces](#phase-3---migration-and-operational-surfaces) | Config/data/rules/CI/assets migration and packaging updates | `done` |
+| [Phase 4 - Go source and tests](#phase-4---go-source-and-tests) | Runtime source + tests updated to final naming contracts | `done` |
+| [Phase 5 - Markdown documentation rename pass](#phase-5---markdown-documentation-rename-pass) | Coordinated markdown rename pass aligned to implemented naming | `done` |
+| [Phase 6 - Documentation consolidation](#phase-6---documentation-consolidation) | Normalize docs to deployed contracts and preserve historical notes explicitly | `done` |
+| [Phase 7 - Legacy alias policy lock](#phase-7---legacy-alias-policy-lock) | Legacy compatibility policy resolved as hard cut: no legacy aliases supported | `done` |
+| [Phase 8 - Topology and entrypoint restructure](#phase-8---topology-and-entrypoint-restructure) | Deferred directory/entrypoint move after naming stability | `done` |
+| [Phase 9 - Final cutover and removal pass](#phase-9---final-cutover-and-removal-pass) | Remove retired aliases and finish target-state naming | `done` |
 
 ---
 
@@ -47,20 +51,20 @@ This document implements the discovery scope requested for [docs/version-v0.3.md
 
 | Class | Current families found | Primary locations |
 |------|-------------------------|-------------------|
-| Product naming | `Claudia`, `Chimera`, `Porcelain`, `Locus` | [../../README.md](../../README.md), [../version-v0.3.md](../version-v0.3.md), [../../cmd/claudia/main.go](../../cmd/claudia/main.go), [../../internal/server/embedui/](../../internal/server/embedui/) |
-| Env vars | `CLAUDIA_*` (gateway/indexer/upstream/session), partial `CHIMERA_*` in scripts | [../../internal/config/config.go](../../internal/config/config.go), [../../internal/indexer/config.go](../../internal/indexer/config.go), [../../scripts/chimera-names.sh](../../scripts/chimera-names.sh) |
-| HTTP headers | `X-Claudia-*` | [../../internal/server/ingest.go](../../internal/server/ingest.go), [../../internal/server/server.go](../../internal/server/server.go), [../../internal/indexer/client.go](../../internal/indexer/client.go) |
-| Binary/command names | `claudia`, `claudia-index`, `claudia-desktop`; make variables now `CHIMERA_*` | [../../Makefile](../../Makefile), [../../.goreleaser.yaml](../../.goreleaser.yaml), [../../scripts/chimera-names.sh](../../scripts/chimera-names.sh) |
-| Indexer state/config dirs | `.claudia/*` | [../../internal/indexer/config.go](../../internal/indexer/config.go), [../../config/indexer.example.yaml](../../config/indexer.example.yaml), [../../.gitignore](../../.gitignore) |
+| Product naming | `Chimera`, `Porcelain`, `Locus` | [../../README.md](../../README.md), [../version-v0.3.md](../version-v0.3.md), [../../cmd/chimera/main.go](../../cmd/chimera/main.go), [../../internal/server/embedui/](../../internal/server/embedui/) |
+| Env vars | `CHIMERA_*` (gateway/indexer/upstream/session), partial `CHIMERA_*` in scripts | [../../internal/config/config.go](../../internal/config/config.go), [../../internal/indexer/config.go](../../internal/indexer/config.go), [../../scripts/chimera-names.sh](../../scripts/chimera-names.sh) |
+| HTTP headers | `X-Chimera-*` | [../../internal/server/ingest.go](../../internal/server/ingest.go), [../../internal/server/server.go](../../internal/server/server.go), [../../internal/indexer/client.go](../../internal/indexer/client.go) |
+| Binary/command names | `chimera`, `chimera-indexer`, `locus-desktop`; make variables now `CHIMERA_*` | [../../Makefile](../../Makefile), [../../.goreleaser.yaml](../../.goreleaser.yaml), [../../scripts/chimera-names.sh](../../scripts/chimera-names.sh) |
+| Indexer state/config dirs | `.chimera/*` | [../../internal/indexer/config.go](../../internal/indexer/config.go), [../../config/indexer.example.yaml](../../config/indexer.example.yaml), [../../.gitignore](../../.gitignore) |
 
 ### 2) Binary and artifact location map
 
 | Surface | Current behavior | Source of truth |
 |--------|-------------------|-----------------|
-| Gateway build target | `make chimera-build` builds `-o chimera ./cmd/chimera` (currently mismatched with existing `./cmd/claudia`) | [../../Makefile](../../Makefile) |
-| Indexer build target | `make indexer-build` builds `chimera-index[.exe]` from `./cmd/chimera-index` (currently mismatched with existing `./cmd/claudia-index`) | [../../Makefile](../../Makefile) |
+| Gateway build target | `make chimera-build` builds `-o chimera ./cmd/chimera` | [../../Makefile](../../Makefile) |
+| Indexer build target | `make indexer-build` builds `chimera-indexer[.exe]` from `./porcelain/chimera/chimera-indexer` | [../../Makefile](../../Makefile) |
 | Desktop build script | Builds `./${CHIMERA_CMD_GATEWAY}` where `CHIMERA_CMD_GATEWAY=cmd/chimera` | [../../scripts/chimera-names.sh](../../scripts/chimera-names.sh), [../../scripts/desktop-build.sh](../../scripts/desktop-build.sh) |
-| Release archives | GoReleaser still uses `project_name: claudia`, binary `claudia`, main `./cmd/claudia` | [../../.goreleaser.yaml](../../.goreleaser.yaml) |
+| Release archives | GoReleaser uses `project_name: chimera`, binary `chimera`, main `./cmd/chimera` | [../../.goreleaser.yaml](../../.goreleaser.yaml) |
 | Personal package | `scripts/release-package.sh` expects desktop binary and emits bundle under `dist/personal/${CHIMERA_DIST_BUNDLE_PREFIX}_<os>_<arch>` | [../../scripts/release-package.sh](../../scripts/release-package.sh) |
 | Bootstrap third-party bins | BiFrost + Qdrant installed into `bin/` via pinned deps | [../../scripts/install-bootstrap.sh](../../scripts/install-bootstrap.sh), [../../scripts/qdrant-from-release.sh](../../scripts/qdrant-from-release.sh) |
 
@@ -68,43 +72,43 @@ This document implements the discovery scope requested for [docs/version-v0.3.md
 
 | Category | Current defaults | Source of truth |
 |----------|------------------|-----------------|
-| Gateway config path | `$CLAUDIA_GATEWAY_CONFIG` else `./config/gateway.yaml` | [../../internal/config/config.go](../../internal/config/config.go) |
+| Gateway config path | `$CHIMERA_GATEWAY_CONFIG` else `./config/gateway.yaml` | [../../internal/config/config.go](../../internal/config/config.go) |
 | Gateway credentials file key/path | `paths.tokens` -> `./tokens.yaml` | [../../config/gateway.example.yaml](../../config/gateway.example.yaml), [../../internal/config/config.go](../../internal/config/config.go) |
 | Gateway metrics DB | `../data/gateway/metrics.sqlite` relative to gateway config | [../../internal/config/config.go](../../internal/config/config.go), [../../config/gateway.example.yaml](../../config/gateway.example.yaml) |
 | Gateway operator DB | `../data/gateway/operator.sqlite` relative to gateway config | [../../internal/config/config.go](../../internal/config/config.go), [../../config/gateway.example.yaml](../../config/gateway.example.yaml) |
 | Supervised indexer merged config | `../data/gateway/indexer.supervised.yaml` relative to gateway config | [../../internal/config/config.go](../../internal/config/config.go), [../../config/gateway.example.yaml](../../config/gateway.example.yaml) |
-| Indexer layered config | `~/.claudia/indexer.config.yaml`, `<cwd>/.claudia/indexer.config.yaml`, optional `--config` | [../../internal/indexer/config.go](../../internal/indexer/config.go) |
-| Indexer sync state | default `.claudia/indexer.sync-state.json` or next to explicit `--config` | [../../internal/indexer/config.go](../../internal/indexer/config.go) |
+| Indexer layered config | `~/.chimera/indexer.config.yaml`, `<cwd>/.chimera/indexer.config.yaml`, optional `--config` | [../../internal/indexer/config.go](../../internal/indexer/config.go) |
+| Indexer sync state | default `.chimera/indexer.sync-state.json` or next to explicit `--config` | [../../internal/indexer/config.go](../../internal/indexer/config.go) |
 | Runtime directories | `run/`, `logs/`, `data/bifrost`, `data/qdrant`, `data/gateway` | [../../scripts/chimera-start.sh](../../scripts/chimera-start.sh), [../../scripts/clean-data.sh](../../scripts/clean-data.sh), [../../scripts/clean-all.sh](../../scripts/clean-all.sh), [../../.gitignore](../../.gitignore) |
 
 ### 4) Packaging and build validation evidence
 
 Executed during this phase:
 
-- `make release-snapshot`: succeeded and produced `dist/claudia_...` archives (linux/darwin/windows amd64+arm64 where configured), plus `checksums.txt`.
-- Archive inspection verified expected packaged files: `claudia[.exe]`, `qdrant[.exe]`, `config/gateway.yaml`, `config/tokens.example.yaml`, `config/bifrost.config.json`, `config/routing-policy.yaml`, `config/provider-free-tier.yaml`, docs/readme files.
+- `make release-snapshot`: succeeded and produced `dist/chimera_...` archives (linux/darwin/windows amd64+arm64 where configured), plus `checksums.txt`.
+- Archive inspection verified expected packaged files: `chimera[.exe]`, `qdrant[.exe]`, `config/gateway.yaml`, `config/tokens.example.yaml`, `config/bifrost.config.json`, `config/routing-policy.yaml`, `config/provider-free-tier.yaml`, docs/readme files.
 - `make chimera-build`: failed (`stat .../cmd/chimera: directory not found`).
 - `make package`: failed via `scripts/desktop-build.sh` for same command path mismatch (`cmd/chimera` not found).
 
 Interpretation:
 
-- Release pipeline is still coherent for legacy `claudia` naming.
+- Release pipeline is still coherent for legacy `chimera` naming.
 - Make/script naming migration is partially applied and currently inconsistent with existing `cmd/` entrypoint directories.
 - Phase 2 must resolve command-path and binary-name source-of-truth first, before broad rename rollout.
 
 ### 5) Rename decision matrix (hard-cut policy)
 
-Selected policy from planning: **hard cut** for legacy `CLAUDIA_*` env vars and `X-Claudia-*` headers in this train.
+Selected policy from planning: **hard cut** for legacy `CHIMERA_*` env vars and `X-Chimera-*` headers in this train.
 
 | Symbol class | Current | Target direction | Phase |
 |--------------|---------|------------------|-------|
-| Product terms in operator docs/UI | Mixed `Claudia`/`Chimera`/`Porcelain` | Layered naming consistency (`Chimera` gateway, `Porcelain` suite, `Locus` workspace side) | 2 |
+| Product terms in operator docs/UI | Mixed `Chimera`/`Chimera`/`Porcelain` | Layered naming consistency (`Chimera` gateway, `Porcelain` suite, `Locus` workspace side) | 2 |
 | Gateway credentials naming | `tokens.yaml`, `paths.tokens`, row field `token` language in docs/comments | `api-keys.yaml`, `paths.api_keys`, row field `secret`/`api_keys` wording | 2-3 |
-| Env vars | `CLAUDIA_*` | New namespace (final prefix to be defined in Phase 2 constants) with no dual read | 3-4 |
-| HTTP headers | `X-Claudia-*` | New namespace (final prefix to be defined in Phase 2 constants) with no dual read | 4 |
-| Binary/entrypoint names | Mixed `claudia*` and `chimera*` wiring | Single coherent command/package naming across Make/scripts/GoReleaser/cmd dirs | 2-3 |
-| Runtime hidden state dirs | `.claudia/*` | New hidden directory naming (single target contract) | 3-4 |
-| Release artifact names | `claudia_*` archives and `claudia` binary in release | Align release naming to chosen product/binary contract | 3 |
+| Env vars | `CHIMERA_*` | New namespace (final prefix to be defined in Phase 2 constants) with no dual read | 3-4 |
+| HTTP headers | `X-Chimera-*` | New namespace (final prefix to be defined in Phase 2 constants) with no dual read | 4 |
+| Binary/entrypoint names | Mixed `chimera*` and `chimera*` wiring | Single coherent command/package naming across Make/scripts/GoReleaser/cmd dirs | 2-3 |
+| Runtime hidden state dirs | `.chimera/*` | New hidden directory naming (single target contract) | 3-4 |
+| Release artifact names | `chimera_*` archives and `chimera` binary in release | Align release naming to chosen product/binary contract | 3 |
 
 ### 5.1) Proposed service and suite naming strategy
 
@@ -273,7 +277,7 @@ Given your request to avoid heavy manual edits:
 
 - Naming constants exist and are referenced from all high-traffic entry surfaces.
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 
@@ -292,7 +296,7 @@ Given your request to avoid heavy manual edits:
 
 - Operational surfaces and package contracts match docs and scripts.
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 
@@ -310,35 +314,127 @@ Given your request to avoid heavy manual edits:
 
 - Affected builds/tests pass with renamed contracts and no stale primary identifiers.
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 
 ## Phase 5 - Markdown documentation rename pass
 
-**Goal.** Apply Markdown documentation renames only after source/config/folder changes stabilize, to reduce repeated churn.
+**Goal.** Complete the coordinated markdown-only rename pass after code/config/packaging surfaces stabilize.
 
 **Deliverables**
 
-- Update Markdown documentation naming across `README`, `docs/`, and plan documents in one coordinated pass.
-- Refresh command examples, binary names, paths, environment variables, and header names to match the final implemented contracts.
-- Remove stale transitional wording introduced during earlier phases.
+- Update Markdown naming across `README`, `docs/`, and plan docs to current implemented contracts.
+- Refresh command examples, binary names, paths, env vars, and header names for consistency.
+- Keep legacy names only where they are explicitly migration aliases (not primary identity).
 
 **Acceptance**
 
-- Markdown docs align with final source/config/package behavior from Phases 2-4.
-- Documentation-only pass minimizes rework caused by earlier file/path renames.
+- Operator-facing docs no longer present legacy names as primary.
+- Docs examples match current build/package outputs and supported aliases.
 
-**Status:** `todo`
+**Status:** `done`
+
+---
+
+## Phase 6 - Documentation consolidation
+
+**Goal.** Normalize documentation after the rename pass and clearly separate historical context from current behavior.
+
+**Deliverables**
+
+- Resolve stale historical statements in planning docs that still read as present-state mismatches.
+- Add explicit historical labels where old behavior is retained for reference.
+- Ensure docs reference the same canonical build/run/package contracts and entrypoint paths.
+
+**Acceptance**
+
+- No contradictory docs for current runtime/packaging behavior.
+- Historical notes are explicitly marked and not mistaken for current requirements.
+
+**Implementation notes**
+
+- Historical snapshots in this document remain for discovery traceability, but they are historical-only and not present-state requirements.
+- Canonical current contracts are hard cut (`CHIMERA_*`, `X-Chimera-*`, `paths.api_keys`, `.locus`, `chimera*`/`locus-desktop` artifacts).
+- Legacy compatibility is not provided; operators are expected to use only the current naming workflow.
+
+**Status:** `done`
+
+---
+
+## Phase 7 - Legacy alias policy lock
+
+**Goal.** Define final compatibility policy for legacy names and enforce it through docs/tests.
+
+**Deliverables**
+
+- Decide keep/remove timelines for legacy env/header/file aliases.
+- Document deprecation windows and operator migration expectations.
+- Add/adjust targeted tests for retained alias behavior and removal boundaries.
+
+**Acceptance**
+
+- Compatibility matrix is explicit and internally consistent.
+- Alias behavior in code, tests, and docs matches policy.
+
+**Status:** `done` (hard-cut policy: no legacy alias support)
+
+---
+
+## Phase 8 - Topology and entrypoint restructure
+
+**Goal.** Execute deferred directory/entrypoint restructuring only after naming/docs stability.
+
+**Deliverables**
+
+- Move entrypoint directories to approved target topology (if in-scope).
+- Update build scripts, Make targets, GoReleaser, CI, and tests to new paths.
+- Provide contributor migration notes for changed dev/build commands.
+
+**Acceptance**
+
+- Build/test/package workflows pass with new paths.
+- No unresolved command-path drift remains in scripts or CI.
+
+**Implementation notes**
+
+- Entrypoint topology moved to `cmd/chimera` and `porcelain/chimera/chimera-indexer`.
+- Build/release/CI contracts now target the restructured paths (`Makefile`, `.goreleaser.yaml`, `scripts/chimera-names.sh`, `.github/workflows/go.yml`).
+- Desktop bridge function names were aligned to Chimera (`chimeraPickFolder`, `chimeraOpenExternalURL`, `chimeraRevealProjectPath`) with UI wiring updated.
+
+**Status:** `done`
+
+---
+
+## Phase 9 - Final cutover and removal pass
+
+**Goal.** Remove retired legacy naming and close the migration train.
+
+**Deliverables**
+
+- Remove aliases and fallback logic that policy marks as retired.
+- Delete stale docs/examples and update migration guide closure notes.
+- Run final repo-wide audit for unintended legacy-primary naming.
+
+**Acceptance**
+
+- Target-state naming is consistent across code/config/scripts/docs.
+- Remaining legacy names (if any) are explicitly intentional.
+
+**Implementation notes**
+
+- Removed legacy alias/fallback contracts for env/header/config/runtime naming in active runtime surfaces.
+- Completed cmd entrypoint cutover by deleting retired `cmd/chimera*` entrypoint sources after `cmd/chimera*` migration.
+- Updated migration and operator docs to reflect hard-cut final state (legacy aliases are retired/unsupported).
+
+**Status:** `done`
 
 ---
 
 ## Open questions
 
-1. Final target prefixes for environment variables and headers under hard-cut policy.
-2. Which of the proposed new Make targets should be introduced first as migration entry points (`*-build`, `*-run`, or suite-level umbrella targets).
-3. Whether hidden state directory rename from `.claudia` is in this train or a follow-up.
-4. Whether Go module path/repo rename and physical directory split to the proposed topology are deferred (recommended: defer and document).
+1. Which of the proposed new Make targets should be introduced first as migration entry points (`*-build`, `*-run`, or suite-level umbrella targets).
+2. Whether Go module path/repo rename and physical directory split to the proposed topology are deferred (recommended: defer and document).
 
 ---
 

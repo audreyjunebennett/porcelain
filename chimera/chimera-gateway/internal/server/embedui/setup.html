@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Chimera — First setup</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 36rem; margin: 2.5rem auto; padding: 0 1rem; line-height: 1.5; color: #1a1a1a; }
+    h1 { font-size: 1.35rem; }
+    p { color: #444; }
+    label { display: block; font-size: 0.85rem; font-weight: 600; margin-top: 1rem; }
+    input[type=text] { width: 100%; max-width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; }
+    button { margin-top: 1rem; padding: 0.45rem 0.9rem; cursor: pointer; }
+    .ok { color: #0d6832; font-weight: 600; }
+    .err { color: #a40000; font-size: 0.9rem; margin-top: 0.5rem; white-space: pre-wrap; }
+    #token-out { width: 100%; min-height: 5rem; font-family: ui-monospace, monospace; font-size: 0.82rem; box-sizing: border-box; padding: 0.5rem; margin-top: 0.5rem; }
+    .callout { background: #f4f4f4; border-radius: 8px; padding: 1rem; margin-top: 1.25rem; border: 1px solid #ddd; }
+    code { background: #eee; padding: 0.1em 0.35em; border-radius: 4px; font-size: 0.88em; }
+  </style>
+</head>
+<body>
+  <h1>Welcome to Chimera</h1>
+  <p>Create your first <strong>gateway token</strong> below. This process only runs on <code>localhost</code> until a token exists. After saving, <strong>restart Chimera</strong> so BiFrost and the full admin UI can start.</p>
+
+  <label for="label">Token label (optional)</label>
+  <input id="label" type="text" autocomplete="off" placeholder="e.g. laptop, admin"/>
+
+  <div id="err" class="err" hidden></div>
+  <button type="button" id="btn-save">Create token</button>
+
+  <div id="result" hidden>
+    <div class="callout">
+      <p class="ok">Token created — copy it now. It will not be shown again.</p>
+      <label for="token-out">Gateway token (use as <code>Authorization: Bearer …</code>)</label>
+      <textarea id="token-out" readonly></textarea>
+      <button type="button" id="btn-copy">Copy token</button>
+      <p>Restart Chimera, then open the admin UI and sign in with this token.</p>
+    </div>
+  </div>
+
+  <script>
+(function () {
+  var errEl = document.getElementById("err");
+  var resultEl = document.getElementById("result");
+  var tokenOut = document.getElementById("token-out");
+  document.getElementById("btn-save").addEventListener("click", async function () {
+    errEl.hidden = true;
+    errEl.textContent = "";
+    var label = (document.getElementById("label").value || "").trim();
+    var r = await fetch("/api/ui/setup/token", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ label: label })
+    });
+    var j = await r.json().catch(function () { return {}; });
+    if (!r.ok) {
+      errEl.textContent = j.error || j.detail || ("HTTP " + r.status);
+      errEl.hidden = false;
+      return;
+    }
+    tokenOut.value = j.token || "";
+    resultEl.hidden = false;
+  });
+  document.getElementById("btn-copy").addEventListener("click", function () {
+    tokenOut.select();
+    document.execCommand("copy");
+  });
+})();
+  </script>
+</body>
+</html>

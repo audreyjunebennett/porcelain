@@ -18,7 +18,7 @@ On the **RAG** side, indexers continue to send content through the gateway so **
 | Focus | Outcome | Status |
 |-------|---------|--------|
 | [Two-phase ensemble](#two-phase-ensemble) | **N** parallel drafts then critique/synthesize → one answer; **default N = 3**; **N** capped by **available** backends from **upstream catalog introspection**; orchestration in **gateway**, **parallel completions** executed by upstream (*Responsibility split · 1–2*) | `todo` |
-| [Triggers and streaming semantics](#triggers-and-streaming-semantics) | **Automatic** ensemble triggers plus manual **`//deep`** (trimmed) on **virtual `Claudia-<semver>`** only; gateway **may** strip `//deep` before upstream; **critique/synthesize** and **streaming** behavior on ensemble phase failure **fully specified** here (*Ensemble orchestration · 1–3*) | `todo` |
+| [Triggers and streaming semantics](#triggers-and-streaming-semantics) | **Automatic** ensemble triggers plus manual **`//deep`** (trimmed) on **virtual `chimera-<semver>`** only; gateway **may** strip `//deep` before upstream; **critique/synthesize** and **streaming** behavior on ensemble phase failure **fully specified** here (*Ensemble orchestration · 1–3*) | `todo` |
 | [External human escalation](#external-human-escalation) | Configurable **name + URL** surfaces, mandatory **privacy disclosure**, engagement only when internal attempts are **exhausted** and **low confidence** (thresholds configurable), **single copy-paste** escalation prompt with **paste-back delimiter**, merge on delimiter, **no blocking wait** without explicit UX (*External human escalation · 1–6*; signals **3** aligned with ensemble milestone) | `todo` |
 | [Indexer workspace lifecycle and purge](#indexer-workspace-lifecycle-and-purge) | Operator-visible way to **manage** indexers and **remove or purge** vectors for a **specific workspace** (aligned collection / tenant scope) while embeddings remain gateway-mediated into the RAG DB | `todo` |
 | [Configuration in the desktop or web UI](#configuration-in-the-desktop-or-web-ui) | Change **runtime-relevant** settings through the **desktop or web** interface; file-based config remains source of truth or sync target as designed—**no** requirement to hand-edit YAML for supported knobs | `todo` |
@@ -28,13 +28,13 @@ On the **RAG** side, indexers continue to send content through the gateway so **
 
 ## What this version is
 
-**v0.4** is the **ensemble roadmap** milestone referenced in [`claudia-gateway.plan.md`](claudia-gateway.plan.md): the point at which **two-phase ensemble**, **triggers**, **streaming error** semantics, and **external human escalation** (including paste-back and session behavior) are **specified and shippable** as a coherent product slice—not partial stubs.
+**v0.4** is the **ensemble roadmap** milestone referenced in [`porcelain.plan.md`](porcelain.plan.md): the point at which **two-phase ensemble**, **triggers**, **streaming error** semantics, and **external human escalation** (including paste-back and session behavior) are **specified and shippable** as a coherent product slice—not partial stubs.
 
 The same train adds **operator-grade RAG housekeeping**: indexers produce embeddings stored **via** the gateway into the **vector database**; operators can **target** a workspace (or indexer registration) for **purge / remove** so retired trees do not leave orphaned vectors. It also advances the **desktop (and any web)** shell toward **settings parity**: edit supported configuration **in UI**, with **search** to navigate dense settings and optionally the rest of the app.
 
-For **`model: Claudia-<gateway_semver>`**, the gateway continues to own **routing policy** and the **fallback chain** (*Gateway turn orchestration*); **RAG** remains as in prior versions when enabled. **Per-turn dispatch** evaluates ensemble triggers anew each message (*Gateway runtime · 2*). **Fail-over / fail-fast** within the model chain and peers still apply; **no** gateway-side request queues (*Release roadmap · v0.8*).
+For **`model: Chimera-<gateway_semver>`**, the gateway continues to own **routing policy** and the **fallback chain** (*Gateway turn orchestration*); **RAG** remains as in prior versions when enabled. **Per-turn dispatch** evaluates ensemble triggers anew each message (*Gateway runtime · 2*). **Fail-over / fail-fast** within the model chain and peers still apply; **no** gateway-side request queues (*Release roadmap · v0.8*).
 
-**Companion docs:** [`claudia-gateway.plan.md`](claudia-gateway.plan.md) (requirements: *Ensemble orchestration*, *External human escalation*, *Responsibility split*, *Gateway runtime*, *Chat turn resilience and degradation*, *Workspace indexing and retrieval*, *Indexer live storage API*), [`configuration.md`](configuration.md), [`plans/indexer.md`](plans/indexer.md), [`plans/desktop-ui.md`](plans/desktop-ui.md), [`plans/_template.md`](plans/_template.md).
+**Companion docs:** [`porcelain.plan.md`](porcelain.plan.md) (requirements: *Ensemble orchestration*, *External human escalation*, *Responsibility split*, *Gateway runtime*, *Chat turn resilience and degradation*, *Workspace indexing and retrieval*, *Indexer live storage API*), [`configuration.md`](configuration.md), [`plans/indexer.md`](plans/indexer.md), [`plans/desktop-ui.md`](plans/desktop-ui.md), [`plans/_template.md`](plans/_template.md).
 
 ---
 
@@ -52,7 +52,7 @@ For **`model: Claudia-<gateway_semver>`**, the gateway continues to own **routin
 
 **Acceptance**
 
-- With ensemble enabled and sufficient healthy upstream models, a **`Claudia-<semver>`** turn can complete **draft → critique/synthesize** and return **one** answer; **N** does not exceed catalog-derived availability.
+- With ensemble enabled and sufficient healthy upstream models, a **`chimera-<semver>`** turn can complete **draft → critique/synthesize** and return **one** answer; **N** does not exceed catalog-derived availability.
 - Logs and metrics allow an operator to see **phase boundaries**, **draft count**, and **which backends** participated (within redaction rules in *Observability · 1*).
 
 **Status:** `todo`
@@ -65,7 +65,7 @@ For **`model: Claudia-<gateway_semver>`**, the gateway continues to own **routin
 
 **Scope**
 
-- **Triggers** — **Automatic** triggers plus manual **`//deep`** (trimmed from user text); **only** for **virtual `Claudia-<semver>`**; gateway **may** strip `//deep` before forwarding to upstream (*Ensemble orchestration · 2*).
+- **Triggers** — **Automatic** triggers plus manual **`//deep`** (trimmed from user text); **only** for **virtual `chimera-<semver>`**; gateway **may** strip `//deep` before forwarding to upstream (*Ensemble orchestration · 2*).
 - **`N` in triggers** — Manual and automatic paths respect the **N** rules from [Two-phase ensemble](#two-phase-ensemble) (*Ensemble orchestration · 2*).
 - **Streaming contract** — Specify how **streaming** proceeds across **draft** and **critique/synthesize** phases; specify **streaming error** semantics when a **phase** fails (partial streams, terminal events, client-visible error shape)—this milestone is where that contract becomes **authoritative** (*Ensemble orchestration* intro paragraph in plan).
 - **Interaction with fallback** — On failure or **429**, behavior remains consistent with **sequential fallback** for the orchestrated path where applicable (*Gateway turn orchestration · 2*, *Chat turn resilience · 2*); document any **ensemble-specific** nuances (e.g. which phase retries or fails the turn).
@@ -178,13 +178,13 @@ For **`model: Claudia-<gateway_semver>`**, the gateway continues to own **routin
 
 | Area | Quick check |
 |------|-------------|
-| Two-phase ensemble | Configured **`Claudia-<semver>`** turn runs draft + synthesize; **N** matches catalog cap; structured logs show phases |
+| Two-phase ensemble | Configured **`chimera-<semver>`** turn runs draft + synthesize; **N** matches catalog cap; structured logs show phases |
 | Triggers / streaming | **`//deep`** on virtual model triggers ensemble; streaming client receives spec-compliant events on success and injected draft-phase failure |
 | External human escalation | Forced low-confidence path produces escalation body with **privacy** line + delimiter docs; paste-back merges; no paste does not hang the session |
 | Indexer / purge | Purge API or UI for workspace **W** clears vectors for **W** only; `GET` storage stats / inventory reflect drop (*Observability · 2*) |
 | In-app configuration | Edit a documented setting in UI; gateway (or supervised stack) reflects it per documented reload/restart rules |
 | Settings / app search | Settings search finds a documented control by partial name; if global search is in train, second scenario from **Acceptance** |
-| Docs/config | [`configuration.md`](configuration.md) and examples list ensemble, escalation, purge, and UI-editable keys; cross-links from [`claudia-gateway.plan.md`](claudia-gateway.plan.md) release row when published |
+| Docs/config | [`configuration.md`](configuration.md) and examples list ensemble, escalation, purge, and UI-editable keys; cross-links from [`porcelain.plan.md`](porcelain.plan.md) release row when published |
 | Tests | Unit/integration coverage for phase scheduling, delimiter parsing, streaming error branches, purge scoping, and settings validation per repo conventions |
 
 ---

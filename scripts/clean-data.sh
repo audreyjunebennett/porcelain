@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Remove supervised BiFrost and Qdrant data dirs (defaults when running the stack; see Makefile clean-data / make chimera-serve).
+# Remove supervised BiFrost and Qdrant data dirs (defaults when running the stack; see Makefile clean-data / make chimera-supervisor-run).
 # First argument must be 1 (from make CONFIRM=1); avoids relying on Make's default shell for `test`.
 set -euo pipefail
 if [[ "${1:-}" != "1" ]]; then

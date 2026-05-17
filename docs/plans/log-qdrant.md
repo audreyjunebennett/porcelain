@@ -27,7 +27,7 @@ Operators see **classified Qdrant output** in the logs UI: every supervised line
 
 ## Background
 
-Supervised Qdrant uses **`QDRANT__LOGGER__FORMAT=json`** so each tracing event is one JSON object per line (optional non-JSON banner or version lines may appear first). The desktop mirror keeps **`timestamp<TAB>source<TAB>payload`** (`internal/servicelogs/store.go`). The logs UI parses payloads with `ClaudiaLogs.parseLogText` (`internal/server/embedui/logs/parse/parseLogText.js`); nested JSON flattens to dot keys. After normalization, **every** Qdrant-derived row exposed to the UI carries **`msg`** with pattern **`qdrant.*`**, matching indexer **`slog`** lines.
+Supervised Qdrant uses **`QDRANT__LOGGER__FORMAT=json`** so each tracing event is one JSON object per line (optional non-JSON banner or version lines may appear first). The desktop mirror keeps **`timestamp<TAB>source<TAB>payload`** (`internal/servicelogs/store.go`). The logs UI parses payloads with `ChimeraLogs.parseLogText` (`internal/server/embedui/logs/parse/parseLogText.js`); nested JSON flattens to dot keys. After normalization, **every** Qdrant-derived row exposed to the UI carries **`msg`** with pattern **`qdrant.*`**, matching indexer **`slog`** lines.
 
 ---
 
@@ -39,7 +39,6 @@ Supervised Qdrant uses **`QDRANT__LOGGER__FORMAT=json`** so each tracing event i
 
 - Canonical **`qdrant.*`** taxonomy (table below) with detection notes and operator subtitles or KV mapping.
 - Locked decisions for collection naming, fan-out, ingest location, HTTP counter semantics, restart window, and Qdrant-only timeline suppression (see table).
-- Reference log captures under repo-root **`temp/`** (gitignored): [`temp/qdrant-logs-1.log`](../../temp/qdrant-logs-1.log), [`temp/qdrant-logs-1.operator-prefixed.log`](../../temp/qdrant-logs-1.operator-prefixed.log), [`temp/claudia-desktop-qdrant-only.log`](../../temp/claudia-desktop-qdrant-only.log).
 
 **Acceptance**
 
@@ -54,9 +53,9 @@ Supervised Qdrant uses **`QDRANT__LOGGER__FORMAT=json`** so each tracing event i
 |-------|-----------|
 | Collection ↔ indexer card | Derive Qdrant collection name from tenant / project / flavor using the same rules as `internal/vectorstore/vectorstore.go` `CollectionName` (browser: `derive/qdrantCollection.js`). |
 | Fan-out | Matching Qdrant lines appear on **every** indexer card whose coords resolve to that collection name. |
-| Normalization location | **On ingest:** `internal/servicelogs/qdrantline` wraps the qdrant line writer (`cmd/claudia/serve.go`) so in-memory buffer and desktop mirror receive enriched JSON. |
+| Normalization location | **On ingest:** `internal/servicelogs/qdrantline` wraps the qdrant line writer (`cmd/chimera/serve.go`) so in-memory buffer and desktop mirror receive enriched JSON. |
 | HTTP success | Summaries show real status codes; only **200** counts as success for upsert, delete, and search counters; non-200 upserts emit **`qdrant.http.points_upsert_rejected`**. |
-| Counter window | Aggregates use lines **at or after** the last **`qdrant.version`** in the buffer (Qdrant restart while Claudia stays up). Claudia restart clears the ring buffer. |
+| Counter window | Aggregates use lines **at or after** the last **`qdrant.version`** in the buffer (Qdrant restart while Chimera stays up). Chimera restart clears the ring buffer. |
 | Timeline | Only the expanded **Qdrant** service panel omits the request timeline and bar. |
 
 ### Canonical `msg` taxonomy
@@ -123,8 +122,8 @@ The indexer emits **`slog`** with **`"msg", "<dotted.slug>"`**; Qdrant matches t
 
 **Deliverables**
 
-- [`internal/servicelogs/qdrantline/normalize.go`](../../internal/servicelogs/qdrantline/normalize.go) — `NormalizePayload`, HTTP access classification, `classifyOperatorSignals`, idempotent **`_claudia_norm`** tagging.
-- Wire-up via [`cmd/claudia/serve.go`](../../cmd/claudia/serve.go) writer wrapper (`NewWriter`).
+- [`internal/servicelogs/qdrantline/normalize.go`](../../internal/servicelogs/qdrantline/normalize.go) — `NormalizePayload`, HTTP access classification, `classifyOperatorSignals`, idempotent **`_chimera_norm`** tagging.
+- Wire-up via [`cmd/chimera/serve.go`](../../cmd/chimera/serve.go) writer wrapper (`NewWriter`).
 - Derive helpers in [`internal/server/embedui/logs/derive/qdrantCollection.js`](../../internal/server/embedui/logs/derive/qdrantCollection.js): `qdrantOperatorLine`, `qdrantCardModel`, `qdrantIndexerCollectionStatusLabel`, slice-after-version window.
 - SHA1 helper [`internal/server/embedui/logs/derive/sha1.js`](../../internal/server/embedui/logs/derive/sha1.js) for collection naming parity.
 

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Parse repository-root deps.lock (KEY=value). Source after setting REPO_ROOT.
+# Parse chimera/deps.lock (KEY=value). Source after setting REPO_ROOT.
 # Optional: DEPS_LOCK_FILE overrides the lockfile path.
 # shellcheck shell=bash
 deps_lock_get() {
 	local key="$1"
-	local lockfile="${DEPS_LOCK_FILE:-$REPO_ROOT/deps.lock}"
+	local lockfile="${DEPS_LOCK_FILE:-$REPO_ROOT/chimera/deps.lock}"
 	if [[ ! -f "$lockfile" ]]; then
 		echo "deps_lock_get: lockfile not found: $lockfile" >&2
 		return 1

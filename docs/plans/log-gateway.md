@@ -5,7 +5,7 @@
 | **Doc kind** | `feature-plan` |
 | **Owners / areas** | Gateway core (`internal/server`, `internal/chat`, `internal/rag`, `internal/routing`, `internal/conversationmerge`, `internal/tokens`, `internal/upstream`, `internal/config`), logs UI (`internal/server/embedui/logs`), parse/derive (`internal/server/embedui/logs/parse`, `derive`) |
 | **Status** | `done` |
-| **Targets** | Gateway parent process (`cmd/claudia serve`, `cmd/claudia gateway`) — structured `slog` only |
+| **Targets** | Gateway parent process (`cmd/chimera serve`, `cmd/chimera-gateway`) — structured `slog` only |
 | **Last updated** | 2026-05-09 |
 
 ## At a glance
@@ -33,7 +33,7 @@ The gateway is the only **first-party** process in the stack. Its logs drive the
 
 ## Background
 
-- The gateway uses a single `*slog.Logger` built in `cmd/claudia/serve.go` via `buildLoggerTo(...)` (`slog` **text** handler: `key=value` lines today). Lines land in `internal/servicelogs.New(...)` under source **`gateway`** (JSON remains valid when present).
+- The gateway uses a single `*slog.Logger` built in `cmd/chimera/serve.go` via `buildLoggerTo(...)` (`slog` **text** handler: `key=value` lines today). Lines land in `internal/servicelogs.New(...)` under source **`gateway`** (JSON remains valid when present).
 - A few hot paths carry stable slugs:
   - `internal/chat/chat.go` — `chat.bifrost.request`, `chat.bifrost.response`, `chat.bifrost.error`, `chat.routing.fallback`, `chat.routing.attempt`, `chat.routing.resolved`, `chat.provider_limits.blocked` ([`log-bifrost.md`](log-bifrost.md) P4 **done**; relay headlines may still use legacy human text until P2 headline pass).
   - `internal/server/server.go` — `chat.request`, `rag.retrieve.error`, `rag.retrieve.source` (per-source hit summary after a successful retrieve; replaces the older single-line `rag context injected` / `rag.retrieve.ok` idea).
@@ -41,7 +41,7 @@ The gateway is the only **first-party** process in the stack. Its logs drive the
   - `internal/server/ingest.go` and `internal/server/ingest_session.go` — `ingest.complete`, `ingest.chunked.error`.
   - `internal/rag/service.go` — `rag.ingest.trace`, `rag.query`, `rag.embed`, `rag.hit`.
   - `internal/indexer/*` — `indexer.run.start`, `indexer.run.done`, `indexer.discovery.summary`, `indexer.queue.snapshot`, `indexer.recovery.poll`, `indexer.recovery.resumed`, `indexer.scope.status`, `indexer.scope.active_file` (these stay owned by the indexer doc).
-- **Parent-process gateway** lines in `cmd/claudia` + gateway-core `internal/` packages carry stable **`msg`** slugs. **Indexer** subprocess JSON and **BiFrost** stdout lines use their own taxonomies ([`log-view-indexer.md`](log-view-indexer.md), [`log-bifrost.md`](log-bifrost.md)).
+- **Parent-process gateway** lines in `cmd/chimera` + gateway-core `internal/` packages carry stable **`msg`** slugs. **Indexer** subprocess JSON and **BiFrost** stdout lines use their own taxonomies ([`log-view-indexer.md`](log-view-indexer.md), [`log-bifrost.md`](log-bifrost.md)).
 - The **gateway service card** uses **`gatewayCardModel`** (derive) for operator KV, counters, and subtitle; probe rows are hideable per P5..
 
 ---
@@ -52,7 +52,7 @@ The gateway is the only **first-party** process in the stack. Its logs drive the
 |-------|-----------|
 | Slug prefix | **`gateway.*`** for parent-process / lifecycle lines that are **not** domain-specific. Domain prefixes stay: `chat.*`, `rag.*`, `ingest.*`, `routing.*`, **`gateway.auth.*`** (gateway-issued **client** credentials file / append / upstream key autogen — **not** LLM usage tokens), `config.*`, `conversation.*`, `indexer.*` (owned), `qdrant.*` (owned by `log-qdrant.md`), `bifrost.*` (owned by [`log-bifrost.md`](log-bifrost.md), **status `done`**). Structured fields may still name tokenizer/usage concepts (`outgoingTokens`, `usageTotalTokens`, …); the dotted **`msg`** slug must not overload **`tokens.`** for auth. |
 | Casing & separators | Lower-snake **dotted** slugs (`gateway.startup.listening`), aligning with `qdrant.*` / `indexer.*` precedent. |
-| Headline rewrite | The **first arg** to `slog.Info/Warn/Error` is rewritten as a **short operator sentence** (e.g. `"gateway listening"` not `"claudia serve: gateway listening"`); structured fields carry the detail. Avoid logger-prefix duplication when the slug already conveys the kind. |
+| Headline rewrite | The **first arg** to `slog.Info/Warn/Error` is rewritten as a **short operator sentence** (e.g. `"gateway listening"` not `"chimera serve: gateway listening"`); structured fields carry the detail. Avoid logger-prefix duplication when the slug already conveys the kind. |
 | Levels | **Info** = operator-relevant state changes & per-request milestones at low volume. **Warn** = degraded but auto-handled. **Error** = user-visible failure or data loss. **Debug** = developer-only / per-line traces. **Trace** (via `platform.LevelTrace`) reserved for ingest body excerpts and per-hit RAG. |
 | Backwards compat | When renaming a slug used by the UI today, accept **both** old and new names in derive modules for **one release window**, then remove the alias. |
 | New objects | New `gateway.*` objects start at **`level:"INFO"`** unless they are pure debug; emit them at **first observation** per process start (e.g. `gateway.startup.listening` is one-shot, not periodic). |
@@ -64,7 +64,7 @@ The gateway is the only **first-party** process in the stack. Its logs drive the
 
 ## Scope
 
-This document is the **single reference** for **gateway-parent** structured logs: lines emitted by `cmd/claudia` (serve and non-serve HTTP entry) and gateway-core `internal/` packages that land in the **gateway** service log via `internal/servicelogs` / the logs UI.
+This document is the **single reference** for **gateway-parent** structured logs: lines emitted by `cmd/chimera` (serve and non-serve HTTP entry) and gateway-core `internal/` packages that land in the **gateway** service log via `internal/servicelogs` / the logs UI.
 
 **Out of scope here** (separate taxonomies / docs):
 
@@ -80,8 +80,8 @@ Use this map to find **source files** for a slug family. Line numbers are intent
 
 | Path | Slug families |
 |------|----------------|
-| [`cmd/claudia/serve.go`](../../cmd/claudia/serve.go) | `gateway.startup.*` (seed, disk log, bootstrap, listening), `gateway.listen.failed`, `gateway.shutdown.http`, `gateway.http.server_error`, `gateway.supervisor.indexer.not_started`; `waitForChildExit`: `gateway.supervisor.child.exited`, `gateway.shutdown.child_force_kill`, `gateway.shutdown.child_stuck` |
-| [`cmd/claudia/gateway.go`](../../cmd/claudia/gateway.go) | Non-`serve` HTTP entry only: same lifecycle slugs as serve — `gateway.startup.listening`, `gateway.shutdown.http`, `gateway.http.server_error` (and seed when used). |
+| [`cmd/chimera/serve.go`](../../cmd/chimera/serve.go) | `gateway.startup.*` (seed, disk log, bootstrap, listening), `gateway.listen.failed`, `gateway.shutdown.http`, `gateway.http.server_error`, `gateway.supervisor.indexer.not_started`; `waitForChildExit`: `gateway.supervisor.child.exited`, `gateway.shutdown.child_force_kill`, `gateway.shutdown.child_stuck` |
+| [`cmd/chimera/gateway.go`](../../cmd/chimera/gateway.go) | Non-`serve` HTTP entry only: same lifecycle slugs as serve — `gateway.startup.listening`, `gateway.shutdown.http`, `gateway.http.server_error` (and seed when used). |
 
 ### Config, credentials, routing
 
@@ -144,16 +144,16 @@ Stable dotted slugs across gateway-emitted lines. Every `slog.Info/Warn/Error/De
 
 | `msg` | Source today (or "**new**") | Level | Notes |
 |-------|------------------------------|-------|-------|
-| `gateway.startup.seed` | **new** — replace raw `fmt.Fprintln(..., "claudia.start")` with structured line | Info | One-shot buffer seed for desktop; KV: none or `semver` if added later. |
+| `gateway.startup.seed` | **new** — replace raw `fmt.Fprintln(..., "chimera.start")` with structured line | Info | One-shot buffer seed for desktop; KV: none or `semver` if added later. |
 | `gateway.startup.config_resolved` | `internal/config/config.go` `resolved gateway config paths` | **Info** *(was Debug)* | Headline: **"gateway config resolved"**. KV: `filePath`, **`api_keys_path`** (resolved path to client credential YAML; today’s code logs `tokensPath` until [`version-v0.3.md`](../version-v0.3.md) config rename), `routingPolicyPath`. |
-| `gateway.startup.bootstrap` | `cmd/claudia/serve.go` bootstrap mode notice | Info | Headline: **"gateway bootstrap mode"**. KV: **`api_keys_path`** (spec; field may remain `tokens_path` in code until v0.3). |
-| `gateway.startup.listening` | `cmd/claudia/serve.go` `claudia serve: gateway listening` | Info | Headline: **"gateway listening"**. KV: `addr`, `ui`, `upstream`, `bifrost_data`, `qdrant_supervised`, `indexer_supervised`, `config`. |
-| `gateway.startup.disk_log` | `cmd/claudia/serve.go` `disk logging enabled` (+ Warn `disk log: mkdir` / `disk log: open` same family) | Info / Warn | KV: `path` where applicable. |
-| `gateway.listen.failed` | `cmd/claudia/serve.go` / `internal/server/server.go` listen errors (`listen`, `claudia serve: listen`) | Error | KV: `addr` / `addrs`, `err`. Unifies bootstrap and non-bootstrap listen failures. |
-| `gateway.http.server_error` | `cmd/claudia/serve.go` / `cmd/claudia/gateway.go` HTTP server exit; Debug **`http serve exit`** in `internal/server/http_multi.go` when `Serve` errors | Error / Debug | KV: `err`. |
-| `gateway.shutdown.http` | `cmd/claudia/serve.go` `http shutdown` | Warn → **Info** | Headline: **"gateway http shutdown"**. KV: `err` (optional). |
-| `gateway.shutdown.child_force_kill` | `cmd/claudia/serve.go` `did not exit after context cancel; forcing kill`; `{name} kill failed` reuses slug with `detail=kill_send_failed` | Warn | KV: `child` (`qdrant` \| `bifrost` \| `indexer`), `pid`, `timeout`, optional `detail`. |
-| `gateway.shutdown.child_stuck` | `cmd/claudia/serve.go` `still has not exited after forced kill` | Warn | KV: `child`. |
+| `gateway.startup.bootstrap` | `cmd/chimera/serve.go` bootstrap mode notice | Info | Headline: **"gateway bootstrap mode"**. KV: **`api_keys_path`** (spec; field may remain `tokens_path` in code until v0.3). |
+| `gateway.startup.listening` | `cmd/chimera/serve.go` `chimera serve: gateway listening` | Info | Headline: **"gateway listening"**. KV: `addr`, `ui`, `upstream`, `bifrost_data`, `qdrant_supervised`, `indexer_supervised`, `config`. |
+| `gateway.startup.disk_log` | `cmd/chimera/serve.go` `disk logging enabled` (+ Warn `disk log: mkdir` / `disk log: open` same family) | Info / Warn | KV: `path` where applicable. |
+| `gateway.listen.failed` | `cmd/chimera/serve.go` / `internal/server/server.go` listen errors (`listen`, `chimera serve: listen`) | Error | KV: `addr` / `addrs`, `err`. Unifies bootstrap and non-bootstrap listen failures. |
+| `gateway.http.server_error` | `cmd/chimera/serve.go` / `cmd/chimera/gateway.go` HTTP server exit; Debug **`http serve exit`** in `internal/server/http_multi.go` when `Serve` errors | Error / Debug | KV: `err`. |
+| `gateway.shutdown.http` | `cmd/chimera/serve.go` `http shutdown` | Warn → **Info** | Headline: **"gateway http shutdown"**. KV: `err` (optional). |
+| `gateway.shutdown.child_force_kill` | `cmd/chimera/serve.go` `did not exit after context cancel; forcing kill`; `{name} kill failed` reuses slug with `detail=kill_send_failed` | Warn | KV: `child` (`qdrant` \| `bifrost` \| `indexer`), `pid`, `timeout`, optional `detail`. |
+| `gateway.shutdown.child_stuck` | `cmd/chimera/serve.go` `still has not exited after forced kill` | Warn | KV: `child`. |
 | `gateway.config.reloaded` | `internal/server/runtime.go` `reloaded gateway.yaml` | Info | KV: `path`. |
 | `gateway.config.reload_failed` | `internal/server/runtime.go` `failed to reload gateway.yaml` | Error | KV: `path`, `err`. |
 | `gateway.config.missing` | `internal/server/runtime.go` `gateway config missing` | Error | KV: `path`, `err`. |
@@ -166,7 +166,7 @@ Stable dotted slugs across gateway-emitted lines. Every `slog.Info/Warn/Error/De
 
 ### Supervisor (`gateway.supervisor.*`)
 
-Structured lifecycle for supervised children (`cmd/claudia/serve.go`, `internal/supervisor/*`). Operators use these to distinguish **startup success** from **relay failures** (`chat.bifrost.*`).
+Structured lifecycle for supervised children (`cmd/chimera/serve.go`, `internal/supervisor/*`). Operators use these to distinguish **startup success** from **relay failures** (`chat.bifrost.*`).
 
 | `msg` | Source today (or "**new**") | Level | Notes |
 |-------|------------------------------|-------|-------|
@@ -176,7 +176,7 @@ Structured lifecycle for supervised children (`cmd/claudia/serve.go`, `internal/
 | `gateway.supervisor.qdrant.ready` | `internal/supervisor/bifrost.go` `WaitHealthy` (qdrant `/readyz` path) `qdrant health OK` | Info | KV: `url`. Same helper as BiFrost; **child** disambiguates log line + `msg`. |
 | `gateway.supervisor.indexer.starting` | `internal/supervisor/indexer.go` `indexer supervised` | Info | KV: `bin`, `config`, `workdir`, `log_json`. |
 | `gateway.supervisor.indexer.raw_exec` | `internal/supervisor/indexer.go` `indexer supervised (raw exec)` | Debug | KV: `bin`, `args`. Test / special layout only. |
-| `gateway.supervisor.indexer.not_started` | `cmd/claudia/serve.go` `indexer supervised not started` and **`indexer supervised: getwd`** | Warn | KV: `err`, `bin`; **`detail=getwd`** when `getwd` fails. Config present but process did not launch. |
+| `gateway.supervisor.indexer.not_started` | `cmd/chimera/serve.go` `indexer supervised not started` and **`indexer supervised: getwd`** | Warn | KV: `err`, `bin`; **`detail=getwd`** when `getwd` fails. Config present but process did not launch. |
 | `gateway.supervisor.child.exited` | **new** — wrap `waitForChildExit` / `cmd.Wait` when `err != nil` after gateway shutdown | **Debug** | KV: `child`, `err`. Optional Info if exit is unexpected mid-run (future). |
 
 ### Gateway client credentials / auth (`gateway.auth.*`)
@@ -251,7 +251,7 @@ Stable **`msg`** prefix for **gateway-issued client access** (Bearer / Continue 
 | `conversation.merge.snapshot_upsert_failed` | `internal/conversationmerge/service.go` `resolve snapshot upsert failed` | Warn | KV: `err`, `conversation_id`. |
 | `conversation.merge.dedup_cache_write_failed` | `internal/conversationmerge/service.go` `dedup cache write failed` | Debug | KV: `err`. |
 | `conversation.merge.resolve_failed` | `internal/server/server.go` `conversation merge resolve failed` | Debug | KV: `err`. Best-effort merge before chat; request continues with a fresh id. **Lifecycle note:** [`log-conversations.md`](log-conversations.md) uses `conversation.merge.failed` as a doc-only umbrella; filters should match **`conversation.merge.*`**, not a separate emitted slug. |
-| `conversation.merge.disabled_no_metrics` | `internal/config/config.go` `conversation_merge.enabled requires metrics.enabled; disabling` | Warn | KV: none. |
+| `conversation.merge.disabled_no_metrics` | Removed: conversation merge now uses operator SQLite and no longer depends on `metrics.enabled`. | N/A | N/A |
 
 ### Upstream / health (`upstream.*`)
 
@@ -359,7 +359,7 @@ New **key-value** fields:
 
 - Edits to `internal/chat/chat.go`, `internal/server/server.go` (including `loggingMiddleware` → `gateway.http.access`), `internal/server/http_multi.go`, `internal/server/ingest.go`, `internal/server/ingest_session.go`, `internal/server/runtime.go`, `internal/server/ui_handlers.go`, `internal/server/ui_tokens.go`, `internal/server/ui_bootstrap.go`, `internal/upstream/upstream.go`, `internal/upstream/smoke_chat.go`, `internal/tokens/tokens.go`, `internal/config/config.go`, `internal/conversationmerge/service.go`, `internal/routing/routing.go`, `internal/transform/toolrouter.go`, `internal/supervisor/*.go` (supervisor uses parent `slog` — add `gateway.supervisor.*` where those lines are emitted) — add `"msg", "<slug>"` to every `slog.Info/Warn/Error/Debug` (and `Trace` where used) per the taxonomy.
 - Backwards-compat: [`internal/server/embedui/logs.js`](../../internal/server/embedui/logs.js) and `derive/bifrostMetrics.js` still match **legacy** `msg`/`message` strings from older gateway builds where P4 slugs were absent (`upstream chat response`, old virtual-model wording).
-- `cmd/claudia/serve.go`: add `gateway.startup.*`, `gateway.shutdown.*`, `gateway.supervisor.*`, `gateway.startup.seed`, and structured supervisor/indexer failure lines per taxonomy.
+- `cmd/chimera/serve.go`: add `gateway.startup.*`, `gateway.shutdown.*`, `gateway.supervisor.*`, `gateway.startup.seed`, and structured supervisor/indexer failure lines per taxonomy.
 
 **Acceptance.** Every gateway-parent `slog.Logger` `Info` / `Warn` / `Error` / `Debug` / `Log` call in the P2 file list carries a `"msg", "<slug>"` pair per the taxonomy and [implementation map](#implementation-map-where-parent-process-msg-is-emitted); [`internal/server/embedui/logs.js`](../../internal/server/embedui/logs.js) `inferShape` treats **`gateway.http.access`** like legacy **`http response`** for `http.access` UI shape.
 
@@ -387,7 +387,7 @@ New **key-value** fields:
 
 **Deliverables**
 
-- `gateway.startup.listening` (replace today's `claudia serve: gateway listening` headline by adding the slug; KV stays the same).
+- `gateway.startup.listening` (replace today's `chimera serve: gateway listening` headline by adding the slug; KV stays the same).
 - `gateway.startup.bootstrap` for the bootstrap-mode notice.
 - `gateway.startup.config_resolved` (promote the existing Debug to Info with a slug).
 - `gateway.config.reloaded` / `gateway.config.reload_failed` / `gateway.config.missing` (slug existing).

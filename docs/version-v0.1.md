@@ -11,7 +11,7 @@
 
 ## At a glance
 
-Stand up the Claudia gateway in Go in front of BiFrost: chat completions work, the operator UI works, and a single desktop binary opens a window where operators manage provider keys, see logs, and copy a Continue config. This is the working-notes scratchpad from that release — useful as history; the current code is the source of truth.
+Stand up the chimera-gateway in Go in front of BiFrost: chat completions work, the operator UI works, and a single desktop binary opens a window where operators manage provider keys, see logs, and copy a Continue config. This is the working-notes scratchpad from that release — useful as history; the current code is the source of truth.
 
 | Theme | Outcome | Status |
 |-------|---------|--------|
@@ -28,7 +28,7 @@ Stand up the Claudia gateway in Go in front of BiFrost: chat completions work, t
 
 This document is for **Audrey** (and a Cursor agent helping her) to **explore** what "done enough" for **v0.1** means in practice, how the repo behaves **today**, and which directions are **worth investigating** versus **already decided** in the product plan.
 
-**Tone:** everything under *Explorations* is **optional research**, not a commitment. The authoritative roadmap and locked decisions remain in [`claudia-gateway.plan.md`](claudia-gateway.plan.md) and [`overview.md`](overview.md). Normative UI/desktop detail lives in [`plans/desktop-ui.md`](plans/desktop-ui.md).
+**Tone:** everything under *Explorations* is **optional research**, not a commitment. The authoritative roadmap and locked decisions remain in [`porcelain.plan.md`](porcelain.plan.md) and [`overview.md`](overview.md). Normative UI/desktop detail lives in [`plans/desktop-ui.md`](plans/desktop-ui.md).
 
 ---
 
@@ -39,22 +39,22 @@ The gateway is a **small Go** service in front of **BiFrost** (OpenAI-compatible
 - **GET /health**
 - **GET /v1/models**, 
 - **POST /v1/chat/completions**
-- **GET /status** (when `**claudia serve**` supervises children)
+- **GET /status** (when `**chimera serve**` supervises children)
 
 **What works today**
 
-- **Virtual model** `Claudia-<semver>` (semver from `config/gateway.yaml`) appears first on `**GET /v1/models`**; concrete upstream ids pass through.
+- **Virtual model** `chimera-<semver>` (semver from `config/gateway.yaml`) appears first on `**GET /v1/models`**; concrete upstream ids pass through.
 - **Token auth** from YAML (`config/tokens.yaml` by default), with **mtime reload**.
 - **Routing policy** (`config/routing-policy.yaml`): for the virtual model only, **rule-based** selection of the **first** upstream model to try (`internal/routing`). Conditions today are thin (e.g. `min_message_chars` on the **last** user message); then optional `ambiguous_default_model`, else `**routing.fallback_chain[0]`** in `config/gateway.yaml`.
 - **Fallback chain**: on **429 / 5xx** from the upstream, the gateway walks `**routing.fallback_chain`** starting at the index of the model that was attempted (`internal/chat`).
 - **Streaming** (SSE) and non-streaming proxying to BiFrost.
-- `**GET /health`**: probes the configured upstream (JSON field `**checks.upstream`). **Qdrant** is optional via `claudia serve`**; the **v0.1** gateway does not call Qdrant for chat.
+- `**GET /health`**: probes the configured upstream (JSON field `**checks.upstream`). **Qdrant** is optional via `chimera serve`**; the **v0.1** gateway does not call Qdrant for chat.
 - **Upstream API key**: if missing in config and env, `**EnsureGeneratedUpstreamAPIKey`** can **generate and persist** `upstream.api_key` in `gateway.yaml` (see `internal/config/upstream_api_key.go`).
 - **Operator UI** (gateway-served): `**GET /ui/login`**, `**GET /ui/panel` (session after `POST /api/ui/login`), BiFrost provider rows via `/api/ui/***` (`internal/server/ui_handlers.go`, embedded HTML in `internal/server/embedui/`). `**GET /ui/models` mirrors the merged model list for tools.
-- **Desktop shell** (optional build): `go build -tags desktop`** produces a binary whose **default no-subcommand** path runs **supervisor + gateway + webview** (`cmd/claudia/default_mode_desktop.go`, `webview_desktop.go`). `**claudia desktop`**, `**claudia serve`, `--headless`, and `claudia gateway` behave as documented in `claudia help**`. The webview **opens the panel URL** derived from the listen address (`cmd/claudia/serve.go` → `panelURLFromListenAddr`); unauthenticated users are **redirected** to `**/ui/login`**.
+- **Desktop shell** (optional build): `go build -tags desktop`** produces a binary whose **default no-subcommand** path runs **supervisor + gateway + webview** (`cmd/chimera/default_mode_desktop.go`, `webview_desktop.go`). `**chimera desktop`**, `**chimera serve`, `--headless`, and `chimera-gateway` behave as documented in `chimera help**`. The webview **opens the panel URL** derived from the listen address (`cmd/chimera/serve.go` → `panelURLFromListenAddr`); unauthenticated users are **redirected** to `**/ui/login`**.
 - **Supervisor children** (BiFrost, Qdrant): subprocess **stdout/stderr** are wired to `**os.Stdout` / `os.Stderr`** (`internal/supervisor/bifrost.go`, `qdrant.go`), so all service logs go to the **same console** as the gateway. On **Windows**, a **desktop** build can still show a **console window** (and users report an extra command window alongside the webview); hiding that console and surfacing logs only in-app is **not** done yet (see below).
 
-**Default local stack:** `**make up`** or `**go run ./cmd/claudia serve` with `./bin/bifrost-http` after `make claudia-install` (or `make install` for desktop OS deps too), plus provider env keys for `config/bifrost.config.json`. Desktop: `make desktop-build` / `make desktop-run**` per [`gui-testing.md`](gui-testing.md).
+**Default local stack:** `**make up`** or `**go run ./cmd/chimera serve` with `./bin/bifrost-http` after `make chimera-install` (or `make install` for desktop OS deps too), plus provider env keys for `config/bifrost.config.json`. Desktop: `make desktop-build` / `make desktop-run**` per [`gui-testing.md`](gui-testing.md).
 
 ---
 
@@ -71,7 +71,7 @@ These are the **last mile** items for v0.1 UX and routing, articulated from the 
 - **No visible console** for the desktop entry (platform-specific: e.g. Windows subsystem / build flags, or subprocess creation flags that avoid allocating a new console).
 - **Operator-visible logs** inside the app: capture **gateway** `slog` output and **child** stdout/stderr (or selected streams), then expose them through a **gateway endpoint** (e.g. SSE or chunked HTTP) or in-memory ring buffer + `**GET /api/ui/logs`** authenticated like other admin routes, consumed by a **Logs** tab in the shell (see §2).
 
-**Design notes:** Avoid logging secrets; consider log level and backpressure; headless `**claudia serve`** should keep writing to stderr for servers and automation.
+**Design notes:** Avoid logging secrets; consider log level and backpressure; headless `**chimera serve`** should keep writing to stderr for servers and automation.
 
 ### 2. Desktop webview: multiple tabs (main, logs, admin) (**implemented**)
 
@@ -93,13 +93,13 @@ Implementation options include **native tab UI** around multiple webviews, **one
 
 Making a fast, portable application is important for the v0.1 release as it dictates the framework we are building on top of going forward.
 
-**Default deployment shape:** **Go** `**claudia`** / `**claudia serve**` with **BiFrost** — see [`plans/upstream-llm-bifrost.md`](plans/upstream-llm-bifrost.md) for the phased history.
+**Default deployment shape:** **Go** `**chimera`** / `**chimera serve**` with **BiFrost** — see [`plans/upstream-llm-bifrost.md`](plans/upstream-llm-bifrost.md) for the phased history.
 
 **4c. Vector store without a dedicated Qdrant process**
 
 - **Context:** **v0.2** RAG may use supervised **Qdrant** or another backend. A portable install may want vectors **off by default** until RAG is in use.
 - **Idea:** spike **embedded** Qdrant (where license and artifact size allow), another embedded vector backend, or a small local store for early RAG—so operators are not required to run a separate Qdrant container for every setup.
-- **Plan alignment:** v0.2 in [`claudia-gateway.plan.md`](claudia-gateway.plan.md) assumes a **swappable vector-store adapter**; if that boundary stays stable, embedded and remote Qdrant can remain interchangeable behind the same interface.
+- **Plan alignment:** v0.2 in [`porcelain.plan.md`](porcelain.plan.md) assumes a **swappable vector-store adapter**; if that boundary stays stable, embedded and remote Qdrant can remain interchangeable behind the same interface.
 
 ### 4. Portable “first run” (**implemented**)
 
@@ -116,7 +116,7 @@ Making a fast, portable application is important for the v0.1 release as it dict
 
 **Status:** **Product decisions below are locked.** The **implementation** described here is **in the tree** (bootstrap serve/gateway path, setup UI, token admin API, packaging/configure no longer seeding `tokens.yaml`). If this section drifts from code, update the doc.
 
-**Previously (before bootstrap work):** The webview opens toward `**/ui/panel`**; without a session the user lands on `**/ui/login`, which asks for a **gateway token** and points them at `config/tokens.yaml`**. `config/tokens.yaml` is often **created automatically** from `config/tokens.example.yaml` (`make configure`, release packaging, `.goreleaser.yaml`). There is **no** dedicated setup path that **mints** a token in the UI on first launch. **BiFrost** and **Qdrant** start under `**claudia serve**` even when no gateway tokens exist.
+**Previously (before bootstrap work):** The webview opens toward `**/ui/panel`**; without a session the user lands on `**/ui/login`, which asks for a **gateway token** and points them at `config/tokens.yaml`**. `config/tokens.yaml` is often **created automatically** from `config/tokens.example.yaml` (`make configure`, release packaging, `.goreleaser.yaml`). There is **no** dedicated setup path that **mints** a token in the UI on first launch. **BiFrost** and **Qdrant** start under `**chimera serve**` even when no gateway tokens exist.
 
 ---
 
@@ -145,7 +145,7 @@ Making a fast, portable application is important for the v0.1 release as it dict
    - **Unauthenticated** access is acceptable **only** on this **loopback-bound** bootstrap surface and **only** for those setup endpoints (same threat model as other localhost-first tools).
 
 7. **UI flow**
-   - **Bootstrap:** dedicated page (e.g. `/ui/setup`) — **create first token** (label/name → generate secret → **atomic write** `tokens.yaml` → show **full token once** with **copy** affordance + message to **save it** and **restart** Claudia). Do **not** land users on the existing full `/ui/panel` during bootstrap.
+   - **Bootstrap:** dedicated page (e.g. `/ui/setup`) — **create first token** (label/name → generate secret → **atomic write** `tokens.yaml` → show **full token once** with **copy** affordance + message to **save it** and **restart** Chimera). Do **not** land users on the existing full `/ui/panel` during bootstrap.
    - **Normal:** existing **login** + `/ui/panel`. Add **token management** (list metadata, **add**, **delete**; optional **rotate** later) in admin — **new** routes/handlers (e.g. under `/api/ui/...`) that **read/write** `tokens.yaml` with the same validation rules as the file format today. Authenticate these like other admin APIs (session after gateway token login).
 
 8. **Desktop / webview entry**
@@ -159,7 +159,7 @@ Use this to track work; tick in PRs or remove items as completed.
 
 | Area | Action |
 |------|--------|
-| `cmd/claudia/serve.go` | Detect bootstrap vs normal from token store state; **skip** `StartQdrant` / BiFrost when bootstrapping; avoid **blocking** gateway startup on upstream health in bootstrap; **dual-stack loopback** listen in bootstrap. |
+| `cmd/chimera/serve.go` | Detect bootstrap vs normal from token store state; **skip** `StartQdrant` / BiFrost when bootstrapping; avoid **blocking** gateway startup on upstream health in bootstrap; **dual-stack loopback** listen in bootstrap. |
 | `internal/server/` | Separate **bootstrap** mux vs **full** mux; redirect or entry URLs for desktop; **POST** (or equivalent) to **append** token to YAML safely; admin **token CRUD** behind session auth. |
 | `internal/tokens/` | Helpers as needed: **count valid tokens**, **atomic save** / merge into YAML without dropping unrelated content. |
 | `internal/server/embedui/` | `setup.html` (or similar) for first token; admin components for **token list / add / delete**. |
@@ -180,7 +180,7 @@ This aligns with **§ Portable “first run”** but narrows v0.1 to **bootstrap
 
 ### 6. Support multiple Groq, Gemini API Keys, and Ollama
 
-**Groq / Gemini (implemented):** The operator panel (`**/ui/panel**`, same embed as desktop **Admin** tab) lists **all** API key rows returned by BiFrost for each provider, sorted for display: `claudia-<provider>-key-<n>` names (numeric order), then any other keys by name. Adding a key **appends** a new row with `weight: 1` and a generated name, **without** a `models` field (BiFrost treats missing `models` as all models for that key); all keys are normalized to **weight 1** on each append/remove. Removing a key **DELETE**s that row by exact `name` and **PUT**s the rest of the provider document (last write wins if two tabs race). Authenticated BFF routes: `POST /api/ui/provider/{groq|gemini}/keys` body `{"value":"…"}`, `POST /api/ui/provider/{groq|gemini}/keys/delete` body `{"name":"…"}`. `GET /api/ui/state` includes `providers.<id>.keys` as `{ name, key_hint, key_configured }[]` plus existing `key_hint` / `key_configured` summaries. Implementation: `internal/bifrostadmin/` (merge + summarize), `internal/server/ui_save.go`, `ui_handlers.go`, `embedui/panel.html`.
+**Groq / Gemini (implemented):** The operator panel (`**/ui/panel**`, same embed as desktop **Admin** tab) lists **all** API key rows returned by BiFrost for each provider, sorted for display: `chimera-<provider>-key-<n>` names (numeric order), then any other keys by name. Adding a key **appends** a new row with `weight: 1` and a generated name, **without** a `models` field (BiFrost treats missing `models` as all models for that key); all keys are normalized to **weight 1** on each append/remove. Removing a key **DELETE**s that row by exact `name` and **PUT**s the rest of the provider document (last write wins if two tabs race). Authenticated BFF routes: `POST /api/ui/provider/{groq|gemini}/keys` body `{"value":"…"}`, `POST /api/ui/provider/{groq|gemini}/keys/delete` body `{"name":"…"}`. `GET /api/ui/state` includes `providers.<id>.keys` as `{ name, key_hint, key_configured }[]` plus existing `key_hint` / `key_configured` summaries. Implementation: `internal/bifrostadmin/` (merge + summarize), `internal/server/ui_save.go`, `ui_handlers.go`, `embedui/panel.html`.
 
 **Ollama:** Still **one** `network_config.base_url` per `ollama` provider in BiFrost; **multiple Ollama sites** remains future work unless BiFrost gains a first-class pattern for it.
 
@@ -196,7 +196,7 @@ This aligns with **§ Portable “first run”** but narrows v0.1 to **bootstrap
 2. **Heuristic:** Build or **suggest** `routing.fallback_chain` ordered **remote / higher-performance first**, then **local** (e.g. Ollama) — using **metadata** when available (provider id, known model families, optional operator overrides) and a **small curated map** or rules file when metadata is thin.
 3. **Persist with safety:** Updates to `config/routing-policy.yaml` and `routing.fallback_chain` in `config/gateway.yaml` must **validate** (parseable YAML, policy shape the gateway accepts, gateway reloadable) **before** writing; on failure, **do not** partially update files — return a clear error to the operator.
 4. **Admin panel UX (desired):** A **Routing** area in the operator UI (after provider setup is usable) that:
-   - Explains how the **virtual model** (`Claudia-<semver>`), `routing-policy.yaml`, and `routing.fallback_chain` interact (initial model vs 429/5xx failover).
+   - Explains how the **virtual model** (`chimera-<semver>`), `routing-policy.yaml`, and `routing.fallback_chain` interact (initial model vs 429/5xx failover).
    - Offers a primary control to **regenerate routing from the live catalog** (same behavior as the API below), respecting `routing.filter_free_tier_models` and `config/provider-free-tier.yaml` when that flag is on.
    - Shows the **saved** `fallback_chain` and policy summary **after** a successful generation (no separate “preview” step required unless we add one later).
    - **Test computed router (not implemented yet):** Let the operator run a **dry evaluation** with sample messages (e.g. short vs long user turn) and see **which rule would match**, **initial upstream id**, and **ordered fallback slice** — **without** calling a paid completion, or optionally with a **minimal** test completion — before or after save.
@@ -205,7 +205,7 @@ This aligns with **§ Portable “first run”** but narrows v0.1 to **bootstrap
 #### Implemented in the tree today
 
 - **Authenticated HTTP API:** `POST /api/ui/routing/generate` (session after `POST /api/ui/login`) fetches upstream `GET /v1/models`, optionally intersects with `provider-free-tier.yaml` when `routing.filter_free_tier_models` is **true**, orders models deterministically (`internal/routinggen`), writes `routing-policy.yaml` and patches `routing.fallback_chain` via `config.WriteGatewayFallbackChain`, and **rejects** invalid output **before** leaving inconsistent files. See `internal/server/ui_routing_generate.go`.
-- **Free-tier catalog reference (offline / CI-friendly):** `make catalog-free` (`go run ./cmd/catalog-write-free`) fetches public Groq + Gemini docs and emits a **reference** YAML snapshot (optional `INTERSECT=` against a local models export); operators may **manually** merge into `provider-free-tier.yaml` — the gateway does **not** load that snapshot automatically. See `docs/configuration.md`, `internal/freecatalog/`, `cmd/catalog-write-free/`.
+- **Free-tier catalog reference (offline / CI-friendly):** `make catalog-free` (`go run ./chimera/cmd/catalog-write-free`) fetches public Groq + Gemini docs and emits a **reference** YAML snapshot (optional `INTERSECT=` against a local models export); operators may **manually** merge into `provider-free-tier.yaml` — the gateway does **not** load that snapshot automatically. See `docs/configuration.md`, `internal/freecatalog/`, `chimera/cmd/catalog-write-free/`.
 - **Catalog visibility:** When `routing.filter_free_tier_models` is on and the allowlist loads, merged `GET /v1/models` lists only allowlisted upstream ids (virtual model still first).
 
 #### Not implemented yet (track against v0.1 admin experience)
@@ -247,7 +247,7 @@ Instead of hand-authoring `routing-policy.yaml` and fallback chains from scratch
 
 ### 2. Router with **small** Model
 
-**Idea:** at **each** chat completion (when using `Claudia-<semver>`), run a **cheap** model first to **classify** or **select** the upstream model (and optionally parameters), then call the chosen backend for the real completion.
+**Idea:** at **each** chat completion (when using `chimera-<semver>`), run a **cheap** model first to **classify** or **select** the upstream model (and optionally parameters), then call the chosen backend for the real completion.
 
 **Contrast with §1:** §1 is closer to **bootstrap / config generation**; §2 is **runtime** routing every turn.
 
@@ -261,8 +261,8 @@ Instead of hand-authoring `routing-policy.yaml` and fallback chains from scratch
 
 | Area                              | Path                                                         |
 | --------------------------------- | ------------------------------------------------------------ |
-| Gateway CLI                       | `cmd/claudia/`                                               |
-| Desktop webview (tag `desktop`)   | `cmd/claudia/webview_desktop.go`, `default_mode_desktop.go`  |
+| Gateway CLI                       | `cmd/chimera/`                                               |
+| Desktop webview (tag `desktop`)   | `cmd/chimera/webview_desktop.go`, `default_mode_desktop.go`  |
 | HTTP server, health, models, chat | `internal/server/`, `internal/chat/`, `internal/upstream/`   |
 | Config load / reload              | `internal/config/`                                           |
 | Routing policy                    | `internal/routing/`                                          |
@@ -272,7 +272,7 @@ Instead of hand-authoring `routing-policy.yaml` and fallback chains from scratch
 | BiFrost bootstrap                 | `config/bifrost.config.json`                                 |
 | Routing rules                     | `config/routing-policy.yaml`                                 |
 | Free-tier allowlist (optional)    | `config/provider-free-tier.yaml`                             |
-| Catalog snapshot tool (reference) | `make catalog-free`, `cmd/catalog-write-free/`, `internal/freecatalog/` |
+| Catalog snapshot tool (reference) | `make catalog-free`, `chimera/cmd/catalog-write-free/`, `internal/freecatalog/` |
 | Regenerate routing (API)          | `POST /api/ui/routing/generate` (`internal/server/ui_routing_generate.go`) |
 | Operator UI (embed)               | `internal/server/embedui/`, `internal/server/ui_handlers.go` |
-| Product / locked decisions        | [`claudia-gateway.plan.md`](claudia-gateway.plan.md)                               |
+| Product / locked decisions        | [`porcelain.plan.md`](porcelain.plan.md)                               |

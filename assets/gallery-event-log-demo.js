@@ -9,7 +9,7 @@
     return n < 10 ? "0" + n : String(n);
   }
 
-  /** Same semantics as ClaudiaLogs.Main formatLogDateTimeLocal (UTC instant → viewer-local wall time). */
+  /** Same semantics as ChimeraLogs.Main formatLogDateTimeLocal (UTC instant → viewer-local wall time). */
   function formatLogDateTimeLocal(ms) {
     if (ms == null || !isFinite(Number(ms))) return "—";
     var d = new Date(Number(ms));

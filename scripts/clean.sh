@@ -7,9 +7,10 @@ cd "$ROOT"
 source "$ROOT/scripts/chimera-names.sh"
 
 rm -f \
-	"${CHIMERA_GATEWAY_BIN_BASE}" "${CHIMERA_GATEWAY_BIN_BASE}.exe" \
-	"${CHIMERA_INDEX_BIN_BASE}" "${CHIMERA_INDEX_BIN_BASE}.exe" \
-	"${CHIMERA_DESKTOP_BIN_BASE}" "${CHIMERA_DESKTOP_BIN_BASE}.exe" \
-	claudia claudia.exe claudia-desktop claudia-desktop.exe claudia-index claudia-index.exe
+	"chimera/bin/${CHIMERA_GATEWAY_BIN_BASE}" "chimera/bin/${CHIMERA_GATEWAY_BIN_BASE}.exe" \
+	"chimera/bin/${CHIMERA_SUPERVISOR_BIN_BASE}" "chimera/bin/${CHIMERA_SUPERVISOR_BIN_BASE}.exe" \
+	"chimera/bin/${CHIMERA_INDEX_BIN_BASE}" "chimera/bin/${CHIMERA_INDEX_BIN_BASE}.exe"
+rm -f \
+	"locus/bin/${LOCUS_DESKTOP_BIN_BASE}" "locus/bin/${LOCUS_DESKTOP_BIN_BASE}.exe"
 rm -rf dist
-echo "clean: removed ${CHIMERA_GATEWAY_BIN_BASE}[.exe], ${CHIMERA_DESKTOP_BIN_BASE}[.exe], ${CHIMERA_INDEX_BIN_BASE}[.exe], dist/"
+echo "clean: removed chimera/bin/${CHIMERA_GATEWAY_BIN_BASE}[.exe], chimera/bin/${CHIMERA_SUPERVISOR_BIN_BASE}[.exe], chimera/bin/${CHIMERA_INDEX_BIN_BASE}[.exe], locus/bin/${LOCUS_DESKTOP_BIN_BASE}[.exe], dist/"

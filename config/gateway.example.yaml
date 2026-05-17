@@ -17,7 +17,7 @@ gateway:
   #   warn | error — quieter.
   #
   # Override (takes precedence over this file): environment variable LOG_LEVEL with the same names.
-  # Example: LOG_LEVEL=trace claudia serve
+  # Example: LOG_LEVEL=trace chimera-supervisor
   #
   # BiFrost (upstream proxy) logging is separate: see upstream.bifrost_log_level below.
   log_level: "debug"
@@ -50,7 +50,7 @@ gateway:
 upstream:
   # OpenAI-compatible upstream (BiFrost on the host).
   base_url: "http://127.0.0.1:8080"
-  api_key_env: "CLAUDIA_UPSTREAM_API_KEY"
+  api_key_env: "CHIMERA_UPSTREAM_API_KEY"
   # BiFrost subprocess only (not the Go gateway). Typical: info | debug. CLI `-bifrost-log-level` overrides when non-empty.
   bifrost_log_level: "info"
   # api_key: optional Bearer for upstream /v1/*. If omitted and api_key_env is unset/empty, a secret is generated and written here on first gateway start.
@@ -64,7 +64,7 @@ health:
   available_models_poll_ms: 30000
 
 paths:
-  tokens: "./tokens.yaml"
+  api_keys: "./api-keys.yaml"
   routing_policy: "./routing-policy.yaml"
   provider_free_tier: "./provider-free-tier.yaml"
   # Vendor quota ceilings for admission/guards; see docs/plans/version-v0.1.1.md §3.7.
@@ -120,15 +120,15 @@ routing:
 metrics:
   enabled: true
   # sqlite_path: "../data/gateway/metrics.sqlite"
-  # migrations_dir: "../migrations/gateway"
+  # migrations_dir: "../migrations/chimera-gateway/metrics"
 
 # Operator SQLite: supervised indexer workspaces (paths + project/flavor). Separate file from metrics.
 # operator:
 #   sqlite_path: "../data/gateway/operator.sqlite"
-#   migrations_dir: "../migrations/operator"
+#   migrations_dir: "../migrations/chimera-gateway/operator"
 
-# Merge chat sessions per tenant + X-Claudia-Project / X-Claudia-Flavor when the client omits
-# X-Claudia-Conversation-Id, using embeddings (rag.embedding) + SQLite state. Requires metrics.enabled.
+# Merge chat sessions per tenant + X-Chimera-Project / X-Chimera-Flavor-Id when the client omits
+# X-Chimera-Conversation-Id, using embeddings (rag.embedding) + operator SQLite state.
 # conversation_merge:
 #   enabled: true
 #   match_threshold: 0.75
@@ -141,21 +141,21 @@ metrics:
 #   # session_attach_min_cosine: 0.18
 #   # session_short_follow_up_runes: 220
 
-# Optional: supervise claudia-index under `claudia serve` / claudia-desktop (v0.5+).
+# Optional: supervise chimera-indexer under `chimera-supervisor` / locus-desktop (v0.5+).
 # When enabled, the gateway starts the file indexer after BiFrost is healthy; the child
-# receives CLAUDIA_GATEWAY_URL and a merged --config at config_path (default under ../data/gateway/).
-# Set CLAUDIA_GATEWAY_TOKEN in the environment so ingest can authenticate. Structured stderr
+# receives CHIMERA_GATEWAY_URL and a merged --config at config_path (default under ../data/gateway/).
+# Set CHIMERA_GATEWAY_TOKEN in the environment so ingest can authenticate. Structured stderr
 # (--log-json) lands in the same ring buffer as BiFrost — filter /ui/logs by source "indexer".
 # Full behavior: docs/indexer.md (supervised mode), docs/supervisor.md.
 indexer:
   supervised:
     enabled: false
     log_json: false
-    # bin: ""                          # optional path to claudia-index; empty → next to claudia or PATH
+    # bin: ""                          # optional path to chimera-indexer; empty → next to chimera-indexer or PATH
     # config_path: "../data/gateway/indexer.supervised.yaml"
     # start_when_rag_disabled: false # if true, start indexer even when rag.enabled is false
 
-# v0.2 Retrieval-Augmented Generation. When enabled, the virtual Claudia model
+# v0.2 Retrieval-Augmented Generation. When enabled, the virtual Chimera model
 # performs Qdrant retrieval before chat; POST /v1/ingest, GET /v1/indexer/*,
 # and the /health Qdrant probe are activated. See docs/plans/version-v0.2.md.
 rag:

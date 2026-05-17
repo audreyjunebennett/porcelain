@@ -1,17 +1,17 @@
-# claudia-index v0.4 example config (v0.2–v0.3 fields unchanged; v0.4 adds chunked ingest + sync state).
-# Copy to .claudia/indexer.config.yaml at the workspace root and edit.
+# chimera-indexer v0.4 example config (v0.2–v0.3 fields unchanged; v0.4 adds chunked ingest + sync state).
+# Copy to .locus/indexer.config.yaml at the workspace root and edit.
 # Sensitive values stay in the environment:
-#   CLAUDIA_GATEWAY_URL   (or set gateway_url below)
-#   CLAUDIA_GATEWAY_TOKEN (required; never put tokens in YAML for v0.2)
+#   CHIMERA_GATEWAY_URL   (or set gateway_url below)
+#   CHIMERA_GATEWAY_TOKEN (required; never put tokens in YAML for v0.2)
 
-# Claudia Gateway base URL — must match `gateway.listen_port` in
+# Chimera Gateway base URL — must match `gateway.listen_port` in
 # config/gateway.yaml (default 3000). NOT the BiFrost upstream port (8080).
 gateway_url: "http://127.0.0.1:3000"
 
 roots:
   - "."
 
-# v0.3 — optional corpus scope (sent as X-Claudia-Project / X-Claudia-Flavor-Id).
+# v0.3 — optional corpus scope (sent as X-Chimera-Project / X-Chimera-Flavor-Id).
 # Use the same values as Continue chat (config.yaml) so RAG hits the same collection.
 # defaults:
 #   project_id: "my-app"
@@ -24,9 +24,9 @@ roots:
 # overrides:
 #   - glob: "**/*.md"
 #     flavor_id: "docs"
-# workspace_id: alias for project when project_id is omitted (maps to X-Claudia-Project).
+# workspace_id: alias for project when project_id is omitted (maps to X-Chimera-Project).
 
-# Extra ignore patterns (in addition to defaults + .claudiaignore + .gitignore).
+# Extra ignore patterns (in addition to defaults + .chimeraignore + .gitignore).
 ignore_extra:
   - "tmp/"
   - "*.snapshot"
@@ -59,13 +59,13 @@ request_timeout_ms: 60000
 # scope_active_file_log_min_interval_ms: 2000
 
 # v0.4 — optional (defaults: with --config, sync state next to that YAML e.g. data/gateway/indexer.sync-state.json;
-# without --config, .claudia/indexer.sync-state.json under cwd; whole-file limit from gateway only).
+# without --config, .locus/indexer.sync-state.json under cwd; whole-file limit from gateway only).
 # sync_state_path: "data/gateway/indexer.sync-state.json"
 # Max body size for single POST /v1/ingest. Files larger than this use the chunked
 # ingest session API (when the gateway advertises it). Set below gateway max_ingest_bytes.
 max_whole_file_bytes: 512000  # 500 KiB
 
-# stderr minimum slog level for claudia-index (debug | info | warn | error). CLI --log-level overrides.
+# stderr minimum slog level for chimera-indexer (debug | info | warn | error). CLI --log-level overrides.
 # log_level: info
 
 # Per-file skip/upload verbosity: info | debug | off. Legacy verbose_job_logs (bool) maps when job_skip_log is unset.

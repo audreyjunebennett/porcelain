@@ -1,0 +1,11 @@
+# Copy to `api-keys.yaml` and replace credentials. Reload on mtime.
+# Bearer secret must match what clients send (Cline apiKey, curl, etc.).
+
+api_keys:
+  - label: personal
+    secret: "chimera-personal-replace-me"
+    tenant_id: "personal"
+  - label: partner
+    secret: "chimera-partner-replace-me"
+    tenant_id: "partner"
+

@@ -1,6 +1,6 @@
 # Token counting discussion (conversation wrap-up)
 
-This document summarizes a multi-turn discussion about how **Claudia Gateway** estimates tokens today, why **upstream errors** (e.g. Groq **413**) can disagree with local counts, and what **several models** suggested for more accurate pre-calculation. It is **not** a commitment to implement every idea; see the detailed sections for trade-offs.
+This document summarizes a multi-turn discussion about how **chimera-gateway** estimates tokens today, why **upstream errors** (e.g. Groq **413**) can disagree with local counts, and what **several models** suggested for more accurate pre-calculation. It is **not** a commitment to implement every idea; see the detailed sections for trade-offs.
 
 ---
 
@@ -15,7 +15,7 @@ This document summarizes a multi-turn discussion about how **Claudia Gateway** e
 
 ### Repo tooling (added during this discussion)
 
-- `make tokencount-file FILE=path/to/file` — runs `go run ./cmd/claudia tokencount -f "$(FILE)"` and prints **byte size**, `cl100k_base`, and `o200k_base` token counts for that file (requires `FILE=…`; see `make help`).
+- `make tokencount-file FILE=path/to/file` — runs `go run ./cmd/chimera tokencount -f "$(FILE)"` and prints **byte size**, `cl100k_base`, and `o200k_base` token counts for that file (requires `FILE=…`; see `make help`).
 - Gateway **metrics / TPM admission** still use the **chat path** estimate (full marshalled body + `cl100k_base` via `internal/tokencount`), not the Makefile-only dual-encoding display.
 
 ---

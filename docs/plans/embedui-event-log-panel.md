@@ -11,7 +11,7 @@
 
 ## At a glance
 
-Operators rely on per-card **full event logs** in the summarized logs feed to debug a single conversation or service slice. Today those lines reuse `log-line-sum` (time, level badge, optional service badge, message) inside a scrollable `.sum-full-log` list, with gateway-only visibility toggled by **Show probe HTTP rows** (`localStorage` key `claudia.logs.gateway.showProbes`, `window.__claudiaToggleGatewayProbes`). This plan moves toward a dedicated **event log component**: clearer columns, local search and filters, multi-select with stable identity across filter changes, copy-to-clipboard, summary counts above the list, and an oldest-entry time footer—without changing the meaning of underlying log data.
+Operators rely on per-card **full event logs** in the summarized logs feed to debug a single conversation or service slice. Today those lines reuse `log-line-sum` (time, level badge, optional service badge, message) inside a scrollable `.sum-full-log` list, with gateway-only visibility toggled by **Show probe HTTP rows** (`localStorage` key `chimera.logs.gateway.showProbes`, `window.__chimeraToggleGatewayProbes`). This plan moves toward a dedicated **event log component**: clearer columns, local search and filters, multi-select with stable identity across filter changes, copy-to-clipboard, summary counts above the list, and an oldest-entry time footer—without changing the meaning of underlying log data.
 
 | Phase | Outcome | Status |
 |-------|---------|--------|
@@ -71,7 +71,7 @@ Operators rely on per-card **full event logs** in the summarized logs feed to de
 - **Filters:** client-side only on the in-memory card slice; level filter hides rows but **does not clear selection** for entries still in the full card dataset (selection keyed by stable id: prefer `seq` + card id hash, or derived stable key; document choice in code comment).
 - **Search:** substring (or token) match on message + optional timestamp string; debounced input.
 - **Copy:** copies selected rows as plain text (one line per row or multi-line blocks with timestamps—match gallery decision); toast or status line feedback via existing status element patterns.
-- **Gateway probes:** keep `GW_PROBES_LS` / `__claudiaToggleGatewayProbes` behavior; probe rows remain in the dataset and respect the toggle; optionally surface “probes hidden” in the new status filter copy if useful.
+- **Gateway probes:** keep `GW_PROBES_LS` / `__chimeraToggleGatewayProbes` behavior; probe rows remain in the dataset and respect the toggle; optionally surface “probes hidden” in the new status filter copy if useful.
 - **Header counts:** derive warn/error and non-2xx (or failure) counts from the same card `arr` used for the list so numbers align with visible semantics.
 
 **Acceptance**
@@ -95,6 +95,6 @@ Operators rely on per-card **full event logs** in the summarized logs feed to de
 
 ## References
 
-- Code: `internal/server/embedui/logs.js` (`logSummaryHtml`, `renderExpandedService`, `renderExpandedConv`, `refreshSummarizedPanel`, `__claudiaToggleGatewayProbes`, summarized event log `sum-evlog-*` panel), `internal/server/embedui/logs.css`, `internal/server/embedui/logs/derive/gatewayCardModel.js`
+- Code: `internal/server/embedui/logs.js` (`logSummaryHtml`, `renderExpandedService`, `renderExpandedConv`, `refreshSummarizedPanel`, `__chimeraToggleGatewayProbes`, summarized event log `sum-evlog-*` panel), `internal/server/embedui/logs.css`, `internal/server/embedui/logs/derive/gatewayCardModel.js`
 - Gallery: `assets/gallery.html`, `assets/gallery-shell.css`
 - Entry HTML: `internal/server/embedui/logs.html`

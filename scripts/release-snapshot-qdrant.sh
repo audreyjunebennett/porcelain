@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # GoReleaser before hook (make release-snapshot): Qdrant bundles for packaging/qdrant-bundles/.
-# Version: QDRANT_RELEASE in repo-root deps.lock.
+# Version: QDRANT_RELEASE in chimera/deps.lock.
 # Requires: curl, tar; unzip for Windows asset.
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"

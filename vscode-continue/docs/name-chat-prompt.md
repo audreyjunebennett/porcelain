@@ -1,3 +1,0 @@
-Given the following... please reply with a title for the chat that is 3-4 words in length, all words used should be directly related to the content of the chat, avoid using verbs unless they are directly related to the content of the chat, no additional text or explanation, you don't need ending punctuation.
-
-You are in chat mode. How can I help you today? Do you need assistance with a specific project or code-related question?

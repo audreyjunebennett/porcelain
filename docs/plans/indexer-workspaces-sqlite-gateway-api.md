@@ -3,7 +3,7 @@
 | Field | Value |
 |-------|-------|
 | **Doc kind** | `feature-plan` |
-| **Owners / areas** | Gateway, `claudia-index`, desktop supervisor, embed UI (`/ui/logs` workspaces), persistence |
+| **Owners / areas** | Gateway, `chimera-indexer`, desktop supervisor, embed UI (`/ui/logs` workspaces), persistence |
 | **Status** | `draft` |
 | **Targets** | Gateway + indexer next minor; desktop inherits supervised behavior |
 | **Last updated** | See git history |
@@ -16,25 +16,25 @@ Operators still manage **workspaces** from the logs UI, but those definitions li
 | Phase | Outcome | Status |
 |-------|---------|--------|
 | [Phase 1 — Operator data store and gateway CRUD](#phase-1--operator-data-store-and-gateway-crud) | Workspaces persist in a dedicated SQLite file; gateway exposes create/read/update/delete used by the UI | `done` |
-| [Phase 2 — Indexer client and merge rules](#phase-2--indexer-client-and-merge-rules) | `claudia-index` fetches workspace list over HTTP; supervised YAML supplies **tuning only**; no DB dependency in the indexer binary | `todo` |
+| [Phase 2 — Indexer client and merge rules](#phase-2--indexer-client-and-merge-rules) | `chimera-indexer` fetches workspace list over HTTP; supervised YAML supplies **tuning only**; no DB dependency in the indexer binary | `todo` |
 | [Phase 3 — Dynamic roots, polling, and docs](#phase-3--dynamic-roots-polling-and-docs) | Configurable poll refetches workspaces; indexer **adds/removes watch roots without** recycling the whole watch session; docs and tests | `todo` |
 
 ---
 
 ## Background
 
-Today, `indexer.supervised.yaml` is both the **merged `--config` layer** for the supervised child (`cmd/claudia-index` with explicit `--config`) and the **mutable store** for workspace roots: UI handlers in `internal/server/ui_indexer.go` read and write the whole file (`GET/PUT /api/ui/indexer/config`, append/update/remove root). The indexer watches that path (`indexer.WatchConfigPathForReload` from `cmd/claudia-index/main.go`); **any** save bumps mtime and cancels the current watch session in favor of a new one (`errSupervisedReload`), which assigns a new `index_run_id` per session. That matches the “ids change on reload” behavior operators see.
+Today, `indexer.supervised.yaml` is both the **merged `--config` layer** for the supervised child (`cmd/chimera-indexer` with explicit `--config`) and the **mutable store** for workspace roots: UI handlers in `internal/server/ui_indexer.go` read and write the whole file (`GET/PUT /api/ui/indexer/config`, append/update/remove root). The indexer watches that path (`indexer.WatchConfigPathForReload` from `cmd/chimera-indexer/main.go`); **any** save bumps mtime and cancels the current watch session in favor of a new one (`errSupervisedReload`), which assigns a new `index_run_id` per session. That matches the “ids change on reload” behavior operators see.
 
 Putting **roots** and **tuning** in the same file means every workspace add/remove rewrites the same artifact the watcher observes. Partial writes or parse errors during save can also surface as a failed reload or a stuck process depending on timing.
 
 **Constraints from product intent**
 
 - **Separate from metrics:** Gateway metrics already use `metrics.sqlite` (see `internal/config/config.go`, `MetricsSQLitePath`). The new store must be a **different file** and **different migration set** so operational concerns (metrics retention, backups) stay isolated.
-- **Indexer stays a pure HTTP client** for workspace data: no `database/sql` or shared DB path in `claudia-index`.
+- **Indexer stays a pure HTTP client** for workspace data: no `database/sql` or shared DB path in `chimera-indexer`.
 - **YAML remains** for supervised **non-workspace** settings and **hot reload** of those settings.
 - **Workspaces** are the only scope for v1 of this store; future rows (conversations, turns, orchestration) are out of scope but the choice of DB should not block adding tables later.
 
-**Related docs:** [`docs/configuration.md`](../configuration.md) (supervised indexer), [`docs/indexer.md`](../indexer.md), [`embedui-logs-workspaces-merge.md`](embedui-logs-workspaces-merge.md), [`internal/server/ui_indexer.go`](../../internal/server/ui_indexer.go), [`cmd/claudia-index/main.go`](../../cmd/claudia-index/main.go).
+**Related docs:** [`docs/configuration.md`](../configuration.md) (supervised indexer), [`docs/indexer.md`](../indexer.md), [`embedui-logs-workspaces-merge.md`](embedui-logs-workspaces-merge.md), [`internal/server/ui_indexer.go`](../../internal/server/ui_indexer.go), [`cmd/chimera-indexer/main.go`](../../cmd/chimera-indexer/main.go).
 
 ---
 
@@ -45,7 +45,7 @@ Putting **roots** and **tuning** in the same file means every workspace add/remo
 **Deliverables**
 
 - New gateway config fields (names illustrative; finalize in implementation): e.g. `operator.sqlite_path` defaulting to something like `../data/gateway/operator.sqlite` relative to `gateway.yaml` (same path-resolution style as `metrics.sqlite_path`), **distinct** from `metrics.sqlite_path`.
-- SQL migrations under a new directory (e.g. `migrations/operator/`) with versioned `NNNNNN_*.sql` files; startup open + migrate pattern aligned with existing metrics migration discipline.
+- SQL migrations under a gateway-owned directory (e.g. `porcelain/migrations/chimera-gateway/operator/`) with versioned `NNNNNN_*.sql` files; startup open + migrate pattern aligned with existing metrics migration discipline.
 - **Normalized schema (decided):**
   - **`workspaces`** — one row per logical workspace: **`id INTEGER PRIMARY KEY AUTOINCREMENT`** (no operator-supplied workspace id), `tenant_id`, `project_id`, `flavor_id`, timestamps.
   - **`workspace_paths`** — one row per watched directory: primary key `id`, **`workspace_row_id` FK → `workspaces.id` ON DELETE CASCADE**, absolute `path`, timestamps. **Paths are not unique** across the DB (same disk path may appear under different workspaces).
@@ -61,7 +61,7 @@ Putting **roots** and **tuning** in the same file means every workspace add/remo
 
 **Status:** `done`
 
-**Goal.** The supervised indexer obtains workspaces from the gateway using the same **Bearer token** model as ingest (`CLAUDIA_GATEWAY_TOKEN`), without reading SQLite.
+**Goal.** The supervised indexer obtains workspaces from the gateway using the same **Bearer token** model as ingest (`CHIMERA_GATEWAY_TOKEN`), without reading SQLite.
 
 **Deliverables**
 
@@ -69,7 +69,7 @@ Putting **roots** and **tuning** in the same file means every workspace add/remo
 - `internal/indexer` HTTP client method to fetch and parse that response; robust error handling (backoff, log, retry) consistent with `GatewayClient` patterns.
 - **Merge semantics** (documented in `docs/indexer.md`) — **no transition period:**
   - **Supervised `--config` mode:** effective watch roots come **only** from `GET /v1/indexer/workspaces`. Supervised YAML **`roots:` is not used**; the supervisor does not pass `--root`.
-  - **Standalone `claudia-index`** (no explicit supervised `--config`): unchanged — roots from layered YAML and optional `--root` overrides (`internal/indexer/config.go`).
+  - **Standalone `chimera-indexer`** (no explicit supervised `--config`): unchanged — roots from layered YAML and optional `--root` overrides (`internal/indexer/config.go`).
 
 **Acceptance**
 
@@ -121,16 +121,16 @@ Putting **roots** and **tuning** in the same file means every workspace add/remo
 
 | Topic | Decision |
 |-------|----------|
-| **Supervised + `--root`** | **API-only:** supervised `claudia-index` does not use `--root`; watch list comes only from gateway workspaces API (Phase 2). |
+| **Supervised + `--root`** | **API-only:** supervised `chimera-indexer` does not use `--root`; watch list comes only from gateway workspaces API (Phase 2). |
 | **Path uniqueness** | **Not enforced** — the same directory may be indexed under two different workspace rows intentionally. |
 | **Removed paths / workspace** | **Stop watching** and **enqueue work** to delete or tombstone corpus vectors for that scope (Phase 3 indexer + gateway job). |
 | **Workspace identity** | **`workspaces.id` is `INTEGER PRIMARY KEY AUTOINCREMENT`**; operators do **not** enter a workspace id in the UI (Phase 1). |
-| **`index_run_id` on YAML reload** | **Unchanged for the process lifetime** when only supervised YAML tuning reloads; new id only on process restart (Phase 3 `cmd/claudia-index`). |
+| **`index_run_id` on YAML reload** | **Unchanged for the process lifetime** when only supervised YAML tuning reloads; new id only on process restart (Phase 3 `cmd/chimera-indexer`). |
 
 ---
 
 ## References
 
-- Code: `cmd/claudia-index/main.go`, `internal/indexer/config.go`, `internal/indexer/config_watch.go`, `internal/server/ui_indexer.go`, `internal/supervisor/indexer.go`, `internal/config/config.go`
+- Code: `cmd/chimera-indexer/main.go`, `internal/indexer/config.go`, `internal/indexer/config_watch.go`, `internal/server/ui_indexer.go`, `internal/supervisor/indexer.go`, `internal/config/config.go`
 - Docs: [`docs/indexer.md`](../indexer.md), [`docs/configuration.md`](../configuration.md), [`docs/supervisor.md`](../supervisor.md)
 - Related plans: [`embedui-logs-workspaces-merge.md`](embedui-logs-workspaces-merge.md), [`log-view-indexer.md`](log-view-indexer.md)

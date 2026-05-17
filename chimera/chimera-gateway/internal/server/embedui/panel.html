@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Chimera — Admin panel</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 44rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.45; color: #1a1a1a; }
+    h1 { font-size: 1.35rem; }
+    h2 { font-size: 1.05rem; margin-top: 2rem; }
+    .row { border: 1px solid #ddd; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; background: #fafafa; }
+    .row h3 { margin: 0 0 0.5rem 0; font-size: 1rem; }
+    .meta { font-size: 0.85rem; color: #444; margin-bottom: 0.5rem; }
+    label { display: block; font-size: 0.85rem; font-weight: 600; margin-top: 0.5rem; }
+    input[type=text], input[type=password], input[type=url] { width: 100%; max-width: 100%; box-sizing: border-box; padding: 0.45rem; margin-top: 0.2rem; }
+    button { margin-top: 0.6rem; margin-right: 0.5rem; padding: 0.4rem 0.75rem; cursor: pointer; }
+    .err { color: #a40000; font-size: 0.85rem; margin-top: 0.4rem; white-space: pre-wrap; }
+    .toolbar { margin: 1rem 0; }
+    a { color: #0b57d0; }
+    .warn { font-size: 0.85rem; color: #555; margin-top: 0.5rem; }
+    ul.key-rows { list-style: none; padding-left: 0; margin: 0.5rem 0; }
+    ul.key-rows li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.35rem 0.5rem; margin-bottom: 0.4rem; }
+    ul.key-rows code { font-size: 0.8rem; background: #eee; padding: 0.1rem 0.35rem; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>Chimera operator panel</h1>
+  <p class="toolbar">
+    <button type="button" id="btn-refresh">Refresh</button>
+    <button type="button" id="btn-logout">Sign out</button>
+  </p>
+
+  <div id="banner" class="err" hidden></div>
+
+  <section class="row" id="row-tokens">
+    <h3>Gateway tokens</h3>
+    <p class="meta">Used for <code>Authorization: Bearer …</code> on the API and to sign in here. Secret values are shown only once when created.</p>
+    <ul id="token-list" style="margin:0.5rem 0;padding-left:1.2rem;"></ul>
+    <label for="new-tok-label">New token label</label>
+    <input id="new-tok-label" type="text" autocomplete="off" placeholder="e.g. work laptop"/>
+    <button type="button" id="tok-add">Create token</button>
+    <div id="tok-new-wrap" hidden style="margin-top:0.75rem;">
+      <label for="tok-new-out">Copy this token now (not stored in the list)</label>
+      <textarea id="tok-new-out" readonly style="width:100%;min-height:4rem;box-sizing:border-box;font-family:ui-monospace,monospace;font-size:0.8rem;"></textarea>
+      <button type="button" id="tok-copy">Copy token</button>
+    </div>
+    <div id="tok-err" class="err"></div>
+  </section>
+
+  <section class="row" id="row-groq">
+    <h3>Groq API keys</h3>
+    <p class="meta">Summary: <span id="groq-hint">—</span> · Broker: <span id="groq-ok">—</span></p>
+    <p class="meta" style="margin-top:0.25rem">Keys use names <code>chimera-groq-key-1</code>, <code>chimera-groq-key-2</code>, … (equal weight, per <a href="https://docs.getbifrost.ai/quickstart/gateway/provider-configuration">BiFrost provider config</a>). List order follows name.</p>
+    <ul id="groq-key-list" class="key-rows"></ul>
+    <label for="groq-val">Add key (stored in Broker only)</label>
+    <input id="groq-val" type="password" autocomplete="off" placeholder="gsk-…"/>
+    <button type="button" id="groq-save">Add Groq key</button>
+    <div id="groq-err" class="err"></div>
+  </section>
+
+  <section class="row" id="row-gemini">
+    <h3>Gemini API keys</h3>
+    <p class="meta">Summary: <span id="gemini-hint">—</span> · Broker: <span id="gemini-ok">—</span></p>
+    <p class="meta" style="margin-top:0.25rem">Keys: <code>chimera-gemini-key-1</code>, …</p>
+    <ul id="gemini-key-list" class="key-rows"></ul>
+    <label for="gemini-val">Add key</label>
+    <input id="gemini-val" type="password" autocomplete="off" placeholder="AIza…"/>
+    <button type="button" id="gemini-save">Add Gemini key</button>
+    <div id="gemini-err" class="err"></div>
+  </section>
+
+  <section class="row" id="row-ollama">
+    <h3>Ollama base URL</h3>
+    <p class="meta">Current: <span id="ollama-hint">—</span> · Broker: <span id="ollama-ok">—</span></p>
+    <label for="ollama-val">New base URL</label>
+    <input id="ollama-val" type="url" autocomplete="off" placeholder="http://127.0.0.1:11434"/>
+    <button type="button" id="ollama-save">Save Ollama URL</button>
+    <div id="ollama-err" class="err"></div>
+  </section>
+
+  <section class="row" id="row-routing">
+    <h3>Routing &amp; fallback</h3>
+    <p class="meta">The virtual model (<code id="rt-vm">—</code>) uses <code id="rt-policy">routing-policy.yaml</code> to pick the first upstream model, then <strong>routing.fallback_chain</strong> in <code>gateway.yaml</code> for 429/5xx failover. <strong>Save routing</strong> also rewrites <strong>routing.router_models</strong> (small/fast-first order, boosted by RPM/TPM from <code>provider-model-limits.yaml</code> when present). Hosted models are ordered ahead of <code>ollama/</code> in the fallback chain when you regenerate.</p>
+    <p class="meta">Saved <code>fallback_chain</code>: <code id="rt-chain-hint">—</code></p>
+    <label class="meta" style="display:block;margin-top:0.5rem;font-weight:normal;">
+      <input type="checkbox" id="rt-ft-toggle"/>
+      <strong>Filter catalog with provider-free-tier allowlist</strong> — merged <code>GET /v1/models</code> and routing preview/generate use <code>provider-free-tier.yaml</code> (<code>routing.filter_free_tier_models</code> in <code>gateway.yaml</code>). Default is on when the key is omitted.
+    </label>
+    <button type="button" id="rt-preview">Preview from live catalog</button>
+    <button type="button" id="rt-generate">Save routing (policy + fallback + router models)</button>
+    <div id="rt-err" class="err"></div>
+    <div id="rt-ok" class="warn" hidden></div>
+    <label for="rt-yaml">Routing policy YAML (preview or paste)</label>
+    <textarea id="rt-yaml" style="width:100%;min-height:12rem;box-sizing:border-box;font-family:ui-monospace,monospace;font-size:0.78rem;"></textarea>
+    <p class="meta">Summary: <span id="rt-summary">—</span></p>
+    <h4 style="font-size:1rem;margin:1.25rem 0 0.35rem 0;">Fallback Chain</h4>
+    <p class="meta" style="margin-top:0;">Model ids for dry-run (<code>routing.fallback_chain</code>). One YAML list item per line (e.g. <code>- groq/llama-3.1-8b-instant</code>). A JSON array is also accepted if pasted.</p>
+    <textarea id="rt-fallback-yaml" style="width:100%;min-height:6.5rem;box-sizing:border-box;font-family:ui-monospace,monospace;font-size:0.78rem;" placeholder="- groq/model-a&#10;- gemini/gemini-3-flash-preview"></textarea>
+    <h4 style="font-size:1rem;margin:1.25rem 0 0.35rem 0;">Router models (tool slimming)</h4>
+    <p class="meta">Before each <code>POST /v1/chat/completions</code>, the gateway may call these upstream models <strong>in order</strong> (same Broker base URL as chat) to score how likely each client <code>tools[]</code> entry is needed for the user&rsquo;s latest message. Tools at or above the confidence threshold are kept; router failures keep the full tool list.</p>
+    <p class="meta">Configured: <code id="rt-router-hint">—</code> · threshold <code id="rt-router-thresh-hint">—</code> · transformer <span id="rt-router-on-hint">—</span></p>
+    <p class="meta" id="rt-router-last-wrap">Last router call: <span id="rt-router-last-txt" class="meta">—</span></p>
+    <p class="meta" style="margin-top:0.35rem">One model id per line (same format as fallback chain). <strong>Preview / Save routing</strong> fills this list from the catalog (you can edit before <strong>Save router tool settings</strong>). Optional headers on chat requests: <code>X-Chimera-Tool-Router: skip</code> to disable for one call; <code>X-Chimera-Tool-Confidence-Threshold: 0.4</code> to override threshold.</p>
+    <textarea id="rt-router-yaml" style="width:100%;min-height:5rem;box-sizing:border-box;font-family:ui-monospace,monospace;font-size:0.78rem;" placeholder="- groq/llama-3.1-8b-instant"></textarea>
+    <label style="display:block;margin-top:0.5rem;font-weight:normal;"><input type="checkbox" id="rt-router-enabled"/> <strong>Enable</strong> tool-router transformer (off when the list is empty)</label>
+    <label for="rt-router-threshold">Confidence threshold (0–1)</label>
+    <input id="rt-router-threshold" type="number" step="0.05" min="0" max="1" value="0.5" style="max-width:10rem;box-sizing:border-box;padding:0.35rem;margin-top:0.2rem;"/>
+    <button type="button" id="rt-router-save">Save router tool settings</button>
+    <div id="rt-router-err" class="err"></div>
+    <div id="rt-router-ok" class="warn" hidden></div>
+    <label for="rt-msg">Sample user message (length affects <code>min_message_chars</code> rules)</label>
+    <input id="rt-msg" type="text" style="width:100%;max-width:100%;box-sizing:border-box;" placeholder="Short or long text…"/>
+    <label><input type="checkbox" id="rt-smoke"/> Optional: smoke <code>POST /v1/chat/completions</code> (1 token) with picked model</label>
+    <button type="button" id="rt-eval">Dry-run router</button>
+    <pre id="rt-eval-out" style="background:#f4f4f4;padding:0.75rem;border-radius:6px;font-size:0.78rem;overflow:auto;max-height:14rem;">—</pre>
+  </section>
+
+  <script>
+(function () {
+  var banner = document.getElementById("banner");
+  function showBanner(msg) {
+    if (!msg) { banner.hidden = true; banner.textContent = ""; return; }
+    banner.textContent = msg;
+    banner.hidden = false;
+  }
+
+  function fallbackChainToYAML(ids) {
+    if (!ids || !ids.length) return "";
+    return ids.map(function (id) {
+      var s = String(id);
+      if (/^[\w./-]+$/.test(s)) return "- " + s;
+      return "- " + JSON.stringify(s);
+    }).join("\n");
+  }
+
+  function parseFallbackChainInput(text) {
+    var t = String(text || "").trim();
+    if (t.length > 0 && t[0] === "[") {
+      try {
+        var j = JSON.parse(t);
+        if (Array.isArray(j)) {
+          return j.map(function (x) { return String(x); });
+        }
+      } catch (e) { /* fall through to YAML lines */ }
+    }
+    var lines = String(text || "").split(/\r?\n/);
+    var out = [];
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].replace(/#.*$/, "").trim();
+      if (!line) continue;
+      if (line[0] !== "-") {
+        throw new Error("each non-empty line must start with '-' (line " + (i + 1) + ")");
+      }
+      var rest = line.slice(1).trim();
+      if (!rest) {
+        throw new Error("empty list item (line " + (i + 1) + ")");
+      }
+      if (rest[0] === '"') {
+        try {
+          out.push(JSON.parse(rest));
+        } catch (e) {
+          throw new Error("bad double-quoted string (line " + (i + 1) + "): " + e.message);
+        }
+        continue;
+      }
+      if (rest[0] === "'") {
+        if (rest.length < 2 || rest[rest.length - 1] !== "'") {
+          throw new Error("unclosed single-quoted string (line " + (i + 1) + ")");
+        }
+        out.push(rest.slice(1, -1).replace(/''/g, "'"));
+        continue;
+      }
+      out.push(rest);
+    }
+    return out;
+  }
+
+  function setProv(name, p) {
+    var hint = document.getElementById(name + "-hint");
+    var ok = document.getElementById(name + "-ok");
+    if (!p) {
+      if (hint) hint.textContent = "—";
+      if (ok) ok.textContent = "—";
+      return;
+    }
+    if (hint) {
+      if (name === "ollama") {
+        hint.textContent = p.ollama_base_url || "(no URL)";
+      } else {
+        hint.textContent = p.key_hint || "—";
+      }
+    }
+    if (ok) ok.textContent = p.ok ? "reachable" : ("error: " + (p.error || p.detail || "?"));
+  }
+
+  function renderKeyList(apiPrefix, p, errEl) {
+    var ul = document.getElementById(apiPrefix + "-key-list");
+    if (!ul) return;
+    ul.textContent = "";
+    var rows = (p && p.keys) ? p.keys : [];
+    if (rows.length === 0) {
+      var empty = document.createElement("li");
+      empty.textContent = "No keys yet — add one below.";
+      ul.appendChild(empty);
+      return;
+    }
+    for (var i = 0; i < rows.length; i++) {
+      (function (row) {
+        var nm = row.name != null ? String(row.name) : "";
+        var li = document.createElement("li");
+        var code = document.createElement("code");
+        code.textContent = nm || "(unnamed)";
+        li.appendChild(code);
+        li.appendChild(document.createTextNode(" · " + (row.key_hint || "—")));
+        var rm = document.createElement("button");
+        rm.type = "button";
+        rm.textContent = "Remove";
+        rm.addEventListener("click", async function () {
+          if (!nm) return;
+          if (!confirm("Remove key " + nm + "?")) return;
+          errEl.textContent = "";
+          if (await postJSON("/api/ui/provider/" + apiPrefix + "/keys/delete", { name: nm }, errEl)) {
+            loadState();
+          }
+        });
+        li.appendChild(rm);
+        ul.appendChild(li);
+      })(rows[i]);
+    }
+  }
+
+  async function loadState() {
+    showBanner("");
+    var r = await fetch("/api/ui/state", { credentials: "same-origin" });
+    if (r.status === 401) {
+      window.location.href = "/ui/login";
+      return;
+    }
+    var j = await r.json().catch(function () { return null; });
+    if (!r.ok || !j) {
+      showBanner((j && j.error) || ("HTTP " + r.status));
+      return;
+    }
+    var gw = j.gateway || {};
+    var prov = j.providers || {};
+    setProv("groq", prov.groq);
+    renderKeyList("groq", prov.groq, document.getElementById("groq-err"));
+    setProv("gemini", prov.gemini);
+    renderKeyList("gemini", prov.gemini, document.getElementById("gemini-err"));
+    setProv("ollama", prov.ollama);
+
+    loadGatewayTokens();
+
+    var vm = gw.virtual_model_id || "Chimera-0.1.0";
+    var rtVmEl = document.getElementById("rt-vm");
+    if (rtVmEl) rtVmEl.textContent = vm;
+    var rtPolEl = document.getElementById("rt-policy");
+    if (rtPolEl) rtPolEl.textContent = gw.routing_policy_basename || "routing-policy.yaml";
+    var rtFtToggle = document.getElementById("rt-ft-toggle");
+    if (rtFtToggle) {
+      rtFtToggle.dataset.programmatic = "1";
+      rtFtToggle.checked = !!gw.filter_free_tier_models;
+      rtFtToggle.dataset.programmatic = "";
+    }
+    var rtChainEl = document.getElementById("rt-chain-hint");
+    var fc = gw.fallback_chain;
+    if (rtChainEl) {
+      rtChainEl.textContent = Array.isArray(fc) && fc.length ? JSON.stringify(fc) : "(empty)";
+    }
+    var rtFb = document.getElementById("rt-fallback-yaml");
+    if (rtFb && !rtFb.dataset.touched) {
+      rtFb.value = Array.isArray(fc) && fc.length ? fallbackChainToYAML(fc) : "";
+    }
+    var rtr = gw.router_models || [];
+    var rth = document.getElementById("rt-router-hint");
+    if (rth) rth.textContent = rtr.length ? JSON.stringify(rtr) : "(empty)";
+    var rttHint = document.getElementById("rt-router-thresh-hint");
+    if (rttHint) rttHint.textContent = gw.tool_router_confidence_threshold != null ? String(gw.tool_router_confidence_threshold) : "0.5";
+    var rton = document.getElementById("rt-router-on-hint");
+    if (rton) rton.textContent = gw.tool_router_enabled ? "on" : "off";
+    var rtl = document.getElementById("rt-router-last-txt");
+    if (rtl) {
+      var p = [];
+      if (gw.tool_router_last_at) p.push(gw.tool_router_last_at);
+      if (gw.tool_router_last_model) p.push("model " + gw.tool_router_last_model);
+      if (gw.tool_router_last_error) p.push("error: " + gw.tool_router_last_error);
+      rtl.textContent = p.length ? p.join(" · ") : "(none yet)";
+    }
+    var rtRy = document.getElementById("rt-router-yaml");
+    if (rtRy && !rtRy.dataset.touched) {
+      rtRy.value = rtr.length ? fallbackChainToYAML(rtr) : "";
+    }
+    var rte = document.getElementById("rt-router-enabled");
+    if (rte) {
+      rte.dataset.programmatic = "1";
+      rte.checked = !!gw.tool_router_enabled;
+      rte.dataset.programmatic = "";
+    }
+    var rtt = document.getElementById("rt-router-threshold");
+    if (rtt && !rtt.dataset.touched) {
+      rtt.value = gw.tool_router_confidence_threshold != null ? String(gw.tool_router_confidence_threshold) : "0.5";
+    }
+  }
+
+  async function postJSON(url, body, errEl) {
+    errEl.textContent = "";
+    var r = await fetch(url, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    var j = await r.json().catch(function () { return {}; });
+    if (r.status === 401) {
+      window.location.href = "/ui/login";
+      return false;
+    }
+    if (!r.ok) {
+      errEl.textContent = (j.error || "Error") + (j.detail ? (": " + j.detail) : "");
+      return false;
+    }
+    return true;
+  }
+
+  async function loadGatewayTokens() {
+    var listEl = document.getElementById("token-list");
+    var errEl = document.getElementById("tok-err");
+    errEl.textContent = "";
+    var r = await fetch("/api/ui/tokens", { credentials: "same-origin" });
+    if (r.status === 401) {
+      window.location.href = "/ui/login";
+      return;
+    }
+    var j = await r.json().catch(function () { return null; });
+    if (!r.ok || !j) {
+      errEl.textContent = (j && j.error) || ("HTTP " + r.status);
+      return;
+    }
+    listEl.textContent = "";
+    var rows = j.tokens || [];
+    for (var i = 0; i < rows.length; i++) {
+      var row = rows[i];
+      var li = document.createElement("li");
+      li.style.marginBottom = "0.35rem";
+      var label = row.label || "(no label)";
+      var tenant = row.tenant_id || "—";
+      li.appendChild(document.createTextNode(label + " · tenant " + tenant + " "));
+      var del = document.createElement("button");
+      del.type = "button";
+      del.textContent = "Remove";
+      del.dataset.index = String(row.index);
+      del.addEventListener("click", async function (ev) {
+        var idx = parseInt(ev.target.dataset.index, 10);
+        if (!confirm("Remove this token? Clients using it will fail.")) return;
+        errEl.textContent = "";
+        var dr = await fetch("/api/ui/tokens/delete", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ index: idx })
+        });
+        var dj = await dr.json().catch(function () { return {}; });
+        if (!dr.ok) {
+          errEl.textContent = dj.error || ("HTTP " + dr.status);
+          return;
+        }
+        loadGatewayTokens();
+      });
+      li.appendChild(del);
+      listEl.appendChild(li);
+    }
+    if (rows.length === 0) {
+      var empty = document.createElement("li");
+      empty.textContent = "No tokens yet — create one below.";
+      listEl.appendChild(empty);
+    }
+  }
+
+  document.getElementById("tok-add").addEventListener("click", async function () {
+    var errEl = document.getElementById("tok-err");
+    var wrap = document.getElementById("tok-new-wrap");
+    var out = document.getElementById("tok-new-out");
+    errEl.textContent = "";
+    wrap.hidden = true;
+    out.value = "";
+    var label = (document.getElementById("new-tok-label").value || "").trim();
+    var r = await fetch("/api/ui/tokens", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ label: label })
+    });
+    var j = await r.json().catch(function () { return {}; });
+    if (r.status === 401) {
+      window.location.href = "/ui/login";
+      return;
+    }
+    if (!r.ok) {
+      errEl.textContent = j.error || j.detail || ("HTTP " + r.status);
+      return;
+    }
+    out.value = j.token || "";
+    wrap.hidden = false;
+    document.getElementById("new-tok-label").value = "";
+    loadGatewayTokens();
+  });
+  document.getElementById("tok-copy").addEventListener("click", function () {
+    var t = document.getElementById("tok-new-out");
+    t.select();
+    document.execCommand("copy");
+  });
+
+  document.getElementById("btn-refresh").addEventListener("click", function () { loadState(); });
+  document.getElementById("btn-logout").addEventListener("click", async function () {
+    await fetch("/api/ui/logout", { method: "POST", credentials: "same-origin" });
+    window.location.href = "/ui/login";
+  });
+
+  document.getElementById("groq-save").addEventListener("click", async function () {
+    var v = (document.getElementById("groq-val").value || "").trim();
+    if (!v) { document.getElementById("groq-err").textContent = "Enter a key"; return; }
+    if (await postJSON("/api/ui/provider/groq/keys", { value: v }, document.getElementById("groq-err"))) {
+      document.getElementById("groq-val").value = "";
+      loadState();
+    }
+  });
+  document.getElementById("gemini-save").addEventListener("click", async function () {
+    var v = (document.getElementById("gemini-val").value || "").trim();
+    if (!v) { document.getElementById("gemini-err").textContent = "Enter a key"; return; }
+    if (await postJSON("/api/ui/provider/gemini/keys", { value: v }, document.getElementById("gemini-err"))) {
+      document.getElementById("gemini-val").value = "";
+      loadState();
+    }
+  });
+  document.getElementById("ollama-save").addEventListener("click", async function () {
+    var v = (document.getElementById("ollama-val").value || "").trim();
+    if (!v) { document.getElementById("ollama-err").textContent = "Enter a URL"; return; }
+    if (await postJSON("/api/ui/provider/ollama/base_url", { base_url: v }, document.getElementById("ollama-err"))) {
+      document.getElementById("ollama-val").value = "";
+      loadState();
+    }
+  });
+
+  var rtFb = document.getElementById("rt-fallback-yaml");
+  if (rtFb) {
+    rtFb.addEventListener("input", function () { rtFb.dataset.touched = "1"; });
+  }
+  var rtRy = document.getElementById("rt-router-yaml");
+  if (rtRy) {
+    rtRy.addEventListener("input", function () { rtRy.dataset.touched = "1"; });
+  }
+  var rttIn = document.getElementById("rt-router-threshold");
+  if (rttIn) {
+    rttIn.addEventListener("input", function () { rttIn.dataset.touched = "1"; });
+  }
+  var rtFtToggleEl = document.getElementById("rt-ft-toggle");
+  if (rtFtToggleEl) {
+    rtFtToggleEl.addEventListener("change", async function (ev) {
+      if (ev.target.dataset.programmatic === "1") return;
+      var errEl = document.getElementById("rt-err");
+      errEl.textContent = "";
+      var r = await fetch("/api/ui/routing/filter_free_tier_models", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: ev.target.checked })
+      });
+      var j = await r.json().catch(function () { return {}; });
+      if (r.status === 401) { window.location.href = "/ui/login"; return; }
+      if (!r.ok) {
+        errEl.textContent = (j.error && j.error.message) || ("HTTP " + r.status);
+        ev.target.checked = !ev.target.checked;
+        return;
+      }
+      loadState();
+    });
+  }
+  document.getElementById("rt-preview").addEventListener("click", async function () {
+    var errEl = document.getElementById("rt-err");
+    var okEl = document.getElementById("rt-ok");
+    errEl.textContent = "";
+    okEl.hidden = true;
+    var r = await fetch("/api/ui/routing/preview", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: "{}"
+    });
+    var j = await r.json().catch(function () { return {}; });
+    if (r.status === 401) { window.location.href = "/ui/login"; return; }
+    if (!r.ok) {
+      errEl.textContent = (j.error && j.error.message) || ("HTTP " + r.status);
+      return;
+    }
+    document.getElementById("rt-yaml").value = j.routing_policy_yaml || "";
+    document.getElementById("rt-summary").textContent = JSON.stringify(j.routing || {});
+    if (rtFb) {
+      rtFb.value = fallbackChainToYAML(j.fallback_chain || []);
+      rtFb.dataset.touched = "";
+    }
+    if (rtRy && !rtRy.dataset.touched) {
+      rtRy.value = fallbackChainToYAML(j.router_models || []);
+      rtRy.dataset.touched = "";
+    }
+    okEl.textContent = "Preview OK (not saved). " + (j.models_used || 0) + " model(s) in fallback chain; router_models co-computed.";
+    okEl.hidden = false;
+  });
+  document.getElementById("rt-generate").addEventListener("click", async function () {
+    var errEl = document.getElementById("rt-err");
+    var okEl = document.getElementById("rt-ok");
+    errEl.textContent = "";
+    okEl.hidden = true;
+    if (!confirm("Overwrite routing-policy.yaml, routing.fallback_chain, and routing.router_models in gateway.yaml?")) return;
+    var r = await fetch("/api/ui/routing/generate", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: "{}"
+    });
+    var j = await r.json().catch(function () { return {}; });
+    if (r.status === 401) { window.location.href = "/ui/login"; return; }
+    if (!r.ok) {
+      errEl.textContent = (j.error && j.error.message) || ("HTTP " + r.status);
+      return;
+    }
+    document.getElementById("rt-yaml").value = j.routing_policy_yaml || "";
+    document.getElementById("rt-summary").textContent = JSON.stringify(j.routing || {});
+    if (rtFb) {
+      rtFb.value = fallbackChainToYAML(j.fallback_chain || []);
+      rtFb.dataset.touched = "";
+    }
+    if (rtRy && !rtRy.dataset.touched) {
+      rtRy.value = fallbackChainToYAML(j.router_models || []);
+      rtRy.dataset.touched = "";
+    }
+    okEl.textContent = "Saved. " + (j.models_used || 0) + " model(s). Routing + fallback + router_models written.";
+    okEl.hidden = false;
+    loadState();
+  });
+  document.getElementById("rt-router-save").addEventListener("click", async function () {
+    var errEl = document.getElementById("rt-router-err");
+    var okEl = document.getElementById("rt-router-ok");
+    errEl.textContent = "";
+    okEl.hidden = true;
+    var fbRaw = rtRy && rtRy.value || "";
+    var models;
+    try {
+      models = parseFallbackChainInput(fbRaw);
+    } catch (e) {
+      errEl.textContent = "Router models: " + e.message;
+      return;
+    }
+    var enabled = document.getElementById("rt-router-enabled").checked;
+    var thr = parseFloat(String(document.getElementById("rt-router-threshold").value || ""), 10);
+    if (isNaN(thr) || thr < 0 || thr > 1) {
+      errEl.textContent = "Threshold must be a number between 0 and 1.";
+      return;
+    }
+    var r = await fetch("/api/ui/routing/router_tooling", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        router_models: models,
+        tool_router_enabled: enabled,
+        confidence_threshold: thr
+      })
+    });
+    var j = await r.json().catch(function () { return {}; });
+    if (r.status === 401) { window.location.href = "/ui/login"; return; }
+    if (!r.ok) {
+      errEl.textContent = (j.error && j.error.message) || ("HTTP " + r.status);
+      return;
+    }
+    if (rtRy) { rtRy.dataset.touched = ""; }
+    if (rttIn) { rttIn.dataset.touched = ""; }
+    var miss = j.router_models_missing_catalog || [];
+    okEl.textContent = "Saved." + (miss.length ? (" Not in upstream /v1/models: " + miss.join(", ") + ".") : "");
+    okEl.hidden = false;
+    loadState();
+  });
+
+  document.getElementById("rt-eval").addEventListener("click", async function () {
+    var errEl = document.getElementById("rt-err");
+    errEl.textContent = "";
+    var yaml = (document.getElementById("rt-yaml").value || "");
+    var fbRaw = rtFb && rtFb.value || "";
+    var fb = null;
+    try {
+      fb = parseFallbackChainInput(fbRaw);
+    } catch (e) {
+      errEl.textContent = "Fallback chain: " + e.message;
+      return;
+    }
+    if (!fb.length) { errEl.textContent = "Fallback chain: add at least one model id"; return; }
+    var msg = (document.getElementById("rt-msg").value || "");
+    var smoke = document.getElementById("rt-smoke").checked;
+    var r = await fetch("/api/ui/routing/evaluate", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        routing_policy_yaml: yaml,
+        fallback_chain: fb,
+        messages: [{ role: "user", content: msg }],
+        smoke_completion: smoke
+      })
+    });
+    var j = await r.json().catch(function () { return {}; });
+    if (r.status === 401) { window.location.href = "/ui/login"; return; }
+    if (!r.ok) {
+      errEl.textContent = (j.error && j.error.message) || ("HTTP " + r.status);
+      document.getElementById("rt-eval-out").textContent = "";
+      return;
+    }
+    document.getElementById("rt-eval-out").textContent = JSON.stringify(j, null, 2);
+  });
+
+  loadState();
+})();
+  </script>
+</body>
+</html>

@@ -9,7 +9,7 @@ on:
       - "Makefile"
       - ".goreleaser.yaml"
       - "docs/packaging.md"
-      - "deps.lock"
+      - "porcelain/chimera/deps.lock"
       - "scripts/release-snapshot-qdrant.sh"
       - "scripts/qdrant-from-release.sh"
       - "scripts/deps-lock.sh"
@@ -20,9 +20,9 @@ on:
       - "scripts/install-gcc.sh"
       - "scripts/install.sh"
       - "scripts/configure.sh"
-      - "scripts/claudia-start.sh"
-      - "scripts/claudia-stop.sh"
-      - "scripts/claudia-status.sh"
+      - "scripts/chimera-start.sh"
+      - "scripts/chimera-stop.sh"
+      - "scripts/chimera-status.sh"
       - "scripts/clean.sh"
       - "scripts/clean-all.sh"
       - "scripts/logs.sh"
@@ -42,7 +42,7 @@ on:
       - "Makefile"
       - ".goreleaser.yaml"
       - "docs/packaging.md"
-      - "deps.lock"
+      - "porcelain/chimera/deps.lock"
       - "scripts/release-snapshot-qdrant.sh"
       - "scripts/qdrant-from-release.sh"
       - "scripts/deps-lock.sh"
@@ -53,9 +53,9 @@ on:
       - "scripts/install-gcc.sh"
       - "scripts/install.sh"
       - "scripts/configure.sh"
-      - "scripts/claudia-start.sh"
-      - "scripts/claudia-stop.sh"
-      - "scripts/claudia-status.sh"
+      - "scripts/chimera-start.sh"
+      - "scripts/chimera-stop.sh"
+      - "scripts/chimera-status.sh"
       - "scripts/clean.sh"
       - "scripts/clean-all.sh"
       - "scripts/logs.sh"
@@ -103,7 +103,7 @@ jobs:
 
       - name: Snapshot smoke (--version)
         run: |
-          BIN=$(find dist -type f -path '*/claudia_linux_amd64*/claudia' | head -1)
+          BIN=$(find dist -type f -path '*/chimera_linux_amd64*/chimera' | head -1)
           test -n "$BIN" -a -x "$BIN"
           "$BIN" --version
 
@@ -136,4 +136,4 @@ jobs:
       - name: Build desktop binary
         env:
           CGO_ENABLED: "1"
-        run: go build -tags desktop -o /tmp/claudia-desktop ./cmd/claudia
+        run: go build -tags desktop -o /tmp/locus-desktop ./cmd/chimera
