@@ -2,6 +2,10 @@
 .env.*
 !.env.example
 
+# Third-party dependency checkouts — same as .gitignore
+.deps/
+chimera/.deps/
+
 # Common secret file patterns
 **/*secret*
 **/*secrets*

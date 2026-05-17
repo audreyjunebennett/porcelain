@@ -8,7 +8,6 @@ CHIMERA_VECTORSTORE_BIN := chimera-vectorstore
 CHIMERA_RUNTIME_DIR := chimera
 CHIMERA_RUNTIME_BIN_DIR := $(CHIMERA_RUNTIME_DIR)/bin
 CHIMERA_RUNTIME_DEPS_DIR := $(CHIMERA_RUNTIME_DIR)/.deps
-BIN_STAGE_DIR := bin
 CHIMERA_CMD_GATEWAY := ./chimera/chimera-gateway
 CHIMERA_CMD_SUPERVISOR := ./chimera/chimera-supervisor
 CHIMERA_CMD_BROKER := ./chimera/chimera-broker
@@ -16,8 +15,13 @@ CHIMERA_CMD_VECTORSTORE := ./chimera/chimera-vectorstore
 CHIMERA_CMD_DESKTOP := ./locus/locus-desktop
 CHIMERA_CMD_TOKENCOUNT := ./chimera/cmd/tokencount
 CHIMERA_CMD_INDEXER := ./chimera/chimera-indexer
+
 LOCUS_RUNTIME_DIR := locus
 LOCUS_RUNTIME_BIN_DIR := $(LOCUS_RUNTIME_DIR)/bin
+
+BIN_STAGE_DIR := bin
+FMT_DIRS := chimera locus internal
+
 
 ifeq ($(OS),Windows_NT)
   # Same bash as scripts/*.sh (Git for Windows). MSYS2-only: set GITBASH, e.g.
@@ -411,7 +415,6 @@ catalog-calculate: catalog-available
 # 	$(GITBASH) scripts/package.sh "$(LOCUS_DESKTOP_BIN)"
 
 # --- Quality gates ---
-FMT_DIRS := chimera locus internal
 
 fmt:
 	gofmt -w $(FMT_DIRS)
