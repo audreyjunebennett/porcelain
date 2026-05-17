@@ -79,7 +79,7 @@ if _env_file.exists():
 
 GATEWAY_URL = os.environ.get("LOCUS_GATEWAY_URL", "http://localhost:3000").rstrip("/")
 GATEWAY_TOKEN = os.environ.get("LOCUS_GATEWAY_TOKEN", "porcelain-loves-lynn")
-GATEWAY_VIRTUAL_MODEL = os.environ.get("LOCUS_GATEWAY_VIRTUAL_MODEL", "Locus-0.2.0")
+GATEWAY_VIRTUAL_MODEL = os.environ.get("LOCUS_GATEWAY_VIRTUAL_MODEL", "ollama/qwen3-vl:8b")
 
 # Optional: ensure UTF-8 on Windows for responses
 if sys.platform == "win32":
@@ -106,8 +106,6 @@ logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 logging.getLogger("uvicorn.error").setLevel(logging.WARNING)
 
 import base64
-import hashlib
-import hmac
 import json
 import random
 import re
@@ -123,93 +121,8 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel
 
-# Single-person mode: no fixed user list, no auth
+# Single-person mode: no auth
 DEFAULT_USER = ""
-_SESSION_SECRET = os.environ.get("LOCUS_SESSION_SECRET", "locus-default-secret-change-me")
-
-
-def _load_auth() -> dict:
-    """Load { user_id: password_hash } from .data/user_auth.json."""
-    if not AUTH_FILE.exists():
-        return {}
-    try:
-        with open(AUTH_FILE, encoding="utf-8") as f:
-            return json.load(f)
-    except (json.JSONDecodeError, OSError):
-        return {}
-
-
-def _save_auth(data: dict) -> None:
-    STORE_DIR.mkdir(parents=True, exist_ok=True)
-    with open(AUTH_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
-        f.flush()
-
-
-def _hash_password(user_id: str, password: str) -> str:
-    """Stable hash for verification; uses secret + user_id so same password differs per user."""
-    raw = f"{_SESSION_SECRET}:{user_id}:{password}"
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
-
-
-def _verify_password(user_id: str, password: str, stored_hash: str) -> bool:
-    return hmac.compare_digest(_hash_password(user_id, password), stored_hash)
-
-
-def _get_protected_users() -> list[str]:
-    """Users who have a password set — only sign-in (session) can access them; X-User alone is not enough."""
-    auth = _load_auth()
-    return list(auth.keys())
-
-
-def _sign_session(user_id: str) -> str:
-    expiry = int(time.time()) + 30 * 24 * 3600
-    payload = f"{user_id}:{expiry}"
-    sig = hmac.new(
-        _SESSION_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256
-    ).hexdigest()[:24]
-    return base64.urlsafe_b64encode(f"{payload}:{sig}".encode("utf-8")).decode("ascii")
-
-
-def _verify_session(cookie_val: str) -> str | None:
-    if not cookie_val or not cookie_val.strip():
-        return None
-    try:
-        raw = base64.urlsafe_b64decode(cookie_val.encode("ascii")).decode("utf-8")
-        parts = raw.rsplit(":", 1)
-        if len(parts) != 2:
-            return None
-        payload, sig = parts
-        user_part, expiry_part = payload.split(":", 1)
-        if int(expiry_part) < int(time.time()):
-            return None
-        expected = hmac.new(
-            _SESSION_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256
-        ).hexdigest()[:24]
-        if not hmac.compare_digest(sig, expected):
-            return None
-        if user_part:
-            return user_part
-    except Exception:
-        pass
-    return None
-
-
-def get_user_from_session(request: Request) -> str | None:
-    """Return current user from signed session cookie, or None if not logged in."""
-    cookie_val = request.cookies.get("locus_session")
-    return _verify_session(cookie_val) if cookie_val else None
-
-
-def require_signed_in(request: Request) -> str:
-    """Require a signed-in session; raise 401 if not. Used for VS Code / Grok / Cursor so they are not visible without login."""
-    user = get_user_from_session(request)
-    if not user:
-        raise HTTPException(
-            status_code=401,
-            detail="Sign in to view VS Code, Grok, and Cursor chats",
-        )
-    return user
 
 
 def get_current_user(
@@ -1217,8 +1130,7 @@ def list_conversations(
         s["source"] = src
         return s
     combined = [summary(c, "mobile") for c in pinned + unpinned]
-    signed_in = get_user_from_session(request)
-    if signed_in:
+    if True:
         try:
             grok_list = _list_grok_conversations()
             eng = _load_engagement()
@@ -2971,65 +2883,6 @@ def update_user_profile(body: UserProfileBody, current_user: str = Depends(get_c
     return {"pronouns": profile["pronouns"], "about_me": profile["about_me"]}
 
 
-# --- Auth: sign in from any device so you get your workspace; session cookie overrides X-User ---
-
-class AuthLoginBody(BaseModel):
-    user: str  # ruby | lynn | raven
-    password: str
-
-
-@app.get("/api/auth/me")
-def auth_me(request: Request):
-    """Return current user from session cookie, or 401 if not signed in. PWA uses this to sync 'Chat as' and show Sign out."""
-    user = get_user_from_session(request)
-    if user:
-        return {"user": user, "displayName": get_user_display_name(user)}
-    raise HTTPException(status_code=401, detail="not signed in")
-
-
-@app.get("/api/auth/status")
-def auth_status(request: Request):
-    """Return who (if anyone) is signed in and which users are locked (have a password). PWA uses this for lock icons and 403 handling."""
-    signed_in = get_user_from_session(request)
-    protected = _get_protected_users()
-    return {
-        "signedInUser": signed_in if signed_in else None,
-        "protectedUsers": protected,
-    }
-
-
-@app.post("/api/auth/login")
-def auth_login(body: AuthLoginBody, response: Response):
-    """Verify user + password; set session cookie. First time a user logs in with a password, that password is stored (no pre-setup)."""
-    user_id = (body.user or "").strip().lower()
-    if not user_id:
-        raise HTTPException(status_code=400, detail="invalid user")
-    auth_data = _load_auth()
-    stored = auth_data.get(user_id)
-    if stored:
-        if not _verify_password(user_id, body.password, stored):
-            raise HTTPException(status_code=401, detail="wrong password")
-    else:
-        # First-time: set password for this user
-        auth_data[user_id] = _hash_password(user_id, body.password)
-        _save_auth(auth_data)
-    token = _sign_session(user_id)
-    response.set_cookie(
-        key="locus_session",
-        value=token,
-        max_age=30 * 24 * 3600,
-        path="/",
-        httponly=True,
-        samesite="lax",
-    )
-    return {"user": user_id, "displayName": get_user_display_name(user_id), "ok": True}
-
-
-@app.post("/api/auth/logout")
-def auth_logout(response: Response):
-    """Clear session cookie so the next person can sign in."""
-    response.delete_cookie(key="locus_session", path="/")
-    return {"ok": True}
 
 
 # --- Creative draft documents (tweets, lyrics) â€” inline in chat, versioned ---
@@ -3554,14 +3407,14 @@ def _get_continue_session_messages(session_id: str):
 
 
 @app.get("/continue/conversations")
-def list_continue_conversations(_: str = Depends(require_signed_in)):
+def list_continue_conversations():
     """List Continue (VS Code) sessions for this project â€” read-only on phone. Requires sign-in."""
     sessions = _list_continue_sessions()
     return {"conversations": sessions}
 
 
 @app.get("/continue/conversations/{session_id}")
-def get_continue_conversation(session_id: str, _: str = Depends(require_signed_in)):
+def get_continue_conversation(session_id: str):
     """Get one Continue session with messages â€” read-only."""
     messages = _get_continue_session_messages(session_id)
     if messages is None:
@@ -3706,7 +3559,7 @@ def _get_grok_conversation_with_branches(conv_id: str) -> dict | None:
 
 
 @app.get("/grok/conversations")
-def list_grok_conversations(_: str = Depends(require_signed_in)):
+def list_grok_conversations():
     """List Grok export conversations â€” read-only on phone. Requires sign-in."""
     return {"conversations": _list_grok_conversations()}
 
@@ -3715,7 +3568,6 @@ def list_grok_conversations(_: str = Depends(require_signed_in)):
 def get_grok_conversation(
     conv_id: str,
     branch: int = 0,
-    _: str = Depends(require_signed_in),
 ):
     """Get one Grok conversation with messages â€” read-only. Optional ?branch=0|1|... for threaded exports."""
     out = _get_grok_conversation_with_branches(conv_id)
@@ -3960,13 +3812,13 @@ def _get_cursor_messages(conv_id: str):
 
 
 @app.get("/cursor/conversations")
-def list_cursor_conversations(_: str = Depends(require_signed_in)):
+def list_cursor_conversations():
     """List Cursor sidebar chats + composers for this project â€” read-only on phone. Requires sign-in."""
     return {"conversations": _list_cursor_conversations()}
 
 
 @app.get("/cursor/conversations/{conv_id}")
-def get_cursor_conversation(conv_id: str, _: str = Depends(require_signed_in)):
+def get_cursor_conversation(conv_id: str):
     """Get one Cursor conversation (tab or composer) â€” read-only."""
     messages = _get_cursor_messages(conv_id)
     if messages is None:
