@@ -124,6 +124,21 @@ func startAllServices(repoRoot string) []Service {
 		defer receiverLog.Close()
 	}
 
+	// Start BiFrost (HTTP transport, port 8080) — Chimera upstream
+	bifrostLogPath := filepath.Join(repoRoot, ".data", "logs", "bifrost.log")
+	bifrostLog, _ := os.OpenFile(bifrostLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	bifrostAppDir := filepath.Join(repoRoot, "chimera", "data", "bifrost")
+	bifrostCmd := exec.Command("chimera/bin/bifrost-http.exe", "-app-dir", bifrostAppDir)
+	bifrostCmd.Dir = repoRoot
+	bifrostCmd.Stdout = bifrostLog
+	bifrostCmd.Stderr = bifrostLog
+	bifrostCmd.SysProcAttr = &syscall.SysProcAttr{
+		CreationFlags: 0x08000000,
+	}
+	bifrostCmd.Start()
+	services = append(services, Service{"bifrost", bifrostCmd})
+	defer bifrostLog.Close()
+
 	// Start Chimera (gateway mode — webview is opened separately via Edge PWA)
 	chimeraLogPath := filepath.Join(repoRoot, ".data", "logs", "chimera.log")
 	chimeraLog, _ := os.OpenFile(chimeraLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
