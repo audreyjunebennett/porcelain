@@ -125,12 +125,7 @@ from pydantic import BaseModel
 
 # Single-person mode: no fixed user list, no auth
 DEFAULT_USER = ""
-
-# Multi-user session constants (Ruby, Lynn, Raven)
-ALLOWED_USERS = ("ruby", "lynn", "raven")
-SESSION_COOKIE_NAME = "locus_session"
-SESSION_SECRET = os.environ.get("LOCUS_SESSION_SECRET", "locus-default-secret-change-me")
-SESSION_MAX_AGE_DAYS = 30
+_SESSION_SECRET = os.environ.get("LOCUS_SESSION_SECRET", "locus-default-secret-change-me")
 
 
 def _load_auth() -> dict:
@@ -153,7 +148,7 @@ def _save_auth(data: dict) -> None:
 
 def _hash_password(user_id: str, password: str) -> str:
     """Stable hash for verification; uses secret + user_id so same password differs per user."""
-    raw = f"{SESSION_SECRET}:{user_id}:{password}"
+    raw = f"{_SESSION_SECRET}:{user_id}:{password}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
@@ -162,16 +157,16 @@ def _verify_password(user_id: str, password: str, stored_hash: str) -> bool:
 
 
 def _get_protected_users() -> list[str]:
-    """Users who have a password set â€” only sign-in (session) can access them; X-User alone is not enough."""
+    """Users who have a password set — only sign-in (session) can access them; X-User alone is not enough."""
     auth = _load_auth()
-    return [u for u in auth if u in ALLOWED_USERS]
+    return list(auth.keys())
 
 
 def _sign_session(user_id: str) -> str:
-    expiry = int(time.time()) + SESSION_MAX_AGE_DAYS * 24 * 3600
+    expiry = int(time.time()) + 30 * 24 * 3600
     payload = f"{user_id}:{expiry}"
     sig = hmac.new(
-        SESSION_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256
+        _SESSION_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256
     ).hexdigest()[:24]
     return base64.urlsafe_b64encode(f"{payload}:{sig}".encode("utf-8")).decode("ascii")
 
@@ -189,11 +184,11 @@ def _verify_session(cookie_val: str) -> str | None:
         if int(expiry_part) < int(time.time()):
             return None
         expected = hmac.new(
-            SESSION_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256
+            _SESSION_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256
         ).hexdigest()[:24]
         if not hmac.compare_digest(sig, expected):
             return None
-        if user_part in ALLOWED_USERS:
+        if user_part:
             return user_part
     except Exception:
         pass
@@ -202,7 +197,7 @@ def _verify_session(cookie_val: str) -> str | None:
 
 def get_user_from_session(request: Request) -> str | None:
     """Return current user from signed session cookie, or None if not logged in."""
-    cookie_val = request.cookies.get(SESSION_COOKIE_NAME)
+    cookie_val = request.cookies.get("locus_session")
     return _verify_session(cookie_val) if cookie_val else None
 
 
@@ -1658,7 +1653,7 @@ def _try_generate_image_ollama(prompt: str, user_id: str) -> str | None:
     import shutil
     now = datetime.now(timezone.utc)
     date_dir = now.strftime("%Y-%m-%d")
-    user_slug = user_id if user_id in ALLOWED_USERS else DEFAULT_USER
+    user_slug = user_id if user_id else DEFAULT_USER
     save_dir = PHONE_PHOTOS_DIR / user_slug / date_dir
     save_dir.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="ollama_img_") as tmpdir:
@@ -1709,7 +1704,7 @@ def _describe_image_from_base64(image_b64: str, user_id: str = DEFAULT_USER) -> 
         suffix = ".webp"
     now = datetime.now(timezone.utc)
     date_dir = now.strftime("%Y-%m-%d")
-    user_slug = user_id if user_id in ALLOWED_USERS else DEFAULT_USER
+    user_slug = user_id if user_id else DEFAULT_USER
     save_dir = PHONE_PHOTOS_DIR / user_slug / date_dir
     save_dir.mkdir(parents=True, exist_ok=True)
     base_name = f"{now.strftime('%Y-%m-%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
@@ -3007,7 +3002,7 @@ def auth_status(request: Request):
 def auth_login(body: AuthLoginBody, response: Response):
     """Verify user + password; set session cookie. First time a user logs in with a password, that password is stored (no pre-setup)."""
     user_id = (body.user or "").strip().lower()
-    if user_id not in ALLOWED_USERS:
+    if not user_id:
         raise HTTPException(status_code=400, detail="invalid user")
     auth_data = _load_auth()
     stored = auth_data.get(user_id)
@@ -3020,9 +3015,9 @@ def auth_login(body: AuthLoginBody, response: Response):
         _save_auth(auth_data)
     token = _sign_session(user_id)
     response.set_cookie(
-        key=SESSION_COOKIE_NAME,
+        key="locus_session",
         value=token,
-        max_age=SESSION_MAX_AGE_DAYS * 24 * 3600,
+        max_age=30 * 24 * 3600,
         path="/",
         httponly=True,
         samesite="lax",
@@ -3033,7 +3028,7 @@ def auth_login(body: AuthLoginBody, response: Response):
 @app.post("/api/auth/logout")
 def auth_logout(response: Response):
     """Clear session cookie so the next person can sign in."""
-    response.delete_cookie(key=SESSION_COOKIE_NAME, path="/")
+    response.delete_cookie(key="locus_session", path="/")
     return {"ok": True}
 
 
@@ -3125,7 +3120,7 @@ USER_FILES_BASE = PROJECT_ROOT / "Journal_Database" / "User_Files"
 
 def _files_root_for_user(user_id: str) -> Path:
     """Root for file list/read/write: Ruby = project root; Lynn/Raven = their own folder (created if missing)."""
-    if user_id == DEFAULT_USER or user_id not in ALLOWED_USERS:
+    if not user_id or user_id == DEFAULT_USER:
         return PROJECT_ROOT
     root = USER_FILES_BASE / user_id
     root.mkdir(parents=True, exist_ok=True)
