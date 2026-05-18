@@ -16,7 +16,7 @@ import (
 )
 
 func TestBootstrapMode_missingTokensFile(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/health" {
 			w.WriteHeader(http.StatusOK)
@@ -44,7 +44,7 @@ func TestBootstrapMode_missingTokensFile(t *testing.T) {
 }
 
 func TestNewBootstrapMux_setupTokenThenNotBootstrap(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/health" {
 			w.WriteHeader(http.StatusOK)

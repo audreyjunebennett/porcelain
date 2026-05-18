@@ -26,7 +26,7 @@ func startGatewayChild(cfg svconfig.Config, path, controlBaseURL string, logStor
 	gatewayArgs := WrapperArgs([]string{
 		"-config", path,
 		"-listen", strings.TrimSpace(cfg.GatewayListen),
-		"-upstream-override", fmt.Sprintf("http://%s", strings.TrimSpace(cfg.BrokerEndpoint)),
+		"-broker-override", fmt.Sprintf("http://%s", strings.TrimSpace(cfg.BrokerEndpoint)),
 	})
 	cmd := exec.Command(strings.TrimSpace(cfg.GatewayBin), gatewayArgs...)
 	cmd.Env = mergeEnv(ChildEnv(controlBaseURL))

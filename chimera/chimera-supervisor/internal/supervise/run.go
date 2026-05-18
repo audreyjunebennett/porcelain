@@ -21,7 +21,7 @@ import (
 	"github.com/lynn/porcelain/chimera/internal/logfmt"
 	"github.com/lynn/porcelain/chimera/internal/servicelogs"
 	"github.com/lynn/porcelain/chimera/internal/tokens"
-	"github.com/lynn/porcelain/chimera/internal/upstream"
+	"github.com/lynn/porcelain/chimera/internal/brokerclient"
 )
 
 // Run supervises gateway, broker, vectorstore wrappers, and optional indexer until ctx is canceled.
@@ -144,10 +144,10 @@ func Run(ctx context.Context, cfg svconfig.Config, version, commit string) error
 		log.Info("shutting down gracefully", "msg", "chimera-supervisor.shutdown.graceful_start")
 		stopChildrenGraceful()
 	}()
-	upstream.RunSupervisedChildHealthMonitor(rootCtx, log, "gateway", gatewayReadyzURL, 15*time.Second, 30*time.Second, !cfg.NoWaitGateway)
-	upstream.RunSupervisedChildHealthMonitor(rootCtx, log, "broker", brokerReadyzURL, 15*time.Second, 30*time.Second, !cfg.NoWaitBroker)
+	brokerclient.RunSupervisedChildHealthMonitor(rootCtx, log, "gateway", gatewayReadyzURL, 15*time.Second, 30*time.Second, !cfg.NoWaitGateway)
+	brokerclient.RunSupervisedChildHealthMonitor(rootCtx, log, "broker", brokerReadyzURL, 15*time.Second, 30*time.Second, !cfg.NoWaitBroker)
 	if vectorstoreReadyzURL != "" {
-		upstream.RunSupervisedChildHealthMonitor(rootCtx, log, "vectorstore", vectorstoreReadyzURL, 15*time.Second, 30*time.Second, !cfg.NoWaitVectorstore)
+		brokerclient.RunSupervisedChildHealthMonitor(rootCtx, log, "vectorstore", vectorstoreReadyzURL, 15*time.Second, 30*time.Second, !cfg.NoWaitVectorstore)
 	}
 	<-rootCtx.Done()
 	stopChildrenGraceful()

@@ -28,7 +28,7 @@ import (
 	"github.com/lynn/porcelain/chimera/internal/platform"
 	"github.com/lynn/porcelain/chimera/internal/servicelogs"
 	"github.com/lynn/porcelain/chimera/internal/supervisorlogs"
-	"github.com/lynn/porcelain/chimera/internal/upstream"
+	"github.com/lynn/porcelain/chimera/internal/brokerclient"
 	"github.com/lynn/porcelain/chimera/internal/wrapper/contract"
 	wruntime "github.com/lynn/porcelain/chimera/internal/wrapper/runtime"
 	"github.com/lynn/porcelain/internal/naming"
@@ -85,7 +85,7 @@ type gatewayConfig struct {
 	Bin                    string
 	ConfigPath             string
 	GatewayListen          string
-	UpstreamOverride       string
+	BrokerOverride         string
 	StartupTimeout         time.Duration
 	ShutdownTimeout        time.Duration
 	TerminateWait          time.Duration
@@ -108,7 +108,7 @@ func parseConfig(args []string) (gatewayConfig, error) {
 	fs.StringVar(&cfg.Bin, "bin", envOrDefault(naming.EnvGatewayBin, defaultGatewayBackendBin()), "gateway backend binary path")
 	fs.StringVar(&cfg.ConfigPath, "config", envOrDefault(naming.EnvGatewayConfigTarget, ""), "path to "+naming.GatewayConfigFileTarget)
 	fs.StringVar(&cfg.GatewayListen, "gateway-listen", envOrDefault(naming.EnvGatewayBackendListen, ""), "backend listen override")
-	fs.StringVar(&cfg.UpstreamOverride, "upstream-override", envOrDefault(naming.EnvGatewayUpstreamOverride, ""), "override upstream base URL for backend runtime")
+	fs.StringVar(&cfg.BrokerOverride, "broker-override", envOrDefault(naming.EnvGatewayBrokerOverride, ""), "override chimera-broker base URL for backend runtime")
 	fs.DurationVar(&cfg.StartupTimeout, "startup-timeout", envDuration(naming.EnvGatewayTimeoutsStartup, contract.DefaultStartupTimeout), "startup readiness timeout")
 	fs.DurationVar(&cfg.ShutdownTimeout, "shutdown-timeout", envDuration(naming.EnvGatewayTimeoutsShutdown, contract.DefaultShutdownTimeout), "wrapper graceful shutdown timeout")
 	fs.DurationVar(&cfg.TerminateWait, "terminate-wait", contract.DefaultTerminateWait, "wait before force-kill backend")
@@ -116,7 +116,7 @@ func parseConfig(args []string) (gatewayConfig, error) {
 	fs.Float64Var(&cfg.BackoffMultiplier, "backoff-multiplier", contract.DefaultBackoffMultiplier, "restart backoff multiplier")
 	fs.DurationVar(&cfg.BackoffMax, "backoff-max", contract.DefaultBackoffMax, "restart backoff max delay")
 	fs.DurationVar(&cfg.BackoffResetAfter, "backoff-reset-after", contract.DefaultBackoffResetAfter, "healthy runtime to reset backoff")
-	fs.BoolVar(&cfg.DebugEnableUpstream, "debug-enable-upstream-logs", wruntime.EnvBool(contract.DebugEnableEnvKey), "enable /debug/upstream/logs")
+	fs.BoolVar(&cfg.DebugEnableUpstream, "debug-enable-broker-logs", wruntime.EnvBool(contract.DebugEnableEnvKey(contract.ComponentGateway)), "enable "+contract.DebugBrokerLogsPath)
 	fs.BoolVar(&cfg.DebugAllowRemote, "debug-allow-remote", wruntime.EnvBool(contract.DebugAllowRemoteEnv), "allow /debug/* on non-loopback bind")
 	fs.BoolVar(&cfg.ForwardUpstreamInDebug, "debug-forward-upstream", false, "forward upstream lines to stderr in debug mode")
 	fs.StringVar(&cfg.UpstreamVersion, "upstream-version", "", "optional gateway upstream version for status payload")
@@ -204,8 +204,8 @@ func (a *gatewayAdapter) Start(ctx context.Context, capture io.Writer, log *slog
 
 	bin := strings.TrimSpace(a.cfg.Bin)
 	args := []string{"-config", path, "-listen", listen}
-	if u := strings.TrimSpace(a.cfg.UpstreamOverride); u != "" {
-		args = append(args, "-upstream-override", u)
+	if u := strings.TrimSpace(a.cfg.BrokerOverride); u != "" {
+		args = append(args, "-broker-override", u)
 	}
 	if useEmbeddedBackend(bin) {
 		exe, err := os.Executable()
@@ -345,10 +345,10 @@ func runGatewayBackend(args []string) error {
 	fs.SetOutput(io.Discard)
 	cfgPath := envOrDefault(naming.EnvGatewayConfigTarget, "")
 	listen := ""
-	upstreamOverride := ""
+	brokerOverride := ""
 	fs.StringVar(&cfgPath, "config", cfgPath, "path to "+naming.GatewayConfigFileTarget)
 	fs.StringVar(&listen, "listen", "", "listen override")
-	fs.StringVar(&upstreamOverride, "upstream-override", envOrDefault(naming.EnvGatewayUpstreamOverride, ""), "upstream base URL override")
+	fs.StringVar(&brokerOverride, "broker-override", envOrDefault(naming.EnvGatewayBrokerOverride, ""), "chimera-broker base URL override")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -360,7 +360,7 @@ func runGatewayBackend(args []string) error {
 		}
 	}
 	log := buildLogger(cfgPath)
-	rt, err := server.NewRuntimeWithBrokerOverride(cfgPath, log, strings.TrimSpace(upstreamOverride))
+	rt, err := server.NewRuntimeWithBrokerOverride(cfgPath, log, strings.TrimSpace(brokerOverride))
 	if err != nil {
 		return err
 	}
@@ -414,7 +414,7 @@ func runGatewayBackend(args []string) error {
 		time.Sleep(500 * time.Millisecond)
 		server.StartCatalogPoller(rootCtx, rt, log, pollInterval)
 	}()
-	upstream.RunGatewayUpstreamHealthMonitor(rootCtx, log, 15*time.Second, 30*time.Second,
+	brokerclient.RunGatewayUpstreamHealthMonitor(rootCtx, log, 15*time.Second, 30*time.Second,
 		func(pctx context.Context) (string, string, time.Duration, bool) {
 			r, _, _ := rt.Snapshot()
 			if r == nil || strings.TrimSpace(r.HealthUpstreamURL) == "" {

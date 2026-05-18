@@ -49,7 +49,7 @@ func TestProxyChatCompletion_recordsMetrics(t *testing.T) {
 	_ = ProxyChatCompletion(context.Background(), w, up.URL, "", "groq/llama-3.3-70b-versatile", false, body, time.Minute, nil, st, nil, nil)
 
 	var calls int
-	q := `SELECT calls FROM upstream_rollup_minute WHERE provider='groq' AND model_id='groq/llama-3.3-70b-versatile' AND status=200 ORDER BY minute_utc DESC LIMIT 1`
+	q := `SELECT calls FROM broker_rollup_minute WHERE provider='groq' AND model_id='groq/llama-3.3-70b-versatile' AND status=200 ORDER BY minute_utc DESC LIMIT 1`
 	if err := st.DB().QueryRow(q).Scan(&calls); err != nil {
 		t.Fatal(err)
 	}

@@ -1,4 +1,4 @@
-package upstream
+package brokerclient
 
 import (
 	"bytes"

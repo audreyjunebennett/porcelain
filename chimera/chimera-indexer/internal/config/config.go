@@ -87,7 +87,7 @@ func bindFlags(fs *flag.FlagSet, cfg *Config) {
 	fs.Float64Var(&cfg.BackoffMultiplier, "backoff-multiplier", contract.DefaultBackoffMultiplier, "restart backoff multiplier")
 	fs.DurationVar(&cfg.BackoffMax, "backoff-max", contract.DefaultBackoffMax, "restart backoff max delay")
 	fs.DurationVar(&cfg.BackoffResetAfter, "backoff-reset-after", contract.DefaultBackoffResetAfter, "healthy runtime to reset backoff")
-	fs.BoolVar(&cfg.DebugEnableUpstream, "debug-enable-upstream-logs", wruntime.EnvBool(contract.DebugEnableEnvKey), "enable /debug/upstream/logs")
+	fs.BoolVar(&cfg.DebugEnableUpstream, "debug-enable-broker-logs", wruntime.EnvBool(contract.DebugEnableEnvKey(contract.ComponentIndexer)), "enable "+contract.DebugBrokerLogsPath)
 	fs.BoolVar(&cfg.DebugAllowRemote, "debug-allow-remote", wruntime.EnvBool(contract.DebugAllowRemoteEnv), "allow /debug/* on non-loopback bind")
 	fs.BoolVar(&cfg.ForwardUpstreamInDebug, "debug-forward-upstream", false, "forward upstream lines to stderr in debug mode")
 	fs.StringVar(&cfg.UpstreamVersion, "upstream-version", "", "optional backend version for status payload")

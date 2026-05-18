@@ -90,7 +90,7 @@ endif
 	locus-clean locus-clean-install locus-clean-build locus-clean-configure locus-clean-run \
 	locus-desktop-clean locus-desktop-clean-install locus-desktop-clean-build locus-desktop-clean-configure locus-desktop-clean-run \
 	build bin-stage stage-bin-dir chimera-build run \
-	chimera-gateway-build chimera-gateway-install chimera-gateway-run chimera-gateway-test chimera-gateway-test-unit chimera-gateway-test-e2e \
+	chimera-gateway-build chimera-gateway-install chimera-gateway-run chimera-gateway-audit chimera-gateway-test chimera-gateway-test-unit chimera-gateway-test-e2e \
 	chimera-supervisor-build chimera-supervisor-run chimera-supervisor-test chimera-supervisor-test-unit chimera-supervisor-test-e2e \
 	chimera-broker-install chimera-broker-build chimera-broker-run chimera-broker-test chimera-broker-test-unit chimera-broker-test-e2e \
 	chimera-vectorstore-install chimera-vectorstore-build chimera-vectorstore-run chimera-vectorstore-test chimera-vectorstore-test-unit chimera-vectorstore-test-e2e \
@@ -304,7 +304,11 @@ chimera-gateway-run: chimera-configure
 	@echo [STEP] Running Chimera gateway on 127.0.0.1:3000
 	@$(GITBASH) -lc 'PATH="$$(pwd)/$(CHIMERA_RUNTIME_BIN_DIR):$$(pwd)/$(BIN_STAGE_DIR):$$PATH" "$(CHIMERA_GATEWAY_STAGE_OUT)" -gateway-listen "127.0.0.1:3000" $(ARGS)'
 
-chimera-gateway-test: chimera-gateway-test-unit chimera-gateway-test-e2e
+chimera-gateway-audit:
+	@echo [STEP] Auditing chimera-gateway vocabulary (no legacy bifrost/upstream/qdrant paths)
+	@$(GITBASH) scripts/chimera-gateway-vocab-audit.sh
+
+chimera-gateway-test: chimera-gateway-audit chimera-gateway-test-unit chimera-gateway-test-e2e
 
 chimera-gateway-test-unit:
 	@echo [STEP] Running Chimera gateway unit tests

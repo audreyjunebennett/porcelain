@@ -180,7 +180,7 @@ const (
 	defaultListenHost      = "0.0.0.0"
 	defaultLogLevel        = "info"
 	defaultBaseURL         = "http://chimera-broker:8080"
-	defaultAPIKeyEnv       = naming.EnvUpstreamAPIKeyTarget
+	defaultAPIKeyEnv       = naming.EnvBrokerAPIKeyTarget
 	defaultHealthTimeoutMs = 5000
 	defaultChatTimeoutMs   = 300_000
 	// defaultAvailableModelsPollMs polls BiFrost `/v1/models` every 30s. Set to 0 in

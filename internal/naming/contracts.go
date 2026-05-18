@@ -22,7 +22,7 @@ const (
 	EnvGatewayListen              = "GATEWAY__LISTEN"
 	EnvGatewayBin                 = "GATEWAY__BIN"
 	EnvGatewayBackendListen       = "GATEWAY__BACKEND_LISTEN"
-	EnvGatewayUpstreamOverride    = "GATEWAY__UPSTREAM_OVERRIDE"
+	EnvGatewayBrokerOverride      = "GATEWAY__BROKER_OVERRIDE"
 	EnvGatewayTimeoutsStartup     = "GATEWAY__TIMEOUTS__STARTUP"
 	EnvGatewayTimeoutsShutdown    = "GATEWAY__TIMEOUTS__SHUTDOWN"
 	EnvGatewayBackendBinDefault   = "GATEWAY__BACKEND_BIN_DEFAULT"
@@ -78,7 +78,7 @@ const (
 
 	// Environment-variable contracts.
 	EnvGatewayConfigTarget        = "CHIMERA_GATEWAY_CONFIG"
-	EnvUpstreamAPIKeyTarget       = "CHIMERA_UPSTREAM_API_KEY"
+	EnvBrokerAPIKeyTarget         = "CHIMERA_BROKER_API_KEY"
 	EnvGatewayURLTarget           = "CHIMERA_GATEWAY_URL"
 	EnvGatewayTokenTarget         = "CHIMERA_GATEWAY_TOKEN"
 	EnvSupervisorControlURLTarget = "CHIMERA_SUPERVISOR_CONTROL_URL"

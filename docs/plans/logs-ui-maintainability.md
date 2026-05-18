@@ -4,10 +4,10 @@
 |-------|-------|
 | **Doc kind** | `refactor-plan` |
 | **Owners / areas** | Gateway embed UI, operator logs |
-| **Status** | `active` |
+| **Status** | `superseded` |
 | **Targets** | Logs UI maintainability, clarity, and testability |
-| **Last updated** | See git history |
-| **Supersedes / superseded by** | Follows [`log-view-refactor.plan.md`](log-view-refactor.plan.md) |
+| **Last updated** | 2026-05-18 |
+| **Supersedes / superseded by** | Follows [`log-view-refactor.plan.md`](log-view-refactor.plan.md); **superseded by** [`chimera-gateway-refactor.md`](chimera-gateway-refactor.md) Phases 5–6 |
 
 ## At a glance
 
@@ -15,18 +15,18 @@ Keep the operator log page easy to evolve. Make file names match what they do, s
 
 | Phase | Outcome | Status |
 |-------|---------|--------|
-| [Workstream A — Documentation & naming](#workstream-a--documentation-and-naming-low-risk-high-leverage) | Developer map; honest file names; `models.js` actually loaded | `todo` |
-| [Workstream B — HTML clarity](#workstream-b--html-clarity) | Semantic regions and stable test hooks | `todo` |
-| [Workstream C — CSS clarity](#workstream-c--css-clarity) | Sectioned `logs.css` paired with a DOM map | `todo` |
-| [Workstream D — JavaScript architecture](#workstream-d--javascript-architecture-main-effort) | Split `logs_main.js` into focused modules with injectable deps | `active` |
-| [Workstream E — Testing strategy](#workstream-e--testing-strategy) | Goja coverage for new pure modules and view-mode logic | `active` |
-| [Workstream F — Server alignment](#workstream-f--server-alignment) | Document `servicelogs.Entry` for UI parsing assumptions | `todo` |
+| [Workstream A — Documentation & naming](#workstream-a--documentation-and-naming-low-risk-high-leverage) | Developer map; honest file names; `models.js` actually loaded | `done` (see `embedui/logs/README.md`) |
+| [Workstream B — HTML clarity](#workstream-b--html-clarity) | Semantic regions and stable test hooks | `done` (`data-testid`, `<section>`) |
+| [Workstream C — CSS clarity](#workstream-c--css-clarity) | Sectioned `logs.css` paired with a DOM map | `partial` (broker/vectorstore class renames; full CSS sectioning optional) |
+| [Workstream D — JavaScript architecture](#workstream-d--javascript-architecture-main-effort) | Split `logs_main.js` into focused modules with injectable deps | `done` (`logs_app.js`, `app/*`, `render/sumEvlog.js`) |
+| [Workstream E — Testing strategy](#workstream-e--testing-strategy) | Goja coverage for new pure modules and view-mode logic | `done` (`logs_components_test.go`) |
+| [Workstream F — Server alignment](#workstream-f--server-alignment) | Document `servicelogs.Entry` for UI parsing assumptions | `todo` (optional follow-up) |
 
 ---
 
 **Route:** `/ui/logs`  
-**Code:** `internal/server/embedui/logs.html`, `logs.css`, `logs.js`, `logs_bootstrap.js`, `embedui/logs/**`  
-**Server:** `internal/server/ui_logs.go`, `internal/server/ui_handlers.go` (embed + asset routes)
+**Code:** `internal/server/adminui/embedui/logs.html`, `logs.css`, `logs_app.js`, `logs_entry.js`, `embedui/logs/**`  
+**Server:** `internal/server/adminui/ui_handlers.go` (embed + asset routes); see [`embedui/logs/README.md`](../../chimera/chimera-gateway/internal/server/adminui/embedui/logs/README.md)
 
 This document is a **follow-on** to [`log-view-refactor.plan.md`](./log-view-refactor.plan.md). That plan drove extraction of CSS, a module folder, `derive/*`, and goja-based tests. **Most checklist items there are marked done**, but the UI is still hard to change safely because the **application shell** (`embedui/logs.js`, served as `/ui/assets/logs/main.js`) remains a large closed-over state machine. This plan focuses on **clarity** (where to edit what), **testability** (what to test without a browser), and **safe incremental refactors**.
 

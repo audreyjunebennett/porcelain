@@ -220,7 +220,7 @@ func recordUpstreamMetrics(rec gatewaymetrics.Recorder, upstreamModel string, st
 	if rec == nil {
 		return
 	}
-	rec.RecordUpstreamResponse(time.Now().UTC(), upstreamModel, status, est)
+	rec.RecordBrokerResponse(time.Now().UTC(), upstreamModel, status, est)
 }
 
 func notifyChatDelivery(opts *ProxyOpts, status int, stream bool, bytes int64, elapsedMs int64) {

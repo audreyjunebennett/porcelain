@@ -8,7 +8,7 @@ import (
 )
 
 func TestEnsureGeneratedUpstreamAPIKey_generatesAndPersists(t *testing.T) {
-	t.Setenv("CHIMERA_UPSTREAM_API_KEY", "")
+	t.Setenv("CHIMERA_BROKER_API_KEY", "")
 	dir := t.TempDir()
 	p := filepath.Join(dir, "gateway.yaml")
 	raw := `gateway:
@@ -17,7 +17,7 @@ func TestEnsureGeneratedUpstreamAPIKey_generatesAndPersists(t *testing.T) {
   listen_host: "127.0.0.1"
 upstream:
   base_url: "http://127.0.0.1:8080"
-  api_key_env: "CHIMERA_UPSTREAM_API_KEY"
+  api_key_env: "CHIMERA_BROKER_API_KEY"
 paths:
   api_keys: "./api-keys.yaml"
   routing_policy: "./routing-policy.yaml"
@@ -56,14 +56,14 @@ routing:
 }
 
 func TestEnsureGeneratedUpstreamAPIKey_envSkipsWrite(t *testing.T) {
-	t.Setenv("CHIMERA_UPSTREAM_API_KEY", "from-env")
+	t.Setenv("CHIMERA_BROKER_API_KEY", "from-env")
 	dir := t.TempDir()
 	p := filepath.Join(dir, "gateway.yaml")
 	raw := `gateway:
   semver: "0.1.0"
 upstream:
   base_url: "http://127.0.0.1:8080"
-  api_key_env: "CHIMERA_UPSTREAM_API_KEY"
+  api_key_env: "CHIMERA_BROKER_API_KEY"
 paths:
   api_keys: "./api-keys.yaml"
   routing_policy: "./routing-policy.yaml"

@@ -154,7 +154,7 @@ func setupRAGServerWithLog(t *testing.T, lg *slog.Logger) (*Runtime, *inMemorySt
 	if lg == nil {
 		lg = testLog()
 	}
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/health" {
 			w.WriteHeader(http.StatusOK)
@@ -320,7 +320,7 @@ func TestIngest_Unauthorized(t *testing.T) {
 }
 
 func TestIngest_RAGDisabled_503(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) }))
 	t.Cleanup(upstream.Close)
 	dir := t.TempDir()

@@ -15,7 +15,7 @@ import (
 )
 
 func TestStatusEndpoint(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/health" {
 			w.WriteHeader(http.StatusOK)
@@ -71,7 +71,7 @@ func TestStatusEndpoint(t *testing.T) {
 }
 
 func TestUILoginAndState(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	chimeraBroker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/health":
@@ -183,7 +183,7 @@ func TestUILoginAndState(t *testing.T) {
 }
 
 func TestUISaveGroqKey(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	var lastPutMethod, lastPutPath string
 	var lastPutBody []byte
 	chimeraBroker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -263,7 +263,7 @@ func TestUISaveGroqKey(t *testing.T) {
 }
 
 func TestUISaveGroqKey_providerMissing404(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	var lastPutBody []byte
 	chimeraBroker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -338,7 +338,7 @@ func TestUISaveGroqKey_providerMissing404(t *testing.T) {
 }
 
 func TestUISaveRemoveGroqKey(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	var lastPutBody []byte
 	chimeraBroker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -411,7 +411,7 @@ func TestUISaveRemoveGroqKey(t *testing.T) {
 }
 
 func TestUISaveOllamaURL_providerMissingEnvelope(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	var lastPutBody []byte
 	envelope := `{"is_chimera_broker_error":false,"status_code":404,"error":{"message":"Provider not found: not found"},"extra_fields":{}}`
 	chimeraBroker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -480,7 +480,7 @@ func TestUISaveOllamaURL_providerMissingEnvelope(t *testing.T) {
 }
 
 func TestChatVirtualModelFallback429(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 
 	var seenModels []string
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

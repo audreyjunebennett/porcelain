@@ -16,7 +16,7 @@ import (
 )
 
 func TestUIBrokerProviderHealth_endToEnd(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 
 	chimeraBroker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -106,7 +106,7 @@ func TestUIBrokerProviderHealth_endToEnd(t *testing.T) {
 }
 
 func TestUIChimeraBrokerProviderHealth_chimeraBrokerDown(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 
 	dead := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	deadURL := dead.URL
@@ -166,7 +166,7 @@ func TestUIChimeraBrokerProviderHealth_chimeraBrokerDown(t *testing.T) {
 }
 
 func TestUIBrokerProviderHealth_requiresAuth(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	chimeraBroker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 	}))

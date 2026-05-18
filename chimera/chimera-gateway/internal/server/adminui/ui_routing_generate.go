@@ -15,7 +15,7 @@ import (
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/routinggen"
 	gruntime "github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/runtime"
 	"github.com/lynn/porcelain/chimera/internal/config"
-	"github.com/lynn/porcelain/chimera/internal/upstream"
+	"github.com/lynn/porcelain/chimera/internal/brokerclient"
 	"github.com/lynn/porcelain/internal/naming"
 	"gopkg.in/yaml.v3"
 )
@@ -74,7 +74,7 @@ func (a *adminUI) computeRoutingDraft(ctx context.Context, res *config.Resolved)
 	timeout := gruntime.HealthTimeout(res)
 	ctx, cancel := context.WithTimeout(ctx, timeout+2*time.Second)
 	defer cancel()
-	st, body, ok := upstream.FetchOpenAIModels(ctx, res.UpstreamBaseURL, apiKey, timeout, a.log)
+	st, body, ok := brokerclient.FetchOpenAIModels(ctx, res.UpstreamBaseURL, apiKey, timeout, a.log)
 	if !ok {
 		return nil, http.StatusBadGateway, map[string]any{
 			"error": map[string]any{
@@ -353,7 +353,7 @@ func (a *adminUI) handleRoutingEvaluatePOST(w http.ResponseWriter, r *http.Reque
 			}
 			ctx, cancel := context.WithTimeout(r.Context(), to+2*time.Second)
 			defer cancel()
-			st, ok, det := upstream.SmokeChatCompletion(ctx, res.UpstreamBaseURL, apiKey, initial, to, a.log)
+			st, ok, det := brokerclient.SmokeChatCompletion(ctx, res.UpstreamBaseURL, apiKey, initial, to, a.log)
 			sm := map[string]any{"ok": ok, "status": st, "detail": det}
 			out["smoke_completion"] = sm
 		}
@@ -408,7 +408,7 @@ func (a *adminUI) handleRoutingRouterToolingPOST(w http.ResponseWriter, r *http.
 			to := gruntime.HealthTimeout(res2)
 			ctx, cancel := context.WithTimeout(r.Context(), to+2*time.Second)
 			defer cancel()
-			st, catBody, ok := upstream.FetchOpenAIModels(ctx, res2.UpstreamBaseURL, apiKey, to, a.log)
+			st, catBody, ok := brokerclient.FetchOpenAIModels(ctx, res2.UpstreamBaseURL, apiKey, to, a.log)
 			if ok && st >= 200 && st < 300 {
 				ids, err := routinggen.ExtractCatalogModelIDs(catBody, res2.VirtualModelID)
 				if err == nil {

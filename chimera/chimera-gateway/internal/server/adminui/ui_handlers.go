@@ -14,7 +14,7 @@ import (
 
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/brokeradmin"
 	gruntime "github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/runtime"
-	"github.com/lynn/porcelain/chimera/internal/upstream"
+	"github.com/lynn/porcelain/chimera/internal/brokerclient"
 	"github.com/lynn/porcelain/internal/naming"
 )
 
@@ -322,7 +322,7 @@ func (a *adminUI) handleState(w http.ResponseWriter, r *http.Request) {
 	}
 	rm, trAt, trErr := a.rt.ToolRouterLast()
 	chimeraBrokerURL := strings.TrimSuffix(res.UpstreamBaseURL, "/")
-	chimeraBrokerOK, _, chimeraBrokerDetail := upstream.ProbeHealth(ctx, res.HealthUpstreamURL, a.rt.UpstreamAPIKey(), gruntime.HealthTimeout(res), a.log)
+	chimeraBrokerOK, _, chimeraBrokerDetail := brokerclient.ProbeHealth(ctx, res.HealthUpstreamURL, a.rt.UpstreamAPIKey(), gruntime.HealthTimeout(res), a.log)
 	chimeraBrokerState := "down"
 	if chimeraBrokerOK {
 		chimeraBrokerState = "up"

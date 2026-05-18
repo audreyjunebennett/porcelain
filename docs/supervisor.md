@@ -75,7 +75,7 @@ For this repository, Qdrant is optional when **RAG is off**. With **RAG on**, th
 From the repo root (with `config/gateway.yaml`, `config/api-keys.yaml`, `config/bifrost.config.json`):
 
 ```bash
-export CHIMERA_UPSTREAM_API_KEY=bifrost-local-dummy
+export CHIMERA_BROKER_API_KEY=bifrost-local-dummy
 export GROQ_API_KEY=...   # as needed
 go run ./cmd/chimera serve
 # or: ./chimera serve

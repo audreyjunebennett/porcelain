@@ -50,7 +50,7 @@ gateway:
 upstream:
   # OpenAI-compatible upstream (BiFrost on the host).
   base_url: "http://127.0.0.1:8080"
-  api_key_env: "CHIMERA_UPSTREAM_API_KEY"
+  api_key_env: "CHIMERA_BROKER_API_KEY"
   # BiFrost subprocess only (not the Go gateway). Typical: info | debug. CLI `-bifrost-log-level` overrides when non-empty.
   bifrost_log_level: "info"
   # api_key: optional Bearer for upstream /v1/*. If omitted and api_key_env is unset/empty, a secret is generated and written here on first gateway start.

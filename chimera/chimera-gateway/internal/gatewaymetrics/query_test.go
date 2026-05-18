@@ -18,8 +18,8 @@ func TestStore_QueryRollups(t *testing.T) {
 	t.Cleanup(func() { _ = st.Close() })
 
 	at := time.Date(2026, 1, 10, 12, 5, 0, 0, time.UTC)
-	st.RecordUpstreamResponse(at, "groq/a", 200, 10)
-	st.RecordUpstreamResponse(at, "groq/b", 429, 5)
+	st.RecordBrokerResponse(at, "groq/a", 200, 10)
+	st.RecordBrokerResponse(at, "groq/b", 429, 5)
 
 	ctx := context.Background()
 	minRows, err := st.QueryMinuteRollups(ctx, "2026-01-10T12:05", 50)

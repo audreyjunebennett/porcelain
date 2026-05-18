@@ -17,7 +17,7 @@ import (
 )
 
 func TestMetricsAPI_unauthorizedWithoutSession(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	up := chimeraBrokerStubForUILogs(t)
 	t.Cleanup(up.Close)
 
@@ -38,7 +38,7 @@ func TestMetricsAPI_unauthorizedWithoutSession(t *testing.T) {
 }
 
 func TestMetricsAPI_returnsJSONWhenAuthed(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	up := chimeraBrokerStubForUILogs(t)
 	t.Cleanup(up.Close)
 
@@ -84,7 +84,7 @@ func TestMetricsAPI_returnsJSONWhenAuthed(t *testing.T) {
 }
 
 func TestMetricsPage_redirectsToLoginWithoutSession(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	up := chimeraBrokerStubForUILogs(t)
 	t.Cleanup(up.Close)
 
@@ -111,7 +111,7 @@ func TestMetricsPage_redirectsToLoginWithoutSession(t *testing.T) {
 }
 
 func TestMetricsWithWorkingStore_queryRollups(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	up := chimeraBrokerStubForUILogs(t)
 	t.Cleanup(up.Close)
 
@@ -145,7 +145,7 @@ func TestMetricsWithWorkingStore_queryRollups(t *testing.T) {
   listen_host: "127.0.0.1"
 upstream:
   base_url: "` + up.URL + `"
-  api_key_env: "` + naming.EnvUpstreamAPIKeyTarget + `"
+  api_key_env: "` + naming.EnvBrokerAPIKeyTarget + `"
 health:
   timeout_ms: 2000
   chat_timeout_ms: 60000
@@ -175,7 +175,7 @@ metrics:
 	if st == nil {
 		t.Fatal("expected metrics store open")
 	}
-	st.RecordUpstreamResponse(time.Now().UTC(), "groq/test-model", 200, 7)
+	st.RecordBrokerResponse(time.Now().UTC(), "groq/test-model", 200, 7)
 
 	ui := NewUIOptions()
 	front := httptest.NewServer(NewMux(rt, testLog(), nil, ui))

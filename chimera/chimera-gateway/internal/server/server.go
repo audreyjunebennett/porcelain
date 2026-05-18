@@ -27,7 +27,7 @@ import (
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/vectorstore"
 	"github.com/lynn/porcelain/chimera/internal/config"
 	"github.com/lynn/porcelain/chimera/internal/platform/requestid"
-	"github.com/lynn/porcelain/chimera/internal/upstream"
+	"github.com/lynn/porcelain/chimera/internal/brokerclient"
 	"github.com/lynn/porcelain/internal/naming"
 
 	"github.com/google/uuid"
@@ -187,7 +187,7 @@ func NewMux(rt *Runtime, log *slog.Logger, overlay *StatusOverlay, ui *UIOptions
 
 		gwURL := publicGatewayURL(res, overlay)
 		chimeraBrokerURL := strings.TrimSuffix(res.UpstreamBaseURL, "/")
-		chimeraBrokerOK, _, _ := upstream.ProbeHealth(ctx, res.HealthUpstreamURL, apiKey, healthTimeout(res), log)
+		chimeraBrokerOK, _, _ := brokerclient.ProbeHealth(ctx, res.HealthUpstreamURL, apiKey, healthTimeout(res), log)
 		chimeraBrokerClass := "err"
 		if chimeraBrokerOK {
 			chimeraBrokerClass = "ok"
@@ -297,7 +297,7 @@ func NewMux(rt *Runtime, log *slog.Logger, overlay *StatusOverlay, ui *UIOptions
 		res, _, _ := rt.Snapshot()
 		apiKey := rt.UpstreamAPIKey()
 		ctx := r.Context()
-		ok, st, detail := upstream.ProbeHealth(ctx, res.HealthUpstreamURL, apiKey, healthTimeout(res), log)
+		ok, st, detail := brokerclient.ProbeHealth(ctx, res.HealthUpstreamURL, apiKey, healthTimeout(res), log)
 		brokerCheck := map[string]any{
 			"ok":     ok,
 			"status": st,
@@ -467,7 +467,7 @@ func writeMergedModelsResponse(w http.ResponseWriter, ctx context.Context, res *
 		})
 		return
 	}
-	st, body, ok := upstream.FetchOpenAIModels(ctx, res.UpstreamBaseURL, apiKey, timeout, log)
+	st, body, ok := brokerclient.FetchOpenAIModels(ctx, res.UpstreamBaseURL, apiKey, timeout, log)
 	if !ok {
 		w.WriteHeader(http.StatusBadGateway)
 		_ = json.NewEncoder(w).Encode(map[string]any{

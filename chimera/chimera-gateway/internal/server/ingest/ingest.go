@@ -143,7 +143,7 @@ func HandleV1(w http.ResponseWriter, r *http.Request, rt *gruntime.Runtime, log 
 				if est > 2_000_000 {
 					est = 2_000_000
 				}
-				rec.RecordUpstreamResponse(time.Now().UTC(), mid, 200, est)
+				rec.RecordBrokerResponse(time.Now().UTC(), mid, 200, est)
 			}
 		}
 	}

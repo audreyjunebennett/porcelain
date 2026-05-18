@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/lynn/porcelain/chimera/internal/config"
-	"github.com/lynn/porcelain/chimera/internal/upstream"
+	"github.com/lynn/porcelain/chimera/internal/brokerclient"
 )
 
 // Successful merged-catalog polls log at Info only for the first success in a process;
@@ -148,7 +148,7 @@ func BuildSnapshot(ctx context.Context, res *config.Resolved, apiKey string, tim
 		out.FetchErr = "missing chimera-broker API key"
 		return out
 	}
-	st, body, fetchOK := upstream.FetchOpenAIModels(ctx, res.UpstreamBaseURL, apiKey, timeout, log)
+	st, body, fetchOK := brokerclient.FetchOpenAIModels(ctx, res.UpstreamBaseURL, apiKey, timeout, log)
 	if !fetchOK {
 		out.FetchErr = "fetch /v1/models failed (status=" + httpStatusOrDash(st) + ")"
 		return out

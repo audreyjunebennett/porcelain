@@ -178,7 +178,7 @@ func TestWriteGatewayFallbackChain_roundTrip(t *testing.T) {
   listen_host: "127.0.0.1"
 upstream:
   base_url: "http://127.0.0.1:8080"
-  api_key_env: "CHIMERA_UPSTREAM_API_KEY"
+  api_key_env: "CHIMERA_BROKER_API_KEY"
 paths:
   api_keys: "./api-keys.yaml"
   routing_policy: "./routing-policy.yaml"

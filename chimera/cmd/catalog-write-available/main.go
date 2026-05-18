@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lynn/porcelain/chimera/internal/upstream"
+	"github.com/lynn/porcelain/chimera/internal/brokerclient"
 	"gopkg.in/yaml.v3"
 )
 
@@ -22,11 +22,11 @@ const (
 )
 
 func main() {
-	defaultKey := strings.TrimSpace(os.Getenv("CHIMERA_UPSTREAM_API_KEY"))
+	defaultKey := strings.TrimSpace(os.Getenv("CHIMERA_BROKER_API_KEY"))
 	baseURL := flag.String("base-url", envOr("BIFROST_BASE_URL", defaultBaseURL), "BiFrost root URL (env BIFROST_BASE_URL)")
 	outPath := flag.String("out", defaultOut, "output YAML path")
 	timeout := flag.Duration("timeout", 30*time.Second, "HTTP client timeout for GET /v1/models")
-	apiKey := flag.String("api-key", defaultKey, "Bearer token (default: env CHIMERA_UPSTREAM_API_KEY)")
+	apiKey := flag.String("api-key", defaultKey, "Bearer token (default: env CHIMERA_BROKER_API_KEY)")
 	flag.Parse()
 
 	ctx, cancel := context.WithTimeout(context.Background(), *timeout+5*time.Second)
@@ -34,7 +34,7 @@ func main() {
 
 	root := strings.TrimSuffix(strings.TrimSpace(*baseURL), "/")
 	key := strings.TrimSpace(*apiKey)
-	st, body, ok := upstream.FetchOpenAIModels(ctx, root, key, *timeout, nil)
+	st, body, ok := brokerclient.FetchOpenAIModels(ctx, root, key, *timeout, nil)
 	if !ok {
 		fmt.Fprintf(os.Stderr, "catalog-write-available: GET %s/v1/models failed (HTTP %d)\n", root, st)
 		os.Exit(1)
@@ -80,7 +80,7 @@ func main() {
 	var out bytes.Buffer
 	out.WriteString("# catalog-available — BiFrost GET /v1/models (OpenAI-style list).\n")
 	out.WriteString("# Re-run: make catalog-available (BiFrost must be reachable).\n")
-	out.WriteString("# Env: BIFROST_BASE_URL, CHIMERA_UPSTREAM_API_KEY (optional).\n\n")
+	out.WriteString("# Env: BIFROST_BASE_URL, CHIMERA_BROKER_API_KEY (optional).\n\n")
 	out.Write(encBuf.Bytes())
 
 	if err := os.WriteFile(*outPath, out.Bytes(), 0o644); err != nil {

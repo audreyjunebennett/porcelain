@@ -14,7 +14,7 @@ type ModelUsage struct {
 }
 
 // UsageForModelWindow returns (calls, est_tokens) summed across all statuses for modelID between
-// [start, end) using the upstream_call_events log. The caller chooses start/end — typically the
+// [start, end) using the broker_call_events log. The caller chooses start/end — typically the
 // UTC minute boundary for RPM/TPM checks or a vendor-local day window for RPD/TPD checks. Both
 // bounds are applied against the RFC3339Nano UTC timestamp stored at insert time.
 func (s *Store) UsageForModelWindow(ctx context.Context, modelID string, start, end time.Time) (ModelUsage, error) {
@@ -22,7 +22,7 @@ func (s *Store) UsageForModelWindow(ctx context.Context, modelID string, start, 
 		return ModelUsage{}, nil
 	}
 	q := `SELECT COALESCE(COUNT(*),0), COALESCE(SUM(est_tokens),0)
-FROM upstream_call_events
+FROM broker_call_events
 WHERE model_id = ? AND occurred_at >= ? AND occurred_at < ?`
 	var calls int64
 	var tokens sql.NullInt64

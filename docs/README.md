@@ -17,6 +17,7 @@ Current release line: **v0.2.x** — RAG, ingest, workspace indexer (`chimera-in
 | [supervisor.md](supervisor.md) | `chimera serve`: BiFrost subprocess + Go gateway |
 | [packaging.md](packaging.md) | GoReleaser releases, artifacts, `chimera -version` |
 | [migration-v0-3-naming.md](migration-v0-3-naming.md) | Operator migration map for v0.3 naming contracts |
+| [plans/chimera-gateway-refactor.md](plans/chimera-gateway-refactor.md) | Gateway broker/vectorstore naming + logs UI modularization (v0.3 train) |
 | [bifrost-discovery.md](bifrost-discovery.md) | BiFrost compatibility matrix and discovery notes |
 | [design.md](design.md) | Design notes for the gateway service |
 | [indexer.md](indexer.md) | `chimera-indexer` operator guide |

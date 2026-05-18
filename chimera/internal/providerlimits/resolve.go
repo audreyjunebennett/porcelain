@@ -93,14 +93,14 @@ func pruneDayTZIfNoDayLimits(eff *Effective) {
 	}
 }
 
-// MinuteKey formats the UTC minute bucket key used in upstream_rollup_minute (YYYY-MM-DDTHH:MM).
+// MinuteKey formats the UTC minute bucket key used in broker_rollup_minute (YYYY-MM-DDTHH:MM).
 // RPM/TPM buckets are always UTC-aligned in our metrics schema; providers do not reset by local
 // minute so this key does not need a provider tz.
 func MinuteKey(at time.Time) string { return at.UTC().Format("2006-01-02T15:04") }
 
 // DayKey returns the calendar-day bucket key for a given instant in the provider's usage-day
 // timezone. The returned string is "YYYY-MM-DD" using that local calendar date — this is the
-// value to match against a provider's reset day when aggregating from upstream_call_events.
+// value to match against a provider's reset day when aggregating from broker_call_events.
 //
 // tz must be a valid IANA name; empty or invalid tz returns ("", error).
 func DayKey(at time.Time, tz string) (string, error) {
@@ -115,7 +115,7 @@ func DayKey(at time.Time, tz string) (string, error) {
 }
 
 // DayWindow returns the [start, end) UTC instants that bound the local calendar day containing
-// at in tz. Useful for summing upstream_call_events rows into a vendor-local day rollup.
+// at in tz. Useful for summing broker_call_events rows into a vendor-local day rollup.
 func DayWindow(at time.Time, tz string) (start, end time.Time, err error) {
 	if strings.TrimSpace(tz) == "" {
 		return time.Time{}, time.Time{}, fmt.Errorf("DayWindow: empty timezone")

@@ -5,7 +5,7 @@ Operator-focused summary of how the `chimera` binary handles secrets, exposure, 
 ## Secrets and logging
 
 - **Client gateway tokens** (`Authorization: Bearer …` on `/v1/*`) are **not** logged in full. Access logs use a **redacted** header value (`Bearer` + first four characters + `…` when the token is long, `Bearer ***` when short). See `internal/server/server.go` (`redactAuth`, `loggingMiddleware`).
-- **Upstream API keys** (env named by `upstream.api_key_env`, usually `CHIMERA_UPSTREAM_API_KEY`, or inline `upstream.api_key` in YAML) are **not** written to logs when used for outbound calls. Debug logs may include **upstream base URL** and paths, not key material.
+- **Upstream API keys** (env named by `upstream.api_key_env`, usually `CHIMERA_BROKER_API_KEY`, or inline `upstream.api_key` in YAML) are **not** written to logs when used for outbound calls. Debug logs may include **upstream base URL** and paths, not key material.
 - `tokens.yaml` reload logs **path** and **token count**, not token strings (`internal/tokens/tokens.go`).
 - **Chat completion** logs (info level) include `clientModel`, `stream`, and `tenant` (from the validated gateway token), **not** full message bodies.
 

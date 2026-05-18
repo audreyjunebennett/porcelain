@@ -39,7 +39,7 @@ func TestApplyMigrations_idempotent(t *testing.T) {
 	if err := db.QueryRow(`SELECT COUNT(*) FROM gateway_migrations`).Scan(&v); err != nil {
 		t.Fatal(err)
 	}
-	if v != 1 {
-		t.Fatalf("gateway_migrations rows = %d, want 1", v)
+	if v != 2 {
+		t.Fatalf("gateway_migrations rows = %d, want 2", v)
 	}
 }

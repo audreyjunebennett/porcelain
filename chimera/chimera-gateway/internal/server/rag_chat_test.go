@@ -24,7 +24,7 @@ import (
 //   - RAG is enabled and pre-loaded with one ingested doc.
 func setupRAGChatServer(t *testing.T) (string, *capturedReqs, *Runtime) {
 	t.Helper()
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 
 	captured := &capturedReqs{}
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -177,7 +177,7 @@ func TestVirtualModelChat_InjectsRetrievedContext(t *testing.T) {
 }
 
 func TestVirtualModelChat_NoContextWhenRAGDisabled(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	captured := &capturedReqs{}
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {

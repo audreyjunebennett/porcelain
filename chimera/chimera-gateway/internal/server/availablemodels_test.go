@@ -163,7 +163,7 @@ func TestRefreshAvailableModels_storesSnapshotAndRunsAuditors(t *testing.T) {
 	}))
 	t.Cleanup(chimeraBroker.Close)
 
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	rt := runtimeForCatalogTest(t, chimeraBroker.URL)
 
 	defer clearCatalogAuditors()
@@ -203,7 +203,7 @@ func TestRefreshAvailableModels_recoversFromAuditorPanic(t *testing.T) {
 		_, _ = w.Write([]byte(`{"object":"list","data":[{"id":"groq/m"}]}`))
 	}))
 	t.Cleanup(chimeraBroker.Close)
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	rt := runtimeForCatalogTest(t, chimeraBroker.URL)
 
 	defer clearCatalogAuditors()

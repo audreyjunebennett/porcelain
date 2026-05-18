@@ -20,7 +20,7 @@ Make **chimera-gateway** easier to change by using one vocabulary everywhere ope
 | [Phase 3 — Broker vocabulary (Go)](#phase-3--broker-vocabulary-go) | Operator logs, APIs, and config language say **broker**, not bifrost/upstream | `done` |
 | [Phase 4 — Vectorstore vocabulary (Go)](#phase-4--vectorstore-vocabulary-go) | RAG and timeline use **vectorstore**; Qdrant is an implementation detail | `done` |
 | [Phase 5 — Logs UI structure and naming](#phase-5--logs-ui-structure-and-naming) | Modular logs app, honest asset names, broker/vectorstore in JS | `done` |
-| [Phase 6 — Validation and doc sync](#phase-6--validation-and-doc-sync) | Tests green; operator docs match code | `todo` |
+| [Phase 6 — Validation and doc sync](#phase-6--validation-and-doc-sync) | Tests green; operator docs match code | `done` |
 
 ---
 
@@ -75,8 +75,8 @@ Operator vocabulary is fixed in [`rename-vectorstore-broker-questions-answered.m
 | HTTP path check | `/v1/qdrant` prefix | vectorstore routes only; drop Qdrant-shaped operator URLs | `timeline_kind.go` | Phase 4 |
 | Go field/comment | `upstream` (broker base URL) | `broker` | `internal/chat`, `runtime` | Phase 3 |
 | Go func | `NewRuntimeWithUpstreamOverride` | `NewRuntimeWithBrokerOverride` | `server/runtime` | Phase 3 |
-| Wrapper flag/env | `upstream-override`, `GATEWAY__UPSTREAM_OVERRIDE` | broker vocabulary (wire TBD — [open Q1](#open-questions)) | `main.go`, supervisor | Phase 3 / env plan |
-| Env name | `CHIMERA_UPSTREAM_API_KEY` | `CHIMERA_BROKER_API_KEY` (optional hard-cut) | `naming`, docs | Open Q1 |
+| Wrapper flag/env | `upstream-override`, `GATEWAY__BROKER_OVERRIDE` | broker vocabulary (wire TBD — [open Q1](#open-questions)) | `main.go`, supervisor | Phase 3 / env plan |
+| Env name | `CHIMERA_BROKER_API_KEY` | `CHIMERA_BROKER_API_KEY` (optional hard-cut) | `naming`, docs | Open Q1 |
 | Status JSON | upstream component block | `broker`; nested `broker.upstream` for debug | `status.go` | Phase 3 |
 | Admin API JSON | `bifrost` fields | `broker` | `adminui/ui_routing_generate.go` | Phase 3 |
 | slog / catalog | `chimera-broker.*` + legacy upstream slugs | `chimera-broker.*` only | `catalog`, `chat` | Phase 3 |
@@ -272,17 +272,25 @@ Pure derive modules and goja tests exist ([`logs_components_test.go`](../../chim
 - Operator setup flow (`/ui/setup`, `/ui/logs`) smoke-tested locally.
 - No compatibility shims for old JSON field names unless explicitly listed in Open questions.
 
-**Status:** `todo`
+**Status:** `done`
+
+**Shipped (2026-05-18)**
+
+- `make chimera-gateway-audit` / `scripts/chimera-gateway-vocab-audit.ps1` fail on forbidden legacy paths (`bifrostadmin`, old derive filenames, `timeline_kind=upstream`, `sum-svc-upstream`, etc.).
+- `chimera-gateway-test` runs audit before unit + e2e tests; `chimera-test` includes gateway + supervisor suites.
+- Operator docs: [configuration.md](../configuration.md), [network.md](../network.md) use chimera-broker / chimera-vectorstore vocabulary; [logs-ui-maintainability.md](logs-ui-maintainability.md) marked superseded.
 
 ---
 
-## Open questions
+## Open questions (resolved 2026-05-18)
 
-1. **Env var hard-cut for `CHIMERA_UPSTREAM_API_KEY` / `GATEWAY__UPSTREAM_OVERRIDE`:** rename to `CHIMERA_BROKER_API_KEY` / `GATEWAY__BROKER_OVERRIDE` in the same train, or keep wire names and only change Go/UI vocabulary? (Affects supervisor, desktop, docs.)
-2. **JS constants source of truth:** hand-maintained `contracts.js`, `go generate` from `naming`, or shared JSON checked into repo?
-3. **`/debug/upstream/logs` on wrapper binaries:** rename to `/debug/broker/logs` across chimera-broker and chimera-gateway wrappers in lockstep?
-4. **Stored metrics / DB columns** with `upstream_*` or `qdrant_*` in SQLite migrations under `migrations/chimera-gateway/`: migrate schema or only rename emitted logs?
-5. **Scope of `chimera/internal/upstream` package:** rename package to `brokerclient` in a separate repo-wide PR?
+| # | Decision |
+|---|----------|
+| 1 | **Hard-cut env:** `CHIMERA_BROKER_API_KEY`, `GATEWAY__BROKER_OVERRIDE`; wrapper flags `-broker-override`, `-debug-enable-broker-logs` / `-debug-enable-vectorstore-logs`. |
+| 2 | **`contracts.js`:** hand-maintained for now. |
+| 3 | **Debug paths:** `/debug/broker/logs` (gateway, broker, indexer wrappers); `/debug/vectorstore/logs` (vectorstore wrapper). |
+| 4 | **Metrics SQLite:** `000002_broker_metrics_rename.sql` renames `upstream_*` tables/index to `broker_*`; Go uses `RecordBrokerResponse` + `broker_*` tables. |
+| 5 | **Package:** `chimera/internal/brokerclient` (was `upstream`). |
 
 ---
 

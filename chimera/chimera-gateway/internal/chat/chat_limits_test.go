@@ -194,7 +194,7 @@ type recStub413 struct {
 	out []int
 }
 
-func (r *recStub413) RecordUpstreamResponse(_ time.Time, _ string, status int, _ int) {
+func (r *recStub413) RecordBrokerResponse(_ time.Time, _ string, status int, _ int) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.out = append(r.out, status)

@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/lynn/porcelain/chimera/internal/upstream"
+	"github.com/lynn/porcelain/chimera/internal/brokerclient"
 	"github.com/lynn/porcelain/internal/naming"
 )
 
@@ -34,7 +34,7 @@ func handleStatus(w http.ResponseWriter, r *http.Request, rt *Runtime, log *slog
 	res, _, _ := rt.Snapshot()
 	apiKey := rt.UpstreamAPIKey()
 	ctx := r.Context()
-	ok, st, detail := upstream.ProbeHealth(ctx, res.HealthUpstreamURL, apiKey, healthTimeout(res), log)
+	ok, st, detail := brokerclient.ProbeHealth(ctx, res.HealthUpstreamURL, apiKey, healthTimeout(res), log)
 
 	listen := res.ListenAddr()
 	if overlay != nil && overlay.EffectiveListen != "" {

@@ -118,7 +118,7 @@ func startGatewayProcess(t *testing.T, wrapperBin, backendBin string, args []str
 		t.Fatalf("write routing: %v", err)
 	}
 	raw := "gateway:\n  semver: \"0.1.0\"\n  listen_port: " + allocPort(t) + "\n  listen_host: \"127.0.0.1\"\n" +
-		"upstream:\n  base_url: \"http://127.0.0.1:1\"\n  api_key_env: \"" + naming.EnvUpstreamAPIKeyTarget + "\"\n" +
+		"upstream:\n  base_url: \"http://127.0.0.1:1\"\n  api_key_env: \"" + naming.EnvBrokerAPIKeyTarget + "\"\n" +
 		"health:\n  timeout_ms: 1000\n  chat_timeout_ms: 60000\n" +
 		"paths:\n  api_keys: \"" + strings.ReplaceAll(tokensPath, "\\", "/") + "\"\n  routing_policy: \"" + strings.ReplaceAll(routingPath, "\\", "/") + "\"\n" +
 		"routing:\n  fallback_chain:\n    - \"fake/model\"\n"
@@ -141,7 +141,7 @@ func startGatewayProcess(t *testing.T, wrapperBin, backendBin string, args []str
 	cmdArgs = append(cmdArgs, args...)
 	cmd := exec.Command(wrapperBin, cmdArgs...)
 	cmd.Env = append([]string{}, os.Environ()...)
-	cmd.Env = append(cmd.Env, naming.EnvUpstreamAPIKeyTarget+"=test-upstream-key", "FAKE_GATEWAY_CONFIG_PATH="+cfgPath)
+	cmd.Env = append(cmd.Env, naming.EnvBrokerAPIKeyTarget+"=test-upstream-key", "FAKE_GATEWAY_CONFIG_PATH="+cfgPath)
 	for k, v := range extraEnv {
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}
@@ -291,7 +291,7 @@ func TestE2E_Gateway_001_002_003_004_HappyStatusMetricsDebugDefault(t *testing.T
 			t.Fatalf("metrics missing %s\n%s", m, text)
 		}
 	}
-	dbg, err := http.Get(base + "/debug/upstream/logs")
+	dbg, err := http.Get(base + "/debug/broker/logs")
 	if err != nil {
 		t.Fatalf("get debug endpoint: %v", err)
 	}
@@ -304,7 +304,7 @@ func TestE2E_Gateway_001_002_003_004_HappyStatusMetricsDebugDefault(t *testing.T
 func TestE2E_Gateway_005_DebugEnabledRedaction(t *testing.T) {
 	wrapperBin, backendBin := ensureE2EBinaries(t)
 	p := startGatewayProcess(t, wrapperBin, backendBin, []string{
-		"-debug-enable-upstream-logs",
+		"-debug-enable-broker-logs",
 	}, map[string]string{
 		"FAKE_GATEWAY_START_READY":   "1",
 		"FAKE_GATEWAY_STDOUT_SECRET": "TOKEN=my-secret-value",
@@ -313,7 +313,7 @@ func TestE2E_Gateway_005_DebugEnabledRedaction(t *testing.T) {
 	base := "http://" + extractFlagValue(p.cmd.Args, "-listen")
 	waitForHTTPStatus(t, base+"/readyz", 200, 12*time.Second)
 
-	resp, err := http.Get(base + "/debug/upstream/logs")
+	resp, err := http.Get(base + "/debug/broker/logs")
 	if err != nil {
 		t.Fatalf("get debug logs: %v", err)
 	}
@@ -350,7 +350,7 @@ func TestE2E_Gateway_006_DebugBindSafetyRejectsRemoteWithoutOverride(t *testing.
 	wrapperBin, backendBin := ensureE2EBinaries(t)
 	p := startGatewayProcess(t, wrapperBin, backendBin, []string{
 		"-listen", "0.0.0.0:" + allocPort(t),
-		"-debug-enable-upstream-logs",
+		"-debug-enable-broker-logs",
 	}, map[string]string{"FAKE_GATEWAY_START_READY": "1"})
 	code := waitForProcessExit(t, p, 8*time.Second)
 	if code != 10 {
@@ -365,7 +365,7 @@ func TestE2E_Gateway_007_DebugBindOverrideAllowsRemote(t *testing.T) {
 	wrapperBin, backendBin := ensureE2EBinaries(t)
 	p := startGatewayProcess(t, wrapperBin, backendBin, []string{
 		"-listen", "0.0.0.0:" + allocPort(t),
-		"-debug-enable-upstream-logs",
+		"-debug-enable-broker-logs",
 		"-debug-allow-remote",
 	}, map[string]string{"FAKE_GATEWAY_START_READY": "1"})
 	t.Cleanup(func() { stopGateway(t, p) })

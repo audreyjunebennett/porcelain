@@ -55,10 +55,12 @@ const (
 )
 
 const (
-	DebugUpstreamLogsPath = "/debug/upstream/logs"
-	DebugEnableEnvKey     = "DEBUG__ENABLE_UPSTREAM_LOGS"
-	DebugAllowRemoteEnv   = "DEBUG__ALLOW_REMOTE"
-	DebugAllowRemoteFlag  = "--debug-allow-remote"
+	DebugBrokerLogsPath      = "/debug/broker/logs"
+	DebugVectorstoreLogsPath = "/debug/vectorstore/logs"
+	DebugEnableBrokerLogsEnvKey     = "DEBUG__ENABLE_BROKER_LOGS"
+	DebugEnableVectorstoreLogsEnvKey = "DEBUG__ENABLE_VECTORSTORE_LOGS"
+	DebugAllowRemoteEnv       = "DEBUG__ALLOW_REMOTE"
+	DebugAllowRemoteFlag      = "--debug-allow-remote"
 )
 
 const (
@@ -105,7 +107,28 @@ var AllowedEndpointMetricLabels = map[string]string{
 	"/healthz":             "healthz",
 	"/readyz":              "readyz",
 	"/metrics":             "metrics",
-	"/debug/upstream/logs": "debug_upstream_logs",
+	"/debug/broker/logs":      "debug_broker_logs",
+	"/debug/vectorstore/logs": "debug_vectorstore_logs",
+}
+
+// DebugLogsPath returns the ring-buffer debug endpoint for a wrapper component.
+func DebugLogsPath(component string) string {
+	switch component {
+	case ComponentVectorstore:
+		return DebugVectorstoreLogsPath
+	default:
+		return DebugBrokerLogsPath
+	}
+}
+
+// DebugEnableEnvKey returns the env var that gates debug log endpoints for component.
+func DebugEnableEnvKey(component string) string {
+	switch component {
+	case ComponentVectorstore:
+		return DebugEnableVectorstoreLogsEnvKey
+	default:
+		return DebugEnableBrokerLogsEnvKey
+	}
 }
 
 type Version struct {

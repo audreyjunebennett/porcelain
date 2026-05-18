@@ -12,7 +12,7 @@ import (
 )
 
 func TestModelsList_VirtualModelFirst(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/health" {
@@ -76,7 +76,7 @@ func TestModelsList_VirtualModelFirst(t *testing.T) {
 }
 
 func TestModelsList_NormalizesMissingOpenAIFields(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/health" {
@@ -139,7 +139,7 @@ func TestModelsList_NormalizesMissingOpenAIFields(t *testing.T) {
 }
 
 func TestUIModels_NoGatewayToken(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/health" {
@@ -202,7 +202,7 @@ func TestUIModels_NoGatewayToken(t *testing.T) {
 }
 
 func TestModelsList_FreeTierFilter(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/health" {
@@ -224,7 +224,7 @@ func TestModelsList_FreeTierFilter(t *testing.T) {
 	dir := t.TempDir()
 	gwPath := filepath.Join(dir, naming.GatewayConfigFileTarget)
 	gwRaw := "gateway:\n  semver: \"0.1.0\"\n  listen_port: 0\n  listen_host: \"127.0.0.1\"\n" +
-		"upstream:\n  base_url: \"" + up.URL + "\"\n  api_key_env: \"" + naming.EnvUpstreamAPIKeyTarget + "\"\n" +
+		"upstream:\n  base_url: \"" + up.URL + "\"\n  api_key_env: \"" + naming.EnvBrokerAPIKeyTarget + "\"\n" +
 		"health:\n  timeout_ms: 2000\n  chat_timeout_ms: 60000\n" +
 		"paths:\n  tokens: \"./api-keys.yaml\"\n  routing_policy: \"./routing-policy.yaml\"\n" +
 		"  provider_free_tier: \"./provider-free-tier.yaml\"\n" +

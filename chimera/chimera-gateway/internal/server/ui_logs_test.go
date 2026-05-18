@@ -52,7 +52,7 @@ func runtimeForUILogs(t *testing.T, chimeraBrokerURL string) *Runtime {
 }
 
 func TestUILogsAPI_unauthorizedWithoutSession(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	up := chimeraBrokerStubForUILogs(t)
 	t.Cleanup(up.Close)
 
@@ -83,7 +83,7 @@ func TestUILogsAPI_unauthorizedWithoutSession(t *testing.T) {
 }
 
 func TestUILogsPoll_returnsLinesAfterSince(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	up := chimeraBrokerStubForUILogs(t)
 	t.Cleanup(up.Close)
 
@@ -142,7 +142,7 @@ func TestUILogsPoll_returnsLinesAfterSince(t *testing.T) {
 }
 
 func TestUILogsPoll_limitReturnsTailWhenSinceZero(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	up := chimeraBrokerStubForUILogs(t)
 	t.Cleanup(up.Close)
 
@@ -190,7 +190,7 @@ func TestUILogsPoll_limitReturnsTailWhenSinceZero(t *testing.T) {
 }
 
 func TestUILogsPoll_beforeSeq_returnsOlderChunk(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	up := chimeraBrokerStubForUILogs(t)
 	t.Cleanup(up.Close)
 
@@ -238,7 +238,7 @@ func TestUILogsPoll_beforeSeq_returnsOlderChunk(t *testing.T) {
 }
 
 func TestUILogsPoll_sinceAndBeforeRejected(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	up := chimeraBrokerStubForUILogs(t)
 	t.Cleanup(up.Close)
 
@@ -269,7 +269,7 @@ func TestUILogsPoll_sinceAndBeforeRejected(t *testing.T) {
 }
 
 func TestUILogsStream_replaysTailOnConnect(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	up := chimeraBrokerStubForUILogs(t)
 	t.Cleanup(up.Close)
 
@@ -338,7 +338,7 @@ func min(a, b int) int {
 }
 
 func TestUILogsPage_requiresAuth(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	up := chimeraBrokerStubForUILogs(t)
 	t.Cleanup(up.Close)
 
@@ -366,7 +366,7 @@ func TestUILogsPage_requiresAuth(t *testing.T) {
 }
 
 func TestUIDesktopPage_requiresAuth(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	up := chimeraBrokerStubForUILogs(t)
 	t.Cleanup(up.Close)
 
@@ -390,7 +390,7 @@ func TestUIDesktopPage_requiresAuth(t *testing.T) {
 }
 
 func TestUILogsPage_servesLogsHTMLWhenAuthed(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	up := chimeraBrokerStubForUILogs(t)
 	t.Cleanup(up.Close)
 
@@ -476,7 +476,7 @@ func TestUILogsPage_servesLogsHTMLWhenAuthed(t *testing.T) {
 }
 
 func TestUILogsAssets_servesLogsJSWhenAuthed(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	up := chimeraBrokerStubForUILogs(t)
 	t.Cleanup(up.Close)
 
@@ -528,7 +528,7 @@ func TestUILogsAssets_servesLogsJSWhenAuthed(t *testing.T) {
 }
 
 func TestUILogsAssets_summarizedFeedContainsBrokerServiceSummary(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	up := chimeraBrokerStubForUILogs(t)
 	t.Cleanup(up.Close)
 
@@ -586,7 +586,7 @@ func TestUILogsAssets_summarizedFeedContainsBrokerServiceSummary(t *testing.T) {
 }
 
 func TestUILogsAssets_servesLogsModuleWhenAuthed(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	up := chimeraBrokerStubForUILogs(t)
 	t.Cleanup(up.Close)
 
@@ -626,7 +626,7 @@ func TestUILogsAssets_servesLogsModuleWhenAuthed(t *testing.T) {
 }
 
 func TestUIDesktopPage_servesShellWhenAuthed(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	up := chimeraBrokerStubForUILogs(t)
 	t.Cleanup(up.Close)
 
@@ -672,7 +672,7 @@ func TestUIDesktopPage_servesShellWhenAuthed(t *testing.T) {
 }
 
 func TestUIPWAPage_servesWhenAuthed(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	up := chimeraBrokerStubForUILogs(t)
 	t.Cleanup(up.Close)
 
@@ -709,7 +709,7 @@ func TestUIPWAPage_servesWhenAuthed(t *testing.T) {
 }
 
 func TestUIIndexer_redirectsToLogsWhenAuthed(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	up := chimeraBrokerStubForUILogs(t)
 	t.Cleanup(up.Close)
 
@@ -746,7 +746,7 @@ func TestUIIndexer_redirectsToLogsWhenAuthed(t *testing.T) {
 }
 
 func TestUIPanel_redirectsToLogsAdminWhenAuthed(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	up := chimeraBrokerStubForUILogs(t)
 	t.Cleanup(up.Close)
 

@@ -152,7 +152,7 @@ The `Product naming` and `Credential file naming` themes in [version-v0.3.md](..
 |----------|-----------------|
 | Gateway config env | `CHIMERA_GATEWAY_CONFIG` (default `./config/gateway.yaml`) |
 | Gateway URL or token env | `CHIMERA_GATEWAY_URL`, `CHIMERA_GATEWAY_TOKEN` |
-| Upstream API key env | `CHIMERA_UPSTREAM_API_KEY` |
+| Upstream API key env | `CHIMERA_BROKER_API_KEY` |
 | Credentials path in gateway.yaml | `paths.api_keys: "./api-keys.yaml"` |
 | Indexer config or sync state | `~/.locus/indexer.config.yaml`, `.locus/indexer.sync-state.json` |
 | Personal bundle binaries | `chimera-supervisor[.exe]`, `locus-desktop[.exe]` |
@@ -368,7 +368,7 @@ Use the `CHIMERA_*` family only:
 - `CHIMERA_GATEWAY_CONFIG`
 - `CHIMERA_GATEWAY_URL`
 - `CHIMERA_GATEWAY_TOKEN`
-- `CHIMERA_UPSTREAM_API_KEY`
+- `CHIMERA_BROKER_API_KEY`
 
 ### Hidden state directories
 

@@ -18,7 +18,7 @@ This document records **Phase 0** of [go-bifrost-migration.plan.md](plans/go-bif
 **Minimal bring-up**
 
 ```bash
-export CHIMERA_UPSTREAM_API_KEY=bifrost-local-dummy
+export CHIMERA_BROKER_API_KEY=bifrost-local-dummy
 export GROQ_API_KEY=...   # per bifrost.config.json
 make chimera-install      # once — versions from chimera/deps.lock
 make chimera-serve        # or: make up
@@ -61,7 +61,7 @@ Gateway YAML uses `upstream.*` for the OpenAI-compatible hop (BiFrost or any com
 | Field | Role |
 |-------|------|
 | `upstream.base_url` | Upstream root. Local default `http://127.0.0.1:8080`. `chimera serve` overrides this to match the supervised BiFrost. |
-| `upstream.api_key_env` | Env var for `Authorization: Bearer` on upstream `/v1/*`. Default `CHIMERA_UPSTREAM_API_KEY`. |
+| `upstream.api_key_env` | Env var for `Authorization: Bearer` on upstream `/v1/*`. Default `CHIMERA_BROKER_API_KEY`. |
 | `routing.fallback_chain` | Ordered BiFrost model ids as `provider/model`. |
 | `paths.tokens` / `paths.routing_policy` | Gateway auth and routing policy. |
 

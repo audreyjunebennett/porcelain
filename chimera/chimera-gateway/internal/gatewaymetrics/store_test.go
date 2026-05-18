@@ -24,7 +24,7 @@ func TestSplitProviderModel(t *testing.T) {
 	}
 }
 
-func TestStore_RecordUpstreamResponse_rollups(t *testing.T) {
+func TestStore_RecordBrokerResponse_rollups(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "metrics.sqlite")
@@ -35,13 +35,13 @@ func TestStore_RecordUpstreamResponse_rollups(t *testing.T) {
 	t.Cleanup(func() { _ = st.Close() })
 
 	at := time.Date(2026, 4, 16, 14, 37, 22, 0, time.UTC)
-	st.RecordUpstreamResponse(at, "groq/llama-3.3-70b-versatile", 200, 42)
-	st.RecordUpstreamResponse(at, "groq/llama-3.3-70b-versatile", 200, 10)
-	st.RecordUpstreamResponse(at, "groq/llama-3.3-70b-versatile", 413, 100)
+	st.RecordBrokerResponse(at, "groq/llama-3.3-70b-versatile", 200, 42)
+	st.RecordBrokerResponse(at, "groq/llama-3.3-70b-versatile", 200, 10)
+	st.RecordBrokerResponse(at, "groq/llama-3.3-70b-versatile", 413, 100)
 
 	var calls200, tok200, calls413 int
 	err = st.db.QueryRow(`
-SELECT calls, est_tokens FROM upstream_rollup_minute
+SELECT calls, est_tokens FROM broker_rollup_minute
 WHERE provider='groq' AND model_id='groq/llama-3.3-70b-versatile' AND minute_utc='2026-04-16T14:37' AND status=200
 `).Scan(&calls200, &tok200)
 	if err != nil {
@@ -51,7 +51,7 @@ WHERE provider='groq' AND model_id='groq/llama-3.3-70b-versatile' AND minute_utc
 		t.Fatalf("minute rollup 200: calls=%d tok=%d want 2,52", calls200, tok200)
 	}
 	err = st.db.QueryRow(`
-SELECT calls FROM upstream_rollup_minute
+SELECT calls FROM broker_rollup_minute
 WHERE provider='groq' AND model_id='groq/llama-3.3-70b-versatile' AND minute_utc='2026-04-16T14:37' AND status=413
 `).Scan(&calls413)
 	if err != nil {
@@ -63,7 +63,7 @@ WHERE provider='groq' AND model_id='groq/llama-3.3-70b-versatile' AND minute_utc
 
 	var dayCalls int
 	err = st.db.QueryRow(`
-SELECT calls FROM upstream_rollup_day
+SELECT calls FROM broker_rollup_day
 WHERE provider='groq' AND model_id='groq/llama-3.3-70b-versatile' AND day_utc='2026-04-16' AND status=200
 `).Scan(&dayCalls)
 	if err != nil {

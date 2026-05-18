@@ -12,7 +12,7 @@ import (
 )
 
 func TestUILoginGET_autoLoginFromEnvToken(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	t.Setenv(naming.EnvGatewayTokenTarget, "gw-ui-secret")
 	up := chimeraBrokerStubForUILogs(t)
 	t.Cleanup(up.Close)
@@ -42,7 +42,7 @@ func TestUILoginGET_autoLoginFromEnvToken(t *testing.T) {
 }
 
 func TestUILoginGET_autoLoginRespectsNextQuery(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	t.Setenv(naming.EnvGatewayTokenTarget, "gw-ui-secret")
 	up := chimeraBrokerStubForUILogs(t)
 	t.Cleanup(up.Close)
@@ -70,7 +70,7 @@ func TestUILoginGET_autoLoginRespectsNextQuery(t *testing.T) {
 }
 
 func TestUIDesktopRouteExistsWhenLogStoreDisabled(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	t.Setenv(naming.EnvGatewayTokenTarget, "gw-ui-secret")
 	up := chimeraBrokerStubForUILogs(t)
 	t.Cleanup(up.Close)
@@ -112,7 +112,7 @@ func TestUIDesktopRouteExistsWhenLogStoreDisabled(t *testing.T) {
 }
 
 func TestUILoginGET_badEnvTokenShowsLoginPage(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	t.Setenv(naming.EnvGatewayTokenTarget, "not-a-valid-token")
 	up := chimeraBrokerStubForUILogs(t)
 	t.Cleanup(up.Close)
@@ -145,7 +145,7 @@ func TestUILoginGET_badEnvTokenShowsLoginPage(t *testing.T) {
 }
 
 func TestUILoginGET_openRedirectQuerySanitized(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	t.Setenv(naming.EnvGatewayTokenTarget, "gw-ui-secret")
 	up := chimeraBrokerStubForUILogs(t)
 	t.Cleanup(up.Close)
@@ -174,7 +174,7 @@ func TestUILoginGET_openRedirectQuerySanitized(t *testing.T) {
 }
 
 func TestUILoginGET_envTokenAllowsAuthenticatedAPI(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	t.Setenv(naming.EnvGatewayTokenTarget, "gw-ui-secret")
 	up := chimeraBrokerStubForUILogs(t)
 	t.Cleanup(up.Close)
@@ -215,7 +215,7 @@ func TestUILoginGET_envTokenAllowsAuthenticatedAPI(t *testing.T) {
 
 func TestUILoginGET_unsetEnvDoesNotRedirect(t *testing.T) {
 	t.Setenv(naming.EnvGatewayTokenTarget, "")
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	up := chimeraBrokerStubForUILogs(t)
 	t.Cleanup(up.Close)
 

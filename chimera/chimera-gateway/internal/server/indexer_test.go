@@ -262,7 +262,7 @@ func TestHealth_RAGFailDegrades(t *testing.T) {
 }
 
 func TestHealth_NoRAGProbeWhenDisabled(t *testing.T) {
-	t.Setenv(naming.EnvUpstreamAPIKeyTarget, "ukey")
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/health" {
 			w.WriteHeader(http.StatusOK)

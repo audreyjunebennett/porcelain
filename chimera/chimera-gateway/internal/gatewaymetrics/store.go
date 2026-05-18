@@ -69,11 +69,11 @@ func (s *Store) DB() *sql.DB {
 	return s.db
 }
 
-// RecordUpstreamResponse records one upstream HTTP outcome (per plan §3.6.3–3.6.4): one row per
-// completed upstream round-trip (including each virtual-model fallback attempt). modelID is the
-// full upstream id (e.g. groq/llama-3.3-70b-versatile). estRequestTokens is the gateway estimate
+// RecordBrokerResponse records one chimera-broker HTTP outcome (per plan §3.6.3–3.6.4): one row per
+// completed broker round-trip (including each virtual-model fallback attempt). modelID is the
+// full broker model id (e.g. groq/llama-3.3-70b-versatile). estRequestTokens is the gateway estimate
 // for the proxied JSON body (tiktoken cl100k_base in the chat path).
-func (s *Store) RecordUpstreamResponse(at time.Time, modelID string, status int, estRequestTokens int) {
+func (s *Store) RecordBrokerResponse(at time.Time, modelID string, status int, estRequestTokens int) {
 	if s == nil || s.db == nil {
 		return
 	}
@@ -95,14 +95,14 @@ func (s *Store) RecordUpstreamResponse(at time.Time, modelID string, status int,
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if _, err := tx.ExecContext(ctx, `INSERT INTO upstream_call_events (occurred_at, provider, model_id, status, est_tokens) VALUES (?,?,?,?,?)`,
+	if _, err := tx.ExecContext(ctx, `INSERT INTO broker_call_events (occurred_at, provider, model_id, status, est_tokens) VALUES (?,?,?,?,?)`,
 		occurred, provider, modelID, status, estRequestTokens); err != nil {
 		s.disable(err, "insert event")
 		return
 	}
 
 	if _, err := tx.ExecContext(ctx, `
-INSERT INTO upstream_rollup_minute (provider, model_id, minute_utc, status, calls, est_tokens)
+INSERT INTO broker_rollup_minute (provider, model_id, minute_utc, status, calls, est_tokens)
 VALUES (?,?,?,?,1,?)
 ON CONFLICT(provider, model_id, minute_utc, status) DO UPDATE SET
   calls = calls + 1,
@@ -113,7 +113,7 @@ ON CONFLICT(provider, model_id, minute_utc, status) DO UPDATE SET
 	}
 
 	if _, err := tx.ExecContext(ctx, `
-INSERT INTO upstream_rollup_day (provider, model_id, day_utc, status, calls, est_tokens)
+INSERT INTO broker_rollup_day (provider, model_id, day_utc, status, calls, est_tokens)
 VALUES (?,?,?,?,1,?)
 ON CONFLICT(provider, model_id, day_utc, status) DO UPDATE SET
   calls = calls + 1,

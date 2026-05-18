@@ -19,10 +19,10 @@ func TestUsageForModelWindow_sumsCallsAndTokensInRange(t *testing.T) {
 
 	base := time.Date(2026, 4, 16, 12, 0, 0, 0, time.UTC)
 	// Three events for the target model across 2 minutes, plus an event for a different model.
-	store.RecordUpstreamResponse(base, "groq/fast", 200, 100)
-	store.RecordUpstreamResponse(base.Add(30*time.Second), "groq/fast", 429, 50)
-	store.RecordUpstreamResponse(base.Add(2*time.Minute), "groq/fast", 200, 200)
-	store.RecordUpstreamResponse(base, "openai/o", 200, 999)
+	store.RecordBrokerResponse(base, "groq/fast", 200, 100)
+	store.RecordBrokerResponse(base.Add(30*time.Second), "groq/fast", 429, 50)
+	store.RecordBrokerResponse(base.Add(2*time.Minute), "groq/fast", 200, 200)
+	store.RecordBrokerResponse(base, "openai/o", 200, 999)
 
 	ctx := context.Background()
 

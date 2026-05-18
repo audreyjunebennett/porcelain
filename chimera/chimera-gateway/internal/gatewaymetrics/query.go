@@ -15,7 +15,7 @@ type UsageRollup struct {
 	EstTokens int    `json:"est_tokens"`
 }
 
-// CallEvent is a recent row from upstream_call_events.
+// CallEvent is a recent row from broker_call_events.
 type CallEvent struct {
 	OccurredAt string `json:"occurred_at"`
 	Provider   string `json:"provider"`
@@ -33,7 +33,7 @@ func (s *Store) QueryMinuteRollups(ctx context.Context, minuteUTC string, limit 
 		limit = 200
 	}
 	q := `SELECT provider, model_id, status, calls, est_tokens
-FROM upstream_rollup_minute WHERE minute_utc = ? ORDER BY calls DESC, model_id LIMIT ?`
+FROM broker_rollup_minute WHERE minute_utc = ? ORDER BY calls DESC, model_id LIMIT ?`
 	rows, err := s.db.QueryContext(ctx, q, minuteUTC, limit)
 	if err != nil {
 		return nil, err
@@ -51,7 +51,7 @@ func (s *Store) QueryDayRollups(ctx context.Context, dayUTC string, limit int) (
 		limit = 200
 	}
 	q := `SELECT provider, model_id, status, calls, est_tokens
-FROM upstream_rollup_day WHERE day_utc = ? ORDER BY calls DESC, model_id LIMIT ?`
+FROM broker_rollup_day WHERE day_utc = ? ORDER BY calls DESC, model_id LIMIT ?`
 	rows, err := s.db.QueryContext(ctx, q, dayUTC, limit)
 	if err != nil {
 		return nil, err
@@ -81,7 +81,7 @@ func (s *Store) QueryRecentEvents(ctx context.Context, limit int) ([]CallEvent, 
 		limit = 100
 	}
 	q := `SELECT occurred_at, provider, model_id, status, est_tokens
-FROM upstream_call_events ORDER BY id DESC LIMIT ?`
+FROM broker_call_events ORDER BY id DESC LIMIT ?`
 	rows, err := s.db.QueryContext(ctx, q, limit)
 	if err != nil {
 		return nil, fmt.Errorf("recent events: %w", err)

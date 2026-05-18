@@ -116,7 +116,7 @@ func startSupervisorProcess(t *testing.T, supervisorBin, fakeWrapper string, arg
 		t.Fatal(err)
 	}
 	raw := "gateway:\n  semver: \"0.1.0\"\n  listen_port: 0\n  listen_host: \"127.0.0.1\"\n" +
-		"upstream:\n  base_url: \"http://127.0.0.1:8080\"\n  api_key_env: \"CHIMERA_UPSTREAM_API_KEY\"\n" +
+		"upstream:\n  base_url: \"http://127.0.0.1:8080\"\n  api_key_env: \"CHIMERA_BROKER_API_KEY\"\n" +
 		"health:\n  timeout_ms: 1000\n  chat_timeout_ms: 60000\n" +
 		"paths:\n  tokens: \"" + strings.ReplaceAll(tokensPath, "\\", "/") + "\"\n  routing_policy: \"" + strings.ReplaceAll(routingPath, "\\", "/") + "\"\n" +
 		"routing:\n  fallback_chain:\n    - \"fake/model\"\n"
@@ -352,7 +352,7 @@ func main() {
 	fs.StringVar(&_endpoint, "endpoint", "", "")
 	fs.StringVar(&_data, "data-path", "", "")
 	fs.StringVar(&_config, "config", "", "")
-	fs.StringVar(&_upstream, "upstream-override", "", "")
+	fs.StringVar(&_upstream, "broker-override", "", "")
 	_ = fs.Bool("debug-forward-upstream", false, "")
 	_ = fs.Parse(os.Args[1:])
 

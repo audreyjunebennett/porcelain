@@ -431,7 +431,12 @@ func (r *Runtime) routes() http.Handler {
 		writeJSON(w, code, payload)
 	}))
 	mux.HandleFunc(contract.MetricsPath, r.withMetrics("metrics", r.handleMetrics))
-	mux.HandleFunc(contract.DebugUpstreamLogsPath, r.withMetrics("debug_upstream_logs", r.handleDebugUpstreamLogs))
+	debugPath := contract.DebugLogsPath(r.cfg.Component)
+	debugMetric := "debug_broker_logs"
+	if r.cfg.Component == contract.ComponentVectorstore {
+		debugMetric = "debug_vectorstore_logs"
+	}
+	mux.HandleFunc(debugPath, r.withMetrics(debugMetric, r.handleDebugLogs))
 	return mux
 }
 
@@ -454,7 +459,7 @@ func (w *captureStatusWriter) WriteHeader(statusCode int) {
 	w.ResponseWriter.WriteHeader(statusCode)
 }
 
-func (r *Runtime) handleDebugUpstreamLogs(w http.ResponseWriter, _ *http.Request) {
+func (r *Runtime) handleDebugLogs(w http.ResponseWriter, _ *http.Request) {
 	if !r.cfg.DebugEnableUpstream {
 		w.WriteHeader(http.StatusNotFound)
 		return

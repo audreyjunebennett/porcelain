@@ -265,7 +265,7 @@ func TestE2E_Vectorstore_001_002_003_004_HappyStatusMetricsDebugDefault(t *testi
 			t.Fatalf("metrics missing %s\n%s", m, text)
 		}
 	}
-	dbg, err := http.Get(base + "/debug/upstream/logs")
+	dbg, err := http.Get(base + "/debug/vectorstore/logs")
 	if err != nil {
 		t.Fatalf("get debug endpoint: %v", err)
 	}
@@ -278,7 +278,7 @@ func TestE2E_Vectorstore_001_002_003_004_HappyStatusMetricsDebugDefault(t *testi
 func TestE2E_Vectorstore_005_DebugEnabledRedaction(t *testing.T) {
 	vectorstoreBin, fakeBin := ensureE2EBinaries(t)
 	p := startVectorstoreProcess(t, vectorstoreBin, fakeBin, []string{
-		"-debug-enable-upstream-logs",
+		"-debug-enable-vectorstore-logs",
 	}, map[string]string{
 		"FAKE_QDRANT_START_READY":   "1",
 		"FAKE_QDRANT_STDOUT_SECRET": "TOKEN=my-secret-value",
@@ -287,7 +287,7 @@ func TestE2E_Vectorstore_005_DebugEnabledRedaction(t *testing.T) {
 	base := "http://" + extractFlagValue(p.cmd.Args, "-listen")
 	waitForHTTPStatus(t, base+"/readyz", 200, 8*time.Second)
 
-	resp, err := http.Get(base + "/debug/upstream/logs")
+	resp, err := http.Get(base + "/debug/vectorstore/logs")
 	if err != nil {
 		t.Fatalf("get debug logs: %v", err)
 	}
@@ -324,7 +324,7 @@ func TestE2E_Vectorstore_006_DebugBindSafetyRejectsRemoteWithoutOverride(t *test
 	vectorstoreBin, fakeBin := ensureE2EBinaries(t)
 	cmd := exec.Command(vectorstoreBin,
 		"-listen", "0.0.0.0:"+strconvPort(t),
-		"-debug-enable-upstream-logs",
+		"-debug-enable-vectorstore-logs",
 		"-bin", fakeBin,
 		"-data-path", t.TempDir(),
 		"-endpoint", "127.0.0.1:"+strconvPort(t),
@@ -347,7 +347,7 @@ func TestE2E_Vectorstore_007_DebugBindOverrideAllowsRemote(t *testing.T) {
 	vectorstoreBin, fakeBin := ensureE2EBinaries(t)
 	p := startVectorstoreProcess(t, vectorstoreBin, fakeBin, []string{
 		"-listen", "0.0.0.0:" + strconvPort(t),
-		"-debug-enable-upstream-logs",
+		"-debug-enable-vectorstore-logs",
 		"-debug-allow-remote",
 	}, map[string]string{"FAKE_QDRANT_START_READY": "1"})
 	t.Cleanup(func() { stopVectorstore(t, p) })

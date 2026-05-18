@@ -28,7 +28,7 @@ func writeGateway(t *testing.T, path, upstream string, chain []string, qdrantURL
 		semver = "0.2.0"
 	}
 	raw := "gateway:\n  semver: \"" + semver + "\"\n  listen_port: 0\n  listen_host: \"127.0.0.1\"\n" +
-		"upstream:\n  base_url: \"" + upstream + "\"\n  api_key_env: \"" + naming.EnvUpstreamAPIKeyTarget + "\"\n" +
+		"upstream:\n  base_url: \"" + upstream + "\"\n  api_key_env: \"" + naming.EnvBrokerAPIKeyTarget + "\"\n" +
 		"health:\n  timeout_ms: 2000\n  chat_timeout_ms: 60000\n" +
 		"paths:\n  tokens: \"./" + naming.APIKeysFileTarget + "\"\n  routing_policy: \"./" + naming.RoutingPolicyFileTarget + "\"\n" +
 		"routing:\n  fallback_chain:\n" + chainYAML
