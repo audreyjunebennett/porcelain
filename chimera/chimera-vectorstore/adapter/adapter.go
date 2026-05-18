@@ -11,7 +11,7 @@ import (
 
 	"github.com/lynn/porcelain/chimera/chimera-vectorstore/internal/config"
 	"github.com/lynn/porcelain/chimera/chimera-vectorstore/internal/qdrant"
-	"github.com/lynn/porcelain/chimera/chimera-vectorstore/vectorstoreline"
+	"github.com/lynn/porcelain/chimera/chimera-vectorstore/internal/vectorstoreline"
 	"github.com/lynn/porcelain/chimera/internal/wrapper/contract"
 	"github.com/lynn/porcelain/internal/naming"
 )
@@ -46,6 +46,11 @@ func (a *Qdrant) MetricsURL() string {
 
 func (a *Qdrant) BackendName() string {
 	return naming.ProductQdrantBinName
+}
+
+// ChildLogWriter normalizes supervised chimera-vectorstore stdout for the operator log buffer.
+func ChildLogWriter(dst io.Writer) io.Writer {
+	return vectorstoreline.NewWriter(dst)
 }
 
 // WrapUpstreamLine normalizes one raw Qdrant log line for the wrapper runtime.

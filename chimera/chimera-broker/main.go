@@ -11,7 +11,7 @@ import (
 	"syscall"
 
 	"github.com/joho/godotenv"
-	"github.com/lynn/porcelain/chimera/chimera-broker/internal/adapter"
+	"github.com/lynn/porcelain/chimera/chimera-broker/adapter"
 	"github.com/lynn/porcelain/chimera/chimera-broker/internal/config"
 	"github.com/lynn/porcelain/chimera/internal/logfmt"
 	"github.com/lynn/porcelain/chimera/internal/wrapper/contract"

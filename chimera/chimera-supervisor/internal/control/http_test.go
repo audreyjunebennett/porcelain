@@ -1,4 +1,4 @@
-package main
+package control
 
 import (
 	"encoding/json"
@@ -12,67 +12,20 @@ import (
 	"github.com/lynn/porcelain/chimera/internal/wrapper/contract"
 )
 
-func TestSupervisorContractStatus(t *testing.T) {
+func TestHandler_StatusAndMetrics(t *testing.T) {
 	t.Parallel()
-	cases := []struct {
-		name string
-		in   supervisorSnapshot
-		want string
-	}{
-		{
-			name: "broker required unready",
-			in: supervisorSnapshot{
-				brokerRequired: true,
-				brokerReady:    false,
-			},
-			want: "degraded",
-		},
-		{
-			name: "vectorstore required unready",
-			in: supervisorSnapshot{
-				brokerRequired:      true,
-				brokerReady:         true,
-				vectorstoreRequired: true,
-				vectorstoreReady:    false,
-			},
-			want: "degraded",
-		},
-		{
-			name: "all required ready",
-			in: supervisorSnapshot{
-				brokerRequired:      true,
-				brokerReady:         true,
-				vectorstoreRequired: true,
-				vectorstoreReady:    true,
-			},
-			want: "ok",
-		},
-	}
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			if got := supervisorContractStatus(tc.in); got != tc.want {
-				t.Fatalf("supervisorContractStatus()=%q want %q", got, tc.want)
-			}
-		})
-	}
-}
+	st := NewState()
+	st.SetRequired(true, true)
+	st.SetVersions("test-version", "abc123")
+	st.SetEndpoints("127.0.0.1:8080", "127.0.0.1:6333")
+	st.SetBrokerReady(true)
+	st.SetVectorstoreReady(true)
+	st.IncBrokerRestarts()
+	st.IncVectorstoreRestarts()
+	st.SetLastError("last err")
+	st.SetOperatorUI("http://127.0.0.1:3000", false)
 
-func TestSupervisorControlMux_StatusAndMetrics(t *testing.T) {
-	t.Parallel()
-	st := newSupervisorControlState()
-	st.setRequired(true, true)
-	st.setVersions("test-version", "abc123")
-	st.setEndpoints("127.0.0.1:8080", "127.0.0.1:6333")
-	st.setBrokerReady(true)
-	st.setVectorstoreReady(true)
-	st.incBrokerRestarts()
-	st.incVectorstoreRestarts()
-	st.setLastError("last err")
-	st.setOperatorUI("http://127.0.0.1:3000", false)
-
-	srv := httptest.NewServer(buildWrapperControlMux(st, servicelogs.New(10)))
+	srv := httptest.NewServer(Handler(st, servicelogs.New(10)))
 	t.Cleanup(srv.Close)
 
 	res, err := http.Get(srv.URL + "/status")
@@ -142,14 +95,14 @@ func TestSupervisorControlMux_StatusAndMetrics(t *testing.T) {
 	}
 }
 
-func TestSupervisorControlMux_ReadyDegraded(t *testing.T) {
+func TestHandler_ReadyDegraded(t *testing.T) {
 	t.Parallel()
-	st := newSupervisorControlState()
-	st.setRequired(true, false)
-	st.setVersions("test-version", "")
-	st.setBrokerReady(false)
+	st := NewState()
+	st.SetRequired(true, false)
+	st.SetVersions("test-version", "")
+	st.SetBrokerReady(false)
 
-	srv := httptest.NewServer(buildWrapperControlMux(st, servicelogs.New(10)))
+	srv := httptest.NewServer(Handler(st, servicelogs.New(10)))
 	t.Cleanup(srv.Close)
 
 	res, err := http.Get(srv.URL + "/readyz")

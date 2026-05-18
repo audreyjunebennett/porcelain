@@ -9,7 +9,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/lynn/porcelain/chimera/chimera-broker/brokerline"
+	"github.com/lynn/porcelain/chimera/chimera-broker/internal/brokerline"
 	"github.com/lynn/porcelain/chimera/chimera-broker/internal/chimerabroker"
 	"github.com/lynn/porcelain/chimera/chimera-broker/internal/config"
 	"github.com/lynn/porcelain/chimera/internal/wrapper/contract"
@@ -47,6 +47,11 @@ func (a *ChimeraBroker) MetricsURL() string {
 
 func (a *ChimeraBroker) BackendName() string {
 	return naming.ProductBrokerName
+}
+
+// ChildLogWriter normalizes supervised chimera-broker stdout for the operator log buffer.
+func ChildLogWriter(dst io.Writer) io.Writer {
+	return brokerline.NewWriter(dst)
 }
 
 // WrapUpstreamLine normalizes one raw backend log line for the wrapper runtime.

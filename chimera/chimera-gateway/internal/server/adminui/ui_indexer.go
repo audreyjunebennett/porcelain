@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/operatorstore"
-	"github.com/lynn/porcelain/chimera/chimera-indexer/indexer"
+	"github.com/lynn/porcelain/chimera/chimera-indexer/adapter"
 	"gopkg.in/yaml.v3"
 )
 
@@ -39,7 +39,7 @@ func validateIndexerRootDir(rootPath string) (absRoot string, msg string, status
 
 // stripRootsFromSupervisedYAML returns YAML bytes with roots cleared (tuning-only file on disk).
 func stripRootsFromSupervisedYAML(raw []byte) ([]byte, error) {
-	var fc indexer.FileConfig
+	var fc adapter.FileConfig
 	if err := yaml.Unmarshal(raw, &fc); err != nil {
 		return nil, err
 	}
@@ -119,7 +119,7 @@ func (a *adminUI) handleIndexerConfigGET(w http.ResponseWriter, r *http.Request)
 		_ = json.NewEncoder(w).Encode(map[string]any{"error": "indexer supervised config path not configured"})
 		return
 	}
-	if err := indexer.EnsureSupervisedConfigFile(path); err != nil {
+	if err := adapter.EnsureSupervisedConfigFile(path); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]any{"error": err.Error()})
@@ -192,7 +192,7 @@ func (a *adminUI) handleIndexerConfigPUT(w http.ResponseWriter, r *http.Request)
 		_ = json.NewEncoder(w).Encode(map[string]any{"error": "yaml too large"})
 		return
 	}
-	var fc indexer.FileConfig
+	var fc adapter.FileConfig
 	if err := yaml.Unmarshal([]byte(y), &fc); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)

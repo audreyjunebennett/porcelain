@@ -1,6 +1,6 @@
 //go:build windows
 
-package main
+package proc
 
 import (
 	"errors"
@@ -8,7 +8,8 @@ import (
 	"os/exec"
 )
 
-func forceKillProcessTree(pid int) error {
+// ForceKillProcessTree terminates pid and its child processes on Windows.
+func ForceKillProcessTree(pid int) error {
 	if pid <= 0 {
 		return fmt.Errorf("invalid pid %d", pid)
 	}
@@ -16,7 +17,6 @@ func forceKillProcessTree(pid int) error {
 	if err := cmd.Run(); err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) && exitErr.ExitCode() == 128 {
-			// Process (or tree) already exited — common after TerminateThenKill.
 			return nil
 		}
 		return fmt.Errorf("taskkill /T /F /PID %d: %w", pid, err)

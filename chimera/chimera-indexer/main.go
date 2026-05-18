@@ -34,7 +34,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strings"
@@ -45,9 +44,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"
-	"github.com/lynn/porcelain/chimera/chimera-indexer/indexer"
-	"github.com/lynn/porcelain/chimera/chimera-indexer/indexerline"
-	"github.com/lynn/porcelain/chimera/chimera-indexer/internal/platform"
+	"github.com/lynn/porcelain/chimera/chimera-indexer/adapter"
+	idxconfig "github.com/lynn/porcelain/chimera/chimera-indexer/internal/config"
+	"github.com/lynn/porcelain/chimera/chimera-indexer/internal/indexer"
 	"github.com/lynn/porcelain/chimera/internal/wrapper/contract"
 	wruntime "github.com/lynn/porcelain/chimera/internal/wrapper/runtime"
 )
@@ -81,7 +80,7 @@ func (r *rootList) Set(v string) error {
 func main() {
 	args := os.Args[1:]
 	if len(args) > 0 && (args[0] == "-h" || args[0] == "--help") {
-		printHelp()
+		idxconfig.PrintHelp()
 		return
 	}
 	if len(args) > 0 && args[0] == "--indexer-backend" {
@@ -562,93 +561,14 @@ func runBackend(args []string) error {
 	return runWatchSession(ctx, wd, cfgPath, gatewayURL, roots, logJSON, logLevel, 0, nil)
 }
 
-type indexerConfig struct {
-	Listen                 string
-	Bin                    string
-	StartupTimeout         time.Duration
-	ShutdownTimeout        time.Duration
-	TerminateWait          time.Duration
-	BackoffInitial         time.Duration
-	BackoffMultiplier      float64
-	BackoffMax             time.Duration
-	BackoffResetAfter      time.Duration
-	DebugEnableUpstream    bool
-	DebugAllowRemote       bool
-	ForwardUpstreamInDebug bool
-	UpstreamVersion        string
-	BackendArgs            []string
-}
-
-func parseConfig(args []string) (indexerConfig, error) {
-	fs := flag.NewFlagSet("chimera-indexer", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
-	cfg := indexerConfig{}
-	var showVersion bool
-	fs.StringVar(&cfg.Listen, "listen", envOrDefault("INDEXER__LISTEN", "127.0.0.1:7750"), "wrapper listen addr (host:port)")
-	fs.StringVar(&cfg.Bin, "bin", envOrDefault("INDEXER__BIN", ""), "indexer backend binary path")
-	fs.DurationVar(&cfg.StartupTimeout, "startup-timeout", envDuration("INDEXER__TIMEOUTS__STARTUP", contract.DefaultStartupTimeout), "startup readiness timeout")
-	fs.DurationVar(&cfg.ShutdownTimeout, "shutdown-timeout", envDuration("INDEXER__TIMEOUTS__SHUTDOWN", contract.DefaultShutdownTimeout), "wrapper graceful shutdown timeout")
-	fs.DurationVar(&cfg.TerminateWait, "terminate-wait", contract.DefaultTerminateWait, "wait before force-kill backend")
-	fs.DurationVar(&cfg.BackoffInitial, "backoff-initial", contract.DefaultBackoffInitial, "restart backoff initial delay")
-	fs.Float64Var(&cfg.BackoffMultiplier, "backoff-multiplier", contract.DefaultBackoffMultiplier, "restart backoff multiplier")
-	fs.DurationVar(&cfg.BackoffMax, "backoff-max", contract.DefaultBackoffMax, "restart backoff max delay")
-	fs.DurationVar(&cfg.BackoffResetAfter, "backoff-reset-after", contract.DefaultBackoffResetAfter, "healthy runtime to reset backoff")
-	fs.BoolVar(&cfg.DebugEnableUpstream, "debug-enable-upstream-logs", wruntime.EnvBool(contract.DebugEnableEnvKey), "enable /debug/upstream/logs")
-	fs.BoolVar(&cfg.DebugAllowRemote, "debug-allow-remote", wruntime.EnvBool(contract.DebugAllowRemoteEnv), "allow /debug/* on non-loopback bind")
-	fs.BoolVar(&cfg.ForwardUpstreamInDebug, "debug-forward-upstream", false, "forward upstream lines to stderr in debug mode")
-	fs.StringVar(&cfg.UpstreamVersion, "upstream-version", "", "optional backend version for status payload")
-	fs.BoolVar(&showVersion, "version", false, "print version")
-	fs.BoolVar(&showVersion, "v", false, "print version")
-	if err := fs.Parse(args); err != nil {
-		return cfg, err
-	}
-	if showVersion {
-		fmt.Printf("chimera-indexer %s\ncommit %s\nbuild date %s\n", version, commit, date)
-		return cfg, io.EOF
-	}
-	cfg.BackendArgs = fs.Args()
-	return cfg, nil
-}
-
-func printHelp() {
-	fmt.Printf(`Chimera indexer runtime
-
-Usage:
-  chimera-indexer [flags] [backend flags]
-  chimera-indexer -version
-
-Backend flags are passed through to the embedded backend mode (for example: --one-shot, --config, --gateway-url).
-
-Flags:
-`)
-	fs := flag.NewFlagSet("chimera-indexer", flag.ContinueOnError)
-	fs.SetOutput(os.Stdout)
-	_ = fs.String("listen", envOrDefault("INDEXER__LISTEN", "127.0.0.1:7750"), "wrapper listen addr (host:port)")
-	_ = fs.String("bin", envOrDefault("INDEXER__BIN", ""), "indexer backend binary path")
-	_ = fs.Duration("startup-timeout", envDuration("INDEXER__TIMEOUTS__STARTUP", contract.DefaultStartupTimeout), "startup readiness timeout")
-	_ = fs.Duration("shutdown-timeout", envDuration("INDEXER__TIMEOUTS__SHUTDOWN", contract.DefaultShutdownTimeout), "wrapper graceful shutdown timeout")
-	_ = fs.Duration("terminate-wait", contract.DefaultTerminateWait, "wait before force-kill backend")
-	_ = fs.Duration("backoff-initial", contract.DefaultBackoffInitial, "restart backoff initial delay")
-	_ = fs.Float64("backoff-multiplier", contract.DefaultBackoffMultiplier, "restart backoff multiplier")
-	_ = fs.Duration("backoff-max", contract.DefaultBackoffMax, "restart backoff max delay")
-	_ = fs.Duration("backoff-reset-after", contract.DefaultBackoffResetAfter, "healthy runtime to reset backoff")
-	_ = fs.Bool("debug-enable-upstream-logs", wruntime.EnvBool(contract.DebugEnableEnvKey), "enable /debug/upstream/logs")
-	_ = fs.Bool("debug-allow-remote", wruntime.EnvBool(contract.DebugAllowRemoteEnv), "allow /debug/* on non-loopback bind")
-	_ = fs.Bool("debug-forward-upstream", false, "forward upstream lines to stderr in debug mode")
-	_ = fs.String("upstream-version", "", "optional backend version for status payload")
-	_ = fs.Bool("version", false, "print version")
-	_ = fs.Bool("v", false, "print version")
-	fs.PrintDefaults()
-}
-
-type indexerAdapter struct {
-	cfg indexerConfig
-}
-
 func run(args []string) error {
 	_ = godotenv.Load("env")
 	_ = godotenv.Load(".env")
-	cfg, err := parseConfig(args)
+	cfg, err := idxconfig.Parse(args, idxconfig.BuildInfo{
+		Version: version,
+		Commit:  commit,
+		Date:    date,
+	})
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			return nil
@@ -656,7 +576,7 @@ func run(args []string) error {
 		return wruntime.WrapExitError(contract.ExitConfigError, err)
 	}
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	adapter := &indexerAdapter{cfg: cfg}
+	idx := &adapter.Indexer{Cfg: cfg}
 	rootCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	return wruntime.Run(rootCtx, wruntime.Config{
@@ -679,67 +599,8 @@ func run(args []string) error {
 		ReadyMessage:           "indexer.ready",
 		UpstreamLineMessage:    "indexer.upstream.line",
 		HTTPServerErrorMessage: "indexer.http.server_error",
-		UpstreamLineWrapper:    wrapIndexerLine,
-	}, adapter, log)
-}
-
-func (a *indexerAdapter) Start(ctx context.Context, capture io.Writer, _ *slog.Logger) (*exec.Cmd, error) {
-	bin := strings.TrimSpace(a.cfg.Bin)
-	args := append([]string{}, a.cfg.BackendArgs...)
-	if bin == "" {
-		exe, err := os.Executable()
-		if err != nil {
-			return nil, fmt.Errorf("resolve executable for embedded backend: %w", err)
-		}
-		bin = exe
-		args = append([]string{"--indexer-backend"}, args...)
-	}
-	stdout := platform.StdoutTee(indexerline.NewWriter(capture))
-	stderr := platform.StderrTee(indexerline.NewWriter(capture))
-	cmd := exec.CommandContext(ctx, bin, args...)
-	cmd.Env = os.Environ()
-	cmd.Stdout = stdout
-	cmd.Stderr = stderr
-	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("start indexer backend: %w", err)
-	}
-	return cmd, nil
-}
-
-func (a *indexerAdapter) ReadyURL() string {
-	return ""
-}
-
-func (a *indexerAdapter) MetricsURL() string {
-	return ""
-}
-
-func (a *indexerAdapter) BackendName() string {
-	return "custom"
-}
-
-func wrapIndexerLine(raw string) string {
-	return string(indexerline.NormalizePayload(raw))
-}
-
-func envOrDefault(key, def string) string {
-	v := strings.TrimSpace(os.Getenv(key))
-	if v == "" {
-		return def
-	}
-	return v
-}
-
-func envDuration(key string, def time.Duration) time.Duration {
-	v := strings.TrimSpace(os.Getenv(key))
-	if v == "" {
-		return def
-	}
-	d, err := time.ParseDuration(v)
-	if err != nil {
-		return def
-	}
-	return d
+		UpstreamLineWrapper:    adapter.WrapUpstreamLine,
+	}, idx, log)
 }
 
 func exitCodeForError(err error) int {

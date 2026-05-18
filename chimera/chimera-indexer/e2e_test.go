@@ -20,7 +20,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lynn/porcelain/chimera/chimera-indexer/indexer"
+	"github.com/lynn/porcelain/chimera/chimera-indexer/internal/indexer"
 )
 
 var (

@@ -87,10 +87,10 @@ endif
 	locus-desktop-clean locus-desktop-clean-install locus-desktop-clean-build locus-desktop-clean-configure locus-desktop-clean-run \
 	build bin-stage stage-bin-dir chimera-build run \
 	chimera-gateway-build chimera-gateway-install chimera-gateway-run chimera-gateway-test chimera-gateway-test-unit chimera-gateway-test-e2e \
-	chimera-supervisor-build chimera-supervisor-run chimera-supervisor-test \
+	chimera-supervisor-build chimera-supervisor-run chimera-supervisor-test chimera-supervisor-test-unit chimera-supervisor-test-e2e \
 	chimera-broker-configure chimera-broker-install chimera-broker-build chimera-broker-run chimera-broker-test chimera-broker-test-unit chimera-broker-test-e2e \
 	chimera-vectorstore-configure chimera-vectorstore-install chimera-vectorstore-build chimera-vectorstore-run chimera-vectorstore-test chimera-vectorstore-test-unit chimera-vectorstore-test-e2e \
-	chimera-indexer-build chimera-indexer-run chimera-indexer-install chimera-indexer-test \
+	chimera-indexer-build chimera-indexer-run chimera-indexer-install chimera-indexer-test chimera-indexer-test-unit chimera-indexer-test-e2e \
 	locus-install locus-build locus-run locus-test \
 	locus-desktop-install locus-desktop-build locus-desktop-run locus-desktop-test locus-desktop-test-unit locus-desktop-test-e2e \
 	tokencount-file catalog-free catalog-available config-provider-free-tier \
@@ -231,7 +231,7 @@ chimera-broker-test: chimera-broker-test-unit chimera-broker-test-e2e
 
 chimera-broker-test-unit:
 	@echo [STEP] Running Chimera broker unit tests
-	@go test $(CHIMERA_CMD_BROKER) $(RACE_GATEWAY) -count=1
+	@go test $(CHIMERA_CMD_BROKER)/... $(RACE_GATEWAY) -run Test -skip E2E -count=1
 
 chimera-broker-test-e2e:
 	@echo [STEP] Running Chimera broker end-to-end tests
@@ -271,7 +271,7 @@ chimera-gateway-test: chimera-gateway-test-unit chimera-gateway-test-e2e
 
 chimera-gateway-test-unit:
 	@echo [STEP] Running Chimera gateway unit tests
-	@go test $(CHIMERA_CMD_GATEWAY) $(RACE_GATEWAY) -run Test -skip E2E -count=1
+	@go test $(CHIMERA_CMD_GATEWAY)/... $(RACE_GATEWAY) -run Test -skip E2E -count=1
 
 chimera-gateway-test-e2e:
 	@echo [STEP] Running Chimera gateway end-to-end tests
@@ -311,11 +311,11 @@ chimera-indexer-test: chimera-indexer-test-unit chimera-indexer-test-e2e
 
 chimera-indexer-test-unit:
 	@echo [STEP] Running Chimera indexer unit tests
-	@go test $(CHIMERA_CMD_INDEXER) $(RACE_GATEWAY) -run TestIndexer -count=1
+	@go test $(CHIMERA_CMD_INDEXER)/... $(RACE_GATEWAY) -run Test -skip E2E -count=1
 
 chimera-indexer-test-e2e:
 	@echo [STEP] Running Chimera indexer end-to-end tests
-	@go test $(CHIMERA_CMD_INDEXER) $(RACE_GATEWAY) -run E2E_Indexer -count=1
+	@go test $(CHIMERA_CMD_INDEXER) $(RACE_GATEWAY) -run E2E -count=1
 
 chimera-indexer-clean: chimera-indexer-clean-build chimera-indexer-clean-install chimera-indexer-clean-configure chimera-indexer-clean-run
 
@@ -349,11 +349,11 @@ chimera-supervisor-test: chimera-supervisor-test-unit chimera-supervisor-test-e2
 
 chimera-supervisor-test-unit:
 	@echo [STEP] Running Chimera supervisor unit tests
-	@go test $(CHIMERA_CMD_SUPERVISOR) $(RACE_GATEWAY) -run TestSupervisor -count=1
+	@go test $(CHIMERA_CMD_SUPERVISOR)/... $(RACE_GATEWAY) -run Test -skip E2E -count=1
 
 chimera-supervisor-test-e2e:
 	@echo [STEP] Running Chimera supervisor end-to-end tests
-	@go test $(CHIMERA_CMD_SUPERVISOR) $(RACE_GATEWAY) -run E2E_Supervisor -count=1
+	@go test $(CHIMERA_CMD_SUPERVISOR) $(RACE_GATEWAY) -run E2E -count=1
 
 chimera-supervisor-clean: chimera-supervisor-clean-build chimera-supervisor-clean-install chimera-supervisor-clean-configure chimera-supervisor-clean-run
 
@@ -393,7 +393,7 @@ chimera-vectorstore-test: chimera-vectorstore-test-unit chimera-vectorstore-test
 
 chimera-vectorstore-test-unit:
 	@echo [STEP] Running Chimera vectorstore unit tests
-	@go test $(CHIMERA_CMD_VECTORSTORE)/internal/... $(CHIMERA_CMD_VECTORSTORE)/vectorstoreline $(RACE_GATEWAY) -count=1
+	@go test $(CHIMERA_CMD_VECTORSTORE)/... $(RACE_GATEWAY) -run Test -skip E2E -count=1
 
 chimera-vectorstore-test-e2e:
 	@echo [STEP] Running Chimera vectorstore end-to-end tests

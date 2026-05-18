@@ -1,4 +1,4 @@
-package main
+package control
 
 import (
 	"encoding/json"
@@ -12,135 +12,6 @@ import (
 	"github.com/lynn/porcelain/chimera/internal/servicelogs"
 	"github.com/lynn/porcelain/chimera/internal/wrapper/contract"
 )
-
-type supervisorControlState struct {
-	mu                  sync.RWMutex
-	brokerRequired      bool
-	vectorstoreRequired bool
-	brokerReady         bool
-	vectorstoreReady    bool
-	brokerRestarts      int
-	vectorstoreRestarts int
-	lastError           string
-	wrapperVersion      string
-	buildCommit         string
-	brokerEndpoint      string
-	vectorstoreEndpoint string
-	operatorUIBaseURL   string
-	bootstrap           bool
-}
-
-func newSupervisorControlState() *supervisorControlState {
-	return &supervisorControlState{}
-}
-
-func (s *supervisorControlState) setRequired(brokerRequired, vectorstoreRequired bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.brokerRequired = brokerRequired
-	s.vectorstoreRequired = vectorstoreRequired
-}
-
-func (s *supervisorControlState) setVersions(wrapperVersion, buildCommit string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.wrapperVersion = strings.TrimSpace(wrapperVersion)
-	s.buildCommit = strings.TrimSpace(buildCommit)
-}
-
-func (s *supervisorControlState) setEndpoints(brokerEndpoint, vectorstoreEndpoint string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.brokerEndpoint = strings.TrimSpace(brokerEndpoint)
-	s.vectorstoreEndpoint = strings.TrimSpace(vectorstoreEndpoint)
-}
-
-func (s *supervisorControlState) setBrokerReady(v bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.brokerReady = v
-}
-
-func (s *supervisorControlState) setVectorstoreReady(v bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.vectorstoreReady = v
-}
-
-func (s *supervisorControlState) incBrokerRestarts() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.brokerRestarts++
-}
-
-func (s *supervisorControlState) incVectorstoreRestarts() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.vectorstoreRestarts++
-}
-
-func (s *supervisorControlState) setLastError(err string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.lastError = strings.TrimSpace(err)
-}
-
-func (s *supervisorControlState) setOperatorUI(baseURL string, bootstrap bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.operatorUIBaseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
-	s.bootstrap = bootstrap
-}
-
-type supervisorSnapshot struct {
-	brokerRequired      bool
-	vectorstoreRequired bool
-	brokerReady         bool
-	vectorstoreReady    bool
-	brokerRestarts      int
-	vectorstoreRestarts int
-	lastError           string
-	wrapperVersion      string
-	buildCommit         string
-	brokerEndpoint      string
-	vectorstoreEndpoint string
-	operatorUIBaseURL   string
-	bootstrap           bool
-}
-
-func (s *supervisorControlState) snapshot() supervisorSnapshot {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return supervisorSnapshot{
-		brokerRequired:      s.brokerRequired,
-		vectorstoreRequired: s.vectorstoreRequired,
-		brokerReady:         s.brokerReady,
-		vectorstoreReady:    s.vectorstoreReady,
-		brokerRestarts:      s.brokerRestarts,
-		vectorstoreRestarts: s.vectorstoreRestarts,
-		lastError:           s.lastError,
-		wrapperVersion:      s.wrapperVersion,
-		buildCommit:         s.buildCommit,
-		brokerEndpoint:      s.brokerEndpoint,
-		vectorstoreEndpoint: s.vectorstoreEndpoint,
-		operatorUIBaseURL:   s.operatorUIBaseURL,
-		bootstrap:           s.bootstrap,
-	}
-}
-
-func supervisorContractStatus(s supervisorSnapshot) string {
-	if s.brokerRequired && !s.brokerReady {
-		return "degraded"
-	}
-	if s.vectorstoreRequired && !s.vectorstoreReady {
-		return "degraded"
-	}
-	return "ok"
-}
-
-func supervisorReady(s supervisorSnapshot) bool {
-	return supervisorContractStatus(s) == "ok"
-}
 
 type requestMetrics struct {
 	mu        sync.Mutex
@@ -219,7 +90,8 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-func buildWrapperControlMux(state *supervisorControlState, logStore *servicelogs.Store) http.Handler {
+// Handler returns the supervisor control-plane HTTP handler.
+func Handler(state *State, logStore *servicelogs.Store) http.Handler {
 	metrics := newRequestMetrics()
 	withMetrics := func(endpoint string, h http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, req *http.Request) {
@@ -238,8 +110,8 @@ func buildWrapperControlMux(state *supervisorControlState, logStore *servicelogs
 		})
 	}))
 	mux.HandleFunc(contract.ReadyPath, withMetrics("readyz", func(w http.ResponseWriter, _ *http.Request) {
-		s := state.snapshot()
-		if !supervisorReady(s) {
+		s := state.Snapshot()
+		if !Ready(s) {
 			writeJSON(w, http.StatusServiceUnavailable, map[string]any{
 				"status":    "degraded",
 				"component": contract.ComponentSupervisor,
@@ -252,22 +124,22 @@ func buildWrapperControlMux(state *supervisorControlState, logStore *servicelogs
 		})
 	}))
 	mux.HandleFunc("/status", withMetrics("status", func(w http.ResponseWriter, _ *http.Request) {
-		s := state.snapshot()
-		restarts := s.brokerRestarts + s.vectorstoreRestarts
-		status := supervisorContractStatus(s)
+		s := state.Snapshot()
+		restarts := s.BrokerRestarts + s.VectorstoreRestarts
+		status := ContractStatus(s)
 		details := map[string]any{
 			"children": map[string]any{
 				"broker": map[string]any{
-					"required": s.brokerRequired,
-					"ready":    s.brokerReady,
-					"restarts": s.brokerRestarts,
-					"endpoint": s.brokerEndpoint,
+					"required": s.BrokerRequired,
+					"ready":    s.BrokerReady,
+					"restarts": s.BrokerRestarts,
+					"endpoint": s.BrokerEndpoint,
 				},
 				"vectorstore": map[string]any{
-					"required": s.vectorstoreRequired,
-					"ready":    s.vectorstoreReady,
-					"restarts": s.vectorstoreRestarts,
-					"endpoint": s.vectorstoreEndpoint,
+					"required": s.VectorstoreRequired,
+					"ready":    s.VectorstoreReady,
+					"restarts": s.VectorstoreRestarts,
+					"endpoint": s.VectorstoreEndpoint,
 				},
 			},
 		}
@@ -278,20 +150,20 @@ func buildWrapperControlMux(state *supervisorControlState, logStore *servicelogs
 			Status:      status,
 			Timestamp:   time.Now().UTC(),
 			Version: contract.Version{
-				Wrapper:  s.wrapperVersion,
-				BuildSHA: s.buildCommit,
+				Wrapper:  s.WrapperVersion,
+				BuildSHA: s.BuildCommit,
 			},
 			Message:  "supervisor wrapper orchestration state",
 			Restarts: &restarts,
 			Details:  details,
 		}
-		if strings.TrimSpace(s.lastError) != "" {
-			payload.LastError = s.lastError
+		if strings.TrimSpace(s.LastError) != "" {
+			payload.LastError = s.LastError
 		}
-		if ui := strings.TrimSpace(s.operatorUIBaseURL); ui != "" {
+		if ui := strings.TrimSpace(s.OperatorUIBaseURL); ui != "" {
 			payload.Details["operator_ui"] = map[string]any{
 				"base_url":  ui,
-				"bootstrap": s.bootstrap,
+				"bootstrap": s.Bootstrap,
 			}
 		}
 		if err := payload.Validate(); err != nil {
@@ -308,10 +180,10 @@ func buildWrapperControlMux(state *supervisorControlState, logStore *servicelogs
 		writeJSON(w, code, payload)
 	}))
 	mux.HandleFunc(contract.MetricsPath, withMetrics("metrics", func(w http.ResponseWriter, _ *http.Request) {
-		s := state.snapshot()
-		restarts := s.brokerRestarts + s.vectorstoreRestarts
+		s := state.Snapshot()
+		restarts := s.BrokerRestarts + s.VectorstoreRestarts
 		backendUp := 1
-		if !supervisorReady(s) {
+		if !Ready(s) {
 			backendUp = 0
 		}
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
