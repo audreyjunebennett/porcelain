@@ -223,7 +223,7 @@ chimera-broker-configure:
 	@echo [STEP] Generating Chimera broker configuration
 	@$(GITBASH) scripts/chimera-broker-configure.sh
 
-chimera-broker-run: chimera-broker-build chimera-broker-configure
+chimera-broker-run: chimera-broker-configure
 	@echo [STEP] Running Chimera broker
 	@$(GITBASH) -lc '"$(CHIMERA_BROKER_STAGE_OUT)" -bin "$(CHIMERA_BROKER_RUNTIME_BIN)"'
 
@@ -263,7 +263,11 @@ chimera-gateway-build:
 	@$(MAKE) stage-bin-dir
 	@$(GITBASH) -lc 'cp -f "$(CHIMERA_GATEWAY_BUILD_OUT)" "$(CHIMERA_GATEWAY_STAGE_OUT)"'
 
-chimera-gateway-run: chimera-gateway-build
+chimera-gateway-configure:
+	@echo [STEP] Generating Chimera gateway configuration
+	@$(GITBASH) scripts/chimera-gateway-configure.sh
+
+chimera-gateway-run: chimera-gateway-configure
 	@echo [STEP] Running Chimera gateway on 127.0.0.1:3000
 	@$(GITBASH) -lc 'PATH="$$(pwd)/$(CHIMERA_RUNTIME_BIN_DIR):$$(pwd)/$(BIN_STAGE_DIR):$$PATH" "$(CHIMERA_GATEWAY_STAGE_OUT)" -gateway-listen "127.0.0.1:3000" $(ARGS)'
 
@@ -303,7 +307,7 @@ chimera-indexer-build:
 	@$(MAKE) stage-bin-dir
 	@$(GITBASH) -lc 'cp -f "$(CHIMERA_INDEXER_BUILD_OUT)" "$(CHIMERA_INDEXER_STAGE_OUT)"'
 
-chimera-indexer-run: chimera-indexer-build
+chimera-indexer-run:
 	@echo [STEP] Running Chimera indexer
 	@$(GITBASH) -lc '"$(CHIMERA_INDEXER_STAGE_OUT)" $(ARGS)'
 
@@ -341,7 +345,7 @@ chimera-supervisor-build:
 	@$(MAKE) stage-bin-dir
 	@$(GITBASH) -lc 'cp -f "$(CHIMERA_SUPERVISOR_BUILD_OUT)" "$(CHIMERA_SUPERVISOR_STAGE_OUT)"'
 
-chimera-supervisor-run: chimera-supervisor-build
+chimera-supervisor-run:
 	@echo [STEP] Running Chimera supervisor
 	@$(GITBASH) -lc '"$(CHIMERA_SUPERVISOR_STAGE_OUT)" $(ARGS)'
 
@@ -385,7 +389,7 @@ chimera-vectorstore-configure:
 	@echo [STEP] Generating Chimera vectorstore configuration
 	@$(GITBASH) scripts/chimera-vectorstore-configure.sh
 
-chimera-vectorstore-run: chimera-vectorstore-build chimera-vectorstore-configure
+chimera-vectorstore-run: chimera-vectorstore-configure
 	@echo [STEP] Running Chimera vectorstore
 	@$(GITBASH) -lc '"$(CHIMERA_VECTORSTORE_STAGE_OUT)" -bin "$(CHIMERA_VECTORSTORE_RUNTIME_BIN)"'
 
