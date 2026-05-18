@@ -95,7 +95,7 @@ endif
 	chimera-broker-install chimera-broker-build chimera-broker-run chimera-broker-test chimera-broker-test-unit chimera-broker-test-e2e \
 	chimera-vectorstore-install chimera-vectorstore-build chimera-vectorstore-run chimera-vectorstore-test chimera-vectorstore-test-unit chimera-vectorstore-test-e2e \
 	chimera-indexer-build chimera-indexer-run chimera-indexer-install chimera-indexer-test chimera-indexer-test-unit chimera-indexer-test-e2e \
-	locus-install locus-build locus-run locus-test locus-test-if-enabled \
+	locus-install locus-build locus-run locus-test locus-vet-if-enabled locus-test-if-enabled \
 	locus-test-unit-if-enabled locus-test-e2e-if-enabled \
 	locus-desktop-install locus-desktop-build locus-desktop-run locus-desktop-test locus-desktop-test-unit locus-desktop-test-e2e \
 	tokencount-file catalog-free catalog-available config-provider-free-tier \
@@ -139,10 +139,17 @@ test-unit: chimera-test-unit locus-test-unit-if-enabled
 test-e2e: chimera-test-e2e locus-test-e2e-if-enabled
 
 vet:
-	$(MAKE) --no-print-directory chimera-vet locus-vet
+	$(MAKE) --no-print-directory chimera-vet locus-vet-if-enabled
 
 vet-desktop:
 	$(MAKE) --no-print-directory chimera-vet locus-vet-desktop
+
+locus-vet-if-enabled:
+ifeq ($(SKIP_DESKTOP),1)
+	@echo [SKIP] locus-vet (SKIP_DESKTOP=1)
+else
+	@$(MAKE) --no-print-directory locus-vet
+endif
 
 locus-test-if-enabled:
 ifeq ($(SKIP_DESKTOP),1)
