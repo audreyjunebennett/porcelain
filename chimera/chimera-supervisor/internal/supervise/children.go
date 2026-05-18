@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	brokeradapter "github.com/lynn/porcelain/chimera/chimera-broker/adapter"
-	"github.com/lynn/porcelain/chimera/chimera-gateway/gatewayline"
+	"github.com/lynn/porcelain/chimera/internal/gatewayline"
 	indexeradapter "github.com/lynn/porcelain/chimera/chimera-indexer/adapter"
 	svconfig "github.com/lynn/porcelain/chimera/chimera-supervisor/internal/config"
 	"github.com/lynn/porcelain/chimera/chimera-supervisor/internal/control"

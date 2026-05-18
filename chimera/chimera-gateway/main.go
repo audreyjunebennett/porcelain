@@ -19,7 +19,8 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
-	"github.com/lynn/porcelain/chimera/chimera-gateway/gatewayline"
+	"github.com/lynn/porcelain/chimera/internal/gatewayline"
+	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/proc"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server"
 	"github.com/lynn/porcelain/chimera/internal/config"
 	"github.com/lynn/porcelain/chimera/internal/logfmt"
@@ -222,6 +223,7 @@ func (a *gatewayAdapter) Start(ctx context.Context, capture io.Writer, log *slog
 	stdout := gatewayline.NewWriter(out)
 	stderr := gatewayline.NewWriter(out)
 	cmd := exec.CommandContext(ctx, bin, args...)
+	proc.ApplyNoConsoleWindow(cmd)
 	cmd.Env = os.Environ()
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
