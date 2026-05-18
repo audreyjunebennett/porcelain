@@ -15,11 +15,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/lynn/porcelain/chimera/chimera-indexer/indexer"
 )
 
 var (
@@ -148,17 +149,6 @@ func newFakeGateway(t *testing.T) *fakeGateway {
 	return g
 }
 
-func (g *fakeGateway) seenSources() []string {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	out := make([]string, 0, len(g.ingest))
-	for _, r := range g.ingest {
-		out = append(out, r.Source)
-	}
-	sort.Strings(out)
-	return out
-}
-
 func TestE2E_Indexer_001_OneShotStructuredLogs(t *testing.T) {
 	indexerBin := ensureIndexerE2EBinary(t)
 	g := newFakeGateway(t)
@@ -167,7 +157,7 @@ func TestE2E_Indexer_001_OneShotStructuredLogs(t *testing.T) {
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	cfgPath := filepath.Join(wd, ".locus", "indexer.config.yaml")
+	cfgPath := indexer.HiddenIndexerConfigPath(wd)
 	if err := os.MkdirAll(filepath.Dir(cfgPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -215,7 +205,7 @@ func TestE2E_Indexer_002_MissingTokenExitsNonZero(t *testing.T) {
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	cfgPath := filepath.Join(wd, ".locus", "indexer.config.yaml")
+	cfgPath := indexer.HiddenIndexerConfigPath(wd)
 	if err := os.MkdirAll(filepath.Dir(cfgPath), 0o755); err != nil {
 		t.Fatal(err)
 	}

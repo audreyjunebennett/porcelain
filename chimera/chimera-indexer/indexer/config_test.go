@@ -70,7 +70,7 @@ func TestResolve_SyncStateDefaultNextToExplicitConfig(t *testing.T) {
 	if len(r.Roots) != 0 {
 		t.Fatalf("supervised mode ignores YAML roots, got %d roots", len(r.Roots))
 	}
-	want := filepath.Join(sub, "indexer.sync-state.json")
+	want := filepath.Join(sub, IndexerSyncStateFileName)
 	if r.SyncStatePath != want {
 		t.Fatalf("SyncStatePath=%q want %q", r.SyncStatePath, want)
 	}
@@ -92,8 +92,8 @@ func TestResolve_SyncStateDefaultDotLocusWithoutExplicitConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := r.SyncStatePath; got != filepath.Join(".locus", "indexer.sync-state.json") {
-		t.Fatalf("SyncStatePath=%q want .locus/indexer.sync-state.json", got)
+	if got := r.SyncStatePath; got != HiddenIndexerSyncStatePath(".") {
+		t.Fatalf("SyncStatePath=%q want %s", got, HiddenIndexerSyncStatePath("."))
 	}
 }
 
@@ -289,8 +289,8 @@ func TestLoadLayeredConfig_MergesGlobalThenLocal(t *testing.T) {
 	if err := os.MkdirAll(rootReal, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	globalPath := filepath.Join(home, ".locus", "indexer.config.yaml")
-	localPath := filepath.Join(cwd, ".locus", "indexer.config.yaml")
+	globalPath := HiddenIndexerConfigPath(home)
+	localPath := HiddenIndexerConfigPath(cwd)
 	if err := os.MkdirAll(filepath.Dir(globalPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -354,7 +354,7 @@ func TestLoadFile_RootsStringsAndObjects(t *testing.T) {
 	if err := os.MkdirAll(b, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	cfgPath := filepath.Join(base, "indexer.config.yaml")
+	cfgPath := filepath.Join(base, IndexerConfigFileName)
 	yaml := fmt.Sprintf(`gateway_url: http://gw.example
 roots:
   - %q

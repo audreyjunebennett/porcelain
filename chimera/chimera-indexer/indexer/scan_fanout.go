@@ -16,10 +16,7 @@ func (ix *Indexer) computePerScopeBudget(nScopes int) int {
 	if cap <= 0 {
 		return 1 << 28 // effectively unlimited chunk size for unbounded queues
 	}
-	pct := ix.cfg.QueueFanoutHWMPercent
-	if pct <= 0 || pct > 100 {
-		pct = 75
-	}
+	pct := effectiveQueueFanoutHWMPercent(ix.cfg.QueueFanoutHWMPercent)
 	p := float64(pct) / 100.0
 	n := nScopes
 	if n < 1 {
@@ -136,10 +133,7 @@ func (ix *Indexer) runScanJob(ctx context.Context, scanID string) error {
 	nScopes := len(scopeSet)
 	budget := ix.computePerScopeBudget(nScopes)
 	cap := ix.queue.Cap()
-	pct := ix.cfg.QueueFanoutHWMPercent
-	if pct <= 0 || pct > 100 {
-		pct = 75
-	}
+	pct := effectiveQueueFanoutHWMPercent(ix.cfg.QueueFanoutHWMPercent)
 
 	ix.log.Info("scan fan-out budget",
 		"msg", "indexer.scan.complete",
@@ -168,7 +162,7 @@ func (ix *Indexer) runScanJob(ctx context.Context, scanID string) error {
 			truncated = true
 			paths = paths[:maxDiscoveryPathsLogged]
 		}
-		ix.log.Info("discovery summary (scope)",
+		args := []any{
 			"msg", "indexer.discovery.summary.scope",
 			"scan_id", scanID,
 			"tenant_id", tid,
@@ -176,15 +170,12 @@ func (ix *Indexer) runScanJob(ctx context.Context, scanID string) error {
 			"ingest_project", proj,
 			"flavor_id", flav,
 			"indexer_target_key", ik,
-			"candidates_discovered", d.Candidates,
-			"skipped_ignored", d.SkippedIgnoredByRules(),
-			"skipped_binary", d.SkippedBinary,
-			"skipped_oversize", d.SkippedOversize,
-			"skipped_other", d.SkippedOther,
 			"rel_paths", paths,
 			"paths_truncated", truncated,
 			"path_sample_count", len(paths),
-		)
+		}
+		args = append(args, d.discoveryScopeLogAttrs()...)
+		ix.log.Info("discovery summary (scope)", args...)
 	}
 
 	meta := FanoutMeta{
@@ -221,7 +212,7 @@ func (ix *Indexer) runScanJob(ctx context.Context, scanID string) error {
 }
 
 func splitScopeKey(sk string) (project, flavor string) {
-	i := strings.Index(sk, "\x00")
+	i := strings.Index(sk, scopeKeySep)
 	if i < 0 {
 		return sk, ""
 	}

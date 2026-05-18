@@ -38,16 +38,13 @@ func classifyDiscoverySkip(reason string) string {
 }
 
 func (d *discoveryAgg) noteSkip(reason string) {
-	r := strings.ToLower(reason)
-	if strings.Contains(r, "ignored") {
-		if strings.Contains(r, "dir") {
+	switch classifyDiscoverySkip(reason) {
+	case "ignored":
+		if strings.Contains(strings.ToLower(reason), "dir") {
 			d.SkippedIgnoredDirs++
 		} else {
 			d.SkippedIgnoredFiles++
 		}
-		return
-	}
-	switch classifyDiscoverySkip(reason) {
 	case "binary":
 		d.SkippedBinary++
 	case "oversize":
@@ -57,23 +54,15 @@ func (d *discoveryAgg) noteSkip(reason string) {
 	}
 }
 
-func (ix *Indexer) logDiscoverySummary(d *discoveryAgg) {
-	if ix.log == nil {
-		return
-	}
-	ix.log.Info("discovery summary",
-		"msg", "indexer.discovery.summary",
+// discoveryScopeLogAttrs returns structured fields shared by per-scope discovery logs.
+func (d *discoveryAgg) discoveryScopeLogAttrs() []any {
+	return []any{
 		"candidates_discovered", d.Candidates,
-		"candidates_enqueued", d.Enqueued,
-		"skipped_queue_full", d.QueueFull,
 		"skipped_ignored", d.SkippedIgnoredByRules(),
-		"skipped_ignored_files", d.SkippedIgnoredFiles,
-		"skipped_ignored_dirs", d.SkippedIgnoredDirs,
 		"skipped_binary", d.SkippedBinary,
 		"skipped_oversize", d.SkippedOversize,
 		"skipped_other", d.SkippedOther,
-		"files_excluded_by_ignore_rules", d.SkippedIgnoredByRules(),
-	)
+	}
 }
 
 // LogQueueSnapshot emits indexer.queue.snapshot for operators / UI rollup.

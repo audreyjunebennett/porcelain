@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	wline "github.com/lynn/porcelain/chimera/internal/wrapper/line"
+	"github.com/lynn/porcelain/internal/naming"
 )
 
 type normalized struct {
@@ -26,7 +27,7 @@ func NormalizePayload(raw string) []byte {
 func normalizePlain(raw string) []byte {
 	out := normalized{
 		Msg:            "indexer.log.line",
-		Service:        "chimera-indexer",
+		Service:        naming.ProductIndexerBinName,
 		ProgressDetail: strings.TrimSpace(raw),
 		ChimeraNorm:    1,
 	}
@@ -47,7 +48,7 @@ func normalizeJSON(raw string) []byte {
 	if msg == "" {
 		msg = "indexer.log.line"
 	}
-	service := "chimera-indexer"
+	service := naming.ProductIndexerBinName
 	level := strings.ToUpper(strings.TrimSpace(wline.JSONString(fields, "level")))
 	state := strings.TrimSpace(wline.JSONString(fields, "state"))
 	progress := strings.TrimSpace(wline.JSONString(fields, "progress_detail"))
@@ -76,10 +77,10 @@ func alreadyNormalized(raw []byte) ([]byte, bool) {
 	if b, ok := wline.ReorderNormalizedJSON(raw); ok {
 		return b, true
 	}
-	if _, ok := wline.AlreadyNormalizedChimera(raw, "indexer.", "chimera-indexer"); ok {
+	if _, ok := wline.AlreadyNormalizedChimera(raw, "indexer.", naming.ProductIndexerBinName); ok {
 		return wline.ReorderNormalizedJSON(raw)
 	}
-	if b, ok := wline.PassthroughSlogJSON(raw, "chimera-indexer"); ok {
+	if b, ok := wline.PassthroughSlogJSON(raw, naming.ProductIndexerBinName); ok {
 		return b, true
 	}
 	return nil, false

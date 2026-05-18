@@ -14,8 +14,6 @@ import (
 	"time"
 )
 
-const indexerWorkspacesPath = "/v1/indexer/workspaces"
-
 // WorkspacesAPIResponse is the JSON body from GET /v1/indexer/workspaces.
 type WorkspacesAPIResponse struct {
 	Object     string              `json:"object"`
@@ -67,7 +65,7 @@ func (c *GatewayClient) FetchWorkspaces(ctx context.Context, hdrs map[string]str
 		return nil, fmt.Errorf("gateway client is nil")
 	}
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
-	body, err := c.httpDoWithPolicy(ctx, http.MethodGet, indexerWorkspacesPath, "", nil, hdrs, pol, rng)
+	body, err := c.httpDoWithPolicy(ctx, http.MethodGet, apiPathIndexerWorkspaces, "", nil, hdrs, pol, rng)
 	if err != nil {
 		return nil, err
 	}

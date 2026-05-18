@@ -14,6 +14,9 @@ const (
 	WorkFanoutList
 )
 
+// scopeKeySep separates compound scope/job keys (project\x00flavor, root\x00rel).
+const scopeKeySep = "\x00"
+
 // PriorityTier controls dequeue order: higher tier runs before lower tier.
 // TierBulk=1 (scan, fan-out, bulk ingest), TierWrite=2, TierInteractive=3.
 type PriorityTier uint8
@@ -33,7 +36,7 @@ type Job struct {
 }
 
 // Key returns the deduplication key for ingest jobs: root id + relative path.
-func (j Job) Key() string { return j.Root.ID + "\x00" + j.RelPath }
+func (j Job) Key() string { return j.Root.ID + scopeKeySep + j.RelPath }
 
 // TaggedCandidate is a walk candidate plus resolved scope for fair-share and logs.
 type TaggedCandidate struct {
@@ -44,7 +47,7 @@ type TaggedCandidate struct {
 
 // ScopeKey returns a stable key for (project, flavor) bucketing.
 func ScopeKey(project, flavor string) string {
-	return project + "\x00" + flavor
+	return project + scopeKeySep + flavor
 }
 
 // FanoutMeta carries scan-derived scheduling metadata for logging and fan-out.
@@ -87,9 +90,9 @@ func (w WorkItem) Key() string {
 	case WorkIngest:
 		return w.Job.Key()
 	case WorkScan:
-		return "scan\x00" + w.ScanID
+		return "scan" + scopeKeySep + w.ScanID
 	case WorkFanoutList:
-		return "fanout\x00" + w.FanoutID
+		return "fanout" + scopeKeySep + w.FanoutID
 	default:
 		return ""
 	}

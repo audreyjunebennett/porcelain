@@ -33,11 +33,28 @@ const (
 	defaultStorageStatsPoll     = 2 * time.Minute
 	defaultScopeStatusPoll      = 45 * time.Second
 	defaultScopeActiveFileMinMs = 2000
+
+	defaultQueueFanoutHWMPercent = 75
 )
 
 const (
+	// IndexerConfigFileName is the layered YAML basename under .locus (and explicit --config paths).
+	IndexerConfigFileName = "indexer.config.yaml"
+	// IndexerSyncStateFileName is the default local skip-cache file next to config or under .locus.
+	IndexerSyncStateFileName = "indexer.sync-state.json"
+
 	indexerHiddenStateDir = naming.IndexerHiddenStateDirTarget
 )
+
+// HiddenIndexerConfigPath returns dir/.locus/indexer.config.yaml.
+func HiddenIndexerConfigPath(dir string) string {
+	return filepath.Join(dir, indexerHiddenStateDir, IndexerConfigFileName)
+}
+
+// HiddenIndexerSyncStatePath returns dir/.locus/indexer.sync-state.json.
+func HiddenIndexerSyncStatePath(dir string) string {
+	return filepath.Join(dir, indexerHiddenStateDir, IndexerSyncStateFileName)
+}
 
 // EnvGatewayURL and EnvGatewayToken are the preferred environment variables for
 // gateway connectivity. They map directly to the indexer plan and to the
@@ -351,7 +368,7 @@ func Resolve(fc FileConfig, env func(string) string, ov Overrides) (Resolved, er
 	case fc.QueueFanoutHWMPercent >= 1 && fc.QueueFanoutHWMPercent <= 100:
 		r.QueueFanoutHWMPercent = fc.QueueFanoutHWMPercent
 	default:
-		r.QueueFanoutHWMPercent = 75
+		r.QueueFanoutHWMPercent = defaultQueueFanoutHWMPercent
 	}
 	if fc.Defaults != nil {
 		r.DefaultScope = ScopeFragment{
@@ -460,12 +477,12 @@ func Resolve(fc FileConfig, env func(string) string, ov Overrides) (Resolved, er
 		if p := strings.TrimSpace(ov.ExplicitConfigPath); p != "" {
 			abs, err := filepath.Abs(p)
 			if err != nil {
-				r.SyncStatePath = filepath.Join(indexerHiddenStateDir, "indexer.sync-state.json")
+				r.SyncStatePath = filepath.Join(indexerHiddenStateDir, IndexerSyncStateFileName)
 			} else {
-				r.SyncStatePath = filepath.Join(filepath.Dir(abs), "indexer.sync-state.json")
+				r.SyncStatePath = filepath.Join(filepath.Dir(abs), IndexerSyncStateFileName)
 			}
 		} else {
-			r.SyncStatePath = filepath.Join(indexerHiddenStateDir, "indexer.sync-state.json")
+			r.SyncStatePath = filepath.Join(indexerHiddenStateDir, IndexerSyncStateFileName)
 		}
 	}
 	if fc.RecoveryIncludeRootHealth != nil {
@@ -496,10 +513,10 @@ func LayeredConfigPaths(cwd, explicitPath string) []string {
 	}
 	var paths []string
 	if home, err := os.UserHomeDir(); err == nil {
-		paths = add(paths, filepath.Join(home, indexerHiddenStateDir, "indexer.config.yaml"))
+		paths = add(paths, HiddenIndexerConfigPath(home))
 	}
 	if cwd != "" {
-		paths = add(paths, filepath.Join(cwd, indexerHiddenStateDir, "indexer.config.yaml"))
+		paths = add(paths, HiddenIndexerConfigPath(cwd))
 	}
 	if strings.TrimSpace(explicitPath) != "" {
 		paths = add(paths, explicitPath)
@@ -535,6 +552,14 @@ func LoadLayeredConfig(cwd, explicitPath string) (FileConfig, error) {
 }
 
 // MergeFileConfig merges overlay onto base (later wins for overlapping keys).
+// effectiveQueueFanoutHWMPercent returns a valid 1–100 fan-out high-water mark.
+func effectiveQueueFanoutHWMPercent(pct int) int {
+	if pct >= 1 && pct <= 100 {
+		return pct
+	}
+	return defaultQueueFanoutHWMPercent
+}
+
 func MergeFileConfig(base, overlay FileConfig) FileConfig {
 	out := base
 	if strings.TrimSpace(overlay.GatewayURL) != "" {

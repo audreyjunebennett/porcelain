@@ -66,16 +66,5 @@ func (r *Resolved) IngestHeaders(root Root, relPath string) (project, flavor str
 // DefaultIndexerHeaders returns optional headers for GET /v1/indexer/config
 // using defaults only (per-root / per-glob scope may differ per file).
 func (r *Resolved) DefaultIndexerHeaders() map[string]string {
-	p, f := IngestProject(r.DefaultScope), strings.TrimSpace(r.DefaultScope.FlavorID)
-	if p == "" && f == "" {
-		return nil
-	}
-	m := map[string]string{}
-	if p != "" {
-		m["X-Chimera-Project"] = p
-	}
-	if f != "" {
-		m["X-Chimera-Flavor-Id"] = f
-	}
-	return m
+	return ScopeHTTPHeaders(IngestProject(r.DefaultScope), r.DefaultScope.FlavorID)
 }

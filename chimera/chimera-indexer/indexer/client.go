@@ -91,7 +91,7 @@ type StorageStatsResponse struct {
 // request (e.g. X-Chimera-Project / X-Chimera-Flavor-Id from indexer v0.3
 // defaults) so the gateway can describe the scoped collection.
 func (c *GatewayClient) FetchConfig(ctx context.Context, hdrs map[string]string) (*IndexerConfig, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, "/v1/indexer/config", "", nil, hdrs)
+	req, err := c.newRequest(ctx, http.MethodGet, apiPathIndexerConfig, "", nil, hdrs)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +101,7 @@ func (c *GatewayClient) FetchConfig(ctx context.Context, hdrs map[string]string)
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		return nil, classify(res, "/v1/indexer/config")
+		return nil, classify(res, apiPathIndexerConfig)
 	}
 	var out IndexerConfig
 	if err := json.NewDecoder(res.Body).Decode(&out); err != nil {
@@ -112,7 +112,7 @@ func (c *GatewayClient) FetchConfig(ctx context.Context, hdrs map[string]string)
 
 // FetchStorageStats calls GET /v1/indexer/storage/stats scoped by hdrs project/flavor headers.
 func (c *GatewayClient) FetchStorageStats(ctx context.Context, hdrs map[string]string) (*StorageStatsResponse, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, "/v1/indexer/storage/stats", "", nil, hdrs)
+	req, err := c.newRequest(ctx, http.MethodGet, apiPathIndexerStorageStats, "", nil, hdrs)
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +126,7 @@ func (c *GatewayClient) FetchStorageStats(ctx context.Context, hdrs map[string]s
 		return nil, err
 	}
 	if res.StatusCode != http.StatusOK {
-		return nil, &HTTPError{Path: "/v1/indexer/storage/stats", Status: res.StatusCode, Body: string(body)}
+		return nil, &HTTPError{Path: apiPathIndexerStorageStats, Status: res.StatusCode, Body: string(body)}
 	}
 	var out StorageStatsResponse
 	if err := json.Unmarshal(body, &out); err != nil {
@@ -171,7 +171,7 @@ type rawErrorEnvelope struct {
 // healthy/degraded shape is also not an error (so the resume loop can poll
 // forever). Truly unexpected statuses still bubble up as HTTPError.
 func (c *GatewayClient) CheckHealth(ctx context.Context) (*HealthStatus, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, "/v1/indexer/storage/health", "", nil, nil)
+	req, err := c.newRequest(ctx, http.MethodGet, apiPathIndexerStorageHealth, "", nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -196,7 +196,7 @@ func (c *GatewayClient) CheckHealth(ctx context.Context) (*HealthStatus, error) 
 		return out, nil
 	}
 	if res.StatusCode != http.StatusOK && res.StatusCode != http.StatusServiceUnavailable {
-		return nil, &HTTPError{Path: "/v1/indexer/storage/health", Status: res.StatusCode, Body: string(body)}
+		return nil, &HTTPError{Path: apiPathIndexerStorageHealth, Status: res.StatusCode, Body: string(body)}
 	}
 	if err := json.Unmarshal(body, out); err != nil {
 		return nil, fmt.Errorf("decode health (status %d, body=%q): %w", res.StatusCode, truncate(string(body), 200), err)
@@ -214,7 +214,7 @@ type GatewayRootHealth struct {
 // CheckGatewayRootHealth calls GET /health. A 200 with no degraded flag is OK;
 // 503 or JSON with degraded=true is not OK. 5xx other than 503 returns an error.
 func (c *GatewayClient) CheckGatewayRootHealth(ctx context.Context) (*GatewayRootHealth, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, "/health", "", nil, nil)
+	req, err := c.newRequest(ctx, http.MethodGet, apiPathGatewayHealth, "", nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -243,7 +243,7 @@ func (c *GatewayClient) CheckGatewayRootHealth(ctx context.Context) (*GatewayRoo
 		return &GatewayRootHealth{OK: false, Status: "degraded", Degraded: true}, nil
 	default:
 		if res.StatusCode >= 500 {
-			return nil, &HTTPError{Path: "/health", Status: res.StatusCode, Body: string(b)}
+			return nil, &HTTPError{Path: apiPathGatewayHealth, Status: res.StatusCode, Body: string(b)}
 		}
 		return &GatewayRootHealth{OK: false, Status: fmt.Sprintf("http_%d", res.StatusCode)}, nil
 	}
@@ -272,7 +272,7 @@ type CorpusInventoryResponse struct {
 func (c *GatewayClient) FetchCorpusInventoryPage(ctx context.Context, path string, limit int, cursor string, hdrs map[string]string) (*CorpusInventoryResponse, error) {
 	p := strings.TrimSpace(path)
 	if p == "" {
-		p = "/v1/indexer/corpus/inventory"
+		p = apiPathIndexerCorpusInventory
 	}
 	if !strings.HasPrefix(p, "/") {
 		p = "/" + p

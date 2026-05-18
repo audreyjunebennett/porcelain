@@ -106,12 +106,5 @@ func DistinctEffectiveStorageStatsScopes(r Resolved, gw *IndexerConfig) []ScopeF
 
 // StorageStatsRequestHeaders builds optional X-Chimera-* headers for storage stats.
 func StorageStatsRequestHeaders(s ScopeFragment) map[string]string {
-	m := map[string]string{}
-	if p := strings.TrimSpace(s.ProjectID); p != "" {
-		m["X-Chimera-Project"] = p
-	}
-	if f := strings.TrimSpace(s.FlavorID); f != "" {
-		m["X-Chimera-Flavor-Id"] = f
-	}
-	return m
+	return ScopeHTTPHeaders(s.ProjectID, s.FlavorID)
 }

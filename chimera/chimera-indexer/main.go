@@ -504,7 +504,7 @@ func runBackend(args []string) error {
 	)
 	fs := flag.NewFlagSet("chimera-indexer-backend", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-	fs.StringVar(&cfgPath, "config", "", "optional indexer YAML merged after ~/.locus/indexer.config.yaml and ./.locus/indexer.config.yaml")
+	fs.StringVar(&cfgPath, "config", "", "optional indexer YAML merged after "+indexer.HiddenIndexerConfigPath("~")+" and "+indexer.HiddenIndexerConfigPath("."))
 	fs.StringVar(&gatewayURL, "gateway-url", "", "override gateway URL (env "+indexer.EnvGatewayURL+")")
 	fs.Var(&roots, "root", "watch root (repeatable; overrides config 'roots')")
 	fs.BoolVar(&oneShot, "one-shot", false, "perform a single scan + ingest pass and exit")
