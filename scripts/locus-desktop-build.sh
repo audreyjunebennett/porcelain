@@ -17,11 +17,11 @@ args=("-tags" "desktop")
 if [[ "$target_os" == "windows" ]]; then
 	args+=(-ldflags "-H=windowsgui")
 fi
-args+=("-o" "$root/locus/bin/$bin" "./${CHIMERA_CMD_DESKTOP}")
+args+=("-o" "$root/locus/bin/$bin" "./${LOCUS_CMD_DESKTOP}")
 if ! go build "${args[@]}"; then
   echo "" >&2
-  echo "${CHIMERA_MAKE_DESKTOP_BUILD_TARGET}: needs CGO and native WebView deps (WebKitGTK on Linux, WebView2 on Windows)." >&2
-  echo "  Run:  make ${CHIMERA_MAKE_DESKTOP_INSTALL_TARGET}" >&2
+  echo "${LOCUS_MAKE_DESKTOP_BUILD_TARGET}: needs CGO and native WebView deps (WebKitGTK on Linux, WebView2 on Windows)." >&2
+  echo "  Run:  make ${LOCUS_MAKE_DESKTOP_INSTALL_TARGET}" >&2
   exit 1
 fi
-echo "Built $root/locus/bin/$bin — run:  make ${CHIMERA_MAKE_DESKTOP_RUN_TARGET}   or  ./locus/bin/$bin   (supervisor+UI) / ./locus/bin/$bin --headless"
+echo "Built $root/locus/bin/$bin — run:  make ${LOCUS_MAKE_DESKTOP_RUN_TARGET}   or  ./locus/bin/$bin   (supervisor+UI) / ./locus/bin/$bin --headless"

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install pinned Qdrant into ./bin/qdrant (or qdrant.exe on Windows). Used by install-bootstrap.sh; run directly to refresh Qdrant only.
+# Install pinned Qdrant into QDRANT_BIN_DIR (default ./bin). Invoked by chimera-vectorstore-install.sh.
 # Version: QDRANT_RELEASE in chimera/deps.lock.
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -18,12 +18,12 @@ mingw*|msys*|cygwin*)
   case "$arch" in
   x86_64) asset="qdrant-x86_64-pc-windows-msvc.zip" ;;
   *)
-    echo "qdrant-from-release: unsupported Windows arch: $arch (Qdrant ships windows amd64 only; use WSL or a manual download from ${BASE})" >&2
+    echo "chimera-vectorstore-qdrant-install: unsupported Windows arch: $arch (Qdrant ships windows amd64 only; use WSL or a manual download from ${BASE})" >&2
     exit 1
     ;;
   esac
   command -v unzip >/dev/null 2>&1 || {
-    echo "qdrant-from-release: unzip is required for the Windows Qdrant zip (install Git for Windows or add unzip to PATH)." >&2
+    echo "chimera-vectorstore-qdrant-install: unzip is required for the Windows Qdrant zip (install Git for Windows or add unzip to PATH)." >&2
     exit 1
   }
   tmp="$(mktemp -d)"
@@ -32,7 +32,7 @@ mingw*|msys*|cygwin*)
   if [[ -f "$tmp/qdrant.exe" ]]; then
     mv "$tmp/qdrant.exe" "$QDRANT_BIN_DIR/qdrant.exe"
   else
-    echo "qdrant-from-release: expected qdrant.exe in ${asset}" >&2
+    echo "chimera-vectorstore-qdrant-install: expected qdrant.exe in ${asset}" >&2
     exit 1
   fi
   rm -rf "$tmp"
@@ -65,7 +65,7 @@ darwin)
   echo "Installed $QDRANT_BIN_DIR/qdrant ($VER)"
   ;;
 *)
-  echo "qdrant-from-release: unsupported OS/kernel: $(uname -s) (try Git Bash on Windows, WSL, Linux, or macOS; or download manually from ${BASE})" >&2
+  echo "chimera-vectorstore-qdrant-install: unsupported OS/kernel: $(uname -s) (try Git Bash on Windows, WSL, Linux, or macOS; or download manually from ${BASE})" >&2
   exit 1
   ;;
 esac

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# GoReleaser before hook (make release-snapshot): Qdrant bundles for packaging/qdrant-bundles/.
+# GoReleaser before hook (make release-build): Qdrant bundles for packaging/qdrant-bundles/.
 # Version: QDRANT_RELEASE in chimera/deps.lock.
 # Requires: curl, tar; unzip for Windows asset.
 set -euo pipefail
@@ -23,7 +23,7 @@ fetch_tgz() {
   if [[ -f "$tmp/qdrant" ]]; then
     mv "$tmp/qdrant" "$out/qdrant"
   else
-    echo "release-snapshot-qdrant: expected qdrant binary in ${asset}" >&2
+    echo "release-build-qdrant: expected qdrant binary in ${asset}" >&2
     ls -la "$tmp" >&2
     exit 1
   fi
@@ -41,7 +41,7 @@ fetch_zip_win() {
   if [[ -f "$tmp/qdrant.exe" ]]; then
     mv "$tmp/qdrant.exe" "$out/qdrant.exe"
   else
-    echo "release-snapshot-qdrant: expected qdrant.exe in windows zip" >&2
+    echo "release-build-qdrant: expected qdrant.exe in windows zip" >&2
     find "$tmp" -maxdepth 2 -type f >&2
     exit 1
   fi
@@ -54,4 +54,4 @@ fetch_tgz "qdrant-x86_64-apple-darwin.tar.gz" darwin amd64
 fetch_tgz "qdrant-aarch64-apple-darwin.tar.gz" darwin arm64
 fetch_zip_win
 
-echo "release-snapshot-qdrant: Qdrant ${VER} → packaging/qdrant-bundles/{linux,darwin}_*/qdrant, windows_amd64/qdrant.exe"
+echo "release-build-qdrant: Qdrant ${VER} → packaging/qdrant-bundles/{linux,darwin}_*/qdrant, windows_amd64/qdrant.exe"

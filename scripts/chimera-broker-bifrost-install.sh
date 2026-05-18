@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Invoked by chimera-broker-install.sh. Clone BiFrost at deps.lock ref and build/install bifrost-http only.
-# Requires: git, make (or mingw32-make), Node.js 20+ (BiFrost UI), Go + CGO C compiler.
+# Requires: git, make (or mingw32-make), Go + CGO C compiler.
+# Node.js 20+ is required unless BIFROST_SKIP_UI=1 (API-only build; no Next.js / Google Fonts fetch).
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -8,6 +9,8 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 source "$REPO_ROOT/scripts/chimera-names.sh"
 # shellcheck source=deps-lock.sh
 source "$REPO_ROOT/scripts/deps-lock.sh"
+# shellcheck source=scripts/chimera-broker-bifrost-build.sh
+source "$REPO_ROOT/scripts/chimera-broker-bifrost-build.sh"
 
 DEPS_DIR="${DEPS_DIR:-$REPO_ROOT/.deps}"
 BIFROST_DIR="${BIFROST_DIR:-$DEPS_DIR/bifrost}"
@@ -23,7 +26,7 @@ if ! command -v "$MAKE_BIN" >/dev/null 2>&1 && command -v mingw32-make >/dev/nul
 	MAKE_BIN=mingw32-make
 fi
 if ! command -v "$MAKE_BIN" >/dev/null 2>&1; then
-	echo "install-bootstrap-bifrost: GNU make not found (tried \$MAKE, make, mingw32-make). Install build tools or set MAKE=…" >&2
+	echo "chimera-broker-bifrost-install: GNU make not found (tried \$MAKE, make, mingw32-make). Install build tools or set MAKE=…" >&2
 	exit 1
 fi
 
@@ -45,8 +48,8 @@ _make_short_for_bifrost() {
 			return 0
 		fi
 	fi
-	echo "install-bootstrap-bifrost: GNU make lives at a path with spaces/parentheses; cygpath could not shorten it." >&2
-	echo "install-bootstrap-bifrost: try MSYS2 make, or put make.exe on PATH from a directory without spaces (see docs/installation.md)." >&2
+	echo "chimera-broker-bifrost-install: GNU make lives at a path with spaces/parentheses; cygpath could not shorten it." >&2
+	echo "chimera-broker-bifrost-install: try MSYS2 make, or put make.exe on PATH from a directory without spaces (see docs/installation.md)." >&2
 	printf '%s\n' "$resolved"
 }
 MAKE_BIN="$(_make_short_for_bifrost "$MAKE_BIN")"
@@ -65,21 +68,21 @@ if ! git -C "$BIFROST_DIR" rev-parse -q --verify "${BIFROST_GIT_REF}^{commit}" >
 fi
 git -C "$BIFROST_DIR" checkout -q "$BIFROST_GIT_REF"
 
-command -v node >/dev/null 2>&1 || {
-	echo "install-bootstrap-bifrost: install Node.js 20+ and ensure it is on PATH (BiFrost UI build)." >&2
-	exit 1
-}
-node_major="$(node -p "parseInt(process.versions.node.split('.')[0],10)" 2>/dev/null || echo 0)"
-if [[ "$node_major" -lt 20 ]]; then
-	echo "install-bootstrap-bifrost: BiFrost needs Node.js >= 20; found $(node -v 2>/dev/null)." >&2
-	exit 1
+if [[ "${BIFROST_SKIP_UI:-}" != "1" ]]; then
+	command -v node >/dev/null 2>&1 || {
+		echo "chimera-broker-bifrost-install: install Node.js 20+ and ensure it is on PATH (BiFrost UI build)." >&2
+		echo "chimera-broker-bifrost-install: or set BIFROST_SKIP_UI=1 to build bifrost-http without the dashboard UI." >&2
+		exit 1
+	}
+	node_major="$(node -p "parseInt(process.versions.node.split('.')[0],10)" 2>/dev/null || echo 0)"
+	if [[ "$node_major" -lt 20 ]]; then
+		echo "chimera-broker-bifrost-install: BiFrost needs Node.js >= 20; found $(node -v 2>/dev/null)." >&2
+		echo "chimera-broker-bifrost-install: or set BIFROST_SKIP_UI=1 to build bifrost-http without the dashboard UI." >&2
+		exit 1
+	fi
 fi
 
-# BiFrost's default `make build` sets GOWORK=off and compiles against published
-# modules. setup-workspace + LOCAL=1 builds with repo-root go.work so local modules match.
-echo "==> Go workspace + build in BiFrost (may run npm ci in ui/)"
-"$MAKE_BIN" -C "$BIFROST_DIR" setup-workspace
-"$MAKE_BIN" -C "$BIFROST_DIR" build LOCAL=1
+bifrost_build_http "$BIFROST_DIR" "$MAKE_BIN"
 BF_ART="$BIFROST_DIR/tmp/bifrost-http"
 BF_DST="$BIFROST_BIN_DIR/bifrost-http"
 GOOS="$(go env GOOS)"
@@ -107,8 +110,8 @@ elif [[ -f "$BF_ART" ]]; then
 		BF_INSTALLED="$BF_DST"
 	fi
 else
-	echo "install-bootstrap-bifrost: no $BF_ART or ${BF_ART}.exe after BiFrost build (CGO often needs gcc on PATH)." >&2
-	echo "install-bootstrap-bifrost: install gcc/clang, then: make ${CHIMERA_MAKE_BROKER_INSTALL_TARGET}" >&2
+	echo "chimera-broker-bifrost-install: no $BF_ART or ${BF_ART}.exe after BiFrost build (CGO often needs gcc on PATH)." >&2
+	echo "chimera-broker-bifrost-install: install gcc/clang, then: make ${CHIMERA_MAKE_BROKER_INSTALL_TARGET}" >&2
 	ls -la "$BIFROST_DIR/tmp" 2>/dev/null || echo "    (tmp/ missing or empty)" >&2
 	exit 1
 fi

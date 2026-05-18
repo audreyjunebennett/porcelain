@@ -54,7 +54,7 @@ Provider keys (`GROQ_API_KEY`, `GEMINI_API_KEY`, etc.) are read from the **envir
 
 Supervision is for a full local stack; the gateway **calls Qdrant** when `rag.enabled` is **true** (**v0.2+**). Without RAG, Qdrant may still be supervised but the gateway does not require it.
 
-- **Pinned version:** `QDRANT_RELEASE` in `chimera/deps.lock` (used by `scripts/qdrant-from-release.sh`, `scripts/release-snapshot-qdrant.sh`, and GoReleaser).
+- **Pinned version:** `QDRANT_RELEASE` in `chimera/deps.lock` (used by `scripts/qdrant-from-release.sh`, `scripts/release-build-qdrant.sh`, and GoReleaser).
 - **Local install:** `make chimera-install` (includes Qdrant) or `bash scripts/qdrant-from-release.sh` alone → `./bin/qdrant` or `qdrant.exe` (see `scripts/qdrant-from-release.sh`).
 - **Full local stack (Qdrant + BiFrost + gateway):** `make up` or `make chimera-supervisor-run` (foreground).
 

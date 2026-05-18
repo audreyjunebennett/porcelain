@@ -24,15 +24,18 @@ echo
 echo "\\\\\\\\////\\\\\\\\////\\\\\\\\////\\\\\\\\////\\\\\\\\////\\\\\\\\////\\\\\\\\////\\\\\\\\////\\\\\\\\////"
 echo
 echo "  make up                               installs, builds, and runs [locus-desktop]"
-echo "  make package                          packages everything up for distribution"
-echo 
+echo
 echo "  make install                          bootstrap dependencies for all products"
 echo "  make build                            assemble all products into executables"
 echo "  make configure                        materialize config for runtime state"
 echo "  make run                              execute the [locus-desktop] application"
 echo "  make test                             validate correctness and behavior"
-echo "  make clean                            cleans workspace completely (needs CONFIRM=1)"
-echo "  make clean-data                       remove only data"
+echo "  make clean                            cleans workspace completely (requires CONFIRM=1)"
+echo "  make clean-data                       remove Chimera runtime data (requires CONFIRM=1)"
+echo
+echo "  make release-install                  install GoReleaser + release hook deps"
+echo "  make release-build                    cross-platform release archives (dist/)"
+echo "  make release-package                  personal desktop bundle (dist/personal/)"
 echo
 echo " __                ___  __       ";
 echo "/  \` |__| |  |\\/| |__  |__)  /\\  ";

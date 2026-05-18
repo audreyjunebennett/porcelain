@@ -13,7 +13,6 @@ CHIMERA_CMD_SUPERVISOR := ./chimera/chimera-supervisor
 CHIMERA_CMD_BROKER := ./chimera/chimera-broker
 CHIMERA_CMD_VECTORSTORE := ./chimera/chimera-vectorstore
 LOCUS_CMD_DESKTOP := ./locus/locus-desktop
-CHIMERA_CMD_DESKTOP := $(LOCUS_CMD_DESKTOP)
 CHIMERA_CMD_TOKENCOUNT := ./chimera/cmd/tokencount
 CHIMERA_CMD_INDEXER := ./chimera/chimera-indexer
 
@@ -80,21 +79,22 @@ endif
 	chimera-clean chimera-clean-install chimera-clean-build chimera-clean-configure chimera-clean-run \
 	chimera-gateway-clean chimera-gateway-clean-install chimera-gateway-clean-build chimera-gateway-clean-configure chimera-gateway-clean-run \
 	chimera-supervisor-clean chimera-supervisor-clean-install chimera-supervisor-clean-build chimera-supervisor-clean-configure chimera-supervisor-clean-run \
-	chimera-broker-clean chimera-broker-clean-install chimera-broker-clean-build chimera-broker-clean-configure chimera-broker-clean-run \
-	chimera-vectorstore-clean chimera-vectorstore-clean-install chimera-vectorstore-clean-build chimera-vectorstore-clean-configure chimera-vectorstore-clean-run \
+	chimera-broker-clean chimera-broker-clean-install chimera-broker-clean-build chimera-broker-clean-run \
+	chimera-vectorstore-clean chimera-vectorstore-clean-install chimera-vectorstore-clean-build chimera-vectorstore-clean-run \
 	chimera-indexer-clean chimera-indexer-clean-install chimera-indexer-clean-build chimera-indexer-clean-configure chimera-indexer-clean-run \
 	locus-clean locus-clean-install locus-clean-build locus-clean-configure locus-clean-run \
 	locus-desktop-clean locus-desktop-clean-install locus-desktop-clean-build locus-desktop-clean-configure locus-desktop-clean-run \
 	build bin-stage stage-bin-dir chimera-build run \
 	chimera-gateway-build chimera-gateway-install chimera-gateway-run chimera-gateway-test chimera-gateway-test-unit chimera-gateway-test-e2e \
 	chimera-supervisor-build chimera-supervisor-run chimera-supervisor-test chimera-supervisor-test-unit chimera-supervisor-test-e2e \
-	chimera-broker-configure chimera-broker-install chimera-broker-build chimera-broker-run chimera-broker-test chimera-broker-test-unit chimera-broker-test-e2e \
-	chimera-vectorstore-configure chimera-vectorstore-install chimera-vectorstore-build chimera-vectorstore-run chimera-vectorstore-test chimera-vectorstore-test-unit chimera-vectorstore-test-e2e \
+	chimera-broker-install chimera-broker-build chimera-broker-run chimera-broker-test chimera-broker-test-unit chimera-broker-test-e2e \
+	chimera-vectorstore-install chimera-vectorstore-build chimera-vectorstore-run chimera-vectorstore-test chimera-vectorstore-test-unit chimera-vectorstore-test-e2e \
 	chimera-indexer-build chimera-indexer-run chimera-indexer-install chimera-indexer-test chimera-indexer-test-unit chimera-indexer-test-e2e \
-	locus-install locus-build locus-run locus-test \
+	locus-install locus-build locus-run locus-test locus-test-if-enabled \
+	locus-test-unit-if-enabled locus-test-e2e-if-enabled \
 	locus-desktop-install locus-desktop-build locus-desktop-run locus-desktop-test locus-desktop-test-unit locus-desktop-test-e2e \
 	tokencount-file catalog-free catalog-available config-provider-free-tier \
-	release-install release-snapshot package \
+	release-install release-build release-package \
 	fmt fmt-check vet test precommit
 
 .DEFAULT_GOAL := help
@@ -122,16 +122,37 @@ stage-bin-dir:
 	@$(GITBASH) -lc 'mkdir -p "$(BIN_STAGE_DIR)"'
 
 configure:
-	$(GITBASH) scripts/configure.sh
+	$(MAKE) --no-print-directory chimera-configure
 
 run:
 	@echo [STEP] Running full stack (Locus)
 	@$(MAKE) --no-print-directory build
 	@$(MAKE) --no-print-directory locus-run
 
-test: chimera-test locus-test
-test-unit: chimera-test-unit locus-test-unit
-test-e2e: chimera-test-e2e locus-test-e2e
+test: chimera-test locus-test-if-enabled
+test-unit: chimera-test-unit locus-test-unit-if-enabled
+test-e2e: chimera-test-e2e locus-test-e2e-if-enabled
+
+locus-test-if-enabled:
+ifeq ($(SKIP_DESKTOP),1)
+	@echo [SKIP] locus-test (SKIP_DESKTOP=1)
+else
+	@$(MAKE) --no-print-directory locus-test
+endif
+
+locus-test-unit-if-enabled:
+ifeq ($(SKIP_DESKTOP),1)
+	@echo [SKIP] locus-test-unit (SKIP_DESKTOP=1)
+else
+	@$(MAKE) --no-print-directory locus-test-unit
+endif
+
+locus-test-e2e-if-enabled:
+ifeq ($(SKIP_DESKTOP),1)
+	@echo [SKIP] locus-test-e2e (SKIP_DESKTOP=1)
+else
+	@$(MAKE) --no-print-directory locus-test-e2e
+endif
 
 clean:
 	$(GITBASH) scripts/clean.sh
@@ -143,14 +164,12 @@ clean-build: chimera-clean-build locus-clean-build
 clean-configure: chimera-clean-configure locus-clean-configure
 
 clean-data:
-	$(GITBASH) scripts/clean-data.sh $(CONFIRM)
+	@$(MAKE) --no-print-directory chimera-clean-run CONFIRM=$(CONFIRM)
 
 clean-run: chimera-clean-run locus-clean-run
 
 clean-all:
-	$(GITBASH) scripts/clean-all-confirm.sh $(CONFIRM)
-	$(MAKE) clean
-	$(GITBASH) scripts/clean-all.sh
+	$(GITBASH) scripts/clean-all.sh $(CONFIRM)
 
 chimera-install:
 	@echo [STEP] Installing Chimera products (broker, gateway, indexer, vectorstore)
@@ -166,6 +185,10 @@ chimera-build:
 	@$(MAKE) --no-print-directory chimera-indexer-build
 	@$(MAKE) --no-print-directory chimera-supervisor-build
 	@$(MAKE) --no-print-directory chimera-vectorstore-build
+
+chimera-configure:
+	@echo [STEP] Generating Chimera configuration
+	@$(GITBASH) scripts/chimera-configure.sh
 
 chimera-run:
 	@echo [STEP] Running Chimera via supervisor
@@ -202,7 +225,7 @@ chimera-clean-install: chimera-gateway-clean-install chimera-supervisor-clean-in
 
 chimera-clean-build: chimera-gateway-clean-build chimera-supervisor-clean-build chimera-broker-clean-build chimera-vectorstore-clean-build chimera-indexer-clean-build
 
-chimera-clean-configure: chimera-gateway-clean-configure chimera-broker-clean-configure chimera-vectorstore-clean-configure chimera-indexer-clean-configure
+chimera-clean-configure: chimera-gateway-clean-configure chimera-indexer-clean-configure
 
 chimera-clean-run: chimera-gateway-clean-run chimera-supervisor-clean-run chimera-broker-clean-run chimera-vectorstore-clean-run chimera-indexer-clean-run
 
@@ -210,7 +233,7 @@ chimera-clean-run: chimera-gateway-clean-run chimera-supervisor-clean-run chimer
 chimera-broker-install:
 	@echo [STEP] Installing Chimera broker runtime dependency (BiFrost HTTP)
 	@$(GITBASH) -lc 'mkdir -p "$(CHIMERA_RUNTIME_DEPS_DIR)"'
-	@$(GITBASH) -lc 'CHIMERA_BROKER_BIN_DIR="$(CHIMERA_RUNTIME_BIN_DIR)" DEPS_DIR="$(CHIMERA_RUNTIME_DEPS_DIR)" bash scripts/chimera-broker-install.sh'
+	@$(GITBASH) -lc 'CHIMERA_BROKER_BIN_DIR="$(CHIMERA_RUNTIME_BIN_DIR)" DEPS_DIR="$(CHIMERA_RUNTIME_DEPS_DIR)" BIFROST_SKIP_UI="$(BIFROST_SKIP_UI)" bash scripts/chimera-broker-install.sh'
 
 chimera-broker-build: chimera-broker-install
 	@echo [STEP] Building Chimera broker executable and staging artifacts
@@ -219,11 +242,7 @@ chimera-broker-build: chimera-broker-install
 	@$(GITBASH) -lc 'cp -f "$(CHIMERA_BROKER_BUILD_OUT)" "$(CHIMERA_BROKER_STAGE_OUT)"'
 	@$(GITBASH) -lc 'cp -f "$(CHIMERA_BROKER_RUNTIME_BIN)" "$(BIN_STAGE_DIR)/$$(basename "$(CHIMERA_BROKER_RUNTIME_BIN)")"'
 
-chimera-broker-configure:
-	@echo [STEP] Generating Chimera broker configuration
-	@$(GITBASH) scripts/chimera-broker-configure.sh
-
-chimera-broker-run: chimera-broker-configure
+chimera-broker-run:
 	@echo [STEP] Running Chimera broker
 	@$(GITBASH) -lc '"$(CHIMERA_BROKER_STAGE_OUT)" -bin "$(CHIMERA_BROKER_RUNTIME_BIN)"'
 
@@ -237,7 +256,7 @@ chimera-broker-test-e2e:
 	@echo [STEP] Running Chimera broker end-to-end tests
 	@go test $(CHIMERA_CMD_BROKER) $(RACE_GATEWAY) -run E2E -count=1
 
-chimera-broker-clean: chimera-broker-clean-build chimera-broker-clean-install chimera-broker-clean-configure chimera-broker-clean-run
+chimera-broker-clean: chimera-broker-clean-build chimera-broker-clean-install chimera-broker-clean-run
 
 chimera-broker-clean-install:
 	$(GITBASH) scripts/clean-product.sh broker install
@@ -245,11 +264,8 @@ chimera-broker-clean-install:
 chimera-broker-clean-build:
 	$(GITBASH) scripts/clean-product.sh broker build
 
-chimera-broker-clean-configure:
-	$(GITBASH) scripts/clean-product.sh broker configure
-
 chimera-broker-clean-run:
-	$(GITBASH) scripts/clean-product.sh broker run
+	$(GITBASH) scripts/clean-product.sh broker run $(CONFIRM)
 
 # --- Chimera gateway ---
 chimera-gateway-install:
@@ -263,11 +279,7 @@ chimera-gateway-build:
 	@$(MAKE) stage-bin-dir
 	@$(GITBASH) -lc 'cp -f "$(CHIMERA_GATEWAY_BUILD_OUT)" "$(CHIMERA_GATEWAY_STAGE_OUT)"'
 
-chimera-gateway-configure:
-	@echo [STEP] Generating Chimera gateway configuration
-	@$(GITBASH) scripts/chimera-gateway-configure.sh
-
-chimera-gateway-run: chimera-gateway-configure
+chimera-gateway-run: chimera-configure
 	@echo [STEP] Running Chimera gateway on 127.0.0.1:3000
 	@$(GITBASH) -lc 'PATH="$$(pwd)/$(CHIMERA_RUNTIME_BIN_DIR):$$(pwd)/$(BIN_STAGE_DIR):$$PATH" "$(CHIMERA_GATEWAY_STAGE_OUT)" -gateway-listen "127.0.0.1:3000" $(ARGS)'
 
@@ -293,7 +305,7 @@ chimera-gateway-clean-configure:
 	$(GITBASH) scripts/clean-product.sh gateway configure
 
 chimera-gateway-clean-run:
-	$(GITBASH) scripts/clean-product.sh gateway run
+	$(GITBASH) scripts/clean-product.sh gateway run $(CONFIRM)
 
 # --- Chimera indexer ---
 chimera-indexer-install:
@@ -333,7 +345,7 @@ chimera-indexer-clean-configure:
 	$(GITBASH) scripts/clean-product.sh indexer configure
 
 chimera-indexer-clean-run:
-	$(GITBASH) scripts/clean-product.sh indexer run
+	$(GITBASH) scripts/clean-product.sh indexer run $(CONFIRM)
 
 # --- Chimera supervisor ---
 # TODO: add chimera-supervisor-install
@@ -345,7 +357,7 @@ chimera-supervisor-build:
 	@$(MAKE) stage-bin-dir
 	@$(GITBASH) -lc 'cp -f "$(CHIMERA_SUPERVISOR_BUILD_OUT)" "$(CHIMERA_SUPERVISOR_STAGE_OUT)"'
 
-chimera-supervisor-run:
+chimera-supervisor-run: chimera-configure
 	@echo [STEP] Running Chimera supervisor
 	@$(GITBASH) -lc '"$(CHIMERA_SUPERVISOR_STAGE_OUT)" $(ARGS)'
 
@@ -371,7 +383,7 @@ chimera-supervisor-clean-configure:
 	$(GITBASH) scripts/clean-product.sh supervisor configure
 
 chimera-supervisor-clean-run:
-	$(GITBASH) scripts/clean-product.sh supervisor run
+	$(GITBASH) scripts/clean-product.sh supervisor run $(CONFIRM)
 
 # --- Chimera vectorstore ---
 chimera-vectorstore-install:
@@ -385,11 +397,7 @@ chimera-vectorstore-build: chimera-vectorstore-install
 	@$(GITBASH) -lc 'cp -f "$(CHIMERA_VECTORSTORE_BUILD_OUT)" "$(CHIMERA_VECTORSTORE_STAGE_OUT)"'
 	@$(GITBASH) -lc 'cp -f "$(CHIMERA_VECTORSTORE_RUNTIME_BIN)" "$(BIN_STAGE_DIR)/$$(basename "$(CHIMERA_VECTORSTORE_RUNTIME_BIN)")"'
 
-chimera-vectorstore-configure:
-	@echo [STEP] Generating Chimera vectorstore configuration
-	@$(GITBASH) scripts/chimera-vectorstore-configure.sh
-
-chimera-vectorstore-run: chimera-vectorstore-configure
+chimera-vectorstore-run:
 	@echo [STEP] Running Chimera vectorstore
 	@$(GITBASH) -lc '"$(CHIMERA_VECTORSTORE_STAGE_OUT)" -bin "$(CHIMERA_VECTORSTORE_RUNTIME_BIN)"'
 
@@ -403,7 +411,7 @@ chimera-vectorstore-test-e2e:
 	@echo [STEP] Running Chimera vectorstore end-to-end tests
 	@go test $(CHIMERA_CMD_VECTORSTORE) $(RACE_GATEWAY) -run E2E -count=1
 
-chimera-vectorstore-clean: chimera-vectorstore-clean-build chimera-vectorstore-clean-install chimera-vectorstore-clean-configure chimera-vectorstore-clean-run
+chimera-vectorstore-clean: chimera-vectorstore-clean-build chimera-vectorstore-clean-install chimera-vectorstore-clean-run
 
 chimera-vectorstore-clean-install:
 	$(GITBASH) scripts/clean-product.sh vectorstore install
@@ -411,11 +419,8 @@ chimera-vectorstore-clean-install:
 chimera-vectorstore-clean-build:
 	$(GITBASH) scripts/clean-product.sh vectorstore build
 
-chimera-vectorstore-clean-configure:
-	$(GITBASH) scripts/clean-product.sh vectorstore configure
-
 chimera-vectorstore-clean-run:
-	$(GITBASH) scripts/clean-product.sh vectorstore run
+	$(GITBASH) scripts/clean-product.sh vectorstore run $(CONFIRM)
 
 # --- Locus ---
 locus-install:
@@ -527,17 +532,19 @@ catalog-calculate: catalog-available
 		-provider-free-tier-out "$(if $(PROVIDER_FT_OUT),$(PROVIDER_FT_OUT),config/provider-free-tier.generated.yaml)"
 
 
-# --- Release packaging ---
+# --- Release (install → build → package) ---
 
-# TODO: REVISIT THIS TASK
-# release-install:
-# 	$(GITBASH) scripts/release-install.sh
-# TODO: REVISIT THIS TASK
-# release-snapshot:
-# 	$(GITBASH) scripts/release-snapshot.sh
-# TODO: REVISIT THIS TASK
-# package:
-# 	$(GITBASH) scripts/package.sh "$(LOCUS_DESKTOP_BIN)"
+release-install:
+	@echo [STEP] Installing release tooling (GoReleaser)
+	@$(GITBASH) scripts/release-install.sh
+
+release-build: release-install
+	@echo [STEP] Building release archives (GoReleaser snapshot)
+	@$(GITBASH) scripts/release-build.sh
+
+release-package: chimera-build locus-desktop-build
+	@echo [STEP] Packaging personal desktop bundle
+	@$(GITBASH) scripts/release-package.sh "$(LOCUS_DESKTOP_BIN)"
 
 # --- Quality gates ---
 

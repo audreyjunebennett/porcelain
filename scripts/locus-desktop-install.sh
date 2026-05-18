@@ -9,7 +9,7 @@ os=$(uname -s)
 
 if [[ "$os" == "Linux" ]]; then
   if [[ ! -f /etc/debian_version ]]; then
-  echo "locus-desktop-install: non-Debian Linux. Install gtk+3 and webkit2gtk for your distro, then make ${CHIMERA_MAKE_DESKTOP_BUILD_TARGET}." >&2
+  echo "locus-desktop-install: non-Debian Linux. Install gtk+3 and webkit2gtk for your distro, then make ${LOCUS_MAKE_DESKTOP_BUILD_TARGET}." >&2
     exit 1
   fi
   echo "locus-desktop-install: Debian/Ubuntu — WebKitGTK + build tools..."
@@ -32,7 +32,7 @@ if [[ "$os" == "Linux" ]]; then
     sudo ln -sf "$wk41_pc" /usr/local/lib/pkgconfig/webkit2gtk-4.0.pc
     echo "locus-desktop-install: webview_go uses pkg-config webkit2gtk-4.0; linked $wk41_pc as webkit2gtk-4.0.pc under /usr/local/lib/pkgconfig." >&2
   fi
-  echo "locus-desktop-install: done. Next: make ${CHIMERA_MAKE_DESKTOP_BUILD_TARGET}   (output: ${LOCUS_DESKTOP_BIN_BASE}[.exe])"
+  echo "locus-desktop-install: done. Next: make ${LOCUS_MAKE_DESKTOP_BUILD_TARGET}   (output: ${LOCUS_DESKTOP_BIN_BASE}[.exe])"
 
 elif [[ "$os" == "Darwin" ]]; then
   echo "locus-desktop-install: macOS — Xcode Command Line Tools (clang + SDK) required for CGO."

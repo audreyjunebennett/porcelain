@@ -2,6 +2,7 @@
 # Idempotent bifrost-only install path for broker wrapper flows.
 # Verifies toolchain (auto-install git/make/go/node/gcc when possible), then installs bifrost from deps.lock.
 # Skip auto-install: SKIP_AUTO_GIT, SKIP_AUTO_MAKE, SKIP_AUTO_GO, SKIP_AUTO_NODE, SKIP_AUTO_GCC.
+# BIFROST_SKIP_UI=1: build bifrost-http without Next.js (no Node required; stub embedded UI).
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
@@ -19,7 +20,11 @@ missing=0
 toolchain_ensure_git || missing=1
 toolchain_ensure_make || missing=1
 toolchain_ensure_go || missing=1
-toolchain_ensure_node || missing=1
+if [[ "${BIFROST_SKIP_UI:-}" == "1" ]]; then
+	echo "    SKIP  node (BIFROST_SKIP_UI=1 — bifrost-http without Next.js UI)"
+else
+	toolchain_ensure_node || missing=1
+fi
 
 # BiFrost's bifrost-http binary is built with CGO; Go needs a C toolchain (gcc or clang on PATH).
 if has_cc; then
@@ -56,7 +61,7 @@ if [[ "${FORCE:-}" != "1" ]] && { [ -f "$CHIMERA_BROKER_BIN_DIR/bifrost-http" ] 
 else
 	echo "==> chimera-broker-install: BiFrost (deps.lock)"
 	export BIFROST_BIN_DIR="$CHIMERA_BROKER_BIN_DIR"
-	bash "$REPO_ROOT/scripts/install-bootstrap-bifrost.sh"
+	bash "$REPO_ROOT/scripts/chimera-broker-bifrost-install.sh"
 fi
 
 echo "==> chimera-broker-install: artifacts"

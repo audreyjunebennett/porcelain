@@ -1,5 +1,5 @@
-# GoReleaser v2 — Phase 4 (see docs/packaging.md).
-# Local: make release-snapshot  OR  goreleaser release --snapshot --clean
+# GoReleaser v2 — see docs/packaging.md.
+# Local: make release-build  OR  goreleaser release --snapshot --clean
 version: 2
 
 project_name: chimera
@@ -7,7 +7,7 @@ project_name: chimera
 before:
   hooks:
     - go mod tidy
-    - bash scripts/release-snapshot-qdrant.sh
+    - bash scripts/release-build-qdrant.sh
 
 builds:
   - id: chimera-gateway
@@ -15,13 +15,8 @@ builds:
     binary: chimera-gateway
     env:
       - CGO_ENABLED=0
-    goos:
-      - linux
-      - darwin
-      - windows
-    goarch:
-      - amd64
-      - arm64
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
     ignore:
       - goos: windows
         goarch: arm64
@@ -35,13 +30,53 @@ builds:
     binary: chimera-broker
     env:
       - CGO_ENABLED=0
-    goos:
-      - linux
-      - darwin
-      - windows
-    goarch:
-      - amd64
-      - arm64
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.CommitDate}}
+  - id: chimera-supervisor
+    main: ./chimera/chimera-supervisor
+    binary: chimera-supervisor
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.CommitDate}}
+  - id: chimera-vectorstore
+    main: ./chimera/chimera-vectorstore
+    binary: chimera-vectorstore
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.CommitDate}}
+  - id: chimera-indexer
+    main: ./chimera/chimera-indexer
+    binary: chimera-indexer
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
     ignore:
       - goos: windows
         goarch: arm64
@@ -56,6 +91,9 @@ archives:
     builds:
       - chimera-gateway
       - chimera-broker
+      - chimera-supervisor
+      - chimera-vectorstore
+      - chimera-indexer
     formats:
       - tar.gz
     format_overrides:
@@ -71,17 +109,20 @@ archives:
         dst: config/gateway.yaml
       - src: config/api-keys.example.yaml
         dst: config/api-keys.example.yaml
-      - src: config/bifrost.config.json
-        dst: config/bifrost.config.json
+      - src: config/chimera-broker.config.json
+        dst: config/chimera-broker.config.json
       - src: config/routing-policy.yaml
         dst: config/routing-policy.yaml
       - src: config/provider-free-tier.yaml
         dst: config/provider-free-tier.yaml
+      - src: config/indexer.example.yaml
+        dst: config/indexer.yaml
+      - src: config/provider-model-limits.example.yaml
+        dst: config/provider-model-limits.yaml
       - src: env.example
         dst: env.example
       - src: packaging/archive-readme.txt
         dst: README_ARCHIVE.txt
-      # Qdrant binaries from scripts/release-snapshot-qdrant.sh (OSS GoReleaser: extra files, not Pro prebuilt builder).
       - src: 'packaging/qdrant-bundles/{{ .Os }}_{{ .Arch }}/qdrant{{ if eq .Os "windows" }}.exe{{ end }}'
         strip_parent: true
 

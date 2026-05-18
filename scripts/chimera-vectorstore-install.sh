@@ -36,7 +36,7 @@ if [[ "${FORCE:-}" != "1" ]] && { [ -f "$QDRANT_BIN_DIR/qdrant" ] || [ -f "$QDRA
 else
 	echo "==> chimera-vectorstore-install: qdrant (deps.lock)"
 	export QDRANT_BIN_DIR
-	bash "$REPO_ROOT/scripts/qdrant-from-release.sh"
+	bash "$REPO_ROOT/scripts/chimera-vectorstore-qdrant-install.sh"
 fi
 
 mkdir -p "$QDRANT_DEPS_DIR/bin"

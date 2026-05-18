@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install tools for make release-snapshot (GoReleaser v2 + Qdrant fetch hook deps). Idempotent.
+# Install tools for make release-build (GoReleaser v2 + Qdrant fetch hook deps). Idempotent.
 # Cross-compilation is pure Go (CGO_ENABLED=0); this does not install a C toolchain.
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -23,12 +23,12 @@ _ensure_curl_tar_unzip() {
 		return 0
 	fi
 	if [[ "$os" == "Linux" ]] && [[ -f /etc/debian_version ]]; then
-		echo "release-install: installing ${miss[*]} (Debian/Ubuntu) for scripts/release-snapshot-qdrant.sh..."
+		echo "release-install: installing ${miss[*]} (Debian/Ubuntu) for scripts/release-build-qdrant.sh..."
 		sudo apt-get update
 		sudo apt-get install -y curl tar unzip
 		return 0
 	fi
-	echo "release-install: missing: ${miss[*]} (needed to download Qdrant bundles during release-snapshot)" >&2
+	echo "release-install: missing: ${miss[*]} (needed to download Qdrant bundles during release-build)" >&2
 	if [[ "$os" == "Darwin" ]]; then
 		echo "release-install: macOS: install Xcode Command Line Tools (xcode-select --install)" >&2
 	elif [[ "$os" == "Linux" ]]; then
@@ -69,4 +69,4 @@ MINGW* | MSYS* | CYGWIN*)
 	;;
 esac
 
-echo "release-install: done. Next: make release-snapshot"
+echo "release-install: done. Next: make ${RELEASE_MAKE_BUILD_TARGET}"

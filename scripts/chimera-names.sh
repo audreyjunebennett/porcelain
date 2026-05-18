@@ -18,6 +18,11 @@
 : "${CHIMERA_LOG_DIR:=logs}"
 : "${CHIMERA_DIST_BUNDLE_PREFIX:=chimera-bundle}"
 
+# Release make targets (install / build / package).
+: "${RELEASE_MAKE_INSTALL_TARGET:=release-install}"
+: "${RELEASE_MAKE_BUILD_TARGET:=release-build}"
+: "${RELEASE_MAKE_PACKAGE_TARGET:=release-package}"
+
 # Primary make targets (canonical namespace only).
 : "${CHIMERA_MAKE_INSTALL_TARGET:=chimera-install}"
 : "${CHIMERA_MAKE_BUILD_TARGET:=chimera-gateway-build}"
@@ -35,14 +40,12 @@
 : "${CHIMERA_MAKE_SUPERVISOR_BUILD_TARGET:=chimera-supervisor-build}"
 : "${CHIMERA_MAKE_SUPERVISOR_RUN_TARGET:=chimera-supervisor-run}"
 : "${CHIMERA_MAKE_SUPERVISOR_TEST_TARGET:=chimera-supervisor-test}"
-: "${CHIMERA_MAKE_BROKER_CONFIGURE_TARGET:=chimera-broker-configure}"
 : "${CHIMERA_MAKE_BROKER_INSTALL_TARGET:=chimera-broker-install}"
 : "${CHIMERA_MAKE_BROKER_BUILD_TARGET:=chimera-broker-build}"
 : "${CHIMERA_MAKE_BROKER_RUN_TARGET:=chimera-broker-run}"
 : "${CHIMERA_MAKE_BROKER_TEST_TARGET:=chimera-broker-test}"
 : "${CHIMERA_MAKE_BROKER_TEST_UNIT_TARGET:=chimera-broker-test-unit}"
 : "${CHIMERA_MAKE_BROKER_TEST_E2E_TARGET:=chimera-broker-test-e2e}"
-: "${CHIMERA_MAKE_VECTORSTORE_CONFIGURE_TARGET:=chimera-vectorstore-configure}"
 : "${CHIMERA_MAKE_VECTORSTORE_INSTALL_TARGET:=chimera-vectorstore-install}"
 : "${CHIMERA_MAKE_VECTORSTORE_BUILD_TARGET:=chimera-vectorstore-build}"
 : "${CHIMERA_MAKE_VECTORSTORE_RUN_TARGET:=chimera-vectorstore-run}"
@@ -52,18 +55,18 @@
 : "${CHIMERA_MAKE_INDEXER_BUILD_TARGET:=chimera-indexer-build}"
 : "${CHIMERA_MAKE_INDEXER_RUN_TARGET:=chimera-indexer-run}"
 : "${CHIMERA_MAKE_INDEXER_TEST_TARGET:=chimera-indexer-test}"
-: "${CHIMERA_MAKE_DESKTOP_INSTALL_TARGET:=locus-desktop-install}"
-: "${CHIMERA_MAKE_DESKTOP_BUILD_TARGET:=locus-desktop-build}"
-: "${CHIMERA_MAKE_DESKTOP_RUN_TARGET:=locus-desktop-run}"
+: "${LOCUS_MAKE_DESKTOP_INSTALL_TARGET:=locus-desktop-install}"
+: "${LOCUS_MAKE_DESKTOP_BUILD_TARGET:=locus-desktop-build}"
+: "${LOCUS_MAKE_DESKTOP_RUN_TARGET:=locus-desktop-run}"
 
 # Go package paths under ./cmd/.
 : "${CHIMERA_CMD_GATEWAY:=chimera/chimera-gateway}"
 : "${CHIMERA_CMD_SUPERVISOR:=chimera/chimera-supervisor}"
 : "${CHIMERA_CMD_BROKER:=chimera/chimera-broker}"
 : "${CHIMERA_CMD_VECTORSTORE:=chimera/chimera-vectorstore}"
-: "${CHIMERA_CMD_DESKTOP:=locus/locus-desktop}"
+: "${LOCUS_CMD_DESKTOP:=locus/locus-desktop}"
 : "${CHIMERA_CMD_TOKENCOUNT:=chimera/cmd/tokencount}"
-: "${CHIMERA_CMD_INDEXER:=porcelain/chimera/chimera-indexer}"
+: "${CHIMERA_CMD_INDEXER:=chimera/chimera-indexer}"
 
 chimera_pid_path() {
 	printf '%s/%s.pid' "${CHIMERA_RUN_DIR}" "${CHIMERA_MAKE_PID_BASENAME}"

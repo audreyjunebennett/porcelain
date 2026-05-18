@@ -9,29 +9,11 @@ on:
       - "Makefile"
       - ".goreleaser.yaml"
       - "docs/packaging.md"
-      - "porcelain/chimera/deps.lock"
-      - "scripts/release-snapshot-qdrant.sh"
-      - "scripts/qdrant-from-release.sh"
-      - "scripts/deps-lock.sh"
-      - "scripts/install-bootstrap.sh"
-      - "scripts/install-make.sh"
-      - "scripts/install-make.ps1"
-      - "scripts/compiler-detect.sh"
-      - "scripts/install-gcc.sh"
-      - "scripts/install.sh"
-      - "scripts/configure.sh"
-      - "scripts/chimera-start.sh"
-      - "scripts/chimera-stop.sh"
-      - "scripts/chimera-status.sh"
-      - "scripts/clean.sh"
-      - "scripts/clean-all.sh"
-      - "scripts/logs.sh"
-      - "scripts/precommit-smoke.sh"
-      - "scripts/fmt-check.sh"
-      - "scripts/desktop-build.sh"
-      - "scripts/desktop-install.sh"
-      - "scripts/desktop-run.sh"
-      - "internal/server/embedui/**"
+      - "chimera/deps.lock"
+      - "packaging/**"
+      - "scripts/**"
+      - "chimera/**"
+      - "locus/**"
       - ".github/workflows/go.yml"
       - ".github/workflows/release.yml"
   pull_request:
@@ -42,29 +24,11 @@ on:
       - "Makefile"
       - ".goreleaser.yaml"
       - "docs/packaging.md"
-      - "porcelain/chimera/deps.lock"
-      - "scripts/release-snapshot-qdrant.sh"
-      - "scripts/qdrant-from-release.sh"
-      - "scripts/deps-lock.sh"
-      - "scripts/install-bootstrap.sh"
-      - "scripts/install-make.sh"
-      - "scripts/install-make.ps1"
-      - "scripts/compiler-detect.sh"
-      - "scripts/install-gcc.sh"
-      - "scripts/install.sh"
-      - "scripts/configure.sh"
-      - "scripts/chimera-start.sh"
-      - "scripts/chimera-stop.sh"
-      - "scripts/chimera-status.sh"
-      - "scripts/clean.sh"
-      - "scripts/clean-all.sh"
-      - "scripts/logs.sh"
-      - "scripts/precommit-smoke.sh"
-      - "scripts/fmt-check.sh"
-      - "scripts/desktop-build.sh"
-      - "scripts/desktop-install.sh"
-      - "scripts/desktop-run.sh"
-      - "internal/server/embedui/**"
+      - "chimera/deps.lock"
+      - "packaging/**"
+      - "scripts/**"
+      - "chimera/**"
+      - "locus/**"
       - ".github/workflows/go.yml"
       - ".github/workflows/release.yml"
 
@@ -83,8 +47,8 @@ jobs:
           SKIP_DESKTOP: "1"
         run: make fmt-check vet test
 
-  # Validates .goreleaser.yaml and produces snapshot artifacts; smoke-run linux amd64 binary.
-  package:
+  # Validates .goreleaser.yaml and produces snapshot archives; smoke-run linux amd64 binaries.
+  release-build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -101,13 +65,10 @@ jobs:
           version: "~> v2"
           args: release --snapshot --clean
 
-      - name: Snapshot smoke (--version)
-        run: |
-          BIN=$(find dist -type f -path '*/chimera_linux_amd64*/chimera' | head -1)
-          test -n "$BIN" -a -x "$BIN"
-          "$BIN" --version
+      - name: Snapshot smoke (Chimera release binaries)
+        run: bash scripts/ci-release-smoke.sh
 
-  # Desktop: webview_go + CGO (compile-only on linux-amd64).
+  # Desktop: webview_go + CGO (linux-amd64).
   desktop:
     runs-on: ubuntu-latest
     steps:
@@ -128,12 +89,12 @@ jobs:
           test -n "$wk41_pc" && test -f "$wk41_pc"
           sudo ln -sf "$wk41_pc" /usr/local/lib/pkgconfig/webkit2gtk-4.0.pc
 
-      - name: Vet and test (desktop tag)
+      - name: Vet and test (locus-desktop)
         env:
           CGO_ENABLED: "1"
-        run: make vet-desktop test-desktop
+        run: make vet locus-desktop-test
 
-      - name: Build desktop binary
+      - name: Build locus-desktop
         env:
           CGO_ENABLED: "1"
-        run: go build -tags desktop -o /tmp/locus-desktop ./cmd/chimera
+        run: make locus-desktop-build
