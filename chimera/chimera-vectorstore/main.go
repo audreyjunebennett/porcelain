@@ -16,6 +16,7 @@ import (
 	"github.com/lynn/porcelain/chimera/internal/logfmt"
 	"github.com/lynn/porcelain/chimera/internal/wrapper/contract"
 	wruntime "github.com/lynn/porcelain/chimera/internal/wrapper/runtime"
+	"github.com/lynn/porcelain/internal/naming"
 )
 
 func main() {
@@ -28,7 +29,7 @@ func main() {
 		}
 	}
 	if err := run(os.Args[1:]); err != nil {
-		fmt.Fprintf(os.Stderr, "chimera-vectorstore: %v\n", err)
+		fmt.Fprintf(os.Stderr, "%s: %v\n", naming.ProductVectorstoreName, err)
 		os.Exit(exitCodeForError(err))
 	}
 }

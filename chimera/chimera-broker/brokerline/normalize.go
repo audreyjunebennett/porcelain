@@ -9,11 +9,12 @@ import (
 	"strings"
 
 	wline "github.com/lynn/porcelain/chimera/internal/wrapper/line"
+	"github.com/lynn/porcelain/internal/naming"
 )
 
 var (
-	bootstrapMSRE   = regexp.MustCompile(`(?i)Time spent in chimera-broker server bootstrap\s+(\d+)\s*ms`)
-	readyURLRE      = regexp.MustCompile(`(?i)successfully started chimera-broker,\s*serving UI on\s+(https?://\S+)`)
+	bootstrapMSRE   = regexp.MustCompile(`(?i)Time spent in ` + regexp.QuoteMeta(naming.ProductBrokerName) + ` server bootstrap\s+(\d+)\s*ms`)
+	readyURLRE      = regexp.MustCompile(`(?i)successfully started ` + regexp.QuoteMeta(naming.ProductBrokerName) + `,\s*serving UI on\s+(https?://\S+)`)
 	pluginStatusRE  = regexp.MustCompile(`(?i)plugin status:\s*([^-]+)\s*-\s*(.+)\s*$`)
 	addedProviderRE = regexp.MustCompile(`(?i)added provider:\s*(\S+)`)
 	logRetentionRE  = regexp.MustCompile(`(?i)log retention cleaner initialized with\s+(\d+)\s*days retention`)
@@ -69,7 +70,7 @@ func normalizeJSON(raw string) []byte {
 	out := normalized{
 		Timestamp:   ts,
 		Level:       strings.ToUpper(level),
-		Service:     "chimera-broker",
+		Service:     naming.ProductBrokerName,
 		ChimeraNorm: 1,
 	}
 
@@ -138,7 +139,7 @@ func normalizeJSON(raw string) []byte {
 		out.Msg = "broker.governance.startup"
 	case strings.Contains(strings.ToLower(message), "async job executor initialized"):
 		out.Msg = "broker.jobs.async_ready"
-	case strings.Contains(strings.ToLower(message), "chimera-broker client initialized"):
+	case strings.Contains(strings.ToLower(message), naming.ProductBrokerName+" client initialized"):
 		out.Msg = "broker.client.ready"
 	case strings.Contains(strings.ToLower(message), "listing all models and adding to model catalog"),
 		strings.Contains(strings.ToLower(message), "models added to catalog"):
@@ -264,7 +265,7 @@ func classifyHTTPAccess(out *normalized, fields map[string]json.RawMessage, mess
 func normalizePlain(raw string) []byte {
 	s := strings.TrimSpace(raw)
 	out := normalized{
-		Service:     "chimera-broker",
+		Service:     naming.ProductBrokerName,
 		Level:       "INFO",
 		ChimeraNorm: 1,
 	}
@@ -315,10 +316,10 @@ func alreadyNormalized(raw []byte) ([]byte, bool) {
 	if b, ok := wline.ReorderNormalizedJSON(raw); ok {
 		return b, true
 	}
-	if _, ok := wline.AlreadyNormalizedChimera(raw, "broker.", "chimera-broker"); ok {
+	if _, ok := wline.AlreadyNormalizedChimera(raw, "broker.", naming.ProductBrokerName); ok {
 		return wline.ReorderNormalizedJSON(raw)
 	}
-	if b, ok := wline.PassthroughSlogJSON(raw, "chimera-broker"); ok {
+	if b, ok := wline.PassthroughSlogJSON(raw, naming.ProductBrokerName); ok {
 		return b, true
 	}
 	return nil, false
@@ -327,7 +328,7 @@ func alreadyNormalized(raw []byte) ([]byte, bool) {
 func fallbackUnknown(raw, level, _, _ string) []byte {
 	out := normalized{
 		Msg:            "broker.unparsed",
-		Service:        "chimera-broker",
+		Service:        naming.ProductBrokerName,
 		Level:          strings.ToUpper(level),
 		ProgressDetail: wline.TrimRunes(raw, 4096),
 		ChimeraNorm:    1,

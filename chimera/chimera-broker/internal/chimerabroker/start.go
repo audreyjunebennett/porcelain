@@ -1,4 +1,4 @@
-package main
+package chimerabroker
 
 import (
 	"context"
@@ -10,33 +10,24 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/lynn/porcelain/internal/naming"
 )
 
-// ChimeraBrokerConfig is the child process layout for supervised chimera-broker.
-type ChimeraBrokerConfig struct {
-	// Bin is the Chimera Broker executable name or path.
-	Bin string
-	// ConfigJSON is the host path to chimera-broker.config.json (copied to DataDir/config.json).
+// Config is the child process layout for supervised chimera-broker-http (BiFrost).
+type Config struct {
+	Bin        string
 	ConfigJSON string
-	// DataDir is Chimera Broker working directory and SQLite/config parent (created if missing).
-	DataDir string
-	// BindHost is passed as -host (and APP_HOST for compatibility).
-	BindHost string
-	// Port is passed as -port (and APP_PORT for compatibility).
-	Port int
-	// LogLevel is -log-level for chimera-broker (empty -> info).
-	LogLevel string
-	// LogStyle is -log-style for chimera-broker (empty -> json).
-	LogStyle string
-	// ExtraArgs are appended after -app-dir, -host, -port, -log-level, -log-style.
-	ExtraArgs []string
-	// RawExec runs Bin with Args only (no chimera-broker flags). Used in tests.
-	RawExec bool
-	// Args is argv when RawExec is true.
-	Args []string
-	// Stdout and Stderr default to os.Stdout / os.Stderr when nil.
-	Stdout io.Writer
-	Stderr io.Writer
+	DataDir    string
+	BindHost   string
+	Port       int
+	LogLevel   string
+	LogStyle   string
+	ExtraArgs  []string
+	RawExec    bool
+	Args       []string
+	Stdout     io.Writer
+	Stderr     io.Writer
 }
 
 // CopyConfigJSON copies src to dstDir/config.json (overwrites).
@@ -55,46 +46,14 @@ func CopyConfigJSON(src, dstDir string) error {
 	return nil
 }
 
-// MergeEnv starts from os.Environ() and replaces keys in overrides (last wins).
-func MergeEnv(overrides map[string]string) []string {
-	m := make(map[string]string)
-	for _, e := range os.Environ() {
-		i := strings.IndexByte(e, '=')
-		if i <= 0 {
-			continue
-		}
-		m[e[:i]] = e[i+1:]
-	}
-	for k, v := range overrides {
-		m[k] = v
-	}
-	out := make([]string, 0, len(m))
-	for k, v := range m {
-		out = append(out, k+"="+v)
-	}
-	return out
-}
-
-// absBinIfNeeded turns relative paths that include a directory into absolute paths.
-func absBinIfNeeded(bin string) (string, error) {
-	if filepath.IsAbs(bin) {
-		return bin, nil
-	}
-	if !strings.ContainsAny(bin, `/\`) {
-		return bin, nil
-	}
-	return filepath.Abs(bin)
-}
-
-// StartChimeraBroker starts chimera-broker with -app-dir, -host, -port, and logging flags.
-// ctx cancel kills the process.
-func StartChimeraBroker(ctx context.Context, cfg ChimeraBrokerConfig, log *slog.Logger) (*exec.Cmd, error) {
+// Start launches chimera-broker-http with -app-dir, -host, -port, and logging flags.
+func Start(ctx context.Context, cfg Config, log *slog.Logger) (*exec.Cmd, error) {
 	if err := CopyConfigJSON(cfg.ConfigJSON, cfg.DataDir); err != nil {
 		return nil, err
 	}
 	bin := strings.TrimSpace(cfg.Bin)
 	if bin == "" {
-		bin = "chimera-broker"
+		bin = naming.ProductBrokerHTTPBinName
 	}
 	var err error
 	bin, err = absBinIfNeeded(bin)
@@ -129,7 +88,7 @@ func StartChimeraBroker(ctx context.Context, cfg ChimeraBrokerConfig, log *slog.
 	}
 	cmd := exec.CommandContext(ctx, bin, argv...)
 	cmd.Dir = cfg.DataDir
-	cmd.Env = MergeEnv(map[string]string{
+	cmd.Env = mergeEnv(map[string]string{
 		"APP_HOST": cfg.BindHost,
 		"APP_PORT": strconv.Itoa(cfg.Port),
 	})
@@ -155,4 +114,33 @@ func StartChimeraBroker(ctx context.Context, cfg ChimeraBrokerConfig, log *slog.
 		return nil, fmt.Errorf("start chimera-broker: %w", err)
 	}
 	return cmd, nil
+}
+
+func mergeEnv(overrides map[string]string) []string {
+	m := make(map[string]string)
+	for _, e := range os.Environ() {
+		i := strings.IndexByte(e, '=')
+		if i <= 0 {
+			continue
+		}
+		m[e[:i]] = e[i+1:]
+	}
+	for k, v := range overrides {
+		m[k] = v
+	}
+	out := make([]string, 0, len(m))
+	for k, v := range m {
+		out = append(out, k+"="+v)
+	}
+	return out
+}
+
+func absBinIfNeeded(bin string) (string, error) {
+	if filepath.IsAbs(bin) {
+		return bin, nil
+	}
+	if !strings.ContainsAny(bin, `/\`) {
+		return bin, nil
+	}
+	return filepath.Abs(bin)
 }

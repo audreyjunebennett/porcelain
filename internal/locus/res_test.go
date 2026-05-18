@@ -15,6 +15,15 @@ func TestBinariesMatchNamingContracts(t *testing.T) {
 	if BinSupervisor != naming.ProductSupervisorName {
 		t.Fatalf("supervisor bin mismatch")
 	}
+	if BinBroker != naming.ProductBrokerName {
+		t.Fatalf("broker bin mismatch")
+	}
+	if BinBrokerHTTP != naming.ProductBrokerHTTPBinName {
+		t.Fatalf("broker http bin mismatch")
+	}
+	if BinQdrant != naming.ProductQdrantBinName {
+		t.Fatalf("qdrant bin mismatch")
+	}
 	if EnvTrace != naming.EnvDesktopTrace {
 		t.Fatalf("trace env mismatch")
 	}

@@ -13,6 +13,7 @@ import (
 	"github.com/lynn/porcelain/chimera/chimera-vectorstore/internal/qdrant"
 	"github.com/lynn/porcelain/chimera/chimera-vectorstore/vectorstoreline"
 	"github.com/lynn/porcelain/chimera/internal/wrapper/contract"
+	"github.com/lynn/porcelain/internal/naming"
 )
 
 // Qdrant implements wruntime.Adapter for a supervised Qdrant binary.
@@ -44,7 +45,7 @@ func (a *Qdrant) MetricsURL() string {
 }
 
 func (a *Qdrant) BackendName() string {
-	return "qdrant"
+	return naming.ProductQdrantBinName
 }
 
 // WrapUpstreamLine normalizes one raw Qdrant log line for the wrapper runtime.

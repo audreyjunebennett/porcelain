@@ -1,4 +1,4 @@
-// Package config parses chimera-vectorstore CLI flags and environment defaults.
+// Package config parses chimera-broker CLI flags and environment defaults.
 package config
 
 import (
@@ -22,7 +22,7 @@ type BuildInfo struct {
 	Date    string
 }
 
-// Config is the resolved runtime configuration for chimera-vectorstore.
+// Config is the resolved runtime configuration for chimera-broker.
 type Config struct {
 	Listen                 string
 	Bin                    string
@@ -41,20 +41,21 @@ type Config struct {
 	DebugAllowRemote       bool
 	ForwardUpstreamInDebug bool
 	UpstreamVersion        string
-	GRPCPort               int
+	ChimeraBrokerConfig    string
+	ChimeraBrokerLogStyle  string
 }
 
 // PrintHelp writes usage to stdout.
 func PrintHelp() {
-	fmt.Printf(`Chimera vectorstore runtime
+	fmt.Printf(`Chimera broker runtime
 
 Usage:
   %s [flags]
   %s -version
 
 Flags:
-`, naming.ProductVectorstoreName, naming.ProductVectorstoreName)
-	fs := flag.NewFlagSet(naming.ProductVectorstoreName, flag.ContinueOnError)
+`, naming.ProductBrokerName, naming.ProductBrokerName)
+	fs := flag.NewFlagSet(naming.ProductBrokerName, flag.ContinueOnError)
 	fs.SetOutput(os.Stdout)
 	bindFlags(fs, &Config{})
 	fs.PrintDefaults()
@@ -62,7 +63,7 @@ Flags:
 
 // Parse reads flags from args. Returns io.EOF when -version was requested (already printed).
 func Parse(args []string, build BuildInfo) (Config, error) {
-	fs := flag.NewFlagSet(naming.ProductVectorstoreName, flag.ContinueOnError)
+	fs := flag.NewFlagSet(naming.ProductBrokerName, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	cfg := Config{}
 	var showVersion bool
@@ -73,24 +74,24 @@ func Parse(args []string, build BuildInfo) (Config, error) {
 		return cfg, err
 	}
 	if showVersion {
-		fmt.Printf("%s %s\ncommit %s\nbuild date %s\n", naming.ProductVectorstoreName, build.Version, build.Commit, build.Date)
+		fmt.Printf("%s %s\ncommit %s\nbuild date %s\n", naming.ProductBrokerName, build.Version, build.Commit, build.Date)
 		return cfg, io.EOF
 	}
-	if strings.TrimSpace(strings.ToLower(cfg.Backend)) != naming.ProductQdrantBinName {
-		return cfg, fmt.Errorf("%s must be %s for binary mode", naming.EnvVectorstoreBackend, naming.ProductQdrantBinName)
+	if strings.TrimSpace(strings.ToLower(cfg.Backend)) != naming.ProductBrokerName {
+		return cfg, fmt.Errorf("%s must be %s for binary mode", naming.EnvBrokerBackend, naming.ProductBrokerName)
 	}
 	return cfg, nil
 }
 
 func bindFlags(fs *flag.FlagSet, cfg *Config) {
-	fs.StringVar(&cfg.Listen, "listen", envOrDefault(naming.EnvVectorstoreListen, naming.DefaultVectorstoreListen), "wrapper listen addr (host:port)")
-	fs.StringVar(&cfg.Bin, "bin", envOrDefault(naming.EnvVectorstoreBin, naming.ProductQdrantBinName), "backend binary path")
-	fs.StringVar(&cfg.Backend, "backend", envOrDefault(naming.EnvVectorstoreBackend, naming.ProductQdrantBinName), "backend name")
-	fs.StringVar(&cfg.Endpoint, "endpoint", envOrDefault(naming.EnvVectorstoreEndpoint, naming.DefaultVectorstoreEndpoint), "backend endpoint host:port")
-	fs.StringVar(&cfg.DataPath, "data-path", envOrDefault(naming.EnvVectorstoreDataPath, naming.DefaultVectorstoreDataPath), "backend data path")
-	fs.StringVar(&cfg.LogLevel, "log-level", envOrDefault(naming.EnvVectorstoreLogLevel, naming.DefaultVectorstoreLogLevel), "backend log level")
-	fs.DurationVar(&cfg.StartupTimeout, "startup-timeout", envDuration(naming.EnvVectorstoreTimeoutsStartup, contract.DefaultStartupTimeout), "startup readiness timeout")
-	fs.DurationVar(&cfg.ShutdownTimeout, "shutdown-timeout", envDuration(naming.EnvVectorstoreTimeoutsShutdown, contract.DefaultShutdownTimeout), "wrapper graceful shutdown timeout")
+	fs.StringVar(&cfg.Listen, "listen", envOrDefault(naming.EnvBrokerListen, naming.DefaultBrokerListen), "wrapper listen addr (host:port)")
+	fs.StringVar(&cfg.Bin, "bin", envOrDefault(naming.EnvBrokerBin, naming.ProductBrokerHTTPBinName), "backend binary path")
+	fs.StringVar(&cfg.Backend, "backend", envOrDefault(naming.EnvBrokerBackend, naming.ProductBrokerName), "backend name")
+	fs.StringVar(&cfg.Endpoint, "endpoint", envOrDefault(naming.EnvBrokerEndpoint, naming.DefaultBrokerEndpoint), "backend endpoint host:port")
+	fs.StringVar(&cfg.DataPath, "data-path", envOrDefault(naming.EnvBrokerDataPath, naming.DefaultBrokerDataPath), "backend data path")
+	fs.StringVar(&cfg.LogLevel, "log-level", envOrDefault(naming.EnvBrokerLogLevel, naming.DefaultBrokerLogLevel), "backend log level")
+	fs.DurationVar(&cfg.StartupTimeout, "startup-timeout", envDuration(naming.EnvBrokerTimeoutsStartup, contract.DefaultStartupTimeout), "startup readiness timeout")
+	fs.DurationVar(&cfg.ShutdownTimeout, "shutdown-timeout", envDuration(naming.EnvBrokerTimeoutsShutdown, contract.DefaultShutdownTimeout), "wrapper graceful shutdown timeout")
 	fs.DurationVar(&cfg.TerminateWait, "terminate-wait", contract.DefaultTerminateWait, "wait before force-kill backend")
 	fs.DurationVar(&cfg.BackoffInitial, "backoff-initial", contract.DefaultBackoffInitial, "restart backoff initial delay")
 	fs.Float64Var(&cfg.BackoffMultiplier, "backoff-multiplier", contract.DefaultBackoffMultiplier, "restart backoff multiplier")
@@ -100,10 +101,11 @@ func bindFlags(fs *flag.FlagSet, cfg *Config) {
 	fs.BoolVar(&cfg.DebugAllowRemote, "debug-allow-remote", wruntime.EnvBool(contract.DebugAllowRemoteEnv), "allow /debug/* on non-loopback bind")
 	fs.BoolVar(&cfg.ForwardUpstreamInDebug, "debug-forward-upstream", false, "forward upstream lines to stderr in debug mode")
 	fs.StringVar(&cfg.UpstreamVersion, "upstream-version", "", "optional upstream version for status payload")
-	fs.IntVar(&cfg.GRPCPort, "grpc-port", envInt(naming.EnvVectorstoreGRPCPort, naming.DefaultVectorstoreGRPCPort), "qdrant grpc port")
+	fs.StringVar(&cfg.ChimeraBrokerConfig, "chimera-broker-config", envOrDefault(naming.EnvBrokerChimeraBrokerConfig, naming.DefaultBrokerConfigPath), "chimera-broker config JSON path")
+	fs.StringVar(&cfg.ChimeraBrokerLogStyle, "chimera-broker-log-style", envOrDefault(naming.EnvBrokerChimeraBrokerLogStyle, naming.DefaultBrokerLogStyle), "chimera-broker log style")
 }
 
-// ParseEndpoint splits host:port for the Qdrant HTTP endpoint.
+// ParseEndpoint splits host:port for the chimera-broker HTTP backend.
 func ParseEndpoint(endpoint string) (host string, port int, err error) {
 	host, portStr, ok := strings.Cut(strings.TrimSpace(endpoint), ":")
 	if !ok || strings.TrimSpace(host) == "" || strings.TrimSpace(portStr) == "" {
@@ -134,16 +136,4 @@ func envDuration(key string, def time.Duration) time.Duration {
 		return def
 	}
 	return d
-}
-
-func envInt(key string, def int) int {
-	v := strings.TrimSpace(os.Getenv(key))
-	if v == "" {
-		return def
-	}
-	n, err := strconv.Atoi(v)
-	if err != nil {
-		return def
-	}
-	return n
 }

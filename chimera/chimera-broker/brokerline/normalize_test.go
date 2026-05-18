@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/lynn/porcelain/internal/naming"
 )
 
 func TestNormalizePayloadHTTPAccessAndRateLimit(t *testing.T) {
@@ -16,7 +18,7 @@ func TestNormalizePayloadHTTPAccessAndRateLimit(t *testing.T) {
 	if m["msg"] != "broker.http.access" {
 		t.Fatalf("msg=%v", m["msg"])
 	}
-	if m["service"] != "chimera-broker" {
+	if m["service"] != naming.ProductBrokerName {
 		t.Fatalf("service=%v", m["service"])
 	}
 	if int(m["http_status"].(float64)) != 200 {
@@ -68,7 +70,7 @@ func TestNormalizePayloadIdempotent(t *testing.T) {
 	if string(b2) != raw {
 		t.Fatalf("second pass changed output: %s vs %s", b2, raw)
 	}
-	if !strings.Contains(raw, `"service":"chimera-broker"`) {
+	if !strings.Contains(raw, `"service":"`+naming.ProductBrokerName+`"`) {
 		t.Fatalf("expected broker service in normalized output: %s", raw)
 	}
 }

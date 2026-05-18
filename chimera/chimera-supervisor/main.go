@@ -517,24 +517,24 @@ func defaultSupervisorQdrantBin() string {
 		return p
 	}
 	if runtime.GOOS == "windows" {
-		return "qdrant.exe"
+		return naming.ProductQdrantBinName + ".exe"
 	}
-	return "qdrant"
+	return naming.ProductQdrantBinName
 }
 
 func defaultSupervisorBifrostBin() string {
 	dir := executableDir()
-	names := []string{"bifrost-http", "bifrost"}
+	names := []string{naming.ProductBifrostHTTPBinName, "bifrost"}
 	if runtime.GOOS == "windows" {
-		names = []string{"bifrost-http.exe", "bifrost.exe", "bifrost-http", "bifrost"}
+		names = []string{naming.ProductBifrostHTTPBinName + ".exe", "bifrost.exe", naming.ProductBifrostHTTPBinName, "bifrost"}
 	}
 	if p := binfind.FirstInExeDirs(dir, names); p != "" {
 		return p
 	}
 	if runtime.GOOS == "windows" {
-		return "bifrost-http.exe"
+		return naming.ProductBifrostHTTPBinName + ".exe"
 	}
-	return "bifrost-http"
+	return naming.ProductBifrostHTTPBinName
 }
 
 func defaultSupervisorGatewayBin() string {

@@ -15,8 +15,11 @@ import (
 const (
 	BinDesktop     = naming.ProductDesktopName
 	BinSupervisor  = naming.ProductSupervisorName
-	BinBroker      = naming.ProductBrokerName
-	BinVectorstore = naming.ProductVectorstoreName
+	BinBroker          = naming.ProductBrokerName
+	BinBrokerHTTP      = naming.ProductBrokerHTTPBinName
+	BinBifrostHTTP     = naming.ProductBifrostHTTPBinName
+	BinVectorstore     = naming.ProductVectorstoreName
+	BinQdrant          = naming.ProductQdrantBinName
 	BinGateway     = naming.ProductGatewayBinName
 	BinIndexer     = naming.ProductIndexerBinName
 )

@@ -16,6 +16,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/lynn/porcelain/internal/naming"
 )
 
 var (
@@ -41,7 +43,7 @@ func buildE2EBinaries() error {
 	if err != nil {
 		return err
 	}
-	tmp, err := os.MkdirTemp("", "chimera-vectorstore-e2e-*")
+	tmp, err := os.MkdirTemp("", naming.ProductVectorstoreName+"-e2e-*")
 	if err != nil {
 		return err
 	}
@@ -49,8 +51,8 @@ func buildE2EBinaries() error {
 	if runtime.GOOS == "windows" {
 		ext = ".exe"
 	}
-	vectorstoreBinPath = filepath.Join(tmp, "chimera-vectorstore"+ext)
-	fakeQdrantBinPath = filepath.Join(tmp, "fake-qdrant"+ext)
+	vectorstoreBinPath = filepath.Join(tmp, naming.ProductVectorstoreName+ext)
+	fakeQdrantBinPath = filepath.Join(tmp, "fake-"+naming.ProductQdrantBinName+ext)
 	if err := runCmd(modRoot, "go", "build", "-o", vectorstoreBinPath, "./chimera/chimera-vectorstore"); err != nil {
 		return fmt.Errorf("build vectorstore: %w", err)
 	}
@@ -238,7 +240,7 @@ func TestE2E_Vectorstore_001_002_003_004_HappyStatusMetricsDebugDefault(t *testi
 	waitForHTTPStatus(t, base+"/readyz", 200, 8*time.Second)
 
 	doc := statusDoc(t, base)
-	if doc["component"] != "chimera-vectorstore" || doc["backend_name"] != "qdrant" || doc["backend_mode"] != "binary" {
+	if doc["component"] != naming.ProductVectorstoreName || doc["backend_name"] != naming.ProductQdrantBinName || doc["backend_mode"] != "binary" {
 		t.Fatalf("status identity mismatch: %+v", doc)
 	}
 	if _, ok := doc["version"]; !ok {
@@ -308,7 +310,7 @@ func TestE2E_Vectorstore_005_DebugEnabledRedaction(t *testing.T) {
 	foundWrapped := false
 	for _, line := range lines {
 		s := fmt.Sprint(line)
-		if strings.Contains(s, `"service":"chimera-vectorstore"`) && strings.Contains(s, `"msg":"vectorstore.`) {
+		if strings.Contains(s, `"service":"`+naming.ProductVectorstoreName+`"`) && strings.Contains(s, `"msg":"vectorstore.`) {
 			foundWrapped = true
 			break
 		}

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	wline "github.com/lynn/porcelain/chimera/internal/wrapper/line"
+	"github.com/lynn/porcelain/internal/naming"
 )
 
 var accessRE = regexp.MustCompile(`"(?P<method>GET|POST|PUT|PATCH|DELETE|HEAD)\s+(?P<path>[^"]+)\s+HTTP/1\.1"\s+(?P<status>\d{3})`)
@@ -78,7 +79,7 @@ func normalizeJSON(raw string) []byte {
 	out := normalized{
 		Timestamp:    parsed.Timestamp,
 		Level:        parsed.Level,
-		Service:      "chimera-vectorstore",
+		Service:      naming.ProductVectorstoreName,
 		ChimeraNorm:  1,
 		QdrantTarget: tgt,
 	}
@@ -106,7 +107,7 @@ func normalizeJSON(raw string) []byte {
 		if m := recoveredCollectionRE.FindStringSubmatch(msg); len(m) == 2 {
 			out.Collection = strings.TrimSpace(m[1])
 		}
-	case tgt == "qdrant" && strings.Contains(msg, "Distributed mode disabled"):
+	case tgt == naming.ProductQdrantBinName && strings.Contains(msg, "Distributed mode disabled"):
 		out.Msg = "vectorstore.cluster.single_node"
 		out.QdrantMode = "single-node"
 	case tgt == "qdrant::actix::web_ui":
@@ -169,10 +170,10 @@ func alreadyNormalized(raw []byte) ([]byte, bool) {
 	if b, ok := wline.ReorderNormalizedJSON(raw); ok {
 		return b, true
 	}
-	if _, ok := wline.AlreadyNormalizedChimera(raw, "vectorstore.", "chimera-vectorstore"); ok {
+	if _, ok := wline.AlreadyNormalizedChimera(raw, "vectorstore.", naming.ProductVectorstoreName); ok {
 		return wline.ReorderNormalizedJSON(raw)
 	}
-	if b, ok := wline.PassthroughSlogJSON(raw, "chimera-vectorstore"); ok {
+	if b, ok := wline.PassthroughSlogJSON(raw, naming.ProductVectorstoreName); ok {
 		return b, true
 	}
 	return nil, false
@@ -181,7 +182,7 @@ func alreadyNormalized(raw []byte) ([]byte, bool) {
 func normalizePlain(raw string) []byte {
 	s := strings.TrimSpace(raw)
 	out := normalized{
-		Service:     "chimera-vectorstore",
+		Service:     naming.ProductVectorstoreName,
 		Level:       "INFO",
 		ChimeraNorm: 1,
 	}
@@ -345,7 +346,7 @@ func classifyOperatorSignals(out *normalized, msg, _ string) bool {
 func fallbackUnknown(raw, level, target, detail string) []byte {
 	out := normalized{
 		Msg:            "vectorstore.unparsed",
-		Service:        "chimera-vectorstore",
+		Service:        naming.ProductVectorstoreName,
 		Level:          level,
 		QdrantTarget:   target,
 		ProgressDetail: wline.TrimRunes(raw, 2048),

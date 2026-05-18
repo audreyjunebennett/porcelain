@@ -5,14 +5,16 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/lynn/porcelain/internal/naming"
 )
 
 const (
-	ComponentVectorstore = "chimera-vectorstore"
-	ComponentBroker      = "chimera-broker"
-	ComponentSupervisor  = "chimera-supervisor"
-	ComponentGateway     = "chimera-gateway"
-	ComponentIndexer     = "chimera-indexer"
+	ComponentVectorstore = naming.ProductVectorstoreName
+	ComponentBroker      = naming.ProductBrokerName
+	ComponentSupervisor  = naming.ProductSupervisorName
+	ComponentGateway     = naming.ProductGatewayBinName
+	ComponentIndexer     = naming.ProductIndexerBinName
 )
 
 var AllowedComponents = map[string]struct{}{
@@ -24,9 +26,9 @@ var AllowedComponents = map[string]struct{}{
 }
 
 var AllowedBackendNames = map[string]struct{}{
-	"qdrant":         {},
-	"bifrost":        {}, // legacy alias; new broker wrapper reports chimera-broker
-	"chimera-broker": {},
+	naming.ProductQdrantBinName:  {},
+	"bifrost":                    {}, // legacy alias; new broker wrapper reports chimera-broker
+	naming.ProductBrokerName:     {},
 	"milvus":         {},
 	"weaviate":       {},
 	"redis_vector":   {},

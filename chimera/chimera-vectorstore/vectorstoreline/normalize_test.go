@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/lynn/porcelain/internal/naming"
 )
 
 func TestNormalizePayloadVersionPlain(t *testing.T) {
@@ -18,7 +20,7 @@ func TestNormalizePayloadVersionPlain(t *testing.T) {
 	if !strings.Contains(m["qdrant_version"].(string), "1.14.1") {
 		t.Fatalf("version=%v", m["qdrant_version"])
 	}
-	if m["service"] != "chimera-vectorstore" {
+	if m["service"] != naming.ProductVectorstoreName {
 		t.Fatalf("service=%v", m["service"])
 	}
 }
@@ -36,7 +38,7 @@ func TestNormalizePayloadLoadingCollection(t *testing.T) {
 	if m["collection"] != "chimera-default-x" {
 		t.Fatal(m["collection"])
 	}
-	if m["service"] != "chimera-vectorstore" {
+	if m["service"] != naming.ProductVectorstoreName {
 		t.Fatal(m["service"])
 	}
 }
@@ -60,7 +62,7 @@ func TestNormalizePayloadHTTPUpsertOK(t *testing.T) {
 }
 
 func TestNormalizePayloadIdempotent(t *testing.T) {
-	raw := `{"timestamp":"t","level":"INFO","service":"chimera-vectorstore","msg":"vectorstore.version","_chimera_norm":1}`
+	raw := `{"timestamp":"t","level":"INFO","service":"` + naming.ProductVectorstoreName + `","msg":"vectorstore.version","_chimera_norm":1}`
 	b2 := NormalizePayload(raw)
 	if string(b2) != raw {
 		t.Fatalf("second pass changed output: %s vs %s", b2, raw)
