@@ -1,13 +1,12 @@
 //go:build windows
 
-package main
+package qdrant
 
 import (
 	"os/exec"
 	"syscall"
 )
 
-// CREATE_NO_WINDOW — child console apps do not allocate a visible console.
 const createNoWindow = 0x08000000
 
 func applyNoConsoleWindow(cmd *exec.Cmd) {

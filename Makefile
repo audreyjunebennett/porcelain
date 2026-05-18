@@ -393,7 +393,7 @@ chimera-vectorstore-test: chimera-vectorstore-test-unit chimera-vectorstore-test
 
 chimera-vectorstore-test-unit:
 	@echo [STEP] Running Chimera vectorstore unit tests
-	@go test $(CHIMERA_CMD_VECTORSTORE) $(RACE_GATEWAY) -count=1
+	@go test $(CHIMERA_CMD_VECTORSTORE)/internal/... $(CHIMERA_CMD_VECTORSTORE)/vectorstoreline $(RACE_GATEWAY) -count=1
 
 chimera-vectorstore-test-e2e:
 	@echo [STEP] Running Chimera vectorstore end-to-end tests
