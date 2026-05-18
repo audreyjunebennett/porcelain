@@ -89,10 +89,14 @@ jobs:
           test -n "$wk41_pc" && test -f "$wk41_pc"
           sudo ln -sf "$wk41_pc" /usr/local/lib/pkgconfig/webkit2gtk-4.0.pc
 
+          gtk_pc_dir=$(dpkg -L libgtk-3-dev | grep -E '/gtk\+-3\.0\.pc$' | xargs dirname | head -n1)
+          test -n "$gtk_pc_dir"
+          echo "PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:${gtk_pc_dir}:${PKG_CONFIG_PATH}" >> "$GITHUB_ENV"
+
       - name: Vet and test (locus-desktop)
         env:
           CGO_ENABLED: "1"
-        run: make vet locus-desktop-test
+        run: make vet-desktop locus-desktop-test
 
       - name: Build locus-desktop
         env:

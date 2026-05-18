@@ -74,6 +74,11 @@ else
   LOCUS_DESKTOP_STAGE_OUT := $(BIN_STAGE_DIR)/locus-desktop
 endif
 
+# Linux/macOS GNU Make uses /bin/sh (dash on Ubuntu). Unquoted () in @echo are subshell syntax there.
+ifneq ($(OS),Windows_NT)
+SHELL := /bin/bash
+endif
+
 .PHONY: help bash up configure install chimera-install chimera-test chimera-run \
 	clean clean-install clean-build clean-configure clean-data clean-run clean-all \
 	chimera-clean chimera-clean-install chimera-clean-build chimera-clean-configure chimera-clean-run \
@@ -95,7 +100,7 @@ endif
 	locus-desktop-install locus-desktop-build locus-desktop-run locus-desktop-test locus-desktop-test-unit locus-desktop-test-e2e \
 	tokencount-file catalog-free catalog-available config-provider-free-tier \
 	release-install release-build release-package \
-	fmt fmt-check vet test precommit
+	fmt fmt-check vet vet-desktop test precommit
 
 .DEFAULT_GOAL := help
 
@@ -132,6 +137,12 @@ run:
 test: chimera-test locus-test-if-enabled
 test-unit: chimera-test-unit locus-test-unit-if-enabled
 test-e2e: chimera-test-e2e locus-test-e2e-if-enabled
+
+vet:
+	$(MAKE) --no-print-directory chimera-vet locus-vet
+
+vet-desktop:
+	$(MAKE) --no-print-directory chimera-vet locus-vet-desktop
 
 locus-test-if-enabled:
 ifeq ($(SKIP_DESKTOP),1)
@@ -217,6 +228,9 @@ chimera-test-e2e:
 	@$(MAKE) --no-print-directory chimera-broker-test-e2e
 	@$(MAKE) --no-print-directory chimera-vectorstore-test-e2e
 	@$(MAKE) --no-print-directory chimera-indexer-test-e2e
+
+chimera-vet:
+	go vet ./chimera/...
 
 chimera-clean: chimera-gateway-clean chimera-supervisor-clean chimera-broker-clean chimera-vectorstore-clean chimera-indexer-clean
 	@$(GITBASH) -lc 'rm -rf dist'
@@ -439,6 +453,12 @@ locus-test:
 	@echo [STEP] Testing Locus products
 	@$(MAKE) --no-print-directory locus-desktop-test
 
+locus-vet:
+	go vet ./locus/...
+
+locus-vet-desktop:
+	go vet $(LOCUS_CMD_DESKTOP)/...
+
 locus-test-unit:
 	@$(MAKE) --no-print-directory locus-desktop-test-unit
 
@@ -491,11 +511,11 @@ locus-desktop-run:
 locus-desktop-test: locus-desktop-test-unit locus-desktop-test-e2e
 
 locus-desktop-test-unit:
-	@echo [STEP] Running Locus desktop unit tests (desktop/CGO)
+	@echo '[STEP] Running Locus desktop unit tests (desktop/CGO)'
 	@go test $(LOCUS_CMD_DESKTOP)/... $(RACE_GATEWAY) -run Test -skip E2E -count=1
 
 locus-desktop-test-e2e:
-	@echo [STEP] Running Locus desktop end-to-end tests (desktop/CGO)
+	@echo '[STEP] Running Locus desktop end-to-end tests (desktop/CGO)'
 	@go test $(LOCUS_CMD_DESKTOP)/internal/... $(RACE_GATEWAY) -run E2E -count=1
 
 # --- Tools ---
@@ -553,8 +573,5 @@ fmt:
 
 fmt-check:
 	$(GITBASH) scripts/fmt-check.sh $(FMT_DIRS)
-
-vet:
-	go vet ./...
 
 precommit: fmt-check vet test
