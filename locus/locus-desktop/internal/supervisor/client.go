@@ -58,6 +58,26 @@ func Reachable(baseURL string) bool {
 	return resp.StatusCode == http.StatusOK
 }
 
+// RequestShutdown asks the supervisor control plane to begin graceful teardown.
+func RequestShutdown(baseURL string) {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if baseURL == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/shutdown", nil)
+	if err != nil {
+		return
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return
+	}
+	_, _ = io.Copy(io.Discard, resp.Body)
+	_ = resp.Body.Close()
+}
+
 // WaitReachable polls Reachable until timeout.
 func WaitReachable(baseURL string, timeout time.Duration) bool {
 	deadline := time.Now().Add(timeout)

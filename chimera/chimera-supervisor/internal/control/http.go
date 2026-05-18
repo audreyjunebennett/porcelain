@@ -91,7 +91,8 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 }
 
 // Handler returns the supervisor control-plane HTTP handler.
-func Handler(state *State, logStore *servicelogs.Store) http.Handler {
+// onShutdown, when non-nil, is invoked by POST /shutdown to begin graceful teardown.
+func Handler(state *State, logStore *servicelogs.Store, onShutdown func()) http.Handler {
 	metrics := newRequestMetrics()
 	withMetrics := func(endpoint string, h http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, req *http.Request) {
@@ -178,6 +179,25 @@ func Handler(state *State, logStore *servicelogs.Store) http.Handler {
 			code = http.StatusServiceUnavailable
 		}
 		writeJSON(w, code, payload)
+	}))
+	mux.HandleFunc("/shutdown", withMetrics("shutdown", func(w http.ResponseWriter, req *http.Request) {
+		if req.Method != http.MethodPost {
+			w.Header().Set("Allow", http.MethodPost)
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if onShutdown == nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]any{
+				"status": "unavailable",
+				"detail": "shutdown not configured",
+			})
+			return
+		}
+		writeJSON(w, http.StatusAccepted, map[string]any{
+			"status":    "shutting_down",
+			"component": contract.ComponentSupervisor,
+		})
+		go onShutdown()
 	}))
 	mux.HandleFunc(contract.MetricsPath, withMetrics("metrics", func(w http.ResponseWriter, _ *http.Request) {
 		s := state.Snapshot()

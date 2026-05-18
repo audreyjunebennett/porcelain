@@ -47,6 +47,9 @@ func Run(ctx context.Context, cfg svconfig.Config, version, commit string) error
 	}
 
 	log.Info("supervisor startup seed", "msg", "chimera-supervisor.startup.seed")
+	rootCtx, stopRoot := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	defer stopRoot()
+
 	bootstrap := false
 	if strings.TrimSpace(res.TokensPath) != "" {
 		bootstrap = tokens.IsBootstrapMode(res.TokensPath)
@@ -62,7 +65,7 @@ func Run(ctx context.Context, cfg svconfig.Config, version, commit string) error
 		controlListen = "127.0.0.1:7710"
 	}
 	controlBaseURL := fmt.Sprintf("http://%s", controlListen)
-	controlSrv := &http.Server{Addr: controlListen, Handler: control.Handler(controlState, logStore)}
+	controlSrv := &http.Server{Addr: controlListen, Handler: control.Handler(controlState, logStore, stopRoot)}
 	controlLn, controlErr := net.Listen("tcp", controlListen)
 	if controlErr != nil {
 		return svconfig.Exitf(1, "listen %s: %v", controlListen, controlErr)
@@ -136,8 +139,6 @@ func Run(ctx context.Context, cfg svconfig.Config, version, commit string) error
 		startIndexerChild(res, cfg, path, controlBaseURL, logStore, log, indexerCtx, &indexerProc, &indexerWait)
 	}
 
-	rootCtx, stopRoot := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
-	defer stopRoot()
 	go func() {
 		<-rootCtx.Done()
 		log.Info("received shutdown signal", "msg", "chimera-supervisor.shutdown.signal_received")

@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lynn/porcelain/chimera/internal/servicelogs"
 	"github.com/lynn/porcelain/chimera/internal/wrapper/contract"
@@ -25,7 +26,7 @@ func TestHandler_StatusAndMetrics(t *testing.T) {
 	st.SetLastError("last err")
 	st.SetOperatorUI("http://127.0.0.1:3000", false)
 
-	srv := httptest.NewServer(Handler(st, servicelogs.New(10)))
+	srv := httptest.NewServer(Handler(st, servicelogs.New(10), nil))
 	t.Cleanup(srv.Close)
 
 	res, err := http.Get(srv.URL + "/status")
@@ -102,7 +103,7 @@ func TestHandler_ReadyDegraded(t *testing.T) {
 	st.SetVersions("test-version", "")
 	st.SetBrokerReady(false)
 
-	srv := httptest.NewServer(Handler(st, servicelogs.New(10)))
+	srv := httptest.NewServer(Handler(st, servicelogs.New(10), nil))
 	t.Cleanup(srv.Close)
 
 	res, err := http.Get(srv.URL + "/readyz")
@@ -121,5 +122,37 @@ func TestHandler_ReadyDegraded(t *testing.T) {
 	defer res2.Body.Close()
 	if res2.StatusCode != http.StatusServiceUnavailable {
 		t.Fatalf("status code=%d want 503", res2.StatusCode)
+	}
+}
+
+func TestHandler_Shutdown(t *testing.T) {
+	t.Parallel()
+	st := NewState()
+	called := make(chan struct{}, 1)
+	onShutdown := func() {
+		select {
+		case called <- struct{}{}:
+		default:
+		}
+	}
+	srv := httptest.NewServer(Handler(st, servicelogs.New(10), onShutdown))
+	t.Cleanup(srv.Close)
+
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/shutdown", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusAccepted {
+		t.Fatalf("shutdown status=%d want 202", res.StatusCode)
+	}
+	select {
+	case <-called:
+	case <-time.After(2 * time.Second):
+		t.Fatal("onShutdown was not invoked")
 	}
 }

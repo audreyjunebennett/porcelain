@@ -12,13 +12,15 @@ import (
 
 	"github.com/lynn/porcelain/internal/binfind"
 	"github.com/lynn/porcelain/internal/locus"
+	"github.com/lynn/porcelain/locus/locus-desktop/internal/supervisor"
 	"github.com/lynn/porcelain/locus/locus-desktop/internal/telemetry"
 )
 
 const (
-	AttachStartupTimeout = 60 * time.Second
-	LaunchLockTimeout    = 4 * time.Second
-	ReadinessTimeout     = 45 * time.Second
+	AttachStartupTimeout       = 60 * time.Second
+	LaunchLockTimeout          = 4 * time.Second
+	ReadinessTimeout           = 45 * time.Second
+	OwnedSupervisorStopTimeout = 45 * time.Second
 )
 
 // FilterSupervisorArgs removes launcher-only flags before passing args to chimera-supervisor.
@@ -191,8 +193,9 @@ func isSensitiveArgKey(k string) bool {
 		strings.Contains(key, "key")
 }
 
-// StopOwnedSupervisor gracefully stops a desktop-owned supervisor process.
-func StopOwnedSupervisor(cmd *exec.Cmd) error {
+// StopOwnedSupervisor stops a desktop-owned supervisor and its supervised children.
+// controlBaseURL should be the supervisor control API base (e.g. http://127.0.0.1:7710).
+func StopOwnedSupervisor(cmd *exec.Cmd, controlBaseURL string) error {
 	if cmd == nil || cmd.Process == nil {
 		return nil
 	}
@@ -200,15 +203,24 @@ func StopOwnedSupervisor(cmd *exec.Cmd) error {
 	go func() {
 		waitCh <- cmd.Wait()
 	}()
+
+	supervisor.RequestShutdown(controlBaseURL)
 	if err := cmd.Process.Signal(os.Interrupt); err != nil && !errors.Is(err, os.ErrProcessDone) {
-		return err
+		// Interrupt may fail on Windows when the desktop has no console; HTTP shutdown above is primary.
+		if controlBaseURL == "" {
+			return err
+		}
 	}
+
 	select {
 	case err := <-waitCh:
 		return err
-	case <-time.After(15 * time.Second):
-		if err := cmd.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
-			return err
+	case <-time.After(OwnedSupervisorStopTimeout):
+		pid := cmd.Process.Pid
+		if err := forceKillProcessTree(pid); err != nil && !errors.Is(err, os.ErrProcessDone) {
+			if killErr := cmd.Process.Kill(); killErr != nil && !errors.Is(killErr, os.ErrProcessDone) {
+				return killErr
+			}
 		}
 		<-waitCh
 		return nil
@@ -232,6 +244,7 @@ func StartOwnedSupervisor(runtimeRoot, logDir, bin string, launchArgs []string) 
 	cmd.Dir = runtimeRoot
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
+	applyNoConsoleWindow(cmd)
 	if err := cmd.Start(); err != nil {
 		_ = logFile.Close()
 		return nil, fmt.Errorf("start %s: %w", locus.BinSupervisor, err)

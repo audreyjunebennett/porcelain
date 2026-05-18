@@ -126,7 +126,7 @@ func Run(cfg Config) {
 				"timeout_ms": launcher.AttachStartupTimeout.Milliseconds(),
 			})
 			if !supervisor.WaitReachable(baseURL, launcher.AttachStartupTimeout) {
-				_ = launcher.StopOwnedSupervisor(ownedProc.Cmd)
+				_ = launcher.StopOwnedSupervisor(ownedProc.Cmd, baseURL)
 				owned = false
 				md.Mode = telemetry.LaunchFailed
 				md.SupervisorOwned = false
@@ -145,7 +145,7 @@ func Run(cfg Config) {
 	ready, readinessDetail := supervisor.WaitReady(baseURL, launcher.ReadinessTimeout)
 	if !ready {
 		if owned && ownedProc != nil {
-			_ = launcher.StopOwnedSupervisor(ownedProc.Cmd)
+			_ = launcher.StopOwnedSupervisor(ownedProc.Cmd, baseURL)
 			md.SupervisorOwned = false
 		}
 		md.Mode = telemetry.LaunchFailed
@@ -168,7 +168,7 @@ func Run(cfg Config) {
 
 	if owned && ownedProc != nil {
 		defer func() {
-			_ = launcher.StopOwnedSupervisor(ownedProc.Cmd)
+			_ = launcher.StopOwnedSupervisor(ownedProc.Cmd, baseURL)
 			telemetry.RecordLifecycle(runtimeRoot, telemetry.StateShutdown, "owned supervisor stopped on desktop close", nil)
 		}()
 	}
