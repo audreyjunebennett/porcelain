@@ -16,8 +16,8 @@ import (
 
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/rag"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/vectorstore"
-	"github.com/lynn/porcelain/chimera/internal/naming"
 	"github.com/lynn/porcelain/chimera/internal/platform/requestid"
+	"github.com/lynn/porcelain/internal/naming"
 )
 
 const ingestSessionTTL = 15 * time.Minute

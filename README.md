@@ -1,6 +1,6 @@
 # Chimera Gateway Runtime
 
-**Porcelain** is an **OpenAI-compatible AI workspace** that brings together **services** and **clients**. **Chimera** is the service stack—HTTP servers, wrapper processes, operator tools, and backend components (gateway, indexer, vector store, and related runtime). **Locus** is the client stack—desktop and workspace apps that connect to Chimera. Operator docs are in `docs/`; milestones and release notes in `docs/plans/`.
+**Porcelain** is an **OpenAI-compatible AI workspace** that brings together **services** and **clients**. **Chimera** is the service stack—HTTP servers, wrapper processes, operator tools, and backend components (gateway, indexer, vector store, and related runtime). **Locus** is the client stack—desktop and workspace apps that connect to Chimera. Operator docs are in `docs/`; milestones in `docs/`; historical and active plans in `docs/plans`.
 
 ## Quick start
 
@@ -114,8 +114,6 @@ make clean
 - **Configuration:** [docs/configuration.md](docs/configuration.md)
 - **Supervisor:** [docs/supervisor.md](docs/supervisor.md)
 - **Packaging / releases:** [docs/packaging.md](docs/packaging.md)
-- **Plans & versions index:** [docs/plans/README.md](docs/plans/README.md)
-- **Admin UI / desktop shell:** [docs/plans/ui-tool.plan.md](docs/plans/ui-tool.plan.md)
 - **Security:** [SECURITY.md](SECURITY.md)
 - **Product / requirements (normative):** [docs/porcelain.plan.md](docs/porcelain.plan.md)
 
@@ -123,8 +121,8 @@ make clean
 
 | Version | Where to read |
 |---------|---------------|
-| **v0.1** | [Working notes](docs/plans/version-v0.1.md); [Go + BiFrost migration plan](docs/plans/go-bifrost-migration.plan.md) |
-| **v0.1.1** | [Tool router, metrics, quotas](docs/plans/version-v0.1.1.md) |
+| **v0.1** | [Working notes](docs/version-v0.1.md) |
+| **v0.1.1** | [Tool router, metrics, quotas](docs/version-v0.1.1.md) |
 | **v0.2.0 – v0.2.2** | [Shipped releases + capability plan](docs/version-v0.2.md) |
 | **v0.3.0** | [Working plan — v0.3](docs/version-v0.3.md) |
 | **v0.4.0** | [Working plan — v0.4](docs/version-v0.4.md) |

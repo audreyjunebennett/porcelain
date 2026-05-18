@@ -1,44 +1,39 @@
-//go:build desktop
-
 package main
 
 import (
-	"context"
-	"fmt"
-	"os"
 	"strings"
 
 	"github.com/gen2brain/dlgs"
-	"github.com/lynn/porcelain/locus/locus-desktop/internal"
+	"github.com/lynn/porcelain/internal/locus"
+	"github.com/lynn/porcelain/locus/locus-desktop/internal/app"
+	"github.com/lynn/porcelain/locus/locus-desktop/internal/page"
+	"github.com/lynn/porcelain/locus/locus-desktop/internal/platform"
 	webview "github.com/webview/webview_go"
 )
 
-func runDesktopWebview(want bool, panelURL string, runtimeLossCh <-chan string, baseURL string, stopRoot context.CancelFunc, rootCtx context.Context) {
-	if !want {
-		<-rootCtx.Done()
-		return
-	}
+func runDesktopWebview(req app.UIRequest) {
 	w := webview.New(false)
 	defer w.Destroy()
 
 	go func() {
-		<-rootCtx.Done()
+		<-req.RootCtx.Done()
 		w.Terminate()
 	}()
-	if runtimeLossCh != nil {
+
+	if req.RuntimeLossCh != nil {
 		go func() {
-			reason, ok := <-runtimeLossCh
+			reason, ok := <-req.RuntimeLossCh
 			if !ok || strings.TrimSpace(reason) == "" {
 				return
 			}
-			lossURL := buildUnreachableURL(baseURL, "Supervisor connection lost during runtime: "+reason, false)
+			lossURL := page.RuntimeLossDataURL(req.BaseURL, "Supervisor connection lost during runtime: "+reason)
 			w.Dispatch(func() {
 				w.Navigate(lossURL)
 			})
 		}()
 	}
 
-	if err := w.Bind("chimeraPickFolder", func(startDir string) (string, error) {
+	if err := w.Bind(locus.BridgePickFolder, func(startDir string) (string, error) {
 		startDir = strings.TrimSpace(startDir)
 		path, ok, err := dlgs.File("Select folder to index", startDir, true)
 		if err != nil {
@@ -49,23 +44,23 @@ func runDesktopWebview(want bool, panelURL string, runtimeLossCh <-chan string, 
 		}
 		return path, nil
 	}); err != nil {
-		fmt.Fprintf(os.Stderr, "locus-desktop: chimeraPickFolder bind: %v\n", err)
+		locus.Logf("%s bind: %v\n", locus.BridgePickFolder, err)
 	}
 
-	if err := w.Bind("chimeraOpenExternalURL", func(raw string) (string, error) {
+	if err := w.Bind(locus.BridgeOpenExternalURL, func(raw string) (string, error) {
 		return "", platform.OpenURLInBrowser(raw)
 	}); err != nil {
-		fmt.Fprintf(os.Stderr, "locus-desktop: chimeraOpenExternalURL bind: %v\n", err)
+		locus.Logf("%s bind: %v\n", locus.BridgeOpenExternalURL, err)
 	}
-	if err := w.Bind("chimeraRevealProjectPath", func(rel string) (string, error) {
+	if err := w.Bind(locus.BridgeRevealProjectPath, func(rel string) (string, error) {
 		return "", platform.RevealProjectPath(rel)
 	}); err != nil {
-		fmt.Fprintf(os.Stderr, "locus-desktop: chimeraRevealProjectPath bind: %v\n", err)
+		locus.Logf("%s bind: %v\n", locus.BridgeRevealProjectPath, err)
 	}
 
-	w.SetTitle("Locus")
+	w.SetTitle(locus.WindowTitle)
 	w.SetSize(1024, 720, webview.HintNone)
-	w.Navigate(panelURL)
+	w.Navigate(req.PanelURL)
 	w.Run()
-	stopRoot()
+	req.StopRoot()
 }

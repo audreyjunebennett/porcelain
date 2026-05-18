@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/lynn/porcelain/chimera/internal/naming"
 	"github.com/lynn/porcelain/chimera/internal/providerfreetier"
 	"github.com/lynn/porcelain/chimera/internal/providerlimits"
+	"github.com/lynn/porcelain/internal/naming"
 	"gopkg.in/yaml.v3"
 )
 

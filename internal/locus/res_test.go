@@ -1,0 +1,42 @@
+package locus
+
+import (
+	"path/filepath"
+	"runtime"
+	"testing"
+
+	"github.com/lynn/porcelain/internal/naming"
+)
+
+func TestBinariesMatchNamingContracts(t *testing.T) {
+	if BinDesktop != naming.ProductDesktopName {
+		t.Fatalf("desktop bin mismatch")
+	}
+	if BinSupervisor != naming.ProductSupervisorName {
+		t.Fatalf("supervisor bin mismatch")
+	}
+	if EnvTrace != naming.EnvDesktopTrace {
+		t.Fatalf("trace env mismatch")
+	}
+}
+
+func TestSupervisorSearchNames_Windows(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("windows-only")
+	}
+	got := SupervisorSearchNames()
+	want0 := naming.ProductSupervisorName + ".exe"
+	if len(got) != 2 || got[0] != want0 {
+		t.Fatalf("unexpected names: %v", got)
+	}
+}
+
+func TestRuntimePaths(t *testing.T) {
+	root := filepath.FromSlash("/tmp/porcelain")
+	if filepath.Base(LaunchLockPath(root)) != FileLaunchLock {
+		t.Fatalf("lock path: %s", LaunchLockPath(root))
+	}
+	if filepath.Base(LifecycleEventsPath(root)) != FileLifecycleLog {
+		t.Fatalf("events path: %s", LifecycleEventsPath(root))
+	}
+}

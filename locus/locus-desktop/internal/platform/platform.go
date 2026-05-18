@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/lynn/porcelain/locus/locus-desktop/internal/paths"
 )
 
 // OpenURLInBrowser opens http(s) URLs in the OS default browser (not an embedded webview).
@@ -28,23 +30,7 @@ func OpenURLInBrowser(raw string) error {
 	}
 }
 
-// repoRootHint returns a directory used to resolve repository-relative paths for desktop helpers.
-// When the executable lives in a bin/ directory (make install / desktop layout), the parent is used.
-func repoRootHint() string {
-	exe, err := os.Executable()
-	if err != nil {
-		wd, _ := os.Getwd()
-		return wd
-	}
-	dir := filepath.Dir(exe)
-	if strings.EqualFold(filepath.Base(dir), "bin") {
-		return filepath.Clean(filepath.Join(dir, ".."))
-	}
-	return dir
-}
-
-// RevealProjectPath opens the OS file manager focused on rel, a slash-separated path relative to the repository root.
-// For files, the folder is opened with the file selected where the platform supports it.
+// RevealProjectPath opens the OS file manager focused on rel, relative to the runtime root.
 func RevealProjectPath(rel string) error {
 	rel = strings.TrimSpace(rel)
 	rel = filepath.ToSlash(rel)
@@ -53,7 +39,7 @@ func RevealProjectPath(rel string) error {
 		return fmt.Errorf("invalid path")
 	}
 	nativeRel := filepath.FromSlash(rel)
-	root := repoRootHint()
+	root := paths.RuntimeRoot()
 	abs := filepath.Join(root, nativeRel)
 	abs, err := filepath.Abs(abs)
 	if err != nil {
@@ -83,7 +69,6 @@ func openDir(abs string) error {
 func revealFile(abs string) error {
 	switch runtime.GOOS {
 	case "windows":
-		// "/select,<path>" — comma immediately after select
 		arg := "/select," + abs
 		return exec.Command("explorer", arg).Start()
 	case "darwin":

@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/bmatcuk/doublestar/v4"
-	"github.com/lynn/porcelain/chimera/internal/naming"
+	"github.com/lynn/porcelain/internal/naming"
 	"gopkg.in/yaml.v3"
 )
 

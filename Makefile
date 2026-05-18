@@ -481,15 +481,13 @@ locus-desktop-run:
 
 locus-desktop-test: locus-desktop-test-unit locus-desktop-test-e2e
 
-locus-desktop-test-unit: export CGO_ENABLED := 1
 locus-desktop-test-unit:
 	@echo [STEP] Running Locus desktop unit tests (desktop/CGO)
-	@go test -tags desktop $(LOCUS_CMD_DESKTOP) $(RACE_GATEWAY) -run Test -skip E2E -count=1
+	@go test $(LOCUS_CMD_DESKTOP)/... $(RACE_GATEWAY) -run Test -skip E2E -count=1
 
-locus-desktop-test-e2e: export CGO_ENABLED := 1
 locus-desktop-test-e2e:
 	@echo [STEP] Running Locus desktop end-to-end tests (desktop/CGO)
-	@go test -tags desktop $(LOCUS_CMD_DESKTOP) $(RACE_GATEWAY) -run E2E -count=1
+	@go test $(LOCUS_CMD_DESKTOP)/internal/... $(RACE_GATEWAY) -run E2E -count=1
 
 # --- Tools ---
 bash:

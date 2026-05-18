@@ -17,8 +17,8 @@ import (
 	"time"
 
 	internalhttp "github.com/lynn/porcelain/chimera/internal/http"
-	"github.com/lynn/porcelain/chimera/internal/naming"
 	"github.com/lynn/porcelain/chimera/internal/platform/requestid"
+	"github.com/lynn/porcelain/internal/naming"
 )
 
 // GatewayClient talks to the Chimera Gateway indexer-facing surface:

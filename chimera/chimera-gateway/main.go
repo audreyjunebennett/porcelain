@@ -24,13 +24,13 @@ import (
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server"
 	"github.com/lynn/porcelain/chimera/internal/config"
 	"github.com/lynn/porcelain/chimera/internal/logfmt"
-	"github.com/lynn/porcelain/chimera/internal/naming"
 	"github.com/lynn/porcelain/chimera/internal/netaddr"
 	"github.com/lynn/porcelain/chimera/internal/servicelogs"
 	"github.com/lynn/porcelain/chimera/internal/supervisorlogs"
 	"github.com/lynn/porcelain/chimera/internal/upstream"
 	"github.com/lynn/porcelain/chimera/internal/wrapper/contract"
 	wruntime "github.com/lynn/porcelain/chimera/internal/wrapper/runtime"
+	"github.com/lynn/porcelain/internal/naming"
 )
 
 func main() {

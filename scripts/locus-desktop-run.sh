@@ -14,7 +14,4 @@ if [[ ! -f "$desktop_path" ]]; then
 	echo "${CHIMERA_MAKE_DESKTOP_RUN_TARGET}: $bin missing — building..."
 	"$make_cmd" "${CHIMERA_MAKE_DESKTOP_BUILD_TARGET}"
 fi
-if [[ "${1:-}" == "desktop" ]]; then
-	shift
-fi
 exec "$desktop_path" "$@"

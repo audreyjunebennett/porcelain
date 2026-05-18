@@ -20,9 +20,9 @@ import (
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/transform"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/vectorstore"
 	"github.com/lynn/porcelain/chimera/internal/config"
-	"github.com/lynn/porcelain/chimera/internal/naming"
 	"github.com/lynn/porcelain/chimera/internal/platform/requestid"
 	"github.com/lynn/porcelain/chimera/internal/upstream"
+	"github.com/lynn/porcelain/internal/naming"
 
 	"github.com/google/uuid"
 )

@@ -28,11 +28,12 @@ import (
 	"github.com/lynn/porcelain/chimera/chimera-vectorstore/vectorstoreline"
 	"github.com/lynn/porcelain/chimera/internal/config"
 	"github.com/lynn/porcelain/chimera/internal/logfmt"
-	"github.com/lynn/porcelain/chimera/internal/naming"
 	"github.com/lynn/porcelain/chimera/internal/servicelogs"
 	"github.com/lynn/porcelain/chimera/internal/tokens"
 	"github.com/lynn/porcelain/chimera/internal/upstream"
 	wruntime "github.com/lynn/porcelain/chimera/internal/wrapper/runtime"
+	"github.com/lynn/porcelain/internal/binfind"
+	"github.com/lynn/porcelain/internal/naming"
 )
 
 func main() {
@@ -481,41 +482,29 @@ func runSupervisor(args []string) {
 
 func defaultSupervisorIndexerBin() string {
 	dir := executableDir()
-	names := []string{"chimera-indexer"}
-	if runtime.GOOS == "windows" {
-		names = []string{"chimera-indexer.exe", "chimera-indexer"}
-	}
-	if p := firstExistingInSearchDirs(dir, names); p != "" {
+	if p := binfind.FirstInExeDirs(dir, binfind.SearchNames(naming.ProductIndexerBinName)); p != "" {
 		return p
 	}
 	if runtime.GOOS == "windows" {
-		return "chimera-indexer.exe"
+		return naming.ProductIndexerBinName + ".exe"
 	}
-	return "chimera-indexer"
+	return naming.ProductIndexerBinName
 }
 
 func defaultSupervisorBrokerBin() string {
 	dir := executableDir()
-	names := []string{"chimera-broker"}
-	if runtime.GOOS == "windows" {
-		names = []string{"chimera-broker.exe", "chimera-broker"}
-	}
-	if p := firstExistingInSearchDirs(dir, names); p != "" {
+	if p := binfind.FirstInExeDirs(dir, binfind.SearchNames(naming.ProductBrokerName)); p != "" {
 		return p
 	}
 	if runtime.GOOS == "windows" {
-		return "chimera-broker.exe"
+		return naming.ProductBrokerName + ".exe"
 	}
-	return "chimera-broker"
+	return naming.ProductBrokerName
 }
 
 func defaultSupervisorVectorstoreBin() string {
 	dir := executableDir()
-	names := []string{"chimera-vectorstore"}
-	if runtime.GOOS == "windows" {
-		names = []string{"chimera-vectorstore.exe", "chimera-vectorstore"}
-	}
-	return firstExistingInSearchDirs(dir, names)
+	return binfind.FirstInExeDirs(dir, binfind.SearchNames(naming.ProductVectorstoreName))
 }
 
 func defaultSupervisorQdrantBin() string {
@@ -524,7 +513,7 @@ func defaultSupervisorQdrantBin() string {
 	if runtime.GOOS == "windows" {
 		names = []string{"qdrant.exe", "qdrant"}
 	}
-	if p := firstExistingInSearchDirs(dir, names); p != "" {
+	if p := binfind.FirstInExeDirs(dir, names); p != "" {
 		return p
 	}
 	if runtime.GOOS == "windows" {
@@ -539,7 +528,7 @@ func defaultSupervisorBifrostBin() string {
 	if runtime.GOOS == "windows" {
 		names = []string{"bifrost-http.exe", "bifrost.exe", "bifrost-http", "bifrost"}
 	}
-	if p := firstExistingInSearchDirs(dir, names); p != "" {
+	if p := binfind.FirstInExeDirs(dir, names); p != "" {
 		return p
 	}
 	if runtime.GOOS == "windows" {
@@ -550,17 +539,13 @@ func defaultSupervisorBifrostBin() string {
 
 func defaultSupervisorGatewayBin() string {
 	dir := executableDir()
-	names := []string{"chimera-gateway"}
-	if runtime.GOOS == "windows" {
-		names = []string{"chimera-gateway.exe", "chimera-gateway"}
-	}
-	if p := firstExistingInSearchDirs(dir, names); p != "" {
+	if p := binfind.FirstInExeDirs(dir, binfind.SearchNames(naming.ProductGatewayBinName)); p != "" {
 		return p
 	}
 	if runtime.GOOS == "windows" {
-		return "chimera-gateway.exe"
+		return naming.ProductGatewayBinName + ".exe"
 	}
-	return "chimera-gateway"
+	return naming.ProductGatewayBinName
 }
 
 func executableDir() string {
@@ -569,32 +554,6 @@ func executableDir() string {
 		return ""
 	}
 	return filepath.Dir(exe)
-}
-
-func firstExistingFile(dir string, names []string) string {
-	for _, n := range names {
-		p := filepath.Join(dir, n)
-		if st, err := os.Stat(p); err == nil && !st.IsDir() {
-			return p
-		}
-	}
-	return ""
-}
-
-func firstExistingInSearchDirs(exeDir string, names []string) string {
-	if exeDir == "" {
-		return ""
-	}
-	for _, d := range []string{
-		exeDir,
-		filepath.Join(exeDir, "bin"),
-		filepath.Join(exeDir, "chimera", "bin"),
-	} {
-		if p := firstExistingFile(d, names); p != "" {
-			return p
-		}
-	}
-	return ""
 }
 
 func buildLoggerTo(w io.Writer, gatewayPath string, json bool) *slog.Logger {

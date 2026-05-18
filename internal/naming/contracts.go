@@ -1,13 +1,22 @@
 package naming
 
 // Naming contracts after final v0.3 cutover.
+// Shell scripts mirror binary basenames in scripts/chimera-names.sh.
 const (
 	// Product-layer names.
-	ProductSuiteName      = "Porcelain"
-	ProductGatewayName    = "Chimera"
-	ProductWorkspaceName  = "Locus"
-	ProductSupervisorName = "chimera-supervisor"
-	ProductDesktopName    = "locus-desktop"
+	ProductSuiteName       = "Porcelain"
+	ProductGatewayName     = "Chimera"
+	ProductWorkspaceName   = "Locus"
+	ProductSupervisorName  = "chimera-supervisor"
+	ProductDesktopName     = "locus-desktop"
+	ProductBrokerName      = "chimera-broker"
+	ProductVectorstoreName = "chimera-vectorstore"
+	ProductGatewayBinName  = "chimera-gateway"
+	ProductIndexerBinName  = "chimera-indexer"
+
+	// Locus desktop environment variables.
+	EnvDesktopTrace  = "LOCUS_DESKTOP_TRACE"
+	EnvDesktopLogDir = "LOCUS_DESKTOP_LOG_DIR"
 
 	// Target contract prefixes (selected in Phase 2).
 	TargetEnvPrefix    = "CHIMERA"

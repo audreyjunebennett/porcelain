@@ -13,8 +13,8 @@ import (
 	"time"
 
 	chimeraBrokeradmin "github.com/lynn/porcelain/chimera/chimera-gateway/internal/bifrostadmin"
-	"github.com/lynn/porcelain/chimera/internal/naming"
 	"github.com/lynn/porcelain/chimera/internal/upstream"
+	"github.com/lynn/porcelain/internal/naming"
 )
 
 func envLoginToken() string {
