@@ -17,11 +17,11 @@ import (
 	svconfig "github.com/lynn/porcelain/chimera/chimera-supervisor/internal/config"
 	"github.com/lynn/porcelain/chimera/chimera-supervisor/internal/control"
 	"github.com/lynn/porcelain/chimera/chimera-supervisor/internal/supervisorline"
+	"github.com/lynn/porcelain/chimera/internal/brokerclient"
 	gwconfig "github.com/lynn/porcelain/chimera/internal/config"
 	"github.com/lynn/porcelain/chimera/internal/logfmt"
 	"github.com/lynn/porcelain/chimera/internal/servicelogs"
 	"github.com/lynn/porcelain/chimera/internal/tokens"
-	"github.com/lynn/porcelain/chimera/internal/brokerclient"
 )
 
 // Run supervises gateway, broker, vectorstore wrappers, and optional indexer until ctx is canceled.

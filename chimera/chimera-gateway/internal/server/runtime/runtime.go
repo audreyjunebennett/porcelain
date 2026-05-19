@@ -18,8 +18,8 @@ import (
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/vectorstore/qdrant"
 	indexeradapter "github.com/lynn/porcelain/chimera/chimera-indexer/adapter"
 	"github.com/lynn/porcelain/chimera/internal/config"
-	"github.com/lynn/porcelain/chimera/internal/servicelogs"
 	"github.com/lynn/porcelain/chimera/internal/providerlimits"
+	"github.com/lynn/porcelain/chimera/internal/servicelogs"
 	"github.com/lynn/porcelain/chimera/internal/tokens"
 	"github.com/lynn/porcelain/internal/naming"
 )

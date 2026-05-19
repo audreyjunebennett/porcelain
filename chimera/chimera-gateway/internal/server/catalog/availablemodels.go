@@ -21,8 +21,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lynn/porcelain/chimera/internal/config"
 	"github.com/lynn/porcelain/chimera/internal/brokerclient"
+	"github.com/lynn/porcelain/chimera/internal/config"
 )
 
 // Successful merged-catalog polls log at Info only for the first success in a process;

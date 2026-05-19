@@ -25,9 +25,9 @@ import (
 	gruntime "github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/runtime"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/transform"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/vectorstore"
+	"github.com/lynn/porcelain/chimera/internal/brokerclient"
 	"github.com/lynn/porcelain/chimera/internal/config"
 	"github.com/lynn/porcelain/chimera/internal/platform/requestid"
-	"github.com/lynn/porcelain/chimera/internal/brokerclient"
 	"github.com/lynn/porcelain/internal/naming"
 
 	"github.com/google/uuid"

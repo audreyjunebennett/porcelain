@@ -55,12 +55,12 @@ const (
 )
 
 const (
-	DebugBrokerLogsPath      = "/debug/broker/logs"
-	DebugVectorstoreLogsPath = "/debug/vectorstore/logs"
-	DebugEnableBrokerLogsEnvKey     = "DEBUG__ENABLE_BROKER_LOGS"
+	DebugBrokerLogsPath              = "/debug/broker/logs"
+	DebugVectorstoreLogsPath         = "/debug/vectorstore/logs"
+	DebugEnableBrokerLogsEnvKey      = "DEBUG__ENABLE_BROKER_LOGS"
 	DebugEnableVectorstoreLogsEnvKey = "DEBUG__ENABLE_VECTORSTORE_LOGS"
-	DebugAllowRemoteEnv       = "DEBUG__ALLOW_REMOTE"
-	DebugAllowRemoteFlag      = "--debug-allow-remote"
+	DebugAllowRemoteEnv              = "DEBUG__ALLOW_REMOTE"
+	DebugAllowRemoteFlag             = "--debug-allow-remote"
 )
 
 const (
@@ -104,9 +104,9 @@ const LegacyCompatibilitySupported = false
 var RedactedSecretTokens = []string{"TOKEN", "KEY", "PASSWORD", "SECRET"}
 
 var AllowedEndpointMetricLabels = map[string]string{
-	"/healthz":             "healthz",
-	"/readyz":              "readyz",
-	"/metrics":             "metrics",
+	"/healthz":                "healthz",
+	"/readyz":                 "readyz",
+	"/metrics":                "metrics",
 	"/debug/broker/logs":      "debug_broker_logs",
 	"/debug/vectorstore/logs": "debug_vectorstore_logs",
 }

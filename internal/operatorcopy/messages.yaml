@@ -116,6 +116,75 @@ messages:
   - slug: conversation.merge.embed_failed
     summary: Embedding failed so this turn cannot be associated with any current conversation; storing as a new conversation
     gallery_preview: Embedding failed — storing as a new conversation
+  - slug: conversation.merge.disabled
+    summary: Conversation merge is disabled because embedding URL or upstream API key is missing.
+    gallery_preview: Conversation merge disabled — missing embedding or API key
+  - slug: conversation.merge.embed_dim_mismatch
+    summary: Embedding vector dimension does not match the configured index dimension.
+    gallery_preview: Embedding dimension mismatch
+  - slug: conversation.merge.list_candidates_failed
+    summary: Could not list merge candidates from the operator store.
+    gallery_preview: List merge candidates failed
+  - slug: conversation.merge.dedup_read_failed
+    summary: Could not read the dedup cache entry for this request body.
+    gallery_preview: Dedup cache read failed
+  - slug: conversation.merge.upsert_failed
+    summary: Could not upsert the conversation merge row.
+    gallery_preview: Merge upsert failed
+  - slug: conversation.merge.snapshot_upsert_failed
+    summary: Could not upsert the conversation resolve snapshot.
+    gallery_preview: Resolve snapshot upsert failed
+  - slug: conversation.merge.dedup_cache_write_failed
+    summary: Could not write the dedup cache entry after merge.
+    gallery_preview: Dedup cache write failed
+  - slug: conversation.merge.resolve_failed
+    summary: Conversation merge resolve failed before chat; continuing with a fresh conversation id.
+    gallery_preview: Merge resolve failed — continuing with new id
+  - slug: conversation.merged
+    summary: This inbound turn was merged into an existing conversation (semantic or sticky match).
+    gallery_preview: Conversation matched · merged into existing id
+  - slug: conversation.dedup_hit
+    summary: Identical request body matched a recent turn; reusing the cached conversation.
+    gallery_preview: Conversation dedup hit
+  - slug: conversation.response.witness
+    summary: 'Response witness logged: completion size, finish reason, and chunk count for correlation.'
+    gallery_preview: Response witness logged for correlation and auditing.
+  - slug: conversation.payload.sample
+    summary: Redacted head/tail excerpt of request or response payload (trace only).
+    gallery_preview: Payload sample (trace)
+  - slug: conversation.rag.attached
+    summary: Retrieved chunks were injected into the chat request as context.
+    gallery_preview: RAG context attached to this turn
+  - slug: conversation.rag.skipped
+    summary: RAG retrieval was skipped for this turn (disabled, empty query, or no hits).
+    gallery_preview: RAG skipped for this turn
+  - slug: conversation.tool.router
+    summary: Tool router pass completed for this chat request.
+    gallery_preview: Tool router applied
+  - slug: conversation.tool.call_started
+    summary: Gateway started executing a tool call for this conversation turn.
+    gallery_preview: Tool call started
+  - slug: conversation.tool.call_completed
+    summary: Tool call finished successfully for this conversation turn.
+    gallery_preview: Tool call completed
+  - slug: conversation.tool.call_failed
+    summary: Tool call failed for this conversation turn.
+    gallery_preview: Tool call failed
+  - slug: conversation.broker.completed
+    summary: chimera-broker request completed for this conversation turn.
+    gallery_preview: chimera-broker request completed
+  - slug: conversation.broker.failed
+    summary: chimera-broker request failed for this conversation turn.
+    gallery_preview: chimera-broker request failed
+  - slug: conversation.fallback.attempted
+    summary: Routing fallback attempted after an upstream failure.
+    gallery_preview: Fallback routing attempted
+  - slug: conversation.fallback.exhausted
+    summary: All models in the routing fallback chain were exhausted.
+    gallery_preview: Fallback chain exhausted
+  - slug: conversation.fallback.model_not_found
+    summary: No model in the fallback chain could serve this request.
+    gallery_preview: Fallback model not found
   - slug: rag.query
     formatter: rag_collection
     gallery_preview: 'Vector search for this request: querying the index for chunks relevant to the user message.'

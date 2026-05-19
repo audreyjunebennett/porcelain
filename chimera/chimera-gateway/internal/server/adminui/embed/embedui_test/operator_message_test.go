@@ -95,10 +95,10 @@ func TestOperatorMessage_gatewaySlugs(t *testing.T) {
 		{
 			name: "routing_alias",
 			flat: map[string]any{
-				"msg":            "conversation.routing.resolve",
-				"upstreamModel":  "gpt-4o",
-				"attempt":        2,
-				"chainLen":       3,
+				"msg":           "conversation.routing.resolve",
+				"upstreamModel": "gpt-4o",
+				"attempt":       2,
+				"chainLen":      3,
 			},
 			want: "Routing resolved: upstream model chosen for this completion. · Model gpt-4o · attempt 2/3",
 		},
@@ -172,9 +172,9 @@ func TestOperatorMessage_vectorstore_version_canonicalSlug(t *testing.T) {
 		t.Fatal("missing operatorMessage")
 	}
 	v, err := fn(goja.Undefined(), vm.ToValue(map[string]any{
-		"service":         "qdrant",
-		"msg":             "vectorstore.version",
-		"qdrant_version":  "1.12.4",
+		"service":        "qdrant",
+		"msg":            "vectorstore.version",
+		"qdrant_version": "1.12.4",
 	}))
 	if err != nil {
 		t.Fatal(err)
