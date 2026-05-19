@@ -597,6 +597,10 @@ contracts-check:
 	@go test ./internal/naming/... -run 'TestGeneratedLogMessagesGoMatchesFile|TestLogMessageConstsHaveRegistryEntry' -count=1
 	@$(GITBASH) scripts/operatorcopy-msg-audit.sh
 
+# Supervisor log normalization fidelity (docs/plans/log-supervisor-normalization-fidelity.md).
+test-log-fidelity:
+	@$(GITBASH) scripts/test-log-fidelity.sh
+
 # --- Quality gates ---
 
 fmt:

@@ -9,6 +9,27 @@
  * - ChimeraLogs.Derive.brokerCardMetrics(arr, getFlat)
  */
 
+function brokerLegacyToCanonical(msg) {
+  var s = String(msg != null ? msg : "").trim();
+  if (s.indexOf("chimera-broker.") === 0) return "broker." + s.slice("chimera-broker.".length);
+  return s;
+}
+
+function brokerCanonicalMsg(flat) {
+  if (!flat || typeof flat !== "object") return "";
+  var oc = globalThis.ChimeraLogs && ChimeraLogs.OperatorCopy;
+  if (oc && typeof oc.resolveFlat === "function") {
+    var slug = oc.resolveFlat(flat);
+    if (slug) return slug;
+  }
+  return brokerLegacyToCanonical(flat.msg != null ? flat.msg : flat.message);
+}
+
+function brokerServiceMatch(flat) {
+  var svc = String((flat && flat.service) || "").toLowerCase();
+  return svc === "chimera-broker" || svc === "broker";
+}
+
 function brokerPathFromTarget(target) {
   var s = target != null ? String(target).trim() : "";
   if (!s) return "";
@@ -85,8 +106,8 @@ function chimeraBrokerSliceSinceLastBanner(arr, getFlat) {
   var lastIdx = -1;
   var i;
   for (i = 0; i < arr.length; i++) {
-    var msg = String(getFlat(arr[i].parsed).msg || "");
-    if (msg === "chimera-broker.startup.banner") lastIdx = i;
+    var msg = brokerCanonicalMsg(getFlat(arr[i].parsed));
+    if (msg === "broker.startup.banner" || msg === "chimera-broker.startup.banner") lastIdx = i;
   }
   if (lastIdx < 0) return arr.slice();
   return arr.slice(lastIdx);
@@ -95,8 +116,8 @@ function chimeraBrokerSliceSinceLastBanner(arr, getFlat) {
 function chimeraBrokerEntryHasRateLimit(ent, getFlat) {
   getFlat = typeof getFlat === "function" ? getFlat : function (p) { return (p && p.rawFlat) || {}; };
   var f = getFlat(ent && ent.parsed);
-  var msg = String(f.msg != null ? f.msg : "").trim();
-  if (msg === "chimera-broker.rate_limit") return true;
+  var msg = brokerCanonicalMsg(f);
+  if (msg === "broker.rate_limit" || msg === "chimera-broker.rate_limit") return true;
   var comb = (String((ent && ent.text) || "") + " " + String(f.msg || "")).toLowerCase();
   return comb.indexOf("429") >= 0 || comb.indexOf("rate limit") >= 0 || comb.indexOf("rate_limit") >= 0;
 }
@@ -134,7 +155,8 @@ function chimeraBrokerSliceForRelayMetrics(arr, getFlat) {
   var lastReady = -1;
   var i;
   for (i = 0; i < arr.length; i++) {
-    if (String(getFlat(arr[i].parsed).msg || "") === "chimera-broker.ready") lastReady = i;
+    var m = brokerCanonicalMsg(getFlat(arr[i].parsed));
+    if (m === "broker.ready" || m === "chimera-broker.ready") lastReady = i;
   }
   if (lastReady >= 0) return arr.slice(lastReady);
   return chimeraBrokerSliceSinceLastBanner(arr, getFlat);
@@ -165,67 +187,67 @@ function chimeraBrokerCardModel(arr, getFlat) {
   var i;
   for (i = arr.length - 1; i >= 0; i--) {
     var f = getFlat(arr[i].parsed);
-    var msg = String(f.msg != null ? f.msg : f.message != null ? f.message : "").trim();
+    var msg = brokerCanonicalMsg(f);
     if (msg === "chat.chimera-broker.available_models") {
       var ng = Number(f.catalog_model_count != null ? f.catalog_model_count : f.catalogModelCount);
       if (!out.catalogModelCount && !isNaN(ng) && ng > 0) out.catalogModelCount = Math.round(ng);
       continue;
     }
-    if (String(f.service || "").toLowerCase() !== "chimera-broker") continue;
+    if (!brokerServiceMatch(f)) continue;
 
     if (!out.version && f.chimera_broker_version) out.version = String(f.chimera_broker_version).trim();
-    if (!out.version && msg === "chimera-broker.version" && f.chimera_broker_version) out.version = String(f.chimera_broker_version).trim();
+    if (!out.version && msg === "broker.version" && f.chimera_broker_version) out.version = String(f.chimera_broker_version).trim();
 
-    if (!out.configuration && msg === "chimera-broker.config.loaded") out.configuration = "supervised";
+    if (!out.configuration && msg === "broker.config.loaded") out.configuration = "supervised";
 
     if (!out.port && f.listen_port != null && !isNaN(Number(f.listen_port))) {
       out.port = String(Math.round(Number(f.listen_port)));
     }
-    if (!out.port && msg === "chimera-broker.listen.http" && f.progress_detail) {
+    if (!out.port && msg === "broker.listen.http" && f.progress_detail) {
       var mport = String(f.progress_detail).match(/:(\d{2,5})\b/);
       if (mport) out.port = mport[1];
     }
-    if (!out.port && msg === "chimera-broker.ready" && f.listen_port != null && !isNaN(Number(f.listen_port))) {
+    if (!out.port && msg === "broker.ready" && f.listen_port != null && !isNaN(Number(f.listen_port))) {
       out.port = String(Math.round(Number(f.listen_port)));
     }
 
-    if (!out.auth && msg === "chimera-broker.jwt.startup") {
+    if (!out.auth && msg === "broker.jwt.startup") {
       var pd = String(f.progress_detail || f.auth_mode || "").toLowerCase();
       if (pd.indexOf("jwt") >= 0) out.auth = "jwt";
       else if (pd.indexOf("api") >= 0) out.auth = "api-key";
       else if (pd.indexOf("disabled") >= 0) out.auth = "disabled";
     }
-    if (!out.auth && msg === "chimera-broker.plugin.status") {
+    if (!out.auth && msg === "broker.plugin.status") {
       var pname = String(f.plugin_name != null ? f.plugin_name : "").toLowerCase();
       var pst = String(f.plugin_status != null ? f.plugin_status : "").toLowerCase();
       var plug = pname + " " + pst;
       if (plug.indexOf("jwt") >= 0 || plug.indexOf("auth") >= 0) out.auth = "jwt";
     }
 
-    if (!out.auth && msg === "chimera-broker.auth.token_refresh") {
+    if (!out.auth && msg === "broker.auth.token_refresh") {
       out.auth = "jwt";
     }
 
-    if (!out.catalogModelCount && msg === "chimera-broker.catalog.sync") {
+    if (!out.catalogModelCount && msg === "broker.catalog.sync") {
       var ncm = Number(f.catalog_model_count != null ? f.catalog_model_count : f.catalogModelCount);
       if (!isNaN(ncm) && ncm > 0) {
         out.catalogModelCount = Math.round(ncm);
       }
     }
 
-    if (!out.mcp && msg === "chimera-broker.mcp.startup") out.mcp = "enabled";
-    if (!out.mcp && msg === "chimera-broker.mcp.persistence.disabled") out.mcp = "disabled";
+    if (!out.mcp && msg === "broker.mcp.startup") out.mcp = "enabled";
+    if (!out.mcp && msg === "broker.mcp.persistence.disabled") out.mcp = "disabled";
 
-    if (!out.governance && msg === "chimera-broker.governance.startup") out.governance = "enabled";
+    if (!out.governance && msg === "broker.governance.startup") out.governance = "enabled";
 
-    if (msg === "chimera-broker.provider.loaded" && f.provider_id) {
+    if (msg === "broker.provider.loaded" && f.provider_id) {
       var pid = String(f.provider_id).trim();
       if (pid) loaded[pid] = true;
     }
-    if (msg === "chimera-broker.provider.health.ok" && f.provider_id) {
+    if (msg === "broker.provider.health.ok" && f.provider_id) {
       healthLast[String(f.provider_id).trim()] = true;
     }
-    if (msg === "chimera-broker.provider.health.fail" && f.provider_id) {
+    if (msg === "broker.provider.health.fail" && f.provider_id) {
       healthLast[String(f.provider_id).trim()] = false;
     }
   }
@@ -233,7 +255,7 @@ function chimeraBrokerCardModel(arr, getFlat) {
   var sliceM = chimeraBrokerSliceForRelayMetrics(arr, getFlat);
   for (i = sliceM.length - 1; i >= 0; i--) {
     var f2 = getFlat(sliceM[i].parsed);
-    var msg2 = String(f2.msg != null ? f2.msg : "").trim();
+    var msg2 = brokerCanonicalMsg(f2);
     if (msg2 === "chat.chimera-broker.request" && f2.upstreamModel) {
       out.lastModel = String(f2.upstreamModel).trim();
       break;
@@ -292,10 +314,10 @@ function chimeraBrokerCardMetrics(arr, getFlat) {
     var p = ent.parsed || {};
     var f = getFlat(p);
     var sh = p.shape || "";
-    var msg = String(f.msg != null ? f.msg : f.message != null ? f.message : "").trim();
+    var msg = brokerCanonicalMsg(f);
 
     if (chimeraBrokerEntryHasRateLimit(ent, getFlat)) rlN++;
-    if (msg === "chimera-broker.rate_limit") rateLimitSlugN++;
+    if (msg === "broker.rate_limit" || msg === "chimera-broker.rate_limit") rateLimitSlugN++;
 
     if (msg === "chat.routing.fallback") fallbackN++;
 
@@ -333,15 +355,15 @@ function chimeraBrokerCardMetrics(arr, getFlat) {
       }
     }
 
-    if (String(f.service || "").toLowerCase() === "chimera-broker") {
-      if (msg === "chimera-broker.provider.loaded" && f.provider_id) {
+    if (brokerServiceMatch(f)) {
+      if (msg === "broker.provider.loaded" && f.provider_id) {
         var pid = String(f.provider_id).trim();
         if (pid) loaded[pid] = true;
       }
-      if (msg === "chimera-broker.provider.health.ok" && f.provider_id) {
+      if (msg === "broker.provider.health.ok" && f.provider_id) {
         healthLast[String(f.provider_id).trim()] = true;
       }
-      if (msg === "chimera-broker.provider.health.fail" && f.provider_id) {
+      if (msg === "broker.provider.health.fail" && f.provider_id) {
         healthLast[String(f.provider_id).trim()] = false;
       }
     }
@@ -349,9 +371,9 @@ function chimeraBrokerCardMetrics(arr, getFlat) {
 
   for (var ic = slice.length - 1; ic >= 0; ic--) {
     var fcat = getFlat(slice[ic].parsed);
-    var mcat = String(fcat.msg != null ? fcat.msg : "").trim();
-    if (mcat !== "chimera-broker.catalog.sync" && mcat !== "chat.chimera-broker.available_models") continue;
-    if (mcat === "chimera-broker.catalog.sync" && String(fcat.service || "").toLowerCase() !== "chimera-broker") continue;
+    var mcat = brokerCanonicalMsg(fcat);
+    if (mcat !== "broker.catalog.sync" && mcat !== "chat.chimera-broker.available_models") continue;
+    if (mcat === "broker.catalog.sync" && !brokerServiceMatch(fcat)) continue;
     var ncat = Number(fcat.catalog_model_count != null ? fcat.catalog_model_count : fcat.catalogModelCount);
     if (!isNaN(ncat) && ncat > 0) {
       catalogModelCount = Math.round(ncat);
@@ -437,21 +459,21 @@ function chimeraBrokerProviderHealthList(arr, getFlat) {
   var lastEvent = {};
   for (var i = 0; i < arr.length; i++) {
     var f = getFlat(arr[i].parsed);
-    var msg = String(f.msg != null ? f.msg : "").trim();
+    var msg = brokerCanonicalMsg(f);
     var pid = f.provider_id != null ? String(f.provider_id).trim() : "";
     if (!pid) continue;
     if (
-      msg === "chimera-broker.provider.loaded" ||
-      msg === "chimera-broker.provider.key_loaded" ||
-      msg === "chimera-broker.provider.health.ok" ||
-      msg === "chimera-broker.provider.health.fail" ||
-      msg === "chimera-broker.provider.key_missing"
+      msg === "broker.provider.loaded" ||
+      msg === "broker.provider.key_loaded" ||
+      msg === "broker.provider.health.ok" ||
+      msg === "broker.provider.health.fail" ||
+      msg === "broker.provider.key_missing"
     ) {
       loaded[pid] = true;
     }
-    if (msg === "chimera-broker.provider.health.ok") lastEvent[pid] = "up";
-    else if (msg === "chimera-broker.provider.health.fail") lastEvent[pid] = "down";
-    else if (msg === "chimera-broker.provider.key_missing") lastEvent[pid] = "key_missing";
+    if (msg === "broker.provider.health.ok") lastEvent[pid] = "up";
+    else if (msg === "broker.provider.health.fail") lastEvent[pid] = "down";
+    else if (msg === "broker.provider.key_missing") lastEvent[pid] = "key_missing";
   }
   var ids = Object.keys(loaded).sort();
   var out = [];

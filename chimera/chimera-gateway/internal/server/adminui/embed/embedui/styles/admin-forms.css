@@ -175,6 +175,11 @@
   flex: 0 0 auto;
   margin-bottom: 1px;
 }
+.sum-workspaces-create-btn.sg-op-save-btn:disabled,
+.sum-workspaces-create-btn.sg-op-save-btn[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 .sg-op-user-cards-stack,
 .sg-op-user-drafts-stack {
   display: flex;

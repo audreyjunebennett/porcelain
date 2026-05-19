@@ -33,7 +33,10 @@ func normalizeJSON(raw string) []byte {
 		Service:     serviceName,
 		ChimeraNorm: 1,
 	}
-	out.Timestamp = wline.JSONString(fields, "time")
+	out.Timestamp = wline.NormalizeTimestampUTC(wline.JSONString(fields, "time"))
+	if out.Timestamp == "" {
+		out.Timestamp = wline.NormalizeTimestampUTC(wline.JSONString(fields, "timestamp"))
+	}
 	out.Level = strings.ToUpper(strings.TrimSpace(wline.JSONString(fields, "level")))
 	msg := strings.TrimSpace(wline.JSONString(fields, "msg"))
 	if msg == "" {
@@ -59,6 +62,7 @@ func normalizePlain(raw string) []byte {
 		return nil
 	}
 	out := normalized{
+		Timestamp:      wline.UTCTimestampNow(),
 		Service:        serviceName,
 		Level:          "INFO",
 		Msg:            "chimera-supervisor.log.text",

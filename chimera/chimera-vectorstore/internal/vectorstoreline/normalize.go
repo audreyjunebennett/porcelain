@@ -73,6 +73,22 @@ func NormalizePayload(raw string) []byte {
 }
 
 func normalizeJSON(raw string) []byte {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &fields); err == nil {
+		if wline.IntFromJSON(fields, "_chimera_norm") == wline.ChimeraNormValue {
+			if b, ok := wline.ReorderNormalizedJSON([]byte(raw)); ok {
+				return b
+			}
+		}
+		slug := strings.TrimSpace(wline.JSONString(fields, "msg"))
+		if slug == "" {
+			slug = strings.TrimSpace(wline.JSONString(fields, "message"))
+		}
+		if strings.HasPrefix(slug, "vectorstore.") {
+			return normalizeVectorstoreDomainSlog(fields, slug, raw)
+		}
+	}
+
 	var parsed rustTracingLine
 	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
 		return fallbackUnknown(raw, parsed.Level, "", "")
@@ -80,7 +96,7 @@ func normalizeJSON(raw string) []byte {
 	msg := strings.TrimSpace(parsed.Fields.Message)
 	tgt := strings.TrimSpace(parsed.Target)
 	out := normalized{
-		Timestamp:    parsed.Timestamp,
+		Timestamp:    wline.NormalizeTimestampUTC(parsed.Timestamp),
 		Level:        parsed.Level,
 		Service:      naming.ProductVectorstoreName,
 		ChimeraNorm:  1,
@@ -159,9 +175,10 @@ func normalizeJSON(raw string) []byte {
 			break
 		}
 		out.Msg = "vectorstore.trace.other"
-		out.ProgressDetail = msg
+		out.ProgressDetail = traceDetailFromQdrant(msg, raw)
 	}
 
+	ensureVectorstoreTimestamp(&out)
 	b, err := json.Marshal(out)
 	if err != nil {
 		return fallbackUnknown(raw, parsed.Level, tgt, msg)
@@ -182,9 +199,49 @@ func alreadyNormalized(raw []byte) ([]byte, bool) {
 	return nil, false
 }
 
+func normalizeVectorstoreDomainSlog(fields map[string]json.RawMessage, slug, raw string) []byte {
+	ts := wline.NormalizeTimestampUTC(wline.JSONString(fields, "time"))
+	if wline.JSONString(fields, "timestamp") != "" {
+		ts = wline.NormalizeTimestampUTC(wline.JSONString(fields, "timestamp"))
+	}
+	out := normalized{
+		Timestamp:   ts,
+		Level:       strings.ToUpper(strings.TrimSpace(wline.JSONString(fields, "level"))),
+		Service:     naming.ProductVectorstoreName,
+		Msg:         slug,
+		ChimeraNorm: 1,
+	}
+	if out.Level == "" {
+		out.Level = "INFO"
+	}
+	if detail := wline.UpstreamDetailFromFields(fields); detail != "" {
+		out.ProgressDetail = wline.TrimRunes(detail, 2048)
+	} else if wline.IsUpstreamLineMsg(slug) {
+		out.ProgressDetail = wline.TrimRunes(raw, 2048)
+	}
+	b, _ := json.Marshal(out)
+	return b
+}
+
+func traceDetailFromQdrant(msg, raw string) string {
+	if s := strings.TrimSpace(msg); s != "" {
+		return s
+	}
+	return wline.TrimRunes(raw, 2048)
+}
+
+func ensureVectorstoreTimestamp(out *normalized) {
+	if strings.TrimSpace(out.Timestamp) == "" {
+		out.Timestamp = wline.UTCTimestampNow()
+	} else {
+		out.Timestamp = wline.NormalizeTimestampUTC(out.Timestamp)
+	}
+}
+
 func normalizePlain(raw string) []byte {
 	s := strings.TrimSpace(raw)
 	out := normalized{
+		Timestamp:   wline.UTCTimestampNow(),
 		Service:     naming.ProductVectorstoreName,
 		Level:       "INFO",
 		ChimeraNorm: 1,
@@ -207,8 +264,9 @@ func normalizeAccessJSON(_ rustTracingLine, msg string, base normalized) []byte 
 	m := accessRE.FindStringSubmatch(msg)
 	if len(m) != 4 {
 		base.Msg = "vectorstore.http.access_other"
-		base.ProgressDetail = msg
+		base.ProgressDetail = traceDetailFromQdrant(msg, "")
 		base.QdrantTarget = "actix_web::middleware::logger"
+		ensureVectorstoreTimestamp(&base)
 		b, _ := json.Marshal(base)
 		return b
 	}
@@ -239,6 +297,7 @@ func normalizeAccessJSON(_ rustTracingLine, msg string, base normalized) []byte 
 	default:
 		base.Msg = "vectorstore.http.access_other"
 	}
+	ensureVectorstoreTimestamp(&base)
 	b, _ := json.Marshal(base)
 	return b
 }

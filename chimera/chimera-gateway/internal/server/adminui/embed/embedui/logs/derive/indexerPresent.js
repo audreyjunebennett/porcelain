@@ -91,6 +91,7 @@ function indexerProseSummary(flat) {
   var svc = String(flat.service || "").toLowerCase();
   var indexerish =
     svc === "indexer" ||
+    svc === "chimera-indexer" ||
     m.indexOf("indexer.") === 0 ||
     m.indexOf("gateway.indexer") === 0 ||
     (svc === "gateway" && m === "rag.retrieve.source");

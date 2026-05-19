@@ -1,6 +1,7 @@
 package brokerline
 
 import (
+	"bytes"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -72,5 +73,57 @@ func TestNormalizePayloadIdempotent(t *testing.T) {
 	}
 	if !strings.Contains(raw, `"service":"`+naming.ProductBrokerName+`"`) {
 		t.Fatalf("expected broker service in normalized output: %s", raw)
+	}
+}
+
+func TestNormalizePayloadBrokerUpstreamLine(t *testing.T) {
+	raw := `{"level":"INFO","time":"2026-05-08T14:00:00-05:00","msg":"broker.upstream.line","upstream_raw":"Version: 1.14.1"}`
+	b := NormalizePayload(raw)
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatal(err)
+	}
+	if m["msg"] != "broker.upstream.line" {
+		t.Fatalf("msg=%v", m["msg"])
+	}
+	if m["progress_detail"] != "Version: 1.14.1" {
+		t.Fatalf("progress_detail=%v", m["progress_detail"])
+	}
+	if m["msg"] == m["progress_detail"] {
+		t.Fatal("progress_detail must not echo slug")
+	}
+}
+
+func TestNormalizePayloadPlainBannerTimestamp(t *testing.T) {
+	b := NormalizePayload("╔════ BiFrost ════╗")
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatal(err)
+	}
+	if m["progress_detail"] == nil || m["progress_detail"] == "" {
+		t.Fatalf("missing banner text: %v", m)
+	}
+	if _, ok := m["timestamp"]; !ok {
+		t.Fatalf("missing timestamp: %v", m)
+	}
+}
+
+func TestNormalizePayloadSupervisorSecondPass(t *testing.T) {
+	raw := `{"level":"info","http.method":"POST","http.target":"/v1/chat","http.status_code":200,"time":"t","message":"request completed"}`
+	first := NormalizePayload(raw)
+	var buf bytes.Buffer
+	w := NewWriter(&buf)
+	if _, err := w.Write(append(first, '\n')); err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &m); err != nil {
+		t.Fatal(err)
+	}
+	if m["msg"] != "broker.http.access" {
+		t.Fatalf("msg=%v", m["msg"])
+	}
+	if int(m["http_status"].(float64)) != 200 {
+		t.Fatalf("http_status=%v", m["http_status"])
 	}
 }

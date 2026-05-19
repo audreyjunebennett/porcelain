@@ -822,6 +822,85 @@ func TestLogsDerive_chimeraBrokerCardModel_kv(t *testing.T) {
 	}
 }
 
+func TestLogsDerive_chimeraBrokerCardModel_canonicalSlugs(t *testing.T) {
+	vm := goja.New()
+	evalJS(t, vm, logsUIPath(t, "testing", "loader.js"))
+	evalJS(t, vm, logsUIPath(t, "derive", "chimeraBrokerMetrics.js"))
+
+	fn, ok := goja.AssertFunction(vm.Get("ChimeraLogs").ToObject(vm).Get("Derive").ToObject(vm).Get("chimeraBrokerCardModel"))
+	if !ok {
+		t.Fatal("missing chimeraBrokerCardModel")
+	}
+	arr := []map[string]any{
+		{"parsed": map[string]any{"rawFlat": map[string]any{"msg": "broker.config.loaded", "service": "chimera-broker"}}},
+		{"parsed": map[string]any{"rawFlat": map[string]any{"msg": "broker.ready", "service": "chimera-broker", "listen_port": 8081}}},
+		{"parsed": map[string]any{"rawFlat": map[string]any{"msg": "broker.governance.startup", "service": "chimera-broker"}}},
+		{"parsed": map[string]any{"rawFlat": map[string]any{"msg": "broker.mcp.startup", "service": "chimera-broker"}}},
+	}
+	v, err := fn(goja.Undefined(), vm.ToValue(arr), goja.Undefined())
+	if err != nil {
+		t.Fatal(err)
+	}
+	o := v.ToObject(vm)
+	if o.Get("configuration").String() != "supervised" {
+		t.Fatalf("configuration=%q", o.Get("configuration").String())
+	}
+	if o.Get("port").String() != "8081" {
+		t.Fatalf("port=%q", o.Get("port").String())
+	}
+	if o.Get("governance").String() != "enabled" {
+		t.Fatalf("governance=%q", o.Get("governance").String())
+	}
+	if o.Get("mcp").String() != "enabled" {
+		t.Fatalf("mcp=%q", o.Get("mcp").String())
+	}
+}
+
+func TestLogsDerive_vectorstoreCardModel_canonicalSlugs(t *testing.T) {
+	vm := goja.New()
+	evalJS(t, vm, logsUIPath(t, "testing", "loader.js"))
+	evalJS(t, vm, logsUIPath(t, "derive", "vectorstoreCollection.js"))
+
+	fn, ok := goja.AssertFunction(vm.Get("ChimeraLogs").ToObject(vm).Get("Derive").ToObject(vm).Get("vectorstoreCardModel"))
+	if !ok {
+		t.Fatal("missing vectorstoreCardModel")
+	}
+	arr := []map[string]any{
+		{"parsed": map[string]any{"rawFlat": map[string]any{
+			"msg": "vectorstore.version", "service": "chimera-vectorstore", "qdrant_version": "1.12.0",
+		}}},
+		{"parsed": map[string]any{"rawFlat": map[string]any{
+			"msg": "vectorstore.listen.http", "service": "chimera-vectorstore", "rest_port": 6333,
+		}}},
+		{"parsed": map[string]any{"rawFlat": map[string]any{
+			"msg": "vectorstore.http.points_upsert_ok", "service": "chimera-vectorstore", "http_status": 200,
+		}}},
+		{"parsed": map[string]any{"rawFlat": map[string]any{
+			"msg": "vectorstore.collection.loading", "service": "chimera-vectorstore",
+		}}},
+		{"parsed": map[string]any{"rawFlat": map[string]any{
+			"msg": "vectorstore.shard.recovered", "service": "chimera-vectorstore",
+		}}},
+	}
+	v, err := fn(goja.Undefined(), vm.ToValue(arr), goja.Undefined())
+	if err != nil {
+		t.Fatal(err)
+	}
+	o := v.ToObject(vm)
+	if o.Get("version").String() != "1.12.0" {
+		t.Fatalf("version=%q", o.Get("version").String())
+	}
+	if o.Get("restPort").Export() != int64(6333) {
+		t.Fatalf("restPort=%v", o.Get("restPort").Export())
+	}
+	if o.Get("upsertOk").Export() != int64(1) {
+		t.Fatalf("upsertOk=%v", o.Get("upsertOk").Export())
+	}
+	if o.Get("collTotal").Export() != int64(1) || o.Get("collLoaded").Export() != int64(1) {
+		t.Fatalf("collections=%v/%v", o.Get("collTotal").Export(), o.Get("collLoaded").Export())
+	}
+}
+
 func TestLogsDerive_chimeraBrokerProviderHealthList_pickLatest(t *testing.T) {
 	vm := goja.New()
 	evalJS(t, vm, logsUIPath(t, "testing", "loader.js"))

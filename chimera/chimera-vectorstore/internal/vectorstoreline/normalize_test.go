@@ -1,6 +1,7 @@
 package vectorstoreline
 
 import (
+	"bytes"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -66,5 +67,69 @@ func TestNormalizePayloadIdempotent(t *testing.T) {
 	b2 := NormalizePayload(raw)
 	if string(b2) != raw {
 		t.Fatalf("second pass changed output: %s vs %s", b2, raw)
+	}
+}
+
+func TestNormalizePayloadPlainBanner(t *testing.T) {
+	b := NormalizePayload("   ____  Qdrant banner line")
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatal(err)
+	}
+	if m["msg"] != "vectorstore.startup.banner" {
+		t.Fatalf("msg=%v", m["msg"])
+	}
+	if m["progress_detail"] != "____  Qdrant banner line" {
+		t.Fatalf("progress_detail=%q", m["progress_detail"])
+	}
+	if _, ok := m["timestamp"]; !ok {
+		t.Fatalf("missing timestamp: %v", m)
+	}
+}
+
+func TestNormalizePayloadTraceOtherDetail(t *testing.T) {
+	raw := `{"timestamp":"2026-05-19T02:19:38Z","level":"INFO","target":"foo","fields":{"message":"shard init ok"}}`
+	b := NormalizePayload(raw)
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatal(err)
+	}
+	if m["msg"] != "vectorstore.trace.other" {
+		t.Fatalf("msg=%v", m["msg"])
+	}
+	if m["progress_detail"] != "shard init ok" {
+		t.Fatalf("progress_detail=%v", m["progress_detail"])
+	}
+}
+
+func TestNormalizePayloadVectorstoreUpstreamLine(t *testing.T) {
+	raw := `{"time":"t","level":"INFO","msg":"vectorstore.upstream.line","upstream_raw":"plain upstream"}`
+	b := NormalizePayload(raw)
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatal(err)
+	}
+	if m["progress_detail"] != "plain upstream" {
+		t.Fatalf("progress_detail=%v", m)
+	}
+}
+
+func TestNormalizePayloadSupervisorSecondPass(t *testing.T) {
+	raw := `{"timestamp":"t","level":"INFO","fields":{"message":"unclassified line"},"target":"qdrant::foo"}`
+	first := NormalizePayload(raw)
+	var buf bytes.Buffer
+	w := NewWriter(&buf)
+	if _, err := w.Write(append(first, '\n')); err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &m); err != nil {
+		t.Fatal(err)
+	}
+	if m["msg"] != "vectorstore.trace.other" {
+		t.Fatalf("msg=%v", m["msg"])
+	}
+	if m["progress_detail"] != "unclassified line" {
+		t.Fatalf("progress_detail=%v", m["progress_detail"])
 	}
 }

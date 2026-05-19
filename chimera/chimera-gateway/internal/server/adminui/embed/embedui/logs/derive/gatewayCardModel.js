@@ -232,10 +232,17 @@ function gatewayCardModel(arr, getFlat) {
     var psh = arr[i].parsed.shape || "";
     gatewayBumpHttpCounters(out.counters, f, psh);
     gatewayBumpRegistryCounters(out.counters, f);
-    // Legacy fallbacks when registry lacks metrics_counter (e.g. scope.chunked.error → ingest fail).
-    msg = gatewayNormMsg(f);
+    // Legacy fallbacks when registry lacks metrics_counter.
+    slug = gatewayCanonicalSlug(f);
     if (!gatewayRegistryMetricsCounter(f)) {
-      if (msg === "ingest.failed" || msg === "ingest.chunked.error" || msg === "scope.chunked.error") out.counters.ingestFail++;
+      if (slug === "ingest.complete") out.counters.ingestOk++;
+      if (slug === "ingest.failed" || slug === "ingest.chunked.error" || slug === "scope.chunked.error")
+        out.counters.ingestFail++;
+      if (slug === "chat.request") out.counters.chatReq++;
+      if (slug === "chat.chimera-broker.response") out.counters.chatResp++;
+      if (slug === "chat.chimera-broker.error") out.counters.chatErr++;
+      if (slug === "rag.query") out.counters.ragQuery++;
+      if (slug === "rag.hit") out.counters.ragHit++;
     }
   }
 

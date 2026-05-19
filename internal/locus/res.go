@@ -7,19 +7,19 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/lynn/porcelain/internal/naming"
 	"github.com/lynn/porcelain/internal/binfind"
+	"github.com/lynn/porcelain/internal/naming"
 )
 
 // Product binaries (basename without directory).
 const (
 	BinDesktop     = naming.ProductDesktopName
 	BinSupervisor  = naming.ProductSupervisorName
-	BinBroker          = naming.ProductBrokerName
-	BinBrokerHTTP      = naming.ProductBrokerHTTPBinName
-	BinBifrostHTTP     = naming.ProductBifrostHTTPBinName
-	BinVectorstore     = naming.ProductVectorstoreName
-	BinQdrant          = naming.ProductQdrantBinName
+	BinBroker      = naming.ProductBrokerName
+	BinBrokerHTTP  = naming.ProductBrokerHTTPBinName
+	BinBifrostHTTP = naming.ProductBifrostHTTPBinName
+	BinVectorstore = naming.ProductVectorstoreName
+	BinQdrant      = naming.ProductQdrantBinName
 	BinGateway     = naming.ProductGatewayBinName
 	BinIndexer     = naming.ProductIndexerBinName
 )
@@ -38,16 +38,16 @@ const (
 	FileLaunchLock     = "locus-desktop-launch.lock"
 	FileLaunchMetadata = "locus-desktop-launch.json"
 	FileLifecycleLog   = "locus-desktop-events.jsonl"
-	FileSupervisorLog  = "locus-supervisor.log"
+	FileSupervisorLog  = "locus-desktop-supervisor.log"
 )
 
 // Launcher-only CLI flags (stripped before execing chimera-supervisor).
 const (
-	FlagLogDir       = "-log-dir"
-	FlagLogDirLong   = "--log-dir"
-	FlagHeadless     = "--headless"
+	FlagLogDir        = "-log-dir"
+	FlagLogDirLong    = "--log-dir"
+	FlagHeadless      = "--headless"
 	FlagHeadlessShort = "-headless"
-	LegacyDesktopArg = "desktop"
+	LegacyDesktopArg  = "desktop"
 )
 
 // Webview JavaScript bridge names (gateway operator UI calls these on window / window.top).

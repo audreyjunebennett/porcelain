@@ -63,11 +63,25 @@ func normalizeJSON(raw string) []byte {
 		return fallbackUnknown(raw, "", "", "")
 	}
 
+	if wline.IntFromJSON(fields, "_chimera_norm") == wline.ChimeraNormValue {
+		if b, ok := wline.ReorderNormalizedJSON([]byte(raw)); ok {
+			return b
+		}
+	}
+
 	level := wline.JSONString(fields, "level")
 	ts := wline.JSONString(fields, "time")
+	if strings.TrimSpace(ts) == "" {
+		ts = wline.JSONString(fields, "timestamp")
+	}
+	ts = wline.NormalizeTimestampUTC(ts)
 	message := strings.TrimSpace(wline.JSONString(fields, "message"))
 	if message == "" {
 		message = strings.TrimSpace(wline.JSONString(fields, "msg"))
+	}
+
+	if isBrokerDomainSlug(message) {
+		return normalizeBrokerDomainSlog(fields, message, raw, level, ts)
 	}
 
 	out := normalized{
@@ -265,9 +279,38 @@ func classifyHTTPAccess(out *normalized, fields map[string]json.RawMessage, mess
 	return "broker.http.access", true
 }
 
+func isBrokerDomainSlug(s string) bool {
+	s = strings.TrimSpace(s)
+	return strings.HasPrefix(s, "broker.")
+}
+
+func normalizeBrokerDomainSlog(fields map[string]json.RawMessage, slug, raw, level, ts string) []byte {
+	out := normalized{
+		Timestamp:   ts,
+		Level:       strings.ToUpper(strings.TrimSpace(level)),
+		Service:     naming.ProductBrokerName,
+		Msg:         slug,
+		ChimeraNorm: 1,
+	}
+	if out.Level == "" {
+		out.Level = "INFO"
+	}
+	if detail := wline.UpstreamDetailFromFields(fields); detail != "" {
+		out.ProgressDetail = wline.TrimRunes(detail, 2048)
+	} else if wline.IsUpstreamLineMsg(slug) {
+		out.ProgressDetail = wline.TrimRunes(raw, 2048)
+	}
+	b, err := json.Marshal(out)
+	if err != nil {
+		return fallbackUnknown(raw, level, slug, slug)
+	}
+	return b
+}
+
 func normalizePlain(raw string) []byte {
 	s := strings.TrimSpace(raw)
 	out := normalized{
+		Timestamp:   wline.UTCTimestampNow(),
 		Service:     naming.ProductBrokerName,
 		Level:       "INFO",
 		ChimeraNorm: 1,

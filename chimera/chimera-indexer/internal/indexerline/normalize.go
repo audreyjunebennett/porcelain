@@ -1,22 +1,46 @@
+// Package indexerline normalizes raw chimera-indexer process output into JSON lines with stable
+// indexer.* msg slugs and structured fields for the operator logs UI.
 package indexerline
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	wline "github.com/lynn/porcelain/chimera/internal/wrapper/line"
 	"github.com/lynn/porcelain/internal/naming"
 )
 
-type normalized struct {
-	Timestamp      string `json:"timestamp,omitempty"`
-	Level          string `json:"level,omitempty"`
-	Service        string `json:"service"`
-	Msg            string `json:"msg"`
-	State          string `json:"state,omitempty"`
-	ProgressDetail string `json:"progress_detail,omitempty"`
-	ChimeraNorm    int    `json:"_chimera_norm,omitempty"`
+var indexerReservedKeys = map[string]struct{}{
+	"msg":             {},
+	"message":         {},
+	"time":            {},
+	"timestamp":       {},
+	"level":           {},
+	"service":         {},
+	"progress_detail": {},
+	"state":           {},
+	"_chimera_norm":   {},
+}
+
+var indexerCoreKeyOrder = []string{
+	"timestamp",
+	"level",
+	"service",
+	"msg",
+	"state",
+	"progress_detail",
+}
+
+type indexerCore struct {
+	Timestamp      string
+	Level          string
+	Service        string
+	Msg            string
+	State          string
+	ProgressDetail string
 }
 
 // NormalizePayload converts one raw indexer line into a stable structured JSON line.
@@ -25,13 +49,15 @@ func NormalizePayload(raw string) []byte {
 }
 
 func normalizePlain(raw string) []byte {
-	out := normalized{
+	out := indexerCore{
 		Msg:            "indexer.log.line",
 		Service:        naming.ProductIndexerBinName,
 		ProgressDetail: strings.TrimSpace(raw),
-		ChimeraNorm:    1,
 	}
-	b, _ := json.Marshal(out)
+	b, err := marshalIndexerLine(out, nil, false)
+	if err != nil {
+		return nil
+	}
 	return b
 }
 
@@ -48,7 +74,8 @@ func normalizeJSON(raw string) []byte {
 	if msg == "" {
 		msg = "indexer.log.line"
 	}
-	service := naming.ProductIndexerBinName
+
+	service := normalizeIndexerService(wline.JSONString(fields, "service"))
 	level := strings.ToUpper(strings.TrimSpace(wline.JSONString(fields, "level")))
 	state := strings.TrimSpace(wline.JSONString(fields, "state"))
 	progress := strings.TrimSpace(wline.JSONString(fields, "progress_detail"))
@@ -57,20 +84,123 @@ func normalizeJSON(raw string) []byte {
 	if ts == "" {
 		ts = strings.TrimSpace(wline.JSONString(fields, "timestamp"))
 	}
-	out := normalized{
+
+	core := indexerCore{
 		Timestamp:      ts,
 		Msg:            msg,
 		Service:        service,
 		Level:          level,
 		State:          state,
 		ProgressDetail: progress,
-		ChimeraNorm:    1,
 	}
-	b, err := json.Marshal(out)
+	b, err := marshalIndexerLine(core, fields, isIndexerDomainMsg(msg))
 	if err != nil {
 		return normalizePlain(raw)
 	}
 	return b
+}
+
+func normalizeIndexerService(raw string) string {
+	s := strings.TrimSpace(raw)
+	switch strings.ToLower(s) {
+	case "", "indexer":
+		return naming.ProductIndexerBinName
+	default:
+		return s
+	}
+}
+
+func isIndexerDomainMsg(msg string) bool {
+	msg = strings.TrimSpace(msg)
+	return strings.HasPrefix(msg, "indexer.") || strings.HasPrefix(msg, "chimera-indexer.")
+}
+
+func marshalIndexerLine(core indexerCore, fields map[string]json.RawMessage, passthrough bool) ([]byte, error) {
+	buf := &bytes.Buffer{}
+	buf.WriteByte('{')
+	first := true
+	emit := func(key string, val json.RawMessage) {
+		if len(val) == 0 {
+			return
+		}
+		if !first {
+			buf.WriteByte(',')
+		}
+		first = false
+		keyJSON, err := json.Marshal(key)
+		if err != nil {
+			return
+		}
+		buf.Write(keyJSON)
+		buf.WriteByte(':')
+		buf.Write(val)
+	}
+
+	for _, key := range indexerCoreKeyOrder {
+		if raw, ok := indexerCoreFieldRaw(core, key); ok {
+			emit(key, raw)
+		}
+	}
+
+	if passthrough && fields != nil {
+		for _, key := range indexerExtraKeys(fields) {
+			emit(key, fields[key])
+		}
+	}
+
+	emit("_chimera_norm", json.RawMessage("1"))
+	buf.WriteByte('}')
+	return buf.Bytes(), nil
+}
+
+func indexerCoreFieldRaw(core indexerCore, key string) (json.RawMessage, bool) {
+	switch key {
+	case "timestamp":
+		if core.Timestamp != "" {
+			return marshalJSONScalar(core.Timestamp)
+		}
+	case "level":
+		if core.Level != "" {
+			return marshalJSONScalar(core.Level)
+		}
+	case "service":
+		if core.Service != "" {
+			return marshalJSONScalar(core.Service)
+		}
+	case "msg":
+		if core.Msg != "" {
+			return marshalJSONScalar(core.Msg)
+		}
+	case "state":
+		if core.State != "" {
+			return marshalJSONScalar(core.State)
+		}
+	case "progress_detail":
+		if core.ProgressDetail != "" {
+			return marshalJSONScalar(core.ProgressDetail)
+		}
+	}
+	return nil, false
+}
+
+func indexerExtraKeys(fields map[string]json.RawMessage) []string {
+	var extras []string
+	for k := range fields {
+		if _, reserved := indexerReservedKeys[k]; reserved {
+			continue
+		}
+		extras = append(extras, k)
+	}
+	sort.Strings(extras)
+	return extras
+}
+
+func marshalJSONScalar(v any) (json.RawMessage, bool) {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil, false
+	}
+	return b, true
 }
 
 func alreadyNormalized(raw []byte) ([]byte, bool) {
@@ -78,6 +208,9 @@ func alreadyNormalized(raw []byte) ([]byte, bool) {
 		return b, true
 	}
 	if _, ok := wline.AlreadyNormalizedChimera(raw, "indexer.", naming.ProductIndexerBinName); ok {
+		return wline.ReorderNormalizedJSON(raw)
+	}
+	if _, ok := wline.AlreadyNormalizedChimera(raw, "chimera-indexer.", naming.ProductIndexerBinName); ok {
 		return wline.ReorderNormalizedJSON(raw)
 	}
 	if b, ok := wline.PassthroughSlogJSON(raw, naming.ProductIndexerBinName); ok {

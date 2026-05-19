@@ -27,7 +27,7 @@ This plan defines a stable contract between `locus-desktop` and `chimera-supervi
 
 The current desktop path still performs supervisor-style startup work in the same runtime path, which blurs ownership between UI shell and service orchestration. Naming and build targets already distinguish `locus-desktop` and `chimera-supervisor`, but runtime boundaries are not yet fully enforced as a contract. This plan formalizes the split so desktop can remain a client of supervisor instead of carrying orchestration logic.
 
-**Related docs:** [`v0-3-naming-migration.md`](v0-3-naming-migration.md), [`vectorstore-broker-wrapper-hard-cut.md`](vectorstore-broker-wrapper-hard-cut.md), [`desktop-ui.md`](desktop-ui.md), [`../supervisor.md`](../supervisor.md), [`../packaging.md`](../packaging.md).
+**Related docs:** [`v0-3-naming-migration.md`](v0-3-naming-migration.md), [`vectorstore-broker-wrapper-hard-cut.md`](vectorstore-broker-wrapper-hard-cut.md), [`desktop-ui.md`](desktop-ui.md), [`log-supervisor-normalization-fidelity.md`](log-supervisor-normalization-fidelity.md), [`../supervisor.md`](../supervisor.md), [`../packaging.md`](../packaging.md).
 
 ---
 
@@ -102,6 +102,12 @@ This section is the implementation contract for Phase 2+ work. Changes to these 
   - On double-click launch, desktop resolves runtime root as parent of the binary directory.
   - Runtime-root-relative directories are canonical for `config`, `data`, `logs`, and `run`.
   - PID/lock files are stored under runtime-root `run`.
+
+- **Supervisor log mirror (`data/locus-desktop-supervisor.log`)**
+  - When desktop starts supervisor, child stdout/stderr are tee'd to this append-only file (see `locus/locus-desktop/internal/launcher/launcher.go`).
+  - Each line is **normalized JSON** (`_chimera_norm: 1`) produced by per-service `*line` normalizers and a **lossless reorder** on supervisor ingest ([`log-supervisor-normalization-fidelity.md`](log-supervisor-normalization-fidelity.md)).
+  - Structured fields (`progress_detail`, `method`, `path`, `collection`, indexer `rel`, `queue_depth`, etc.) must survive the wrapper → supervisor double-normalize path; bare `msg`-only rows indicate a regression.
+  - The gateway logs UI reads the same normalized lines from the supervisor log buffer via HTTP (`supervisorlogs`), not a separate richer format.
 
 **Status:** `done`
 

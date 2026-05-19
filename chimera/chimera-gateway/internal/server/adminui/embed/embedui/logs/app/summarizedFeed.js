@@ -1718,11 +1718,11 @@ globalThis.ChimeraLogs.App.mountSummarizedFeed = function (ctx) {
         if (insA) return insA.getTime();
       }
       if (
-        m === "chimera-indexer.job.upload" ||
-        m === "chimera-indexer.job.ingested" ||
-        m === "chimera-indexer.job.skipped" ||
-        m.indexOf("chimera-indexer.retry") === 0 ||
-        m.indexOf("chimera-indexer.job.failed") === 0
+        m === "indexer.job.upload" ||
+        m === "indexer.job.ingested" ||
+        m === "indexer.job.skipped" ||
+        m.indexOf("indexer.retry") === 0 ||
+        m.indexOf("indexer.job.failed") === 0
       ) {
         var ins = entryInstant(evs[i]);
         if (ins) return ins.getTime();
@@ -1739,11 +1739,11 @@ globalThis.ChimeraLogs.App.mountSummarizedFeed = function (ctx) {
       if (!f.rel) continue;
       var m = indexerFlatMsg(f);
       if (
-        m === "chimera-indexer.job.upload" ||
-        m === "chimera-indexer.job.ingested" ||
-        m === "chimera-indexer.job.skipped" ||
-        m.indexOf("chimera-indexer.retry") === 0 ||
-        m.indexOf("chimera-indexer.job.failed") === 0
+        m === "indexer.job.upload" ||
+        m === "indexer.job.ingested" ||
+        m === "indexer.job.skipped" ||
+        m.indexOf("indexer.retry") === 0 ||
+        m.indexOf("indexer.job.failed") === 0
       ) {
         return String(f.rel);
       }
@@ -1957,7 +1957,7 @@ globalThis.ChimeraLogs.App.mountSummarizedFeed = function (ctx) {
     for (var i = arr.length - 1; i >= 0; i--) {
       var f = getFlat(arr[i].parsed);
       var m = indexerFlatMsg(f);
-      if (m !== "chimera-indexer.queue.snapshot" && m.indexOf("chimera-indexer.queue.snapshot") !== 0) continue;
+      if (m !== "indexer.queue.snapshot" && m.indexOf("indexer.queue.snapshot") !== 0) continue;
       if (f.queue_cap != null && f.queue_cap !== "") {
         var c = Number(f.queue_cap);
         if (!isNaN(c)) cap = c;
@@ -1986,24 +1986,24 @@ globalThis.ChimeraLogs.App.mountSummarizedFeed = function (ctx) {
     for (var i = 0; i < entries.length; i++) {
       var f = getFlat(entries[i].parsed);
       var m = indexerFlatMsg(f);
-      if (m === "chimera-indexer.job.upload") {
+      if (m === "indexer.job.upload") {
         upload++;
         if (f.rel) relSet[String(f.rel)] = 1;
-      } else if (m === "chimera-indexer.job.ingested" || m === "ingested") {
+      } else if (m === "indexer.job.ingested" || m === "ingested") {
         ingested++;
         if (f.rel) relSet[String(f.rel)] = 1;
-      } else if (m === "chimera-indexer.job.skipped") {
+      } else if (m === "indexer.job.skipped") {
         skipped++;
         if (f.rel) relSet[String(f.rel)] = 1;
-      } else if (m.indexOf("chimera-indexer.job.failed") === 0) failed++;
-      else if (m.indexOf("chimera-indexer.retry") === 0) retry++;
-      else if (m.indexOf("chimera-indexer.worker.paused") === 0) paused++;
-      else if (m.indexOf("chimera-indexer.queue.snapshot") === 0) snapshots++;
+      } else if (m.indexOf("indexer.job.failed") === 0) failed++;
+      else if (m.indexOf("indexer.retry") === 0) retry++;
+      else if (m.indexOf("indexer.worker.paused") === 0) paused++;
+      else if (m.indexOf("indexer.queue.snapshot") === 0) snapshots++;
     }
     for (var j = entries.length - 1; j >= 0; j--) {
       var fj = getFlat(entries[j].parsed);
       var mj = indexerFlatMsg(fj);
-      if (mj.indexOf("chimera-indexer.queue.snapshot") === 0) {
+      if (mj.indexOf("indexer.queue.snapshot") === 0) {
         if (fj.workers != null && fj.workers !== "") workers = Number(fj.workers);
         if (fj.queue_depth != null && fj.queue_depth !== "") queueDepth = Number(fj.queue_depth);
         break;
@@ -2375,14 +2375,14 @@ globalThis.ChimeraLogs.App.mountSummarizedFeed = function (ctx) {
 
   function flatLooksLikeIndexerRunStart(fl) {
     var m = indexerFlatMsg(fl);
-    if (m === "chimera-indexer.run.start" || m === "chimera-indexer run start") return true;
+    if (m === "indexer.run.start" || m === "chimera-indexer run start") return true;
     if (String(fl.service || "").toLowerCase() !== "indexer") return false;
     return fl.root_ids != null && (fl.roots != null || Array.isArray(fl.watch_root_paths));
   }
 
   function flatLooksLikeIndexerRunDone(fl) {
     var m = indexerFlatMsg(fl);
-    if (m.indexOf("chimera-indexer.run.done") === 0) return true;
+    if (m.indexOf("indexer.run.done") === 0) return true;
     if (m === "indexer run done" || m === "indexer run stopped") return true;
     return (
       String(fl.service || "").toLowerCase() === "chimera-indexer" &&
@@ -2394,7 +2394,7 @@ globalThis.ChimeraLogs.App.mountSummarizedFeed = function (ctx) {
 
   function flatLooksLikeIndexerRunProgress(fl) {
     var m = indexerFlatMsg(fl);
-    if (m.indexOf("chimera-indexer.run.progress") === 0 || m === "chimera-indexer.run.progress") return true;
+    if (m.indexOf("indexer.run.progress") === 0 || m === "indexer.run.progress") return true;
     if (m === "initial scan complete") return true;
     return fl.phase != null && String(fl.phase).trim() !== "" && fl.candidates_enqueued != null;
   }
@@ -2402,7 +2402,7 @@ globalThis.ChimeraLogs.App.mountSummarizedFeed = function (ctx) {
   function flatLooksLikeIndexerJobIngested(fl) {
     var m = indexerFlatMsg(fl);
     if (String(fl.service || "").toLowerCase() !== "chimera-indexer") return false;
-    if (m !== "chimera-indexer.job.ingested" && m !== "ingested") return false;
+    if (m !== "indexer.job.ingested" && m !== "ingested") return false;
     return fl.chunks != null;
   }
 
@@ -2411,13 +2411,13 @@ globalThis.ChimeraLogs.App.mountSummarizedFeed = function (ctx) {
     var rel = f && f.rel != null ? String(f.rel).trim() : "";
     if (!rel) return null;
 
-    if (m === "chimera-indexer.scope.active_file") {
+    if (m === "indexer.scope.active_file") {
       return { rel: rel, st: "evaluating", cls: "sum-st-indexing", detail: "" };
     }
-    if (m === "chimera-indexer.job.upload") {
+    if (m === "indexer.job.upload") {
       return { rel: rel, st: "uploading", cls: "sum-st-indexing", detail: "" };
     }
-    if (m === "chimera-indexer.job.ingested" || m === "ingested") {
+    if (m === "indexer.job.ingested" || m === "ingested") {
       var chunks = f && f.chunks != null && !isNaN(Number(f.chunks)) ? Math.round(Number(f.chunks)) : null;
       return {
         rel: rel,
@@ -2426,18 +2426,18 @@ globalThis.ChimeraLogs.App.mountSummarizedFeed = function (ctx) {
         detail: chunks != null ? formatInt(chunks) + " chunks" : ""
       };
     }
-    if (m === "chimera-indexer.job.skipped") {
+    if (m === "indexer.job.skipped") {
       var why = f && f.reason != null ? String(f.reason).replace(/\s+/g, " ").trim() : "";
       if (why.length > 80) why = why.slice(0, 78) + "…";
       return { rel: rel, st: "skipped", cls: "sum-st-complete", detail: why };
     }
-    if (m.indexOf("chimera-indexer.job.failed") === 0) {
+    if (m.indexOf("indexer.job.failed") === 0) {
       var err = f && (f.err != null ? f.err : f.error != null ? f.error : "");
       var es = err != null ? String(err).replace(/\s+/g, " ").trim() : "";
       if (es.length > 80) es = es.slice(0, 78) + "…";
       return { rel: rel, st: "failed", cls: "sum-st-error", detail: es };
     }
-    if (m.indexOf("chimera-indexer.retry") === 0) {
+    if (m.indexOf("indexer.retry") === 0) {
       return { rel: rel, st: "retrying", cls: "sum-st-monitor", detail: "" };
     }
     if (m === "rag.retrieve.source") {
@@ -2589,8 +2589,8 @@ globalThis.ChimeraLogs.App.mountSummarizedFeed = function (ctx) {
       for (var k = 0; k < evs.length; k++) {
         var fk = getFlat(evs[k].parsed);
         var mk = indexerFlatMsg(fk);
-        if (mk === "chimera-indexer.job.ingested" || mk === "ingested") ok++;
-        else if (mk === "chimera-indexer.job.failed" || mk.indexOf("ingest failed (dropped)") === 0) fail++;
+        if (mk === "indexer.job.ingested" || mk === "ingested") ok++;
+        else if (mk === "indexer.job.failed" || mk.indexOf("ingest failed (dropped)") === 0) fail++;
       }
     }
 
@@ -3189,8 +3189,12 @@ globalThis.ChimeraLogs.App.mountSummarizedFeed = function (ctx) {
       meta = mergePersistedIndexerWatchRoots(meta, run.events, run.id);
       var lab = indexerCardTitleSortLabel(meta);
       if (!lab || lab === "—") continue;
-      if (seen[lab]) continue;
-      seen[lab] = true;
+      var dedupeKey =
+        meta.workspaceId && meta.workspaceId !== "—"
+          ? "ws:" + String(meta.workspaceId)
+          : run.id || lab;
+      if (seen[dedupeKey]) continue;
+      seen[dedupeKey] = true;
       rows.push({
         label: lab,
         bucketId: run.id,
@@ -4840,11 +4844,16 @@ globalThis.ChimeraLogs.App.mountSummarizedFeed = function (ctx) {
     var segs = String(bucketId || "").split("\u001e");
     if (segs[0] !== "opws" || segs.length < 3) return false;
     var wantWid = String(segs[1] || "").trim();
+    if (!wantWid) return false;
     var wantProj = String(segs[2] || "").trim();
     var wantFlav = segs.length > 3 ? normalizeIndexerScopeFlavor(segs[3]) : "";
     var fp = String(f.project_id || f.ingest_project || "").trim();
     var ff = normalizeIndexerScopeFlavor(f.flavor_id);
-    if (fp !== wantProj || ff !== wantFlav) return false;
+    if (wantProj !== "") {
+      if (fp !== wantProj || ff !== wantFlav) return false;
+    } else if (fp !== "") {
+      return false;
+    }
     var sw = f.scope_workspace_id != null ? String(f.scope_workspace_id).trim() : "";
     if (wantWid && sw === wantWid) return true;
     var opWsCtx = ctx.operatorWsFullLogCtx[bucketId];

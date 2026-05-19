@@ -713,6 +713,13 @@ globalThis.ChimeraLogs.App.mountWireHandlers = function (ctx) {
   })();
 
   (function wireAdminWorkflowCards() {
+    function setAdminSaveBtnPending(btn, pending) {
+      if (!btn) return;
+      btn.disabled = !!pending;
+      if (pending) btn.setAttribute("aria-disabled", "true");
+      else btn.removeAttribute("aria-disabled");
+    }
+
     function syncYamlOverlayVScrollFromTarget(t) {
       if (!t || String(t.tagName || "").toLowerCase() !== "textarea") return;
       var wrap = t.closest && t.closest(".sg-op-yaml-wrap");
@@ -738,8 +745,14 @@ globalThis.ChimeraLogs.App.mountWireHandlers = function (ctx) {
         ctx.routingPolicyDraft = t.value != null ? String(t.value) : "";
         var savedPolicy = String((((ctx.adminStateCache && ctx.adminStateCache.gateway) || {}).routing_policy_yaml) || "");
         ctx.routingPolicyTouched = String(ctx.routingPolicyDraft) !== savedPolicy;
+        var routingWrap = document.getElementById("admin-routing-policy-wrap");
+        if (routingWrap) routingWrap.classList.toggle("sg-op-yaml-wrap--dirty", !!ctx.routingPolicyTouched);
       }
-      else if (t.id === "admin-fallback-yaml") ctx.fallbackTouched = true;
+      else if (t.id === "admin-fallback-yaml") {
+        ctx.fallbackTouched = true;
+        var fallbackWrap = document.getElementById("admin-fallback-yaml-wrap");
+        if (fallbackWrap) fallbackWrap.classList.add("sg-op-yaml-wrap--dirty");
+      }
       else if (t.id === "admin-router-models-yaml") {
         ctx.routerModelsTouched = true;
         ctx.routerModelsDraft = t.value != null ? String(t.value) : "";
@@ -994,6 +1007,7 @@ globalThis.ChimeraLogs.App.mountWireHandlers = function (ctx) {
           adminSetMessage("err", "Enter a key.");
           return;
         }
+        setAdminSaveBtnPending(t, true);
         adminPostJSON("/api/ui/provider/" + prov + "/keys", { value: String(val).trim() })
           .then(function () {
             var inp = document.getElementById(inputId);
@@ -1001,7 +1015,10 @@ globalThis.ChimeraLogs.App.mountWireHandlers = function (ctx) {
             adminSetMessage("", "Provider key added.");
             reloadAdmin();
           })
-          .catch(function (e) { adminSetMessage("err", e && e.message ? e.message : String(e)); });
+          .catch(function (e) {
+            setAdminSaveBtnPending(t, false);
+            adminSetMessage("err", e && e.message ? e.message : String(e));
+          });
         return;
       }
 
@@ -1021,9 +1038,13 @@ globalThis.ChimeraLogs.App.mountWireHandlers = function (ctx) {
           adminSetMessage("err", "Enter a URL.");
           return;
         }
+        setAdminSaveBtnPending(t, true);
         adminPostJSON("/api/ui/provider/ollama/base_url", { base_url: baseURL })
           .then(function () { adminSetMessage("", "Ollama URL saved."); reloadAdmin(); })
-          .catch(function (e) { adminSetMessage("err", e && e.message ? e.message : String(e)); });
+          .catch(function (e) {
+            setAdminSaveBtnPending(t, false);
+            adminSetMessage("err", e && e.message ? e.message : String(e));
+          });
         return;
       }
 

@@ -21,7 +21,8 @@ function indexerFlatMsgLocal(fl) {
 
 function indexerInferIsIndexerLine(ent, flat) {
   var f = flat || {};
-  if (String(f.service || "").toLowerCase() === "indexer") return true;
+  var svc = String(f.service || "").toLowerCase();
+  if (svc === "indexer" || svc === "chimera-indexer") return true;
   if (ent && String(ent.source || "").toLowerCase() === "indexer") return true;
   if (ent && ent.parsed && String(ent.parsed.app || "").toLowerCase() === "indexer") return true;
   return false;
@@ -31,13 +32,14 @@ function indexerInferIsIndexerLine(ent, flat) {
 function indexerAugmentFlat(ent, flat) {
   var f = flat;
   if (!f || typeof f !== "object") f = {};
-  if (String(f.service || "").toLowerCase() === "indexer") return f;
+  if (String(f.service || "").toLowerCase() === "indexer" || String(f.service || "").toLowerCase() === "chimera-indexer")
+    return f;
   if (!indexerInferIsIndexerLine(ent, f)) return f;
   var out = {};
   for (var k in f) {
     if (Object.prototype.hasOwnProperty.call(f, k)) out[k] = f[k];
   }
-  out.service = "indexer";
+  out.service = "chimera-indexer";
   return out;
 }
 
