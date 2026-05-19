@@ -21,6 +21,7 @@ Make the gateway easier to set up, friendlier to share between operators, and cl
 | [Product naming](#product-naming)                                                          | Layered names in docs, UI, and startup logs with hard-cut naming contracts ([`plans/v0-3-naming-migration.md`](plans/v0-3-naming-migration.md)) | `done`        |
 | [Credential file naming](#credential-file-naming)                                          | `api-keys.yaml` / `api_keys` / `secret`; reserve "token" for tokenizer counts                                                            | `done`        |
 | [Internal embedding provider (exploration)](#internal-embedding-provider-exploration)      | Optional in-repo or first-install embedding runtime to reduce reliance on Ollama for `/embeddings`                                       | `exploration` |
+| [Logs UI page data refreshing](#logs-ui-page-data-refreshing)                              | Interaction-safe summarized feed; per-card patches and view model (phased)                                                               | `done` |
 | [Operator-managed virtual models](#operator-managed-virtual-models)                        | Create virtual models from `/ui/logs`; per-model fallback, routing rules, and tool-router; operator SQLite + scoped routing logs         | `todo`        |
 | [Workspace embedding scope (project + flavor)](#workspace-embedding-scope-project--flavor) | Ingestion keys `(user, project, flavor)`; project-only = base corpus; flavored queries union base + flavor; multi-workspace request pool | `todo`        |
 | [First-run token handoff](#first-run-token-handoff)                                        | Show, copy, and optionally save the gateway token; restart-friendly                                                                      | `todo`        |
@@ -280,6 +281,36 @@ Aim for **~4–6 GB RAM** total, **quantized** execution, **sub‑300 ms** per h
 - Written recommendation: **ship in v0.3**, **pilot behind a flag**, or **defer**—with explicit notes for [Setup wizard](#setup-wizard) step 5 (combobox includes internal provider + model when implemented).
 
 **Status:** `exploration`
+
+---
+
+## Logs UI page data refreshing
+
+**Execution plan:** [`plans/logs-ui-page-data-refreshing.md`](plans/logs-ui-page-data-refreshing.md) — phased fix for `/ui/logs` summarized feed flicker, double-click card expansion, and admin form focus loss during SSE and admin poll rebuilds.
+
+**Goal:** Operators on `/ui/logs` open cards on the first click, edit provider API keys without losing focus, and see live log updates without the whole panel flashing. Today `refreshSummarizedPanel()` assigns `innerHTML` on almost every log line and on the 12s admin poll; later phases add per-card patches and a testable view model.
+
+### Phase 1 — Interaction-safe rebuilds (shipped)
+
+- `summarizedPanelInteractionBlocksRebuild()` defers rebuild when focus is in any `#panel-summarized` `input` / `textarea` / `select`, plus existing evlog and admin YAML fields.
+- Short pointer suppression after `details.sum-card > summary` click so card toggle races SSE debounced rebuild.
+- `adminProviderKeyDraft` / `adminOllamaUrlDraft` on `ctx`, wired from `wireHandlers.js` and rendered in `adminProvider.js`.
+- Interaction contract documented in [`chimera/chimera-gateway/internal/server/adminui/embed/embedui/logs/README.md`](../chimera/chimera-gateway/internal/server/adminui/embed/embedui/logs/README.md).
+
+**Acceptance (Phase 1)**
+
+- First click expands a collapsed card under live SSE traffic (manual smoke).
+- Typing in `admin-groq-key` / `admin-gemini-key` / `admin-ollama-url` for 30+ seconds (spanning an admin poll) does not clear the field or drop focus.
+- Existing evlog search/filter/YAML deferral unchanged.
+
+### Phase 2 — Poll-path card patching (shipped)
+
+- `replaceCardById()` shared helper (open state + table scroll preservation).
+- `syncAdminStatePolling` calls `patchAdminCardsFromPoll()` instead of `refreshSummarizedPanel()`.
+- Patches users, provider (groq/gemini/ollama), routing, fallback, and router cards; skips routing trio while Configure/YAML edit mode is active.
+- Missing card id → `scheduleStoryRebuild()` (debounced), not synchronous full rebuild.
+
+**Status:** `done` (see execution plan).
 
 ---
 
@@ -676,6 +707,7 @@ When this plan is implemented, update `[porcelain.plan.md](porcelain.plan.md)` *
 | `[plans/indexer.md](plans/indexer.md)` | Indexer milestones that may cross-link with this release | — |
 | `[plans/v0-3-naming-migration.md](plans/v0-3-naming-migration.md)` | Product naming hard-cut execution | `done` |
 | `[plans/virtual-models-operator.md](plans/virtual-models-operator.md)` | Operator-managed virtual models (execution plan) | `todo` |
+| `[plans/logs-ui-page-data-refreshing.md](plans/logs-ui-page-data-refreshing.md)` | Summarized logs feed: interaction-safe rebuilds, card patches, view model | `active` |
 | `[plans/_template.md](plans/_template.md)` | Phase-level plan template | — |
 
 ---

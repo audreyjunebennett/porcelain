@@ -1,4 +1,4 @@
-# Plan: Logs UI incremental updates
+# Plan: Logs UI Page Data Refreshing
 
 | Field | Value |
 |-------|-------|
@@ -6,7 +6,7 @@
 | **Owners / areas** | Gateway embed UI, operator logs (`/ui/logs`) |
 | **Status** | `draft` |
 | **Targets** | Reliable card interaction, stable admin forms, low-flicker live feed |
-| **Last updated** | 2026-05-18 |
+| **Last updated** | 2026-05-19 |
 | **Supersedes / superseded by** | Follows [`logs-ui-maintainability.md`](logs-ui-maintainability.md); complements [`unified-logs-operator-shell.md`](unified-logs-operator-shell.md) |
 
 ## At a glance
@@ -15,11 +15,11 @@ Operators on `/ui/logs` should open cards on the first click, edit provider API 
 
 | Phase | Outcome | Status |
 |-------|---------|--------|
-| [Phase 1 — Interaction-safe rebuilds](#phase-1--interaction-safe-rebuilds) | Typing and card clicks are not fighting background refreshes | `todo` |
-| [Phase 2 — Poll-path card patching](#phase-2--poll-path-card-patching) | Metrics, gateway, admin, and provider cards update without wiping the panel | `todo` |
-| [Phase 3 — Live-log dirty cards](#phase-3--live-log-dirty-cards) | New log lines update only affected cards, coalesced per frame | `todo` |
-| [Phase 4 — Summarized view model](#phase-4--summarized-view-model) | Pure `buildSummarizedModel()` drives rendering; full rebuild is rare | `todo` |
-| [Phase 5 — Patch engine](#phase-5--patch-engine) | Stable card DOM + structural patch ops; Tier 3 complete | `todo` |
+| [Phase 1 — Interaction-safe rebuilds](#phase-1--interaction-safe-rebuilds) | Typing and card clicks are not fighting background refreshes | `done` |
+| [Phase 2 — Poll-path card patching](#phase-2--poll-path-card-patching) | Metrics, gateway, admin, and provider cards update without wiping the panel | `done` |
+| [Phase 3 — Live-log dirty cards](#phase-3--live-log-dirty-cards) | New log lines update only affected cards, coalesced per frame | `done` |
+| [Phase 4 — Summarized view model](#phase-4--summarized-view-model) | Pure `buildSummarizedModel()` drives rendering; full rebuild is rare | `done` |
+| [Phase 5 — Patch engine](#phase-5--patch-engine) | Stable card DOM + structural patch ops; Tier 3 complete | `done` |
 
 ---
 
@@ -67,7 +67,7 @@ The summarized logs UI (`embedui/logs/app/summarizedFeed.js`) renders operator c
 - Typing in `admin-groq-key` / `admin-gemini-key` / `admin-ollama-url` for 30+ seconds (spanning at least one admin poll interval) does not clear the field or drop focus.
 - No regression to existing evlog deferral (search/filter/YAML).
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 
@@ -91,7 +91,7 @@ The summarized logs UI (`embedui/logs/app/summarizedFeed.js`) renders operator c
 - Provider key counts and gateway overview still match `/api/ui/state` after poll.
 - Existing `patchGatewayUsageMetricsCard` / `patchGatewayOverviewCard` behavior unchanged.
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 
@@ -120,7 +120,7 @@ The summarized logs UI (`embedui/logs/app/summarizedFeed.js`) renders operator c
 - Conversation and service cards still show new events within one frame of batch flush.
 - Open cards and panel scroll remain stable when not interacting (Phase 1 guards still apply).
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 
@@ -144,7 +144,7 @@ The summarized logs UI (`embedui/logs/app/summarizedFeed.js`) renders operator c
 - `go test ./chimera/chimera-gateway/internal/server/adminui/embed/embedui_test/...` covers model build for at least: one conversation, one service bucket, one admin provider, gateway overview.
 - Full `refreshSummarizedPanel()` uses model → HTML path; behavior matches pre-Phase-4 snapshots on fixed fixtures.
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 
@@ -170,7 +170,7 @@ The summarized logs UI (`embedui/logs/app/summarizedFeed.js`) renders operator c
 - Automated: goja tests for `diffSummarizedModels` and patch op application on a minimal DOM stub (jsdom-like string container or HTML parser in goja).
 - Phase 1–3 interaction and poll tests still pass.
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 

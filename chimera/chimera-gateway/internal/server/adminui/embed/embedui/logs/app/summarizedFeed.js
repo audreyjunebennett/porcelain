@@ -123,13 +123,51 @@ globalThis.ChimeraLogs.App.mountSummarizedFeed = function (ctx) {
     }, 300);
   }
 
-  function refreshSummarizedPanel() {
-    var psu = document.getElementById("panel-summarized");
-    if (getViewMode() !== "summarized" || !psu) return;
-    if (summarizedPanelInteractionBlocksRebuild()) {
-      scheduleDeferredSummarizedRefresh();
-      return;
+  function summarizedPatchAvailable() {
+    return !!(
+      globalThis.ChimeraLogs &&
+      ChimeraLogs.Summarized &&
+      ChimeraLogs.Summarized.Patch &&
+      typeof ChimeraLogs.Summarized.Patch.diffSummarizedModels === "function" &&
+      typeof ChimeraLogs.Summarized.Patch.applySummarizedPatches === "function"
+    );
+  }
+
+  function summarizedPatchSkipCardIds() {
+    var skip = Object.create(null);
+    if (ctx.adminRoutingEditing) skip["admin-routing-rules"] = true;
+    if (ctx.adminFallbackEditing) skip["admin-fallback-chain"] = true;
+    if (ctx.adminRouterEditing) skip["admin-router-model"] = true;
+    return skip;
+  }
+
+  function replaceCardByIdForPatch(cardId, html, opts) {
+    return replaceCardById(cardId, function () {
+      return html;
+    }, opts);
+  }
+
+  function applySummarizedPanelPatch(psu, ops) {
+    if (!psu || !ops || !ops.length) return { ok: true, applied: 0 };
+    var result = ChimeraLogs.Summarized.Patch.applySummarizedPatches(
+      psu,
+      ops,
+      summarizedHtmlRenderers(),
+      {
+        replaceCard: replaceCardByIdForPatch,
+        preserveScrollSelectors:
+          ".sum-metrics-table-wrap, .sum-full-log--evlog .sum-evlog-table-wrap"
+      }
+    );
+    if (result.applied > 0 && typeof globalThis.sumEvlogHydrateAllIn === "function") {
+      try {
+        globalThis.sumEvlogHydrateAllIn(psu);
+      } catch (_eEvPatch) {}
     }
+    return result;
+  }
+
+  function applySummarizedFullPanelRebuild(psu, nextModel, agg) {
     var prevScrollTop = psu.scrollTop;
     var prevScrollH = psu.scrollHeight;
     var nearPanelBottom =
@@ -181,7 +219,9 @@ globalThis.ChimeraLogs.App.mountSummarizedFeed = function (ctx) {
       }
     } catch (e3) { }
 
-    psu.innerHTML = renderSummarizedUnified();
+    psu.innerHTML = renderSummarizedHtmlFromModel(nextModel);
+    ctx.lastSummarizedModel = nextModel;
+    ctx.lastSummarizedAggregate = agg;
 
     syncIndexerServiceSummaryDom();
     scheduleIndexerServiceSummaryFetch(false);
@@ -282,6 +322,54 @@ globalThis.ChimeraLogs.App.mountSummarizedFeed = function (ctx) {
     window.requestAnimationFrame(finalizeSummarizedScrollAfterLayout);
   }
 
+  function refreshSummarizedPanel() {
+    var psu = document.getElementById("panel-summarized");
+    if (getViewMode() !== "summarized" || !psu) return;
+    if (summarizedPanelInteractionBlocksRebuild()) {
+      scheduleDeferredSummarizedRefresh();
+      return;
+    }
+    clearSummarizedDirtySets();
+
+    var forceFull = !!ctx.summarizedForceFullRebuild;
+    ctx.summarizedForceFullRebuild = false;
+
+    var snap = buildSummarizedFeedSnapshot();
+    var nextModel = snap.model;
+    var agg = snap.agg;
+    var prevModel = ctx.lastSummarizedModel;
+
+    if (!forceFull && prevModel && prevModel.cards && summarizedPatchAvailable()) {
+      var Patch = ChimeraLogs.Summarized.Patch;
+      var ops = Patch.diffSummarizedModels(prevModel, nextModel, {
+        skipCardIds: summarizedPatchSkipCardIds()
+      });
+      if (!Patch.shouldUseFullRebuildFromOps(ops)) {
+        var replaceCount = Patch.countReplaceCardOps(ops);
+        if (replaceCount === 0) {
+          ctx.lastSummarizedModel = nextModel;
+          ctx.lastSummarizedAggregate = agg;
+          return;
+        }
+        if (!shouldSummarizedDirtyFullRebuild(replaceCount)) {
+          var patchResult = applySummarizedPanelPatch(psu, ops);
+          if (patchResult.ok) {
+            ctx.lastSummarizedModel = nextModel;
+            ctx.lastSummarizedAggregate = agg;
+            return;
+          }
+        }
+      }
+    }
+
+    applySummarizedFullPanelRebuild(psu, nextModel, agg);
+  }
+
+  function forceSummarizedFullRebuild(reason) {
+    ctx.summarizedForceFullRebuild = reason || true;
+    refreshSummarizedPanel();
+  }
+
   window.__chimeraToggleGatewayProbes = function (on) {
     ctx.gatewayPanelShowProbes = !!on;
     try {
@@ -316,6 +404,9 @@ globalThis.ChimeraLogs.App.mountSummarizedFeed = function (ctx) {
     if (!newEl || newEl.id !== cardId) return false;
     oldEl.parentNode.replaceChild(newEl, oldEl);
     if (preserveOpen && "open" in newEl) newEl.open = keepOpen;
+    if (opts.cardVersionAttr !== false && opts.cardHash && newEl.setAttribute) {
+      newEl.setAttribute("data-card-hash", String(opts.cardHash));
+    }
     if (scrollSel && scrollSnaps.length) {
       var newNodes = newEl.querySelectorAll(scrollSel);
       for (var sj = 0; sj < newNodes.length && sj < scrollSnaps.length; sj++) {
@@ -347,13 +438,364 @@ globalThis.ChimeraLogs.App.mountSummarizedFeed = function (ctx) {
 
   function scheduleStoryRebuild() {
     if (ctx.storyRebuildTimer) clearTimeout(ctx.storyRebuildTimer);
-    ctx.storyRebuildTimer = setTimeout(function () {
-      ctx.storyRebuildTimer = null;
-      refreshSummarizedPanel();
-      scheduleFocusTargets();
-    }, 80);
+    ctx.storyRebuildTimer = null;
+    forceSummarizedFullRebuild("structural");
+    scheduleFocusTargets();
   }
 
+  /** Phase 3: coalesced per-card patches for live SSE lines (see summarizedDirtyRouting.js). */
+  var SUMMARIZED_DIRTY_FULL_REBUILD_MIN = 10;
+  var SUMMARIZED_DIRTY_FULL_REBUILD_RATIO = 0.3;
+  ctx.summarizedDirtyCardIds = ctx.summarizedDirtyCardIds || Object.create(null);
+  ctx.summarizedDirtyIndexerBucketIds = ctx.summarizedDirtyIndexerBucketIds || Object.create(null);
+  ctx.summarizedReqToConv = ctx.summarizedReqToConv || Object.create(null);
+  ctx.summarizedIndexRunToConv = ctx.summarizedIndexRunToConv || Object.create(null);
+
+  function summarizedDirtyRoutingDeps() {
+    return {
+      getFlat: getFlat,
+      strHash: strHash,
+      normalizeServiceBucketKey: normalizeServiceBucketKey,
+      indexerGroupIdForFlat: indexerGroupIdForFlat
+    };
+  }
+
+  function updateSummarizedCorrelationFromEntry(ent) {
+    if (!ent || !ent.parsed) return;
+    var f = getFlat(ent.parsed);
+    tryRegisterRequestConversationCorrelationPrimary(ctx.summarizedReqToConv, f);
+    tryRegisterRequestConversationCorrelationRagFallback(ctx.summarizedReqToConv, f);
+    var msgIr = String(f.msg != null ? f.msg : f.message != null ? f.message : "").trim();
+    if (msgIr !== "ingest.complete" && msgIr !== "ingest.failed" && msgIr !== "ingest.chunked.error") return;
+    var irKey = f.index_run_id != null ? String(f.index_run_id).trim() : "";
+    var cidIr = f.conversation_id != null ? String(f.conversation_id).trim() : "";
+    var pidIr =
+      f.principal_id != null ? String(f.principal_id).trim() : f.tenant != null ? String(f.tenant).trim() : "";
+    if (irKey && cidIr && pidIr && !ctx.summarizedIndexRunToConv[irKey]) {
+      ctx.summarizedIndexRunToConv[irKey] = { pid: pidIr, cid: cidIr };
+    }
+  }
+
+  function markSummarizedDirtyFromEntry(ent) {
+    if (
+      !ent ||
+      !globalThis.ChimeraLogs ||
+      !ChimeraLogs.Summarized ||
+      typeof ChimeraLogs.Summarized.dirtyTargetsForEntry !== "function"
+    ) {
+      return;
+    }
+    var targets = ChimeraLogs.Summarized.dirtyTargetsForEntry(
+      ent,
+      { reqToConv: ctx.summarizedReqToConv, indexRunToConv: ctx.summarizedIndexRunToConv },
+      summarizedDirtyRoutingDeps()
+    );
+    var ci;
+    for (ci = 0; ci < targets.cardIds.length; ci++) {
+      ctx.summarizedDirtyCardIds[targets.cardIds[ci]] = true;
+    }
+    for (ci = 0; ci < targets.indexerBucketIds.length; ci++) {
+      ctx.summarizedDirtyIndexerBucketIds[targets.indexerBucketIds[ci]] = true;
+    }
+  }
+
+  function summarizedDirtyCardCount() {
+    var n = 0;
+    var k;
+    for (k in ctx.summarizedDirtyCardIds) {
+      if (Object.prototype.hasOwnProperty.call(ctx.summarizedDirtyCardIds, k)) n++;
+    }
+    for (k in ctx.summarizedDirtyIndexerBucketIds) {
+      if (Object.prototype.hasOwnProperty.call(ctx.summarizedDirtyIndexerBucketIds, k)) n++;
+    }
+    return n;
+  }
+
+  function clearSummarizedDirtySets() {
+    ctx.summarizedDirtyCardIds = Object.create(null);
+    ctx.summarizedDirtyIndexerBucketIds = Object.create(null);
+  }
+
+  function shouldSummarizedDirtyFullRebuild(dirtyCount) {
+    var panel = document.getElementById("panel-summarized");
+    if (!panel) return true;
+    var total = panel.querySelectorAll("details.sum-card").length;
+    if (!total) return true;
+    if (dirtyCount >= SUMMARIZED_DIRTY_FULL_REBUILD_MIN) return true;
+    if (dirtyCount / total >= SUMMARIZED_DIRTY_FULL_REBUILD_RATIO) return true;
+    return false;
+  }
+
+  function conversationDomIdForGroup(g) {
+    var cardKey =
+      Array.isArray(g.cids) && g.cids.length > 1
+        ? g.pid + "\0" + g.cids.slice().sort().join("\0")
+        : g.pid + "\0" + g.cid;
+    return strHash(cardKey);
+  }
+
+  function resolveIndexerDomIdsFromDirtyBuckets(bucketIds, agg) {
+    var out = [];
+    var seen = Object.create(null);
+    if (!bucketIds.length || !agg || !agg.byRun) return out;
+    var dedupeGroups = {};
+    var rks = Object.keys(agg.byRun);
+    var rj;
+    for (rj = 0; rj < rks.length; rj++) {
+      var runG = agg.byRun[rks[rj]];
+      if (!runG) continue;
+      var hit = false;
+      var bi;
+      for (bi = 0; bi < bucketIds.length; bi++) {
+        if (bucketIds[bi] === runG.id) {
+          hit = true;
+          break;
+        }
+      }
+      if (!hit) continue;
+      var pmetaG = null;
+      if (
+        agg.partitionRegistry &&
+        globalThis.ChimeraLogs &&
+        ChimeraLogs.Derive &&
+        typeof ChimeraLogs.Derive.indexerPartitionMetaForRun === "function"
+      ) {
+        pmetaG = ChimeraLogs.Derive.indexerPartitionMetaForRun(
+          agg.partitionRegistry,
+          runG.id,
+          runG.events,
+          getFlat
+        );
+      }
+      var metaG = collectIndexerRunMeta(runG.id, runG.events, pmetaG);
+      metaG = mergePersistedIndexerWatchRoots(metaG, runG.events, runG.id);
+      var dk = indexerRunTimelineDedupeKey(metaG, runG.id);
+      if (!dedupeGroups[dk]) dedupeGroups[dk] = [];
+      dedupeGroups[dk].push(runG);
+    }
+    var dkIter;
+    for (dkIter in dedupeGroups) {
+      if (!Object.prototype.hasOwnProperty.call(dedupeGroups, dkIter)) continue;
+      var grpRuns = dedupeGroups[dkIter];
+      var run = pickCanonicalIndexerRun(grpRuns);
+      if (!run) continue;
+      var pmetaLive = null;
+      if (
+        agg.partitionRegistry &&
+        globalThis.ChimeraLogs &&
+        ChimeraLogs.Derive &&
+        typeof ChimeraLogs.Derive.indexerPartitionMetaForRun === "function"
+      ) {
+        pmetaLive = ChimeraLogs.Derive.indexerPartitionMetaForRun(
+          agg.partitionRegistry,
+          run.id,
+          run.events,
+          getFlat
+        );
+      }
+      var metaLive = collectIndexerRunMeta(run.id, run.events, pmetaLive);
+      metaLive = mergePersistedIndexerWatchRoots(metaLive, run.events, run.id);
+      var domId = indexerCardDomIdFromMeta(metaLive, run.id);
+      if (!seen[domId]) {
+        seen[domId] = true;
+        out.push(domId);
+      }
+    }
+    return out;
+  }
+
+  function buildHtmlForSummarizedCardId(cardId, agg) {
+    if (!cardId) return null;
+    var model = ctx.lastSummarizedModel;
+    if (!model || !model.cards) {
+      model = buildSummarizedModelForAgg(agg || buildSummarizedAggregateState());
+    }
+    if (
+      model &&
+      globalThis.ChimeraLogs.Summarized.Render &&
+      typeof ChimeraLogs.Summarized.Render.findCardById === "function"
+    ) {
+      var card = ChimeraLogs.Summarized.Render.findCardById(model, cardId);
+      if (card) return renderSummarizedCardFromModel(card);
+    }
+    if (!agg) return null;
+    if (cardId.indexOf("admin-provider-") === 0) {
+      var providerId = cardId.slice("admin-provider-".length);
+      for (var pi = 0; pi < ADMIN_PROVIDER_PATCH_SPECS.length; pi++) {
+        if (ADMIN_PROVIDER_PATCH_SPECS[pi].id === providerId) {
+          var spec = ADMIN_PROVIDER_PATCH_SPECS[pi];
+          return buildAdminProviderCardHtml(spec.id, spec.title, spec.avatar, spec.subtitle);
+        }
+      }
+      return null;
+    }
+    var svcOrder =
+      globalThis.ChimeraLogs &&
+      ChimeraLogs.Summarized &&
+      ChimeraLogs.Summarized.SERVICE_BUCKET_ORDER
+        ? ChimeraLogs.Summarized.SERVICE_BUCKET_ORDER
+        : ["chimera-broker", "chimera-gateway", "chimera-indexer", "chimera-vectorstore"];
+    var si;
+    for (si = 0; si < svcOrder.length; si++) {
+      var nm = svcOrder[si];
+      if (cardId !== "svc-" + strHash(nm)) continue;
+      var arr = agg.buckets[nm];
+      if (!arr || !arr.length) return null;
+      return buildServiceCard(nm, arr, { byRun: agg.byRun, partitionRegistry: agg.partitionRegistry });
+    }
+    var ci;
+    for (ci = 0; ci < agg.mergedConv.length; ci++) {
+      var g = agg.mergedConv[ci];
+      if (conversationDomIdForGroup(g) === cardId) return buildConvCard(g);
+    }
+    var rks = Object.keys(agg.byRun || {});
+    var rj;
+    for (rj = 0; rj < rks.length; rj++) {
+      var runG = agg.byRun[rks[rj]];
+      if (!runG) continue;
+      var pmetaG = null;
+      if (
+        agg.partitionRegistry &&
+        globalThis.ChimeraLogs &&
+        ChimeraLogs.Derive &&
+        typeof ChimeraLogs.Derive.indexerPartitionMetaForRun === "function"
+      ) {
+        pmetaG = ChimeraLogs.Derive.indexerPartitionMetaForRun(
+          agg.partitionRegistry,
+          runG.id,
+          runG.events,
+          getFlat
+        );
+      }
+      var metaG = collectIndexerRunMeta(runG.id, runG.events, pmetaG);
+      metaG = mergePersistedIndexerWatchRoots(metaG, runG.events, runG.id);
+      if (indexerCardDomIdFromMeta(metaG, runG.id) === cardId) {
+        return buildIndexerCard(runG, agg.partitionRegistry);
+      }
+    }
+    return null;
+  }
+
+  function patchSummarizedCard(cardId, agg, nextModel) {
+    var prevModel = ctx.lastSummarizedModel;
+    if (!nextModel) nextModel = buildSummarizedModelForAgg(agg || buildSummarizedAggregateState());
+    if (prevModel && summarizedPatchAvailable()) {
+      var onlyCardIds = Object.create(null);
+      onlyCardIds[cardId] = true;
+      var ops = ChimeraLogs.Summarized.Patch.diffSummarizedModels(prevModel, nextModel, {
+        onlyCardIds: onlyCardIds,
+        skipCardIds: summarizedPatchSkipCardIds()
+      });
+      if (
+        !ChimeraLogs.Summarized.Patch.shouldUseFullRebuildFromOps(ops) &&
+        ChimeraLogs.Summarized.Patch.countReplaceCardOps(ops) > 0
+      ) {
+        var psu = document.getElementById("panel-summarized");
+        var patchResult = applySummarizedPanelPatch(psu, ops);
+        if (patchResult.ok) {
+          ctx.lastSummarizedModel = nextModel;
+          if (agg) ctx.lastSummarizedAggregate = agg;
+          return true;
+        }
+      }
+    }
+    var html = buildHtmlForSummarizedCardId(cardId, agg);
+    if (!html) return false;
+    return replaceCardById(
+      cardId,
+      function () {
+        return html;
+      },
+      {
+        preserveOpen: true,
+        preserveScrollSelectors: ".sum-metrics-table-wrap, .sum-full-log--evlog .sum-evlog-table-wrap"
+      }
+    );
+  }
+
+  function flushSummarizedDirtyCards() {
+    if (getViewMode() !== "summarized") {
+      clearSummarizedDirtySets();
+      return;
+    }
+    if (summarizedPanelInteractionBlocksRebuild()) {
+      scheduleDeferredSummarizedRefresh();
+      return;
+    }
+    var dirtyCount = summarizedDirtyCardCount();
+    if (!dirtyCount) return;
+    if (shouldSummarizedDirtyFullRebuild(dirtyCount)) {
+      clearSummarizedDirtySets();
+      forceSummarizedFullRebuild("dirty-storm");
+      scheduleFocusTargets();
+      return;
+    }
+    var agg = buildSummarizedAggregateState();
+    var nextModel = buildSummarizedModelForAgg(agg);
+    var cardIds = [];
+    var k;
+    for (k in ctx.summarizedDirtyCardIds) {
+      if (Object.prototype.hasOwnProperty.call(ctx.summarizedDirtyCardIds, k)) cardIds.push(k);
+    }
+    var ixBuckets = [];
+    for (k in ctx.summarizedDirtyIndexerBucketIds) {
+      if (Object.prototype.hasOwnProperty.call(ctx.summarizedDirtyIndexerBucketIds, k)) ixBuckets.push(k);
+    }
+    var ixDom = resolveIndexerDomIdsFromDirtyBuckets(ixBuckets, agg);
+    for (var xi = 0; xi < ixDom.length; xi++) {
+      if (cardIds.indexOf(ixDom[xi]) < 0) cardIds.push(ixDom[xi]);
+    }
+    clearSummarizedDirtySets();
+
+    var prevModel = ctx.lastSummarizedModel;
+    if (prevModel && cardIds.length && summarizedPatchAvailable()) {
+      var onlyCardIds = Object.create(null);
+      for (var ci = 0; ci < cardIds.length; ci++) onlyCardIds[cardIds[ci]] = true;
+      var dirtyOps = ChimeraLogs.Summarized.Patch.diffSummarizedModels(prevModel, nextModel, {
+        onlyCardIds: onlyCardIds,
+        skipCardIds: summarizedPatchSkipCardIds()
+      });
+      if (
+        !ChimeraLogs.Summarized.Patch.shouldUseFullRebuildFromOps(dirtyOps) &&
+        ChimeraLogs.Summarized.Patch.countReplaceCardOps(dirtyOps) > 0
+      ) {
+        var psuDirty = document.getElementById("panel-summarized");
+        var dirtyPatch = applySummarizedPanelPatch(psuDirty, dirtyOps);
+        if (dirtyPatch.ok) {
+          ctx.lastSummarizedModel = nextModel;
+          ctx.lastSummarizedAggregate = agg;
+          scheduleFocusTargets();
+          return;
+        }
+      } else if (!ChimeraLogs.Summarized.Patch.shouldUseFullRebuildFromOps(dirtyOps)) {
+        ctx.lastSummarizedModel = nextModel;
+        ctx.lastSummarizedAggregate = agg;
+        scheduleFocusTargets();
+        return;
+      }
+    }
+
+    var needRebuild = false;
+    var pi;
+    for (pi = 0; pi < cardIds.length; pi++) {
+      if (!patchSummarizedCard(cardIds[pi], agg, nextModel)) needRebuild = true;
+    }
+    if (needRebuild) scheduleStoryRebuild();
+    else {
+      ctx.lastSummarizedModel = nextModel;
+      ctx.lastSummarizedAggregate = agg;
+      scheduleFocusTargets();
+    }
+  }
+
+  function scheduleSummarizedDirtyFlush() {
+    if (ctx.summarizedDirtyRafPending) return;
+    ctx.summarizedDirtyRafPending = true;
+    window.requestAnimationFrame(function () {
+      ctx.summarizedDirtyRafPending = false;
+      flushSummarizedDirtyCards();
+    });
+  }
 
   function fetchGatewayMetrics() {
     if (ctx.uiUnauthorized) return;
@@ -804,10 +1246,46 @@ globalThis.ChimeraLogs.App.mountSummarizedFeed = function (ctx) {
   function patchAdminCardsFromPoll() {
     if (getViewMode() !== "summarized") return;
     if (summarizedPanelInteractionBlocksRebuild()) return;
+    var psu = document.getElementById("panel-summarized");
+    if (!psu) return;
+
+    var prevModel = ctx.lastSummarizedModel;
+    var agg = buildSummarizedAggregateState();
+    var nextModel = buildSummarizedModelForAgg(agg);
+    if (prevModel && summarizedPatchAvailable()) {
+      var onlyCardIds = Object.create(null);
+      onlyCardIds["admin-users"] = true;
+      for (var ai = 0; ai < ADMIN_PROVIDER_PATCH_SPECS.length; ai++) {
+        onlyCardIds["admin-provider-" + ADMIN_PROVIDER_PATCH_SPECS[ai].id] = true;
+      }
+      if (!ctx.adminRoutingEditing) onlyCardIds["admin-routing-rules"] = true;
+      if (!ctx.adminFallbackEditing) onlyCardIds["admin-fallback-chain"] = true;
+      if (!ctx.adminRouterEditing) onlyCardIds["admin-router-model"] = true;
+      var pollOps = ChimeraLogs.Summarized.Patch.diffSummarizedModels(prevModel, nextModel, {
+        onlyCardIds: onlyCardIds,
+        skipCardIds: summarizedPatchSkipCardIds()
+      });
+      if (
+        !ChimeraLogs.Summarized.Patch.shouldUseFullRebuildFromOps(pollOps) &&
+        ChimeraLogs.Summarized.Patch.countReplaceCardOps(pollOps) > 0
+      ) {
+        var pollPatch = applySummarizedPanelPatch(psu, pollOps);
+        if (pollPatch.ok) {
+          ctx.lastSummarizedModel = nextModel;
+          ctx.lastSummarizedAggregate = agg;
+          return;
+        }
+      } else if (!ChimeraLogs.Summarized.Patch.shouldUseFullRebuildFromOps(pollOps)) {
+        ctx.lastSummarizedModel = nextModel;
+        ctx.lastSummarizedAggregate = agg;
+        return;
+      }
+    }
+
     var needRebuild = false;
     if (!patchAdminUsersCard()) needRebuild = true;
-    for (var ai = 0; ai < ADMIN_PROVIDER_PATCH_SPECS.length; ai++) {
-      if (!patchAdminProviderCard(ADMIN_PROVIDER_PATCH_SPECS[ai].id)) needRebuild = true;
+    for (var aj = 0; aj < ADMIN_PROVIDER_PATCH_SPECS.length; aj++) {
+      if (!patchAdminProviderCard(ADMIN_PROVIDER_PATCH_SPECS[aj].id)) needRebuild = true;
     }
     if (!ctx.adminRoutingEditing) {
       if (!patchAdminRoutingCard()) needRebuild = true;
@@ -819,6 +1297,10 @@ globalThis.ChimeraLogs.App.mountSummarizedFeed = function (ctx) {
       if (!patchAdminRouterModelsCard()) needRebuild = true;
     }
     if (needRebuild) scheduleStoryRebuild();
+    else {
+      ctx.lastSummarizedModel = nextModel;
+      ctx.lastSummarizedAggregate = agg;
+    }
   }
 
   function syncAdminStatePolling() {
@@ -5298,8 +5780,7 @@ globalThis.ChimeraLogs.App.mountSummarizedFeed = function (ctx) {
     return itk || ik || rid || "";
   }
 
-  function renderSummarizedUnified() {
-    ctx.operatorWsFullLogCtx = {};
+  function buildSummarizedAggregateState() {
     rebuildIndexerRootScopeMaps();
     var groups = {};
     var reqToConv = {};
@@ -5564,177 +6045,173 @@ globalThis.ChimeraLogs.App.mountSummarizedFeed = function (ctx) {
         });
       }
     }
+    ctx.summarizedReqToConv = reqToConv;
+    ctx.summarizedIndexRunToConv = indexRunToConv;
     var mergedConv = sortConversationGroupsByRecency(groups);
-    var convTimeline = [];
-    for (var ci = 0; ci < mergedConv.length; ci++) {
-      var gx = mergedConv[ci];
-      convTimeline.push({ sort: convLastTs(gx), html: buildConvCard(gx) });
-    }
-    convTimeline.sort(function (a, b) {
-      return b.sort - a.sort;
-    });
-    var svcHtml = "";
-    var order = ["chimera-broker", "chimera-gateway", "chimera-indexer", "chimera-vectorstore"];
-    for (var oi = 0; oi < order.length; oi++) {
-      var nm = order[oi];
-      var arr = buckets[nm];
-      if (!arr || !arr.length) continue;
-      svcHtml += buildServiceCard(nm, arr, { byRun: byRun, partitionRegistry: partitionRegistry });
-    }
-    var idxTimeline = [];
-    var seenIndexerBuckets = {};
-    var liveIndexerIdentities = {};
-    var dedupeGroups = {};
-    var rks = Object.keys(byRun);
-    for (var rj = 0; rj < rks.length; rj++) {
-      var runG = byRun[rks[rj]];
-      if (!runG) continue;
-      var pmetaG = null;
-      if (
-        partitionRegistry &&
-        globalThis.ChimeraLogs &&
-        ChimeraLogs.Derive &&
-        typeof ChimeraLogs.Derive.indexerPartitionMetaForRun === "function"
-      ) {
-        pmetaG = ChimeraLogs.Derive.indexerPartitionMetaForRun(
-          partitionRegistry,
-          runG.id,
-          runG.events,
-          getFlat
-        );
-      }
-      var metaG = collectIndexerRunMeta(runG.id, runG.events, pmetaG);
-      metaG = mergePersistedIndexerWatchRoots(metaG, runG.events, runG.id);
-      var dk = indexerRunTimelineDedupeKey(metaG, runG.id);
-      if (!dedupeGroups[dk]) dedupeGroups[dk] = [];
-      dedupeGroups[dk].push(runG);
-    }
-    var dkIter;
-    var headlinesWithIndexerOrStaleCard = Object.create(null);
-    for (dkIter in dedupeGroups) {
-      if (!Object.prototype.hasOwnProperty.call(dedupeGroups, dkIter)) continue;
-      var grpRuns = dedupeGroups[dkIter];
-      var run = pickCanonicalIndexerRun(grpRuns);
-      if (!run) continue;
-      var gi;
-      for (gi = 0; gi < grpRuns.length; gi++) {
-        seenIndexerBuckets[grpRuns[gi].id] = true;
-      }
-      var pmetaLive = null;
-      if (
-        partitionRegistry &&
-        globalThis.ChimeraLogs &&
-        ChimeraLogs.Derive &&
-        typeof ChimeraLogs.Derive.indexerPartitionMetaForRun === "function"
-      ) {
-        pmetaLive = ChimeraLogs.Derive.indexerPartitionMetaForRun(
-          partitionRegistry,
-          run.id,
-          run.events,
-          getFlat
-        );
-      }
-      var metaLive = collectIndexerRunMeta(run.id, run.events, pmetaLive);
-      metaLive = mergePersistedIndexerWatchRoots(metaLive, run.events, run.id);
-      liveIndexerIdentities[indexerCardIdentityKey(metaLive)] = true;
-      var ixHead = workspaceCardTitleFromIndexerMeta(metaLive);
-      if (ixHead) headlinesWithIndexerOrStaleCard[ixHead] = true;
-      var sortLabel = indexerCardTitleSortLabel(metaLive) + "\u0001" + String(run.id || "");
-      idxTimeline.push({ sortKey: sortLabel, html: buildIndexerCard(run, partitionRegistry) });
-    }
-    var snapStore = loadIndexerWatchRootsStore();
-    if (snapStore.snapshots) {
-      for (var sbi in snapStore.snapshots) {
-        if (!Object.prototype.hasOwnProperty.call(snapStore.snapshots, sbi)) continue;
-        if (seenIndexerBuckets[sbi]) continue;
-        var sn = snapStore.snapshots[sbi];
-        if (liveIndexerIdentities[indexerCardIdentityKeyFromSnap(sn)]) continue;
-        var staleHead = workspaceCardTitleFromIndexerMeta({
-          userLabel: sn.userLabel,
-          projectId: sn.projectId,
-          flavorId: sn.flavorId
-        });
-        if (staleHead) headlinesWithIndexerOrStaleCard[staleHead] = true;
-        idxTimeline.push({
-          sortKey: indexerCardTitleSortLabel(sn) + "\u0001" + String(sbi),
-          html: buildIndexerStaleSnapshotCard(sbi, sn)
-        });
-      }
-    }
-    var wsn = dedupeOperatorWorkspacesNested(ctx.lastIndexerOperatorWorkspacesNested.slice());
-    wsn.sort(function (a, b) {
-      var ak = canonicalWorkspaceRowIdKey(a.id);
-      var bk = canonicalWorkspaceRowIdKey(b.id);
-      var an = parseInt(ak, 10);
-      var bn = parseInt(bk, 10);
-      if (/^\d+$/.test(ak) && /^\d+$/.test(bk) && !isNaN(an) && !isNaN(bn)) return an - bn;
-      return String(ak).localeCompare(String(bk));
-    });
-    var seenManagedWsTitle = Object.create(null);
-    var wdx;
-    for (wdx = 0; wdx < ctx.workspaceDrafts.length; wdx++) {
-      var draftHead = workspaceDraftComparableManagedTitle(ctx.workspaceDrafts[wdx]);
-      if (draftHead) seenManagedWsTitle[draftHead] = true;
-    }
-    if (wsn && wsn.length) {
-      for (var owi = 0; owi < wsn.length; owi++) {
-        var ows = wsn[owi];
-        if (!ows || ows.id == null) continue;
-        var headTtl = operatorManagedWorkspaceTitleText(ows);
-        if (seenManagedWsTitle[headTtl]) continue;
-        if (headlinesWithIndexerOrStaleCard[headTtl]) continue;
-        seenManagedWsTitle[headTtl] = true;
-        if (operatorWorkspaceCoveredByIndexerRuns(ows, byRun, partitionRegistry)) continue;
-        var sortOp =
-          headTtl + "\u0001opws-" + canonicalWorkspaceRowIdKey(ows.id);
-        idxTimeline.push({
-          sortKey: sortOp,
-          html: buildIndexerOperatorWorkspaceCard(ows, partitionRegistry)
-        });
-      }
-    }
-    idxTimeline.sort(function (a, b) {
-      var ka = a.sortKey != null ? String(a.sortKey) : "";
-      var kb = b.sortKey != null ? String(b.sortKey) : "";
-      return ka.localeCompare(kb, undefined, { sensitivity: "base", numeric: true });
-    });
-    var body = buildGatewayOverviewFeedSection() + buildAdminWorkflowsFeedSection();
-    if (convTimeline.length) {
-      body +=
-        '<div class="sum-feed-section"><div class="sum-section-label sum-feed-section-title">Conversations</div>';
-      for (var zc = 0; zc < convTimeline.length; zc++) body += convTimeline[zc].html;
-      body += "</div>";
-    }
-    body +=
-      '<div class="sum-feed-section sum-feed-section--workspaces">' +
-      '<div class="sum-feed-section-head">' +
-      '<span class="sum-feed-section-title sum-section-label">Workspaces</span>' +
-      '<button type="button" class="sum-workspaces-create-btn" data-sum-workspaces-create="1">Create</button>' +
-      "</div>" +
-      buildWorkspacesSectionIntroHtml();
-    var wdi;
-    for (wdi = 0; wdi < ctx.workspaceDrafts.length; wdi++) {
-      body += buildWorkspaceDraftCardHtml(ctx.workspaceDrafts[wdi]);
-    }
-    for (var zi = 0; zi < idxTimeline.length; zi++) body += idxTimeline[zi].html;
-    body += "</div>";
-    if (svcHtml) {
-      body +=
-        '<div class="sum-feed-section"><div class="sum-section-label sum-feed-section-title">Services</div>' +
-        svcHtml +
-        "</div>";
-    }
-    var hasThreads =
-      convTimeline.length > 0 ||
-      idxTimeline.length > 0 ||
-      svcHtml.length > 0 ||
-      ctx.workspaceDrafts.length > 0;
-    if (!hasThreads) {
-      body +=
-        '<p class="muted">No conversation / service cards in the <em>loaded</em> window yet. Chat traffic needs <code>conversation_id</code> in structured logs; <strong>scroll to the top</strong> of this feed to load older lines (indexer snapshots often crowd the recent tail). Switch to <strong>StructuredLogs</strong> for the full stream.</p>';
-    }
-    return body;
+    return {
+      groups: groups,
+      reqToConv: reqToConv,
+      indexRunToConv: indexRunToConv,
+      buckets: buckets,
+      byRun: byRun,
+      partitionRegistry: partitionRegistry,
+      mergedConv: mergedConv
+    };
   }
+
+  function summarizedModelState(agg) {
+    return {
+      agg: agg,
+      gatewayOverviewCache: ctx.gatewayOverviewCache,
+      metricsCache: ctx.metricsCache,
+      adminStateCache: ctx.adminStateCache,
+      tokenListCache: ctx.tokenListCache,
+      workspaceDrafts: ctx.workspaceDrafts,
+      adminProviderSpecs: ADMIN_PROVIDER_PATCH_SPECS,
+      adminRoutingEditing: ctx.adminRoutingEditing,
+      adminFallbackEditing: ctx.adminFallbackEditing,
+      adminRouterEditing: ctx.adminRouterEditing,
+      lastIndexerOperatorWorkspacesNested: ctx.lastIndexerOperatorWorkspacesNested
+    };
+  }
+
+  function summarizedModelDeps() {
+    return {
+      strHash: strHash,
+      conversationDomIdForGroup: conversationDomIdForGroup,
+      convLastTs: convLastTs,
+      primaryLogMessage: primaryLogMessage,
+      conversationCardModelForGroup: conversationCardModelForGroup,
+      conversationCardStatus: conversationCardStatus,
+      indexerPartitionMetaForRun: function (partitionRegistry, runId, events) {
+        if (
+          partitionRegistry &&
+          globalThis.ChimeraLogs &&
+          ChimeraLogs.Derive &&
+          typeof ChimeraLogs.Derive.indexerPartitionMetaForRun === "function"
+        ) {
+          return ChimeraLogs.Derive.indexerPartitionMetaForRun(partitionRegistry, runId, events, getFlat);
+        }
+        return null;
+      },
+      collectIndexerRunMeta: collectIndexerRunMeta,
+      mergePersistedIndexerWatchRoots: mergePersistedIndexerWatchRoots,
+      indexerRunTimelineDedupeKey: indexerRunTimelineDedupeKey,
+      pickCanonicalIndexerRun: pickCanonicalIndexerRun,
+      workspaceCardTitleFromIndexerMeta: workspaceCardTitleFromIndexerMeta,
+      indexerCardTitleSortLabel: indexerCardTitleSortLabel,
+      indexerCardDomIdFromMeta: indexerCardDomIdFromMeta,
+      indexerCardIdentityKey: indexerCardIdentityKey,
+      indexerCardIdentityKeyFromSnap: indexerCardIdentityKeyFromSnap,
+      loadIndexerWatchRootsStore: loadIndexerWatchRootsStore,
+      dedupeOperatorWorkspacesNested: dedupeOperatorWorkspacesNested,
+      canonicalWorkspaceRowIdKey: canonicalWorkspaceRowIdKey,
+      workspaceDraftComparableManagedTitle: workspaceDraftComparableManagedTitle,
+      operatorManagedWorkspaceTitleText: operatorManagedWorkspaceTitleText,
+      operatorWorkspaceCoveredByIndexerRuns: operatorWorkspaceCoveredByIndexerRuns,
+      adminProvidersSectionBreakHtml: function () {
+        return "";
+      },
+      adminRoutingSectionBreakHtml: function () {
+        return (
+          '<div class="sum-section-label sum-feed-section-title">Routing</div>' +
+          '<div class="sum-workspaces-intro"><p class="sum-workspaces-intro-lead">Routing controls are fully editable here: policy YAML, fallback chain, and tool-router settings.</p></div>'
+        );
+      }
+    };
+  }
+
+  function renderSummarizedCardFromModel(card) {
+    if (!card || card.kind === "section-break") return null;
+    var src = card.source;
+    switch (card.kind) {
+      case "gateway-overview":
+        return buildGatewayOverviewCardHtml();
+      case "gateway-usage":
+        return buildGatewayUsageCardHtml();
+      case "admin-users":
+        return buildAdminUsersCardHtml();
+      case "admin-provider":
+        return buildAdminProviderCardHtml(src.spec.id, src.spec.title, src.spec.avatar, src.spec.subtitle);
+      case "admin-routing":
+        return buildAdminRoutingRulesCardHtml();
+      case "admin-fallback":
+        return buildAdminFallbackCardHtml();
+      case "admin-router-model":
+        return buildAdminRouterModelCardHtml();
+      case "conversation":
+        return buildConvCard(src);
+      case "service":
+        return buildServiceCard(src.name, src.events, src.svcCtx);
+      case "indexer":
+        return buildIndexerCard(src.run, src.partitionRegistry);
+      case "indexer-stale":
+        return buildIndexerStaleSnapshotCard(src.bucketId, src.snap);
+      case "workspace-draft":
+        return buildWorkspaceDraftCardHtml(src);
+      case "indexer-operator-workspace":
+        return buildIndexerOperatorWorkspaceCard(src.workspace, src.partitionRegistry);
+      default:
+        return null;
+    }
+  }
+
+  function buildSummarizedModelForAgg(agg) {
+    if (
+      !globalThis.ChimeraLogs ||
+      !ChimeraLogs.Summarized ||
+      !ChimeraLogs.Summarized.Model ||
+      typeof ChimeraLogs.Summarized.Model.buildSummarizedModel !== "function"
+    ) {
+      return null;
+    }
+    var deps = summarizedModelDeps();
+    deps.adminProvidersSectionBreakHtml = function () {
+      return (
+        '<div class="sum-section-label sum-feed-section-title">Providers</div>' +
+        '<div class="sum-workspaces-intro"><p class="sum-workspaces-intro-lead">Providers drive upstream inference through chimera-broker; each card shows configuration, usage, and scoped log activity.</p></div>'
+      );
+    };
+    return ChimeraLogs.Summarized.Model.buildSummarizedModel(deps, summarizedModelState(agg));
+  }
+
+  function summarizedHtmlRenderers() {
+    return {
+      renderCard: renderSummarizedCardFromModel,
+      workspacesSectionIntro: buildWorkspacesSectionIntroHtml,
+      emptyFeedMessage: function () {
+        return (
+          '<p class="muted">No conversation / service cards in the <em>loaded</em> window yet. Chat traffic needs <code>conversation_id</code> in structured logs; <strong>scroll to the top</strong> of this feed to load older lines (indexer snapshots often crowd the recent tail). Switch to <strong>StructuredLogs</strong> for the full stream.</p>'
+        );
+      }
+    };
+  }
+
+  function buildSummarizedFeedSnapshot() {
+    ctx.operatorWsFullLogCtx = {};
+    var agg = buildSummarizedAggregateState();
+    var model = buildSummarizedModelForAgg(agg);
+    return { agg: agg, model: model };
+  }
+
+  function renderSummarizedHtmlFromModel(model) {
+    if (
+      model &&
+      globalThis.ChimeraLogs.Summarized.Render &&
+      typeof ChimeraLogs.Summarized.Render.renderSummarizedHtml === "function"
+    ) {
+      return ChimeraLogs.Summarized.Render.renderSummarizedHtml(model, summarizedHtmlRenderers());
+    }
+    return "";
+  }
+
+  function renderSummarizedUnified() {
+    var snap = buildSummarizedFeedSnapshot();
+    ctx.lastSummarizedModel = snap.model;
+    ctx.lastSummarizedAggregate = snap.agg;
+    return renderSummarizedHtmlFromModel(snap.model);
+  }
+
 
   ctx.chimeraBrokerShortModelLabel = chimeraBrokerShortModelLabel;
   ctx.avatarInitials = avatarInitials;
@@ -5774,10 +6251,18 @@ globalThis.ChimeraLogs.App.mountSummarizedFeed = function (ctx) {
   var serviceAvatarInitials = ctx.serviceAvatarInitials;
   var formatMergedConversationSubtitle = ctx.formatMergedConversationSubtitle;
   ctx.refreshSummarizedPanel = refreshSummarizedPanel;
+  ctx.forceSummarizedFullRebuild = forceSummarizedFullRebuild;
   ctx.scheduleDeferredSummarizedRefresh = scheduleDeferredSummarizedRefresh;
   ctx.summarizedPanelInteractionBlocksRebuild = summarizedPanelInteractionBlocksRebuild;
   ctx.summarizedEvlogInteractionBlocksRebuild = summarizedPanelInteractionBlocksRebuild;
   ctx.scheduleStoryRebuild = scheduleStoryRebuild;
+  ctx.markSummarizedDirtyFromEntry = markSummarizedDirtyFromEntry;
+  ctx.updateSummarizedCorrelationFromEntry = updateSummarizedCorrelationFromEntry;
+  ctx.scheduleSummarizedDirtyFlush = scheduleSummarizedDirtyFlush;
+  ctx.flushSummarizedDirtyCards = flushSummarizedDirtyCards;
+  ctx.buildSummarizedAggregateState = buildSummarizedAggregateState;
+  ctx.buildSummarizedModelForAgg = buildSummarizedModelForAgg;
+  ctx.renderSummarizedCardFromModel = renderSummarizedCardFromModel;
   ctx.renderSummarizedUnified = renderSummarizedUnified;
   ctx.replaceCardById = replaceCardById;
   ctx.patchGatewayUsageMetricsCard = patchGatewayUsageMetricsCard;

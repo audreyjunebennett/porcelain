@@ -15,7 +15,7 @@ In UI, logs, supervisor output, and this doc set, use **Chimera product names**:
 
 **Config file keys** use `broker.*`, top-level `vectorstore.*`, and `rag.*` (orchestration) in `gateway.yaml`. **`GET /status`** exposes `broker` and `vectorstore` blocks; nested debug fields name the wrapped storage/relay implementation only.
 
-Naming refactor status: [plans/chimera-gateway-refactor.md](plans/chimera-gateway-refactor.md). Vocabulary audit: `make chimera-gateway-audit` or `pwsh -File scripts/chimera-gateway-vocab-audit.ps1`. `gateway.yaml`, `api-keys.yaml`, `routing-policy.yaml`, and `provider-free-tier.yaml` (when configured) are picked up when their file **modification time** changes (`gateway.yaml` reload also runs when `provider-free-tier.yaml` alone changes). **Gateway metrics** (the `metrics` block in `gateway.yaml`) are applied **at process start** only (changing paths requires a **restart**).
+Naming refactor status: [plans/chimera-gateway-refactor.md](plans/chimera-gateway-refactor.md). `gateway.yaml`, `api-keys.yaml`, `routing-policy.yaml`, and `provider-free-tier.yaml` (when configured) are picked up when their file **modification time** changes (`gateway.yaml` reload also runs when `provider-free-tier.yaml` alone changes). **Gateway metrics** (the `metrics` block in `gateway.yaml`) are applied **at process start** only (changing paths requires a **restart**).
 
 ## Go gateway binary
 

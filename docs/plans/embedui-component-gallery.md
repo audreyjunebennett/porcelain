@@ -103,7 +103,6 @@ Phase 2 of [`embedui-theme-styleguide.md`](embedui-theme-styleguide.md) shipped 
 **Acceptance**
 
 - Manual side-by-side: a `sum-card` + `sum-evlog` region in gallery matches `/ui/logs` structure for the same class list.
-- `make chimera-gateway-audit` vocabulary rules pass for strings **added** in gallery HTML (no reintroduced forbidden upstream/qdrant operator labels in new copy).
 
 **Status:** `done`
 

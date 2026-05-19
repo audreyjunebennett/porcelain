@@ -276,7 +276,6 @@ Pure derive modules and goja tests exist ([`logs_components_test.go`](../../chim
 
 **Shipped (2026-05-18)**
 
-- `make chimera-gateway-audit` / `scripts/chimera-gateway-vocab-audit.ps1` fail on forbidden legacy paths (`bifrostadmin`, old derive filenames, `timeline_kind=upstream`, `sum-svc-upstream`, etc.).
 - `chimera-gateway-test` runs audit before unit + e2e tests; `chimera-test` includes gateway + supervisor suites.
 - Operator docs: [configuration.md](../configuration.md), [network.md](../network.md) use chimera-broker / chimera-vectorstore vocabulary; [logs-ui-maintainability.md](logs-ui-maintainability.md) marked superseded.
 

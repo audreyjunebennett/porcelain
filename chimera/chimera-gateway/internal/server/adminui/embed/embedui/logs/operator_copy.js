@@ -182,7 +182,7 @@
     
   ];
   var bySlug = {
-    "gateway.http.access": {summary: "GET /v1/chat/completions → 200 · 142 ms", formatter: "http_access"},
+    "gateway.http.access": {summary: "GET /v1/chat/completions → 200 · 142 ms", formatter: "http_access", shape: "http.access"},
     "conversation.merge.embed_failed": {summary: "Embedding failed so this turn cannot be associated with any current conversation; storing as a new conversation"},
     "conversation.merge.disabled": {summary: "Conversation merge is disabled because embedding URL or upstream API key is missing."},
     "conversation.merge.embed_dim_mismatch": {summary: "Embedding vector dimension does not match the configured index dimension."},
@@ -207,9 +207,9 @@
     "conversation.fallback.attempted": {summary: "Routing fallback attempted after an upstream failure."},
     "conversation.fallback.exhausted": {summary: "All models in the routing fallback chain were exhausted."},
     "conversation.fallback.model_not_found": {summary: "No model in the fallback chain could serve this request."},
-    "rag.query": {summary: "Vector search for this request: querying the index for chunks relevant to the user message.", formatter: "rag_collection"},
+    "rag.query": {summary: "Vector search for this request: querying the index for chunks relevant to the user message.", formatter: "rag_collection", shape: "rag", metricsCounter: "ragQuery"},
     "conversation.received": {summary: "Inbound chat message recorded for this conversation."},
-    "chat.request": {summary: "Chat completion request accepted and prepared for upstream routing."},
+    "chat.request": {summary: "Chat completion request accepted and prepared for upstream routing.", shape: "chat.request", metricsCounter: "chatReq"},
     "conversation.rag.span": {summary: "RAG retrieval span recorded for this conversation turn (links retrieval to the chat scope).", formatter: "rag_collection"},
     "upstream.models.ok": {summary: "Upstream model catalog responded successfully.", formatter: "upstream_models_ok"},
     "conversation.request.witness": {summary: "Request witness logged: structured snapshot of the chat payload after normalization (message counts, roles, prompt size, tools) for correlation and auditing."},
@@ -218,7 +218,7 @@
     "conversation.delivered": {summary: "Completion delivered to the client (this turn finished successfully).", formatter: "conversation_delivered"},
     "conversation.routing.resolved": {summary: "Routing resolved: upstream model chosen for this completion.", formatter: "conversation_routing"},
     "conversation.broker.started": {summary: "chimera-broker request started (POST to chat/completions).", formatter: "conversation_broker_started"},
-    "ingest.complete": {summary: "Ingest finished — document indexed.", formatter: "ingest_complete"},
+    "ingest.complete": {summary: "Ingest finished — document indexed.", formatter: "ingest_complete", shape: "ingest", metricsCounter: "ingestOk"},
     "gateway.auth.reloaded": {summary: "Client credentials reloaded from disk.", formatter: "gateway_auth_reloaded"},
     "gateway.health.upstream": {summary: "Upstream health OK", formatter: "gateway_health_upstream"},
     "gateway.startup.listening": {summary: "Gateway listening for HTTP requests.", formatter: "gateway_startup_listening"},
@@ -319,7 +319,7 @@
     "vectorstore.http.points_delete": {summary: "Deleting from collection chimera-tenant-project-abc12345 · 200", formatter: "vectorstore_collection_http"},
     "vectorstore.http.vector_search": {summary: "Searching collection chimera-tenant-project-abc12345 · 200", formatter: "vectorstore_collection_http"},
     "rag.retrieve.source": {summary: "RAG retrieved · 3 hit(s) · docs/guide.md", formatter: "indexer_rag_source"},
-    "indexer.supervised.wait_roots": {summary: "Waiting for at least one watch root"},
+    "indexer.supervised.wait_roots": {summary: "Waiting for at least one watch root", formatter: "indexer_supervised_wait_roots"},
     "indexer.state": {summary: "Waiting for file changes · queue depth 0", formatter: "indexer_state"},
     "indexer.storage.stats": {summary: "Indexed vectors: 1204", formatter: "indexer_storage_stats"},
     "gateway.indexer.config": {summary: "Gateway indexer settings loaded (chunk 512, model text-embedding-3-small)", formatter: "indexer_gateway_config"},
@@ -346,7 +346,14 @@
     "indexer.sync_state.write_failed": {summary: "Couldn't save sync checkpoint after ingest"},
     "indexer.job.failed": {summary: "Ingest failed (dropped) · src/main.go", formatter: "indexer_job_failed"}
   };
-  var indexerStateLabels = {};
+  var indexerStateLabels = {
+    "backlog": "Queued files to process",
+    "idle": "Idle",
+    "initial_scanning": "Scanning workspace",
+    "recovery": "Recovering (waiting for gateway / storage)",
+    "uploading": "Embedding",
+    "watch_idle": "Waiting for file changes"
+  };
   var Slug = {
     MsgGatewayHttpAccess: "gateway.http.access",
     MsgConversationMergeEmbedFailed: "conversation.merge.embed_failed",

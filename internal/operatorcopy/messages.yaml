@@ -89,6 +89,8 @@ formatters:
     description: state label, queue_depth, ingest_inflight
   indexer_storage_stats:
     description: qdrant_points or unavailable detail
+  indexer_supervised_wait_roots:
+    description: optional config_path suffix
   indexer_work_failed:
     description: work kind label
   ingest_complete:
@@ -107,11 +109,19 @@ formatters:
     description: progress_detail truncation
   vectorstore_version:
     description: qdrant_version in banner
+indexer_states:
+  backlog: Queued files to process
+  idle: Idle
+  initial_scanning: Scanning workspace
+  recovery: Recovering (waiting for gateway / storage)
+  uploading: Embedding
+  watch_idle: Waiting for file changes
 messages:
   - slug: gateway.http.access
     formatter: http_access
     aliases:
       - http response
+    shape: http.access
     gallery_preview: GET /v1/chat/completions → 200 · 142 ms
   - slug: conversation.merge.embed_failed
     summary: Embedding failed so this turn cannot be associated with any current conversation; storing as a new conversation
@@ -187,12 +197,16 @@ messages:
     gallery_preview: Fallback model not found
   - slug: rag.query
     formatter: rag_collection
+    shape: rag
+    metrics_counter: ragQuery
     gallery_preview: 'Vector search for this request: querying the index for chunks relevant to the user message.'
   - slug: conversation.received
     summary: Inbound chat message recorded for this conversation.
     gallery_preview: Inbound chat message recorded for this conversation.
   - slug: chat.request
     summary: Chat completion request accepted and prepared for upstream routing.
+    shape: chat.request
+    metrics_counter: chatReq
     gallery_preview: Chat completion request accepted and prepared for upstream routing.
   - slug: conversation.rag.span
     formatter: rag_collection
@@ -222,6 +236,8 @@ messages:
     gallery_preview: chimera-broker request started (POST to chat/completions).
   - slug: ingest.complete
     formatter: ingest_complete
+    shape: ingest
+    metrics_counter: ingestOk
     gallery_preview: Ingest finished — document indexed.
   - slug: gateway.auth.reloaded
     formatter: gateway_auth_reloaded
@@ -722,7 +738,7 @@ messages:
       - rag retrieved hits from source
     gallery_preview: RAG retrieved · 3 hit(s) · docs/guide.md
   - slug: indexer.supervised.wait_roots
-    summary: Waiting for at least one watch root
+    formatter: indexer_supervised_wait_roots
     aliases:
       - indexer supervised wait roots
     gallery_preview: Waiting for at least one watch root

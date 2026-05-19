@@ -20,8 +20,8 @@ Canonical structured-log slugs, legacy aliases, and English operator copy for th
 go generate ./internal/operatorcopy/...   # validate messages.yaml + write logs/operator_copy.js
 go test ./internal/operatorcopy/...
 go run ./internal/operatorcopy/cmd/bootstrap   # rewrite messages.yaml from bootstrap_registry.go
-make operator-copy-generate   # bootstrap + generate (Phase 2+)
-make operator-copy-check      # stale check for operator_copy.js
+make contracts-generate   # bootstrap + generate (Phase 2+)
+make contracts-check      # stale check for operator_copy.js
 ```
 
 ```powershell

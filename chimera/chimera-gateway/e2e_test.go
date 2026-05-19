@@ -118,7 +118,7 @@ func startGatewayProcess(t *testing.T, wrapperBin, backendBin string, args []str
 		t.Fatalf("write routing: %v", err)
 	}
 	raw := "gateway:\n  semver: \"0.1.0\"\n  listen_port: " + allocPort(t) + "\n  listen_host: \"127.0.0.1\"\n" +
-		"upstream:\n  base_url: \"http://127.0.0.1:1\"\n  api_key_env: \"" + naming.EnvBrokerAPIKeyTarget + "\"\n" +
+		"broker:\n  base_url: \"http://127.0.0.1:1\"\n  api_key_env: \"" + naming.EnvBrokerAPIKeyTarget + "\"\n" +
 		"health:\n  timeout_ms: 1000\n  chat_timeout_ms: 60000\n" +
 		"paths:\n  api_keys: \"" + strings.ReplaceAll(tokensPath, "\\", "/") + "\"\n  routing_policy: \"" + strings.ReplaceAll(routingPath, "\\", "/") + "\"\n" +
 		"routing:\n  fallback_chain:\n    - \"fake/model\"\n"

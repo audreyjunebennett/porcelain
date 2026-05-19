@@ -224,7 +224,7 @@ func TestModelsList_FreeTierFilter(t *testing.T) {
 	dir := t.TempDir()
 	gwPath := filepath.Join(dir, naming.GatewayConfigFileTarget)
 	gwRaw := "gateway:\n  semver: \"0.1.0\"\n  listen_port: 0\n  listen_host: \"127.0.0.1\"\n" +
-		"upstream:\n  base_url: \"" + up.URL + "\"\n  api_key_env: \"" + naming.EnvBrokerAPIKeyTarget + "\"\n" +
+		"broker:\n  base_url: \"" + up.URL + "\"\n  api_key_env: \"" + naming.EnvBrokerAPIKeyTarget + "\"\n" +
 		"health:\n  timeout_ms: 2000\n  chat_timeout_ms: 60000\n" +
 		"paths:\n  tokens: \"./api-keys.yaml\"\n  routing_policy: \"./routing-policy.yaml\"\n" +
 		"  provider_free_tier: \"./provider-free-tier.yaml\"\n" +

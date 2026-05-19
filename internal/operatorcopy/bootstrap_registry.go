@@ -6,6 +6,14 @@ func BootstrapRegistry() *Registry {
 	return &Registry{
 		Version: 1,
 		Locale:  "en",
+		IndexerStates: map[string]string{
+			"watch_idle":         "Waiting for file changes",
+			"backlog":            "Queued files to process",
+			"uploading":          "Embedding",
+			"recovery":           "Recovering (waiting for gateway / storage)",
+			"initial_scanning":   "Scanning workspace",
+			"idle":               "Idle",
+		},
 		Formatters: map[string]Formatter{
 			"rag_collection":              {Description: "Append RAG collection label from flat.collection"},
 			"rag_retrieve_error":          {Description: "Summarize rag.retrieve.error err field"},
@@ -47,6 +55,7 @@ func BootstrapRegistry() *Registry {
 			"indexer_discovery":           {Description: "discovery summary fields"},
 			"indexer_scope_status":        {Description: "workspace/queue counts"},
 			"indexer_scope_active_file":   {Description: "project + rel"},
+			"indexer_supervised_wait_roots": {Description: "optional config_path suffix"},
 			"indexer_queue_snapshot":      {Description: "queue_depth, ingest_completed"},
 			"indexer_job_upload":          {Description: "rel, bytes, transport"},
 			"indexer_job_ingested":        {Description: "rel, chunks"},
@@ -79,11 +88,21 @@ func formatted(slug, formatter, preview string, aliases ...string) Message {
 	return Message{Slug: slug, Formatter: formatter, GalleryPreview: preview, Aliases: aliases}
 }
 
+func withShape(m Message, shape string) Message {
+	m.Shape = shape
+	return m
+}
+
+func withMetrics(m Message, counter string) Message {
+	m.MetricsCounter = counter
+	return m
+}
+
 func gatewayMessages() []Message {
 	return []Message{
-		formatted("gateway.http.access", "http_access",
+		withShape(formatted("gateway.http.access", "http_access",
 			"GET /v1/chat/completions → 200 · 142 ms",
-			"http response"),
+			"http response"), "http.access"),
 		static("conversation.merge.embed_failed",
 			"Embedding failed so this turn cannot be associated with any current conversation; storing as a new conversation",
 			"Embedding failed — storing as a new conversation"),
@@ -156,14 +175,14 @@ func gatewayMessages() []Message {
 		static("conversation.fallback.model_not_found",
 			"No model in the fallback chain could serve this request.",
 			"Fallback model not found"),
-		formatted("rag.query", "rag_collection",
-			"Vector search for this request: querying the index for chunks relevant to the user message."),
+		withMetrics(withShape(formatted("rag.query", "rag_collection",
+			"Vector search for this request: querying the index for chunks relevant to the user message."), "rag"), "ragQuery"),
 		static("conversation.received",
 			"Inbound chat message recorded for this conversation.",
 			"Inbound chat message recorded for this conversation."),
-		static("chat.request",
+		withShape(withMetrics(static("chat.request",
 			"Chat completion request accepted and prepared for upstream routing.",
-			"Chat completion request accepted and prepared for upstream routing."),
+			"Chat completion request accepted and prepared for upstream routing."), "chatReq"), "chat.request"),
 		formatted("conversation.rag.span", "rag_collection",
 			"RAG retrieval span recorded for this conversation turn (links retrieval to the chat scope)."),
 		formatted("upstream.models.ok", "upstream_models_ok",
@@ -182,8 +201,8 @@ func gatewayMessages() []Message {
 			"conversation.routing.resolve"),
 		formatted("conversation.broker.started", "conversation_broker_started",
 			"chimera-broker request started (POST to chat/completions)."),
-		formatted("ingest.complete", "ingest_complete",
-			"Ingest finished — document indexed."),
+		withShape(withMetrics(formatted("ingest.complete", "ingest_complete",
+			"Ingest finished — document indexed."), "ingestOk"), "ingest"),
 		formatted("gateway.auth.reloaded", "gateway_auth_reloaded",
 			"Client credentials reloaded from disk.",
 			"Client credentials reloaded from disk."),
@@ -347,8 +366,7 @@ func indexerMessages() []Message {
 		formatted("rag.retrieve.source", "indexer_rag_source",
 			"RAG retrieved · 3 hit(s) · docs/guide.md",
 			"rag retrieved hits from source"),
-		static("indexer.supervised.wait_roots",
-			"Waiting for at least one watch root",
+		formatted("indexer.supervised.wait_roots", "indexer_supervised_wait_roots",
 			"Waiting for at least one watch root",
 			"indexer supervised wait roots"),
 		formatted("indexer.state", "indexer_state",

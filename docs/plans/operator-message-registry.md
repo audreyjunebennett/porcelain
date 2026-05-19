@@ -103,7 +103,7 @@ Three layers exist today with no shared catalog:
 - [`logs/render/operatorMessage.js`](../../chimera/chimera-gateway/internal/server/adminui/embed/embedui/logs/render/operatorMessage.js): `resolveCanonicalSlug`, `operatorMessage`, formatters for gateway-phase slugs.
 - [`logs_app.js`](../../chimera/chimera-gateway/internal/server/adminui/embed/embedui/logs_app.js): `operatorFriendlyGatewayMsg` delegates to registry renderer.
 - Goja: [`operator_message_test.go`](../../chimera/chimera-gateway/internal/server/adminui/embed/embedui_test/operator_message_test.go).
-- Make: `operator-copy-generate`, `operator-copy-check` (wired into `chimera-gateway-test`).
+- Make: `operator-copy-generate`, `contracts-check` (wired into `chimera-gateway-test`).
 
 ---
 
@@ -184,7 +184,7 @@ Three layers exist today with no shared catalog:
 
 - `go generate` → [`internal/naming/log_messages.go`](../../internal/naming/log_messages.go) (`Msg*` per canonical slug; 163 messages).
 - Gateway `conversation.*` emitters use `naming.Msg*` (server, chat, merge, witness, tools, rag span).
-- CI: `operator-copy-check` runs log_messages staleness + [`scripts/operatorcopy-msg-audit.sh`](../../scripts/operatorcopy-msg-audit.sh) (no raw `conversation.*` msg literals).
+- CI: `contracts-check` runs log_messages staleness + [`scripts/operatorcopy-msg-audit.sh`](../../scripts/operatorcopy-msg-audit.sh) (no raw `conversation.*` msg literals).
 
 ---
 

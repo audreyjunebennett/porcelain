@@ -15,7 +15,8 @@
  * - entryCache (array), seenSeq (object), maxSeqRef {value}, minLoadedSeqRef {value}
  * - bufferMinSeqRef {value}, bufferMinSeqFromServerRef {value}
  * - constants: CLIENT_CACHE_MAX, INITIAL_TAIL_LIMIT, BACKFILL_CHUNK, RENDER_CHUNK, stickPx
- * - render hooks: scheduleStoryRebuild(), rebuildAllRows(), rebuildRawLogsTextarea(opts),
+ * - render hooks: scheduleStoryRebuild(), scheduleSummarizedDirtyFlush(), markSummarizedDirtyFromEntry(),
+ *   updateSummarizedCorrelationFromEntry(), rebuildAllRows(), rebuildRawLogsTextarea(opts),
  *   appendRawLineToTextarea(ent, follow) (legacy), appendTableRow(parsed, follow, seq, entryTs, rawText)
  *   Raw live stream uses scheduleRawLogsDomFlush (rAF-coalesced rebuild; avoids textarea +=).
  * - filters hooks: applyFilters(), ensureAppOption(app), ensureLevelOption(lvl), entryMatchesFilters(parsed)
@@ -165,7 +166,33 @@ function appendLine(ctx, e) {
 
   var viewMode = ctx.getViewMode();
   if (viewMode === "summarized") {
-    ctx.scheduleStoryRebuild();
+    if (cacheTrimmed) {
+      ctx.scheduleStoryRebuild();
+    } else {
+      if (typeof ctx.updateSummarizedCorrelationFromEntry === "function") {
+        ctx.updateSummarizedCorrelationFromEntry({
+          seq: e.seq,
+          source: e.source,
+          text: e.text || "",
+          ts: e.ts,
+          parsed: parsed
+        });
+      }
+      if (typeof ctx.markSummarizedDirtyFromEntry === "function") {
+        ctx.markSummarizedDirtyFromEntry({
+          seq: e.seq,
+          source: e.source,
+          text: e.text || "",
+          ts: e.ts,
+          parsed: parsed
+        });
+      }
+      if (typeof ctx.scheduleSummarizedDirtyFlush === "function") {
+        ctx.scheduleSummarizedDirtyFlush();
+      } else {
+        ctx.scheduleStoryRebuild();
+      }
+    }
     if (follow) window.scrollTo(0, document.documentElement.scrollHeight);
     return;
   }
