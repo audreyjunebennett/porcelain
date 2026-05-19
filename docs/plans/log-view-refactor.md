@@ -4,7 +4,7 @@
 |-------|-------|
 | **Doc kind** | `refactor-plan` |
 | **Owners / areas** | Gateway embed UI, operator logs |
-| **Status** | `shipped` |
+| **Status** | `done` |
 | **Targets** | `/ui/logs` extraction and testability phases 0-7 |
 | **Last updated** | See git history |
 | **Supersedes / superseded by** | Followed by [`logs-ui-maintainability.plan.md`](logs-ui-maintainability.plan.md) |
