@@ -20,6 +20,7 @@ Make the gateway easier to set up, friendlier to share between operators, and cl
 | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
 | [Product naming](#product-naming)                                                          | Layered names in docs, UI, and startup logs with hard-cut naming contracts ([`plans/v0-3-naming-migration.md`](plans/v0-3-naming-migration.md)) | `done`        |
 | [Credential file naming](#credential-file-naming)                                          | `api-keys.yaml` / `api_keys` / `secret`; reserve "token" for tokenizer counts                                                            | `done`        |
+| [Operator UI filesystem dev mode](#operator-ui-filesystem-dev-mode)                        | Serve `embedui/` from disk via `CHIMERA_ADMINUI_ROOT` for live UI edits without rebuilding the gateway                                   | `done`        |
 | [Internal embedding provider (exploration)](#internal-embedding-provider-exploration)      | Optional in-repo or first-install embedding runtime to reduce reliance on Ollama for `/embeddings`                                       | `exploration` |
 | [Logs UI page data refreshing](#logs-ui-page-data-refreshing)                              | Interaction-safe summarized feed; per-card patches and view model (phased)                                                               | `done` |
 | [Operator-managed virtual models](#operator-managed-virtual-models)                        | Create virtual models from `/ui/logs`; per-model fallback, routing rules, and tool-router; operator SQLite + scoped routing logs         | `todo`        |
@@ -147,6 +148,28 @@ In `gateway.yaml`, the path that points at this file should use `paths.api_keys`
 - Example and runtime credential files use `api-keys.yaml`, `api_keys`, and `secret` where implemented.
 - `gateway.yaml` uses `paths.api_keys` for current behavior.
 - Docs and logs reserve "token" for tokenizer/model-token usage except in explicitly historical notes.
+
+**Status:** `done`
+
+---
+
+## Operator UI filesystem dev mode
+
+**Execution plan:** [`plans/adminui-filesystem-dev-mode.md`](plans/adminui-filesystem-dev-mode.md)
+
+**Goal:** Let developers edit operator UI assets under `adminui/embed/embedui/` and see changes after a browser refresh, without rebuilding `chimera-gateway` for every JavaScript or CSS change. Production and packaged desktop builds keep compile-time `//go:embed` when the env var is unset.
+
+**Scope**
+
+- **`CHIMERA_ADMINUI_ROOT`** — Absolute or relative path to the gateway embed package directory (the folder that contains `embedui/`, typically `chimera/chimera-gateway/internal/server/adminui/embed`). Inherited by supervisor → gateway child; set in the shell, `.env` (`env.example`), or via `make locus-desktop-dev-ui` / `make chimera-supervisor-dev-ui`.
+- **Loopback only** — Disk mode is refused when the gateway HTTP listen address is not loopback.
+- **Same URLs** — `/ui/logs`, `/ui/assets/logs/**`, etc. unchanged; only the asset backend switches from embedded bytes to disk.
+- **Still requires rebuild** when changing Go handlers, `internal/naming` → `contracts.js` (`make operator-contracts-generate`), or `operator_copy.js` generation.
+
+**Acceptance**
+
+- With `CHIMERA_ADMINUI_ROOT` set, editing a file under `embedui/logs/` and refreshing `/ui/logs` shows the change without `make chimera-gateway-build`.
+- With the env var unset, behavior matches pre-change embedded serving.
 
 **Status:** `done`
 
@@ -696,6 +719,7 @@ When this plan is implemented, update `[porcelain.plan.md](porcelain.plan.md)` *
 | -------- | ---- | ------ |
 | `[plans/chimera-gateway-package-boundaries.md](plans/chimera-gateway-package-boundaries.md)` | Admin UI / operator API package split; shared DTOs | `draft` |
 | `[plans/chimera-gateway-refactor.md](plans/chimera-gateway-refactor.md)` | Gateway naming clarity; logs UI modularization train | `draft` |
+| `[plans/adminui-filesystem-dev-mode.md](plans/adminui-filesystem-dev-mode.md)` | Optional `CHIMERA_ADMINUI_ROOT` disk serving for embed UI dev | `done` |
 | `[plans/embedui-component-gallery.md](plans/embedui-component-gallery.md)` | Static component gallery paths and upkeep | `done` |
 | `[plans/embedui-component-system.md](plans/embedui-component-system.md)` | Reusable embed UI primitives and module split | `draft` |
 | `[plans/embedui-event-log-panel.md](plans/embedui-event-log-panel.md)` | Per-card event log layout and interaction | `done` |

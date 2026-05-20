@@ -99,6 +99,9 @@ function prependHistoricalEntries(ctx, entriesOldestFirst) {
 
 function fetchOlderLogs(ctx) {
   if (ctx.olderFetchBusyRef.value) return;
+  if (ctx.historyTailReadyRef && !ctx.historyTailReadyRef.value) return;
+  if (ctx.startingRef && ctx.startingRef.value) return;
+  if (!ctx.getStarted || !ctx.getStarted()) return;
   if (!ctx.minLoadedSeqRef.value || !ctx.bufferMinSeqFromServerRef.value) return;
   if (ctx.minLoadedSeqRef.value <= ctx.bufferMinSeqFromServerRef.value) return;
 
@@ -116,9 +119,9 @@ function fetchOlderLogs(ctx) {
     })
     .then(function (data) {
       syncPollMeta(ctx, data);
-      prependHistoricalEntries(ctx, data.lines || []);
       ctx.olderFetchBusyRef.value = false;
       statusSet(ctx, prevStatus);
+      prependHistoricalEntries(ctx, data.lines || []);
     })
     .catch(function () {
       ctx.olderFetchBusyRef.value = false;
@@ -178,19 +181,21 @@ function appendLine(ctx, e) {
           parsed: parsed
         });
       }
-      if (typeof ctx.markSummarizedDirtyFromEntry === "function") {
-        ctx.markSummarizedDirtyFromEntry({
-          seq: e.seq,
-          source: e.source,
-          text: e.text || "",
-          ts: e.ts,
-          parsed: parsed
-        });
-      }
-      if (typeof ctx.scheduleSummarizedDirtyFlush === "function") {
-        ctx.scheduleSummarizedDirtyFlush();
-      } else {
-        ctx.scheduleStoryRebuild();
+      if (!ctx.suppressSummarizedDirty) {
+        if (typeof ctx.markSummarizedDirtyFromEntry === "function") {
+          ctx.markSummarizedDirtyFromEntry({
+            seq: e.seq,
+            source: e.source,
+            text: e.text || "",
+            ts: e.ts,
+            parsed: parsed
+          });
+        }
+        if (typeof ctx.scheduleSummarizedDirtyFlush === "function") {
+          ctx.scheduleSummarizedDirtyFlush();
+        } else {
+          ctx.scheduleStoryRebuild();
+        }
       }
     }
     if (follow) window.scrollTo(0, document.documentElement.scrollHeight);
@@ -222,6 +227,13 @@ function applyPollPayloadBatched(ctx, data, opts, startIdx, doneFn) {
   var lines = data.lines || [];
   var i = startIdx || 0;
   var end = Math.min(i + ctx.RENDER_CHUNK, lines.length);
+  var bulkSummarized = ctx.getViewMode() === "summarized";
+  if (bulkSummarized && i === 0) {
+    if (ctx.historyTailReadyRef) ctx.historyTailReadyRef.value = false;
+    ctx.suppressSummarizedDirty = true;
+    ctx.summarizedDirtyRafPending = false;
+    if (typeof ctx.clearSummarizedDirtySets === "function") ctx.clearSummarizedDirtySets();
+  }
   var bulkRaw = ctx.getViewMode() === "raw_logs";
   if (bulkRaw) ctx.suppressRawLogsDom = true;
   for (; i < end; i++) {
@@ -240,6 +252,16 @@ function applyPollPayloadBatched(ctx, data, opts, startIdx, doneFn) {
     });
     return;
   }
+  if (bulkSummarized) {
+    if (ctx.historyTailReadyRef) ctx.historyTailReadyRef.value = true;
+    if (typeof ctx.beginSummarizedLiveSettle === "function") {
+      ctx.beginSummarizedLiveSettle();
+    } else {
+      ctx.suppressSummarizedDirty = false;
+      if (typeof ctx.scheduleStoryRebuild === "function") ctx.scheduleStoryRebuild();
+    }
+  }
+  statusSet(ctx, "", "");
   if (lines.length) ctx.minLoadedSeqRef.value = lines[0].seq;
   if (opts.rawPrimeScroll && lines.length && (ctx.getViewMode() === "raw" || ctx.getViewMode() === "raw_logs")) {
     window.requestAnimationFrame(function () {
@@ -427,12 +449,22 @@ function init(ctx) {
     fetchOlderLogs(ctx);
   }, { passive: true });
 
-  /** Summarized mode now uses the main page scrollbar; load older chunks when user reaches the top. */
+  /** Summarized mode: backfill older lines only when the user scrolls up near the top (not on initial load at scrollY 0). */
+  var summarizedLastScrollY = typeof window.scrollY === "number" ? window.scrollY : 0;
   window.addEventListener(
     "scroll",
     function () {
       if (ctx.getViewMode() !== "summarized") return;
-      if (window.scrollY > 260) return;
+      var y = window.scrollY;
+      if (y > 260) {
+        summarizedLastScrollY = y;
+        return;
+      }
+      if (y >= summarizedLastScrollY - 12) {
+        summarizedLastScrollY = y;
+        return;
+      }
+      summarizedLastScrollY = y;
       fetchOlderLogs(ctx);
     },
     { passive: true }

@@ -161,6 +161,7 @@ var gatewayIndexTmpl = template.Must(template.New("gatewayIndex").Parse(`<!DOCTY
 // pass nil in tests; production passes listen address and optional supervisor info.
 // ui enables operator /ui and /api/ui routes; pass nil to disable (tests).
 func NewMux(rt *Runtime, log *slog.Logger, overlay *StatusOverlay, ui *UIOptions) http.Handler {
+	configureAdminUIListenForEmbed(rt, overlay)
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /assets/icon.png", func(w http.ResponseWriter, r *http.Request) {
 		if len(assets.IconPNG) == 0 {

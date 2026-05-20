@@ -837,8 +837,14 @@ globalThis.ChimeraLogs.App.mountWireHandlers = function (ctx) {
       ev.preventDefault();
       ev.stopPropagation();
 
+      function patchAdminUsersCardOrRefresh() {
+        if (typeof ctx.patchAdminUsersCard === "function" && ctx.patchAdminUsersCard()) return;
+        refreshSummarizedPanel();
+      }
+
       function reloadAdmin() {
         Promise.all([fetchAdminState(), fetchAdminTokens()]).then(function () {
+          if (typeof ctx.patchAdminCardsFromPoll === "function" && ctx.patchAdminCardsFromPoll()) return;
           refreshSummarizedPanel();
         });
       }
@@ -851,7 +857,7 @@ globalThis.ChimeraLogs.App.mountWireHandlers = function (ctx) {
           saving: false,
           msg: ""
         });
-        refreshSummarizedPanel();
+        patchAdminUsersCardOrRefresh();
         return;
       }
 
@@ -863,7 +869,7 @@ globalThis.ChimeraLogs.App.mountWireHandlers = function (ctx) {
           if (!ctx.adminUserDrafts[dc] || ctx.adminUserDrafts[dc].id !== dCancel) kept.push(ctx.adminUserDrafts[dc]);
         }
         ctx.adminUserDrafts = kept;
-        refreshSummarizedPanel();
+        patchAdminUsersCardOrRefresh();
         return;
       }
 
@@ -880,7 +886,7 @@ globalThis.ChimeraLogs.App.mountWireHandlers = function (ctx) {
         if (!draft) return;
         draft.saving = true;
         draft.msg = "";
-        refreshSummarizedPanel();
+        patchAdminUsersCardOrRefresh();
         var label = String(draft.name || draft.email || "token").trim();
         adminPostJSON("/api/ui/tokens", { label: label })
           .then(function (j) {
@@ -899,7 +905,7 @@ globalThis.ChimeraLogs.App.mountWireHandlers = function (ctx) {
           .catch(function (e) {
             draft.saving = false;
             draft.msg = e && e.message ? e.message : String(e);
-            refreshSummarizedPanel();
+            patchAdminUsersCardOrRefresh();
             adminSetMessage("err", draft.msg);
           });
         return;

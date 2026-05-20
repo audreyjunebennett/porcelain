@@ -13,6 +13,33 @@ Route: `/ui/logs` — shell HTML: `embedui/logs.html`.
 | `/ui/assets/logs/contracts.js` | `embedui/logs/contracts.js` | Generated from `internal/naming` (`make operator-contracts-generate`) |
 | `/ui/assets/logs/**` | `embedui/logs/**` | Pure derive, components, `app/`, `render/` |
 
+## Local development (filesystem assets)
+
+Production builds embed these files at compile time. For live UI work, point the gateway at the repo tree with **`CHIMERA_ADMINUI_ROOT`** (directory that contains `embedui/`, i.e. `chimera/chimera-gateway/internal/server/adminui/embed`). The variable is inherited by `chimera-supervisor` and `locus-desktop` children.
+
+```bash
+# repo root — bash (Make sets CHIMERA_ADMINUI_ROOT)
+make locus-desktop-dev-ui
+
+# or manual:
+export CHIMERA_ADMINUI_ROOT="$PWD/chimera/chimera-gateway/internal/server/adminui/embed"
+make locus-desktop-run
+```
+
+```powershell
+# repo root — PowerShell
+$env:CHIMERA_ADMINUI_ROOT = "$PWD\chimera\chimera-gateway\internal\server\adminui\embed"
+make locus-desktop-run
+```
+
+Disk mode is allowed only when the gateway HTTP listen address is **loopback** (`127.0.0.1`, `localhost`, `::1`). Remote binds ignore `CHIMERA_ADMINUI_ROOT` and keep embedded assets.
+
+Edit files under `embedui/`, then refresh `/ui/logs` (or the desktop webview). Assets use `Cache-Control: no-store`.
+
+**Still rebuild the gateway** when changing Go handlers, running `make operator-contracts-generate` after `internal/naming` edits, or regenerating `operator_copy.js`.
+
+See [`docs/plans/adminui-filesystem-dev-mode.md`](../../../../../../../../docs/plans/adminui-filesystem-dev-mode.md).
+
 ## Script load order
 
 See the comment block in `logs.html`. Do not reorder without checking dependencies:
@@ -63,7 +90,7 @@ Summarized-only in current builds (`viewMode === "summarized"`). Panel: `#panel-
 
 **Poll-path card patches** (`patchAdminCardsFromPoll` in `summarizedFeed.js`): the 12s admin poll (`syncAdminStatePolling`) replaces individual cards via `replaceCardById` instead of assigning `#panel-summarized` `innerHTML`. Patched ids: `admin-users`, `admin-provider-{groq,gemini,ollama}`, `admin-routing-rules`, `admin-fallback-chain`, `admin-router-model` (routing trio skipped while their Configure/YAML edit mode is active). Missing cards schedule `scheduleStoryRebuild()` (full rebuild). Gateway metrics/overview use the same helper from their own polls.
 
-**Live-log dirty cards** (Phase 3): `appendLine` in `transport/streaming.js` calls `markSummarizedDirtyFromEntry` + `scheduleSummarizedDirtyFlush` (one `requestAnimationFrame` batch per frame) instead of `scheduleStoryRebuild`. Routing is pure in `app/summarizedDirtyRouting.js` (`ChimeraLogs.Summarized.dirtyTargetsForEntry`). `flushSummarizedDirtyCards` patches conversation, service (`svc-*`), indexer workspace (`ix-*`), and admin-provider cards via `replaceCardById`; falls back to full `refreshSummarizedPanel` when many cards are dirty (≥10 or ≥30% of visible cards) or a patch misses. Historical backfill (`prependHistoricalEntries`) and cache trim still use full rebuild.
+**Live-log dirty cards** (Phase 3): `appendLine` in `transport/streaming.js` calls `markSummarizedDirtyFromEntry` + `scheduleSummarizedDirtyFlush` (one `requestAnimationFrame` batch per frame) instead of `scheduleStoryRebuild`. Routing is pure in `app/summarizedDirtyRouting.js` (`ChimeraLogs.Summarized.dirtyTargetsForEntry`). `flushSummarizedDirtyCards` patches conversation, service (`svc-*`), indexer workspace (`ix-*`), and admin-provider cards via `replaceCardById`; falls back to full `refreshSummarizedPanel` when many cards are dirty (≥10 or ≥30% of visible cards) or a patch misses. Historical backfill (`prependHistoricalEntries`) and cache trim still use full rebuild. **Initial tail load** (`applyPollPayloadBatched`) sets `suppressSummarizedDirty` so per-line patches do not run until all `RENDER_CHUNK` batches finish (avoids freezing on “Rendering 160/N…”). Then `beginSummarizedLiveSettle()` runs one deferred full rebuild and keeps per-line patches off for ~2s while SSE catches up. **Live SSE** dirty flushes are coalesced to at most once per 500ms; many dirty cards schedule a debounced full rebuild (800ms) instead of replacing the whole panel every frame. `historyTailReadyRef` blocks scroll backfill until the tail is ingested. **Scroll backfill** runs only when the user scrolls **up** near the top (not because `scrollY` is 0 on first paint).
 
 **View model** (Phase 4): `buildSummarizedAggregateState()` → `ChimeraLogs.Summarized.Model.buildSummarizedModel(deps, state)` → `ChimeraLogs.Summarized.Render.renderSummarizedHtml(model, renderers)`. Each card is `{ id, kind, section, sortKey, hash, summary, body, source }` (no HTML in the model). `renderSummarizedUnified()` is thin; `ctx.lastSummarizedModel` is kept for dirty-card patches. Per-card `hash` is a stable digest of `summary` + `body` fields (for Phase 5 diff).
 

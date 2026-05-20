@@ -9,6 +9,7 @@ CHIMERA_RUNTIME_DIR := chimera
 CHIMERA_RUNTIME_BIN_DIR := $(CHIMERA_RUNTIME_DIR)/bin
 CHIMERA_RUNTIME_DEPS_DIR := $(CHIMERA_RUNTIME_DIR)/.deps
 CHIMERA_CMD_GATEWAY := ./chimera/chimera-gateway
+CHIMERA_ADMINUI_EMBED_DIR := chimera/chimera-gateway/internal/server/adminui/embed
 CHIMERA_CMD_SUPERVISOR := ./chimera/chimera-supervisor
 CHIMERA_CMD_BROKER := ./chimera/chimera-broker
 CHIMERA_CMD_VECTORSTORE := ./chimera/chimera-vectorstore
@@ -97,7 +98,8 @@ endif
 	chimera-indexer-build chimera-indexer-run chimera-indexer-install chimera-indexer-test chimera-indexer-test-unit chimera-indexer-test-e2e \
 	locus-install locus-build locus-run locus-test locus-vet-if-enabled locus-test-if-enabled \
 	locus-test-unit-if-enabled locus-test-e2e-if-enabled \
-	locus-desktop-install locus-desktop-build locus-desktop-run locus-desktop-test locus-desktop-test-unit locus-desktop-test-e2e \
+	locus-desktop-install locus-desktop-build locus-desktop-run locus-desktop-dev-ui chimera-supervisor-dev-ui \
+	locus-desktop-test locus-desktop-test-unit locus-desktop-test-e2e \
 	tokencount-file catalog-free catalog-available config-provider-free-tier \
 	release-install release-build release-package \
 	fmt fmt-check vet vet-desktop test precommit operator-contracts-generate operator-contracts-check
@@ -112,7 +114,7 @@ help:
 up: configure install build locus-desktop-run
 
 install:
-	@echo '[STEP] Installing all products (Chimera + Locus desktop)'
+	@echo [STEP] Installing all products (Chimera + Locus desktop)
 	@$(MAKE) --no-print-directory chimera-install
 	@$(MAKE) --no-print-directory locus-desktop-install
 
@@ -146,21 +148,21 @@ vet-desktop:
 
 locus-vet-if-enabled:
 ifeq ($(SKIP_DESKTOP),1)
-	@echo '[SKIP] locus-vet (SKIP_DESKTOP=1)'
+	@echo [SKIP] locus-vet (SKIP_DESKTOP=1)
 else
 	@$(MAKE) --no-print-directory locus-vet
 endif
 
 locus-test-if-enabled:
 ifeq ($(SKIP_DESKTOP),1)
-	@echo '[SKIP] locus-test (SKIP_DESKTOP=1)'
+	@echo [SKIP] locus-test (SKIP_DESKTOP=1)
 else
 	@$(MAKE) --no-print-directory locus-test
 endif
 
 locus-test-unit-if-enabled:
 ifeq ($(SKIP_DESKTOP),1)
-	@echo '[SKIP] locus-test-unit (SKIP_DESKTOP=1)'
+	@echo [SKIP] locus-test-unit (SKIP_DESKTOP=1)
 else
 	@$(MAKE) --no-print-directory locus-test-unit
 endif
@@ -190,14 +192,14 @@ clean-all:
 	$(GITBASH) scripts/clean-all.sh $(CONFIRM)
 
 chimera-install:
-	@echo '[STEP] Installing Chimera products (broker, gateway, indexer, vectorstore)'
+	@echo [STEP] Installing Chimera products (broker, gateway, indexer, vectorstore)
 	@$(MAKE) --no-print-directory chimera-broker-install
 	@$(MAKE) --no-print-directory chimera-gateway-install
 	@$(MAKE) --no-print-directory chimera-indexer-install
 	@$(MAKE) --no-print-directory chimera-vectorstore-install
 
 chimera-build:
-	@echo '[STEP] Building Chimera products (broker, gateway, indexer, supervisor, vectorstore)'
+	@echo [STEP] Building Chimera products (broker, gateway, indexer, supervisor, vectorstore)
 	@$(MAKE) --no-print-directory chimera-broker-build
 	@$(MAKE) --no-print-directory chimera-gateway-build
 	@$(MAKE) --no-print-directory chimera-indexer-build
@@ -252,7 +254,7 @@ chimera-clean-run: chimera-gateway-clean-run chimera-supervisor-clean-run chimer
 
 # --- Chimera broker ---
 chimera-broker-install:
-	@echo '[STEP] Installing Chimera broker runtime dependency (BiFrost HTTP)'
+	@echo [STEP] Installing Chimera broker runtime dependency (BiFrost HTTP)
 	@$(GITBASH) -lc 'mkdir -p "$(CHIMERA_RUNTIME_DEPS_DIR)"'
 	@$(GITBASH) -lc 'CHIMERA_BROKER_BIN_DIR="$(CHIMERA_RUNTIME_BIN_DIR)" DEPS_DIR="$(CHIMERA_RUNTIME_DEPS_DIR)" BIFROST_SKIP_UI="$(BIFROST_SKIP_UI)" bash scripts/chimera-broker-install.sh'
 
@@ -412,7 +414,7 @@ chimera-supervisor-clean-run:
 
 # --- Chimera vectorstore ---
 chimera-vectorstore-install:
-	@echo '[STEP] Installing Chimera vectorstore runtime dependency (Qdrant)'
+	@echo [STEP] Installing Chimera vectorstore runtime dependency (Qdrant)
 	@$(GITBASH) -lc 'QDRANT_BIN_DIR="$(CHIMERA_RUNTIME_BIN_DIR)" DEPS_DIR="$(CHIMERA_RUNTIME_DEPS_DIR)" bash scripts/chimera-vectorstore-install.sh'
 
 chimera-vectorstore-build: chimera-vectorstore-install
@@ -513,20 +515,29 @@ locus-desktop-build:
 	@$(GITBASH) -lc 'cp -f "$(LOCUS_RUNTIME_BIN_DIR)/$(LOCUS_DESKTOP_BIN)" "$(LOCUS_DESKTOP_STAGE_OUT)"'
 
 locus-desktop-run:
-	@echo '[STEP] Running Locus desktop (with Chimera runtime dependencies)'
+	@echo [STEP] Running Locus desktop (with Chimera runtime dependencies)
 	@$(GITBASH) -lc '"$(LOCUS_DESKTOP_STAGE_OUT)" desktop \
 		-broker-bin "$(CHIMERA_BROKER_STAGE_OUT)" \
 		-vectorstore-bin "$(CHIMERA_VECTORSTORE_STAGE_OUT)" \
 		$(ARGS)'
 
+# Serves operator UI assets from the repo embed tree (CHIMERA_ADMINUI_ROOT); loopback listen only.
+locus-desktop-dev-ui:
+	@echo [STEP] Running Locus desktop with filesystem operator UI assets
+	@$(GITBASH) -lc 'export CHIMERA_ADMINUI_ROOT="$$(pwd)/$(CHIMERA_ADMINUI_EMBED_DIR)" && $(MAKE) --no-print-directory locus-desktop-run'
+
+chimera-supervisor-dev-ui: chimera-configure
+	@echo [STEP] Running chimera-supervisor with filesystem operator UI assets
+	@$(GITBASH) -lc 'export CHIMERA_ADMINUI_ROOT="$$(pwd)/$(CHIMERA_ADMINUI_EMBED_DIR)" && $(MAKE) --no-print-directory chimera-supervisor-run'
+
 locus-desktop-test: locus-desktop-test-unit locus-desktop-test-e2e
 
 locus-desktop-test-unit:
-	@echo '[STEP] Running Locus desktop unit tests (desktop/CGO)'
+	@echo [STEP] Running Locus desktop unit tests (desktop/CGO)
 	@go test $(LOCUS_CMD_DESKTOP)/... $(RACE_GATEWAY) -run Test -skip E2E -count=1
 
 locus-desktop-test-e2e:
-	@echo '[STEP] Running Locus desktop end-to-end tests (desktop/CGO)'
+	@echo [STEP] Running Locus desktop end-to-end tests (desktop/CGO)
 	@go test $(LOCUS_CMD_DESKTOP)/internal/... $(RACE_GATEWAY) -run E2E -count=1
 
 # --- Tools ---
@@ -565,11 +576,11 @@ catalog-calculate: catalog-available
 # --- Release (install → build → package) ---
 
 release-install:
-	@echo '[STEP] Installing release tooling (GoReleaser)'
+	@echo [STEP] Installing release tooling (GoReleaser)
 	@$(GITBASH) scripts/release-install.sh
 
 release-build: release-install
-	@echo '[STEP] Building release archives (GoReleaser snapshot)'
+	@echo [STEP] Building release archives (GoReleaser snapshot)
 	@$(GITBASH) scripts/release-build.sh
 
 release-package: chimera-build locus-desktop-build
@@ -579,16 +590,16 @@ release-package: chimera-build locus-desktop-build
 # --- Operator UI contracts (Phase 3: internal/naming → embedui/logs/contracts.js) ---
 
 contracts-generate:
-	@echo '[STEP] Generating data contracts from internal/naming'
+	@echo [STEP] Generating data contracts from internal/naming
 	@go generate ./internal/naming/...
-	@echo '[STEP] Regenerating operator copy (messages.yaml bootstrap + operator_copy.js)'
+	@echo [STEP] Regenerating operator copy (messages.yaml bootstrap + operator_copy.js)
 	@go run ./internal/operatorcopy/cmd/bootstrap
 	@go generate ./internal/operatorcopy/...
 
 contracts-check:
-	@echo '[STEP] Checking data contracts are up to date'
+	@echo [STEP] Checking data contracts are up to date
 	@go test ./internal/naming/... -run TestGeneratedContractsJSMatchesFile -count=1
-	@echo '[STEP] Checking operator_copy.js and log_messages.go are up to date'
+	@echo [STEP] Checking operator_copy.js and log_messages.go are up to date
 	@go test ./internal/operatorcopy/... -run TestGeneratedOperatorCopyJSMatchesFile -count=1
 	@go test ./internal/naming/... -run 'TestGeneratedLogMessagesGoMatchesFile|TestLogMessageConstsHaveRegistryEntry' -count=1
 	@$(GITBASH) scripts/operatorcopy-msg-audit.sh

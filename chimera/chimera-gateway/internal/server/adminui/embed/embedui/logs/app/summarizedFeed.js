@@ -30,6 +30,9 @@ globalThis.ChimeraLogs.App.mountSummarizedFeed = function (ctx) {
   var sumEvlogVisibleEntriesForService = ctx.sumEvlogVisibleEntriesForService;
   var sumEvlogCountWarnFailFromEntries = ctx.sumEvlogCountWarnFailFromEntries;
   var scopedEvlogTitle = ctx.scopedEvlogTitle;
+  var serviceStripHtml = ctx.serviceStripHtml;
+  var contextGrowthStripHtml = ctx.contextGrowthStripHtml;
+  var SHOW_CONV_EXPANDED_CONTEXT_STRIP = !!ctx.SHOW_CONV_EXPANDED_CONTEXT_STRIP;
   var metricsPollTimer = null;
   var METRICS_POLL_MS = 12000;
   var gatewayOverviewPollTimer = null;
@@ -46,6 +49,12 @@ globalThis.ChimeraLogs.App.mountSummarizedFeed = function (ctx) {
   var chimeraBrokerProviderPollTimer = null;
   var CHIMERA_BROKER_PROVIDER_POLL_MS = 30000;
   var CHIMERA_BROKER_PROVIDER_STALE_MS = 90000;
+  /** Min gap between live-log dirty flushes (SSE can otherwise rebuild DOM every frame). */
+  var SUMMARIZED_DIRTY_FLUSH_MS = 750;
+  /** Debounce full-panel rebuild when many cards are dirty at once. */
+  var SUMMARIZED_DIRTY_FULL_REBUILD_DEBOUNCE_MS = 800;
+  /** After initial tail ingest, hold per-line patches until the first full rebuild finishes. */
+  var SUMMARIZED_LIVE_SETTLE_MS = 2000;
   ctx.uiUnauthorized = false;
 
   function stopSummarizedPolling() {
@@ -91,6 +100,14 @@ globalThis.ChimeraLogs.App.mountSummarizedFeed = function (ctx) {
         window.location.replace("/ui/login?next=" + encodeURIComponent(next));
       } catch (_eLogin) {}
     }
+  }
+
+  function summarizedAdminEditingActive() {
+    if (ctx.adminUserDrafts && ctx.adminUserDrafts.length) return true;
+    if (ctx.adminRoutingEditing) return true;
+    if (ctx.adminFallbackEditing) return true;
+    if (ctx.adminRouterEditing) return true;
+    return false;
   }
 
   function summarizedPanelInteractionBlocksRebuild() {
@@ -436,11 +453,61 @@ globalThis.ChimeraLogs.App.mountSummarizedFeed = function (ctx) {
     }
   }
 
+  function cancelCoalescedFullRebuild() {
+    if (ctx.coalescedFullRebuildTimer) {
+      clearTimeout(ctx.coalescedFullRebuildTimer);
+      ctx.coalescedFullRebuildTimer = null;
+    }
+  }
+
+  function scheduleCoalescedFullRebuild(reason) {
+    if (summarizedAdminEditingActive()) {
+      scheduleDeferredSummarizedRefresh();
+      return;
+    }
+    if (ctx.coalescedFullRebuildTimer) return;
+    ctx.coalescedFullRebuildTimer = setTimeout(function () {
+      ctx.coalescedFullRebuildTimer = null;
+      clearSummarizedDirtySets();
+      ctx.suppressSummarizedDirty = true;
+      try {
+        forceSummarizedFullRebuild(reason || "dirty-storm-coalesced");
+      } finally {
+        ctx.suppressSummarizedDirty = false;
+      }
+      scheduleFocusTargets();
+    }, SUMMARIZED_DIRTY_FULL_REBUILD_DEBOUNCE_MS);
+  }
+
+  function beginSummarizedLiveSettle() {
+    ctx.suppressSummarizedDirty = true;
+    if (ctx.summarizedLiveSettleTimer) clearTimeout(ctx.summarizedLiveSettleTimer);
+    cancelCoalescedFullRebuild();
+    scheduleStoryRebuild();
+    ctx.summarizedLiveSettleTimer = setTimeout(function () {
+      ctx.summarizedLiveSettleTimer = null;
+      ctx.suppressSummarizedDirty = false;
+      scheduleSummarizedDirtyFlush();
+    }, SUMMARIZED_LIVE_SETTLE_MS);
+  }
+
   function scheduleStoryRebuild() {
+    if (summarizedAdminEditingActive()) {
+      scheduleDeferredSummarizedRefresh();
+      return;
+    }
+    cancelCoalescedFullRebuild();
     if (ctx.storyRebuildTimer) clearTimeout(ctx.storyRebuildTimer);
-    ctx.storyRebuildTimer = null;
-    forceSummarizedFullRebuild("structural");
-    scheduleFocusTargets();
+    ctx.storyRebuildTimer = setTimeout(function () {
+      ctx.storyRebuildTimer = null;
+      ctx.suppressSummarizedDirty = true;
+      try {
+        forceSummarizedFullRebuild("structural");
+      } finally {
+        if (!ctx.summarizedLiveSettleTimer) ctx.suppressSummarizedDirty = false;
+      }
+      scheduleFocusTargets();
+    }, 0);
   }
 
   /** Phase 3: coalesced per-card patches for live SSE lines (see summarizedDirtyRouting.js). */
@@ -722,14 +789,11 @@ globalThis.ChimeraLogs.App.mountSummarizedFeed = function (ctx) {
       scheduleDeferredSummarizedRefresh();
       return;
     }
-    var dirtyCount = summarizedDirtyCardCount();
-    if (!dirtyCount) return;
-    if (shouldSummarizedDirtyFullRebuild(dirtyCount)) {
-      clearSummarizedDirtySets();
-      forceSummarizedFullRebuild("dirty-storm");
-      scheduleFocusTargets();
+    if (summarizedAdminEditingActive()) {
       return;
     }
+    var dirtyCount = summarizedDirtyCardCount();
+    if (!dirtyCount) return;
     var agg = buildSummarizedAggregateState();
     var nextModel = buildSummarizedModelForAgg(agg);
     var cardIds = [];
@@ -744,6 +808,10 @@ globalThis.ChimeraLogs.App.mountSummarizedFeed = function (ctx) {
     var ixDom = resolveIndexerDomIdsFromDirtyBuckets(ixBuckets, agg);
     for (var xi = 0; xi < ixDom.length; xi++) {
       if (cardIds.indexOf(ixDom[xi]) < 0) cardIds.push(ixDom[xi]);
+    }
+    if (shouldSummarizedDirtyFullRebuild(dirtyCount)) {
+      scheduleCoalescedFullRebuild("dirty-storm");
+      return;
     }
     clearSummarizedDirtySets();
 
@@ -780,8 +848,9 @@ globalThis.ChimeraLogs.App.mountSummarizedFeed = function (ctx) {
     for (pi = 0; pi < cardIds.length; pi++) {
       if (!patchSummarizedCard(cardIds[pi], agg, nextModel)) needRebuild = true;
     }
-    if (needRebuild) scheduleStoryRebuild();
-    else {
+    if (needRebuild) {
+      scheduleStoryRebuild();
+    } else {
       ctx.lastSummarizedModel = nextModel;
       ctx.lastSummarizedAggregate = agg;
       scheduleFocusTargets();
@@ -789,12 +858,13 @@ globalThis.ChimeraLogs.App.mountSummarizedFeed = function (ctx) {
   }
 
   function scheduleSummarizedDirtyFlush() {
-    if (ctx.summarizedDirtyRafPending) return;
-    ctx.summarizedDirtyRafPending = true;
-    window.requestAnimationFrame(function () {
-      ctx.summarizedDirtyRafPending = false;
+    if (ctx.suppressSummarizedDirty || ctx.storyRebuildTimer || ctx.coalescedFullRebuildTimer) return;
+    if (ctx.summarizedDirtyFlushTimer) return;
+    ctx.summarizedDirtyFlushTimer = setTimeout(function () {
+      ctx.summarizedDirtyFlushTimer = null;
+      if (ctx.suppressSummarizedDirty || ctx.storyRebuildTimer || ctx.coalescedFullRebuildTimer) return;
       flushSummarizedDirtyCards();
-    });
+    }, SUMMARIZED_DIRTY_FLUSH_MS);
   }
 
   function fetchGatewayMetrics() {
@@ -3279,7 +3349,7 @@ globalThis.ChimeraLogs.App.mountSummarizedFeed = function (ctx) {
     var scrollTbodyId = "conv-log-" + convScope;
     var tbodyInner = sumEvlogBuildTbodyFromConvEvents(evs, turnGroups, convScope);
     var mc = sumEvlogCountWarnFailFromEntries(evs);
-    var servicesStrip = serviceStripHtml(evs);
+    var servicesStrip = typeof serviceStripHtml === "function" ? serviceStripHtml(evs) : "";
     var full =
       '<div class="sum-full-log sum-full-log--evlog">' +
       sumEvlogPanelHtml({
@@ -3294,7 +3364,10 @@ globalThis.ChimeraLogs.App.mountSummarizedFeed = function (ctx) {
         titleRightHtml: servicesStrip || ""
       }) +
       "</div>";
-    var contextStrip = SHOW_CONV_EXPANDED_CONTEXT_STRIP ? contextGrowthStripHtml(evs) : "";
+    var contextStrip =
+      SHOW_CONV_EXPANDED_CONTEXT_STRIP && typeof contextGrowthStripHtml === "function"
+        ? contextGrowthStripHtml(evs)
+        : "";
     return (
       '<div class="sum-body">' +
       '<div class="sum-section-label">Lifecycle</div>' +
@@ -3915,7 +3988,9 @@ globalThis.ChimeraLogs.App.mountSummarizedFeed = function (ctx) {
         ctx.lastIndexerOperatorConfigPath = d.path != null ? String(d.path).trim() : "";
         ctx.indexerOperatorConfigHydratedOnce = true;
         syncIndexerServiceSummaryDom();
-        if (nextFp !== prevFp && getViewMode() === "summarized") scheduleStoryRebuild();
+        if (nextFp !== prevFp && getViewMode() === "summarized") {
+          scheduleStoryRebuild();
+        }
       })
       .catch(function () {
         ctx.indexerOperatorConfigUnavailable = true;
@@ -6257,8 +6332,10 @@ globalThis.ChimeraLogs.App.mountSummarizedFeed = function (ctx) {
   ctx.summarizedEvlogInteractionBlocksRebuild = summarizedPanelInteractionBlocksRebuild;
   ctx.scheduleStoryRebuild = scheduleStoryRebuild;
   ctx.markSummarizedDirtyFromEntry = markSummarizedDirtyFromEntry;
+  ctx.clearSummarizedDirtySets = clearSummarizedDirtySets;
   ctx.updateSummarizedCorrelationFromEntry = updateSummarizedCorrelationFromEntry;
   ctx.scheduleSummarizedDirtyFlush = scheduleSummarizedDirtyFlush;
+  ctx.beginSummarizedLiveSettle = beginSummarizedLiveSettle;
   ctx.flushSummarizedDirtyCards = flushSummarizedDirtyCards;
   ctx.buildSummarizedAggregateState = buildSummarizedAggregateState;
   ctx.buildSummarizedModelForAgg = buildSummarizedModelForAgg;

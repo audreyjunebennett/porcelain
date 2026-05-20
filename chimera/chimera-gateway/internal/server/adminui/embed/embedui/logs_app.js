@@ -908,6 +908,9 @@ globalThis.ChimeraLogs.Main = function () {
     formatLogRelativeAgo: formatLogRelativeAgo,
     toIsoDatetimeAttr: toIsoDatetimeAttr,
     operatorFriendlyGatewayMsg: operatorFriendlyGatewayMsg,
+    serviceStripHtml: serviceStripHtml,
+    contextGrowthStripHtml: contextGrowthStripHtml,
+    SHOW_CONV_EXPANDED_CONTEXT_STRIP: SHOW_CONV_EXPANDED_CONTEXT_STRIP,
     buildHeadlineHtml: buildHeadlineHtml,
     buildDetailsColumn: buildDetailsColumn,
     stickPx: stickPx,
@@ -1005,6 +1008,8 @@ globalThis.ChimeraLogs.Main = function () {
     minLoadedSeqRef: { value: minLoadedSeq },
     bufferMinSeqFromServerRef: { value: bufferMinSeqFromServer },
     olderFetchBusyRef: { value: olderFetchBusy },
+    /** False until initial /api/ui/logs tail ingest finishes (blocks scroll backfill). */
+    historyTailReadyRef: { value: false },
     CLIENT_CACHE_MAX: CLIENT_CACHE_MAX,
     INITIAL_TAIL_LIMIT: INITIAL_TAIL_LIMIT,
     BACKFILL_CHUNK: BACKFILL_CHUNK,

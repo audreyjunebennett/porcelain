@@ -13,6 +13,7 @@ import (
 
 // NewBootstrapMux serves only the first-run setup surface (loopback-only in production).
 func NewBootstrapMux(rt *Runtime, log *slog.Logger, overlay *StatusOverlay) http.Handler {
+	configureAdminUIListenForEmbed(rt, overlay)
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {

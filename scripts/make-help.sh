@@ -58,6 +58,10 @@ echo "___  __   __        __  ";
 echo " |  /  \\ /  \\ |    /__\` ";
 echo " |  \\__/ \\__/ |___ .__/ ";
 echo "                        ";
+echo
+echo "  make locus-desktop-dev-ui             desktop + operator UI assets from repo (CHIMERA_ADMINUI_ROOT)"
+echo "  make chimera-supervisor-dev-ui        supervisor stack + operator UI assets from repo"
+echo
 echo "  make bash                             interactive bash (-il); Windows: Git  bash"
 echo "  make fmt-check|fmt                    check code format changes and fixes it"
 echo "  make vet                              validate code correctness and behavior"

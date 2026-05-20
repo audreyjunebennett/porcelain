@@ -82,6 +82,9 @@ const (
 	EnvGatewayURLTarget           = "CHIMERA_GATEWAY_URL"
 	EnvGatewayTokenTarget         = "CHIMERA_GATEWAY_TOKEN"
 	EnvSupervisorControlURLTarget = "CHIMERA_SUPERVISOR_CONTROL_URL"
+	// EnvAdminUIRoot, when set, points at the gateway embed package directory (contains embedui/).
+	// Used for local development only; production leaves this unset.
+	EnvAdminUIRoot = "CHIMERA_ADMINUI_ROOT"
 
 	// Header contracts.
 	HeaderProjectTarget                 = "X-Chimera-Project"

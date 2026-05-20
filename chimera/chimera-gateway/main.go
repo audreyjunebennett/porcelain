@@ -21,6 +21,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/proc"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server"
+	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/adminui/embed"
 	"github.com/lynn/porcelain/chimera/internal/brokerclient"
 	"github.com/lynn/porcelain/chimera/internal/config"
 	"github.com/lynn/porcelain/chimera/internal/gatewayline"
@@ -370,6 +371,7 @@ func runGatewayBackend(args []string) error {
 	rootCtx, stopRoot := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stopRoot()
 
+	embed.SetGatewayListenAddr(addr)
 	if server.BootstrapMode(rt) {
 		h := server.NewBootstrapMux(rt, log, overlay)
 		addrs := server.BootstrapTCPAddrs(res, listen)
