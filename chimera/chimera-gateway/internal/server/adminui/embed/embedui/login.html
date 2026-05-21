@@ -4,21 +4,18 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Chimera — Admin login</title>
-  <style>
-    body { font-family: system-ui, sans-serif; max-width: 28rem; margin: 3rem auto; padding: 0 1rem; }
-    label { display: block; margin-bottom: 0.35rem; font-weight: 600; }
-    input { width: 100%; padding: 0.5rem; box-sizing: border-box; margin-bottom: 1rem; }
-    button { padding: 0.5rem 1rem; cursor: pointer; }
-    .err { color: #a40000; margin-top: 0.5rem; }
-  </style>
+  <link rel="stylesheet" href="/ui/assets/theme-tokens.css" />
+  <link rel="stylesheet" href="/ui/assets/ui.css" />
 </head>
-<body>
+<body class="embed-page embed-page--narrow embed-page--login">
   <h1>Chimera admin</h1>
   <p>Sign in with a gateway token. On first run (no <code>api-keys.yaml</code> rows yet), start Chimera from your bundle — it listens on <strong>localhost</strong> and opens <strong>setup</strong> to create a token; then restart for the full stack.</p>
   <form id="f">
-    <label for="token">Gateway token</label>
-    <input id="token" name="token" type="password" autocomplete="current-password" required/>
-    <button type="submit">Sign in</button>
+    <label class="embed-field" for="token">
+      <span class="embed-field-label">Gateway token</span>
+      <input class="embed-input" id="token" name="token" type="password" autocomplete="current-password" required/>
+    </label>
+    <button type="submit" class="btn btn--primary">Sign in</button>
     <p id="msg" class="err" hidden></p>
   </form>
   <script>

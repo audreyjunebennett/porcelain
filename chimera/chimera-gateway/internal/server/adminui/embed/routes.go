@@ -36,13 +36,15 @@ func Register(mux *http.ServeMux, h *handler.Handler) {
 		http.Redirect(w, r, "/ui/logs", http.StatusFound)
 	}))
 
+	// Shared primitives (login/setup) — no session required; static CSS only.
+	mux.HandleFunc("GET /ui/assets/ui.css", ServeAsset("embedui/ui.css", "text/css; charset=utf-8"))
+	mux.HandleFunc("GET /ui/assets/theme-tokens.css", ServeAsset("embedui/theme-tokens.css", "text/css; charset=utf-8"))
+
 	if h.Opts.LogStore == nil {
 		return
 	}
 	mux.HandleFunc("GET /ui/assets/reload.svg", h.RequireAuthPage(ServeAsset("embedui/reload.svg", "image/svg+xml; charset=utf-8")))
 	mux.HandleFunc("GET /ui/assets/logs.css", h.RequireAuthPage(ServeAsset("embedui/logs.css", "text/css; charset=utf-8")))
-	mux.HandleFunc("GET /ui/assets/ui.css", h.RequireAuthPage(ServeAsset("embedui/ui.css", "text/css; charset=utf-8")))
-	mux.HandleFunc("GET /ui/assets/theme-tokens.css", h.RequireAuthPage(ServeAsset("embedui/theme-tokens.css", "text/css; charset=utf-8")))
 	mux.HandleFunc("GET /ui/assets/styles/", h.RequireAuthPage(ServePathPrefix("embedui/styles/", "/ui/assets/styles/", "text/css; charset=utf-8")))
 	mux.HandleFunc("GET /ui/assets/ui/", h.RequireAuthPage(ServePathPrefix("embedui/ui/", "/ui/assets/ui/", "application/javascript; charset=utf-8")))
 	mux.HandleFunc("GET /ui/assets/logs.js", h.RequireAuthPage(ServeAsset("embedui/logs_entry.js", "application/javascript; charset=utf-8")))

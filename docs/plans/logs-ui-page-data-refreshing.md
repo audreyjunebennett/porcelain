@@ -4,7 +4,7 @@
 |-------|-------|
 | **Doc kind** | `refactor-plan` |
 | **Owners / areas** | Gateway embed UI, operator logs (`/ui/logs`) |
-| **Status** | `draft` |
+| **Status** | `done` |
 | **Targets** | Reliable card interaction, stable admin forms, low-flicker live feed |
 | **Last updated** | 2026-05-19 |
 | **Supersedes / superseded by** | Follows [`logs-ui-maintainability.md`](logs-ui-maintainability.md); complements [`unified-logs-operator-shell.md`](unified-logs-operator-shell.md) |

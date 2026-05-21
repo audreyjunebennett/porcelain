@@ -4,6 +4,8 @@ Route: `/ui/logs` — shell HTML: `embedui/logs.html`.
 
 **Operator entry (canonical):** use `/ui/logs` in the browser or `/ui/desktop` in the desktop shell (settings opens embedded logs). Legacy `/ui/panel` and `/ui/metrics` redirect here with `?focus=admin` or `?focus=metrics`.
 
+**Standalone pages** (bootstrap / pre-session): `embedui/setup.html` and `embedui/login.html` load `theme-tokens.css` + `ui.css` (public routes, no session). There is no separate metrics or admin HTML page anymore.
+
 ## URL → disk map
 
 | Served URL | Embed path | Role |

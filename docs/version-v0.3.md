@@ -18,11 +18,24 @@ Make the gateway easier to set up, friendlier to share between operators, and cl
 
 | Theme                                                                                      | Outcome                                                                                                                                  | Status        |
 | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
-| [Product naming](#product-naming)                                                          | Layered names in docs, UI, and startup logs with hard-cut naming contracts ([`plans/v0-3-naming-migration.md`](plans/v0-3-naming-migration.md)) | `done`        |
+| [Product naming](#product-naming)                                                          | Layered names in docs, UI, and startup logs with naming contracts ([`plans/v0-3-naming-migration.md`](plans/v0-3-naming-migration.md))   | `done`        |
 | [Credential file naming](#credential-file-naming)                                          | `api-keys.yaml` / `api_keys` / `secret`; reserve "token" for tokenizer counts                                                            | `done`        |
 | [Operator UI filesystem dev mode](#operator-ui-filesystem-dev-mode)                        | Serve `embedui/` from disk via `CHIMERA_ADMINUI_ROOT` for live UI edits without rebuilding the gateway                                   | `done`        |
+| [plans/chimera-gateway-package-boundaries.md](plans/chimera-gateway-package-boundaries.md) | Admin UI / operator API package split; shared DTOs                                                                                       | `done`        |
+| [plans/chimera-gateway-refactor.md](plans/chimera-gateway-refactor.md)                     | Gateway naming clarity; logs UI modularization train                                                                                     | `done`        |
+| [plans/adminui-filesystem-dev-mode.md](plans/adminui-filesystem-dev-mode.md)               | Optional `CHIMERA_ADMINUI_ROOT` disk serving for embed UI dev                                                                            | `done`        |
+| [plans/embedui-component-gallery.md](plans/embedui-component-gallery.md)                   | Static component gallery paths and upkeep                                                                                                | `done`        |
+| [plans/embedui-component-system.md](plans/embedui-component-system.md)                     | Reusable embed UI primitives and module split                                                                                            | `done`        |
+| [plans/embedui-event-log-panel.md](plans/embedui-event-log-panel.md)                       | Per-card event log layout and interaction                                                                                                | `done`        |
+| [plans/embedui-logs-workspaces-merge.md](plans/embedui-logs-workspaces-merge.md)           | Unify logs and workspace indexers in embed UI                                                                                            | `done`        |
+| [plans/embedui-theme-styleguide.md](plans/embedui-theme-styleguide.md)                     | Theme tokens and static styleguide                                                                                                       | `done`        |
+| [plans/env-precedence-contract.md](plans/env-precedence-contract.md)                       | Unified env/config precedence across binaries                                                                                            | `draft`       |
+| [plans/locus-desktop-supervisor-contract.md](plans/locus-desktop-supervisor-contract.md)   | Desktop ↔ supervisor process and readiness contract                                                                                      | `done`        |
+| [plans/vectorstore-broker-wrapper-hard-cut.md](plans/vectorstore-broker-wrapper-hard-cut.md) | **chimera-vectorstore** / **chimera-broker** wrapper binaries and supervisor cutover                                                   | `done`        |
+| [plans/v0-3-naming-migration.md](plans/v0-3-naming-migration.md)                             | Product naming hard-cut execution                                                                                                      | `done`        |
+| [plans/logs-ui-page-data-refreshing.md](plans/logs-ui-page-data-refreshing.md)               | Summarized logs feed: interaction-safe rebuilds, card patches, view model                                                              | `done`        |
 | [Internal embedding provider (exploration)](#internal-embedding-provider-exploration)      | Optional in-repo or first-install embedding runtime to reduce reliance on Ollama for `/embeddings`                                       | `exploration` |
-| [Logs UI page data refreshing](#logs-ui-page-data-refreshing)                              | Interaction-safe summarized feed; per-card patches and view model (phased)                                                               | `done` |
+| [Logs UI page data refreshing](#logs-ui-page-data-refreshing)                              | Interaction-safe summarized feed; per-card patches and view model (phased)                                                               | `done`        |
 | [Operator-managed virtual models](#operator-managed-virtual-models)                        | Create virtual models from `/ui/logs`; per-model fallback, routing rules, and tool-router; operator SQLite + scoped routing logs         | `todo`        |
 | [Workspace embedding scope (project + flavor)](#workspace-embedding-scope-project--flavor) | Ingestion keys `(user, project, flavor)`; project-only = base corpus; flavored queries union base + flavor; multi-workspace request pool | `todo`        |
 | [First-run token handoff](#first-run-token-handoff)                                        | Show, copy, and optionally save the gateway token; restart-friendly                                                                      | `todo`        |
@@ -717,21 +730,7 @@ When this plan is implemented, update `[porcelain.plan.md](porcelain.plan.md)` *
 
 | Document | Role | Status |
 | -------- | ---- | ------ |
-| `[plans/chimera-gateway-package-boundaries.md](plans/chimera-gateway-package-boundaries.md)` | Admin UI / operator API package split; shared DTOs | `draft` |
-| `[plans/chimera-gateway-refactor.md](plans/chimera-gateway-refactor.md)` | Gateway naming clarity; logs UI modularization train | `draft` |
-| `[plans/adminui-filesystem-dev-mode.md](plans/adminui-filesystem-dev-mode.md)` | Optional `CHIMERA_ADMINUI_ROOT` disk serving for embed UI dev | `done` |
-| `[plans/embedui-component-gallery.md](plans/embedui-component-gallery.md)` | Static component gallery paths and upkeep | `done` |
-| `[plans/embedui-component-system.md](plans/embedui-component-system.md)` | Reusable embed UI primitives and module split | `draft` |
-| `[plans/embedui-event-log-panel.md](plans/embedui-event-log-panel.md)` | Per-card event log layout and interaction | `done` |
-| `[plans/embedui-logs-workspaces-merge.md](plans/embedui-logs-workspaces-merge.md)` | Unify logs and workspace indexers in embed UI | `draft` |
-| `[plans/embedui-theme-styleguide.md](plans/embedui-theme-styleguide.md)` | Theme tokens and static styleguide | `draft` |
-| `[plans/env-precedence-contract.md](plans/env-precedence-contract.md)` | Unified env/config precedence across binaries | `draft` |
-| `[plans/locus-desktop-supervisor-contract.md](plans/locus-desktop-supervisor-contract.md)` | Desktop ↔ supervisor process and readiness contract | `active` |
-| `[plans/vectorstore-broker-wrapper-hard-cut.md](plans/vectorstore-broker-wrapper-hard-cut.md)` | **chimera-vectorstore** / **chimera-broker** wrapper binaries and supervisor cutover | `active` |
 | `[plans/indexer.md](plans/indexer.md)` | Indexer milestones that may cross-link with this release | — |
-| `[plans/v0-3-naming-migration.md](plans/v0-3-naming-migration.md)` | Product naming hard-cut execution | `done` |
-| `[plans/virtual-models-operator.md](plans/virtual-models-operator.md)` | Operator-managed virtual models (execution plan) | `todo` |
-| `[plans/logs-ui-page-data-refreshing.md](plans/logs-ui-page-data-refreshing.md)` | Summarized logs feed: interaction-safe rebuilds, card patches, view model | `active` |
 | `[plans/_template.md](plans/_template.md)` | Phase-level plan template | — |
 
 ---

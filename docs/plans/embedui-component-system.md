@@ -19,8 +19,8 @@ Operators see cards, chips, tables, and forms across `/ui/logs`, setup, metrics,
 | [Phase 2 — UI component modules](#phase-2--ui-component-modules) | `embedui/ui/components/*` for Badge, Pill, Chip, Card, Button, tables, timeline | `done` |
 | [Phase 3 — Card render extraction](#phase-3--card-render-extraction) | `summarizedFeed.js` orchestrates only; card HTML lives under `render/cards/` | `todo` |
 | [Phase 4 — Handler and app shell split](#phase-4--handler-and-app-shell-split) | `wireHandlers.js` and `logs_app.js` shrink to mount + transport | `done` |
-| [Phase 5 — Unify standalone operator pages](#phase-5--unify-standalone-operator-pages) | `setup.html`, `metrics.html`, `panel.html` use shared tokens + `ui.css` | `todo` |
-| [Phase 6 — Optional bundle step](#phase-6--optional-bundle-step) | CI/Makefile can emit one embed bundle; dev still loads modules individually | `todo` |
+| [Phase 5 — Unify standalone operator pages](#phase-5--unify-standalone-operator-pages) | `setup.html`, `metrics.html`, `panel.html` use shared tokens + `ui.css` | `done` |
+| [Phase 6 — Optional bundle step](#phase-6--optional-bundle-step) | CI/Makefile can emit one embed bundle; dev still loads modules individually | `deferred` |
 
 ---
 
@@ -159,7 +159,9 @@ Details: [`docs/component-gallery/README.md`](../component-gallery/README.md#cha
 - Setup and metrics pages visually align with logs chrome (buttons, tables, errors).
 - If panel is deprecated: link from desktop shell points to `/ui/logs?focus=admin` (or agreed replacement).
 
-**Status:** `todo`
+**Status:** `done`
+
+**Panel / metrics deprecation (2026-05):** Standalone `panel.html` and `metrics.html` were removed. `/ui/panel` → `/ui/logs?focus=admin`; `/ui/metrics` → `/ui/logs?focus=metrics` (see [`embed/routes.go`](../../chimera/chimera-gateway/internal/server/adminui/embed/routes.go)). Desktop shell settings opens `/ui/logs?embed=1`. No Shoelace/Pico — `ui.css` primitives are sufficient for setup and login.
 
 ---
 
@@ -178,7 +180,7 @@ Details: [`docs/component-gallery/README.md`](../component-gallery/README.md#cha
 - Gateway can serve either module list or bundle behind a build tag or env (implementation choice documented).
 - Bundle size and load order equivalent to unbundled behavior.
 
-**Status:** `todo`
+**Status:** `deferred`
 
 ---
 
