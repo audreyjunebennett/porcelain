@@ -48,6 +48,18 @@ func TestNormalizePayloadJobIngested(t *testing.T) {
 	}
 }
 
+func TestNormalizePayloadTruncatesTimestamp(t *testing.T) {
+	raw := `{"time":"2026-05-22T11:38:58.1267507-05:00","level":"INFO","msg":"indexer.run.start","service":"indexer","roots":1}`
+	b := NormalizePayload(raw)
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatal(err)
+	}
+	if m["timestamp"] != "2026-05-22T16:38:58Z" {
+		t.Fatalf("timestamp=%v", m["timestamp"])
+	}
+}
+
 func TestNormalizePayloadQueueSnapshot(t *testing.T) {
 	raw := `{"level":"INFO","msg":"indexer.queue.snapshot","queue_depth":3,"queue_cap":64,"workers":4,"ingest_completed":12,"phase":"idle"}`
 	b := NormalizePayload(raw)

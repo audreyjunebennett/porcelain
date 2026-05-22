@@ -936,7 +936,7 @@ func TestLogsDerive_chimeraBrokerProviderHealthList_pickLatest(t *testing.T) {
 	want := map[string]string{
 		"anthropic": "key_missing",
 		"gemini":    "up",
-		"groq":      "up",
+		"groq":      "unknown",
 		"openai":    "down",
 	}
 	gotIDs := []string{}
@@ -953,6 +953,116 @@ func TestLogsDerive_chimeraBrokerProviderHealthList_pickLatest(t *testing.T) {
 		if gotIDs[i-1] >= gotIDs[i] {
 			t.Fatalf("ids not sorted: %v", gotIDs)
 		}
+	}
+}
+
+func TestLogsDerive_chimeraBrokerProviderHealthList_catalogLiveness(t *testing.T) {
+	vm := goja.New()
+	evalJS(t, vm, settingsUIPath(t, "testing", "loader.js"))
+	evalJS(t, vm, settingsUIPath(t, "derive", "chimeraBrokerMetrics.js"))
+
+	derive := vm.Get("ChimeraSettings").ToObject(vm).Get("Derive").ToObject(vm)
+	fn, ok := goja.AssertFunction(derive.Get("chimeraBrokerProviderHealthList"))
+	if !ok {
+		t.Fatal("missing chimeraBrokerProviderHealthList")
+	}
+
+	freshAt := time.Now().UTC().Format(time.RFC3339)
+	arr := []map[string]any{
+		{"parsed": map[string]any{"rawFlat": map[string]any{"msg": "chimera-broker.provider.loaded", "service": "chimera-broker", "provider_id": "groq"}}},
+		{"parsed": map[string]any{"rawFlat": map[string]any{"msg": "chimera-broker.provider.loaded", "service": "chimera-broker", "provider_id": "ollama"}}},
+		{"parsed": map[string]any{"rawFlat": map[string]any{
+			"msg":                 "chat.chimera-broker.available_models",
+			"service":             "gateway",
+			"ok":                  true,
+			"fetched_at":          freshAt,
+			"providers":           []any{"groq", "gemini"},
+			"catalog_model_count": 3,
+		}}},
+	}
+	v, err := fn(goja.Undefined(), vm.ToValue(arr), goja.Undefined())
+	if err != nil {
+		t.Fatal(err)
+	}
+	list, ok := v.Export().([]any)
+	if !ok {
+		t.Fatalf("expected []any, got %T", v.Export())
+	}
+	want := map[string]string{"groq": "up", "ollama": "down"}
+	if len(list) != len(want) {
+		t.Fatalf("len=%d want %d", len(list), len(want))
+	}
+	for _, raw := range list {
+		entry, _ := raw.(map[string]any)
+		id, _ := entry["id"].(string)
+		state, _ := entry["state"].(string)
+		if want[id] != state {
+			t.Fatalf("provider %q: state=%q want %q", id, state, want[id])
+		}
+	}
+}
+
+func TestLogsDerive_chimeraBrokerProviderHealthList_modelDiscoveryOverridesCatalog(t *testing.T) {
+	vm := goja.New()
+	evalJS(t, vm, settingsUIPath(t, "testing", "loader.js"))
+	evalJS(t, vm, settingsUIPath(t, "derive", "chimeraBrokerMetrics.js"))
+
+	fn, ok := goja.AssertFunction(vm.Get("ChimeraSettings").ToObject(vm).Get("Derive").ToObject(vm).Get("chimeraBrokerProviderHealthList"))
+	if !ok {
+		t.Fatal("missing chimeraBrokerProviderHealthList")
+	}
+
+	freshAt := time.Now().UTC().Format(time.RFC3339)
+	arr := []map[string]any{
+		{"parsed": map[string]any{"rawFlat": map[string]any{"msg": "chimera-broker.provider.loaded", "service": "chimera-broker", "provider_id": "ollama"}}},
+		{"parsed": map[string]any{"rawFlat": map[string]any{
+			"msg": "chat.chimera-broker.available_models", "service": "gateway", "ok": true,
+			"fetched_at": freshAt, "providers": []any{"ollama"},
+		}}},
+		{"parsed": map[string]any{"rawFlat": map[string]any{
+			"msg": "chimera-broker.provider.model_discovery.fail", "service": "chimera-broker", "provider_id": "ollama",
+		}}},
+	}
+	v, err := fn(goja.Undefined(), vm.ToValue(arr), goja.Undefined())
+	if err != nil {
+		t.Fatal(err)
+	}
+	list := v.Export().([]any)
+	entry := list[0].(map[string]any)
+	if entry["state"] != "down" {
+		t.Fatalf("state=%v want down after model_discovery.fail", entry["state"])
+	}
+}
+
+func TestLogsDerive_chimeraBrokerProviderHealthList_catalogFail(t *testing.T) {
+	vm := goja.New()
+	evalJS(t, vm, settingsUIPath(t, "testing", "loader.js"))
+	evalJS(t, vm, settingsUIPath(t, "derive", "chimeraBrokerMetrics.js"))
+
+	fn, ok := goja.AssertFunction(vm.Get("ChimeraSettings").ToObject(vm).Get("Derive").ToObject(vm).Get("chimeraBrokerProviderHealthList"))
+	if !ok {
+		t.Fatal("missing chimeraBrokerProviderHealthList")
+	}
+
+	freshAt := time.Now().UTC().Format(time.RFC3339)
+	arr := []map[string]any{
+		{"parsed": map[string]any{"rawFlat": map[string]any{"msg": "chimera-broker.provider.loaded", "service": "chimera-broker", "provider_id": "ollama"}}},
+		{"parsed": map[string]any{"rawFlat": map[string]any{
+			"msg": "chat.chimera-broker.available_models", "service": "gateway", "ok": false,
+			"fetched_at": freshAt, "err": "fetch /v1/models failed (status=400)",
+		}}},
+	}
+	v, err := fn(goja.Undefined(), vm.ToValue(arr), goja.Undefined())
+	if err != nil {
+		t.Fatal(err)
+	}
+	list := v.Export().([]any)
+	if len(list) != 1 {
+		t.Fatalf("len=%d want 1", len(list))
+	}
+	entry := list[0].(map[string]any)
+	if entry["state"] != "down" {
+		t.Fatalf("state=%v want down after catalog fail", entry["state"])
 	}
 }
 
@@ -1721,6 +1831,207 @@ func TestLogsDerive_indexerPartition_syntheticJobsWhenStartMissing(t *testing.T)
 	got := v.ToObject(vm).Get("buckets").ToObject(vm)
 	if got.Get(k1) == nil || got.Get(k2) == nil {
 		t.Fatalf("want synthetic keys %q and %q, have object", k1, k2)
+	}
+}
+
+func TestLogsDerive_indexerPartition_stateGoesToServiceOnly(t *testing.T) {
+	vm := goja.New()
+	loadIndexerPresentCtx(t, vm)
+	evalJS(t, vm, settingsUIPath(t, "derive", "indexerPartition.js"))
+	if _, err := vm.RunString(`function __getFlat(p) { return (p && p.rawFlat) || {}; }`); err != nil {
+		t.Fatal(err)
+	}
+	cache := []any{
+		map[string]any{
+			"parsed": map[string]any{"rawFlat": map[string]any{
+				"service":      "chimera-indexer",
+				"index_run_id": "run-a",
+				"msg":          "indexer.state",
+				"state":        "watch_idle",
+				"indexer_key":  "ik_orphan",
+				"tenant_id":    "lynn",
+				"user_label":   "lynn",
+			}},
+		},
+		map[string]any{
+			"parsed": map[string]any{"rawFlat": map[string]any{
+				"service":            "chimera-indexer",
+				"index_run_id":       "run-a",
+				"msg":                "indexer.storage.stats",
+				"indexer_target_key": "ik_orphan",
+				"ingest_project":     "porcelain",
+				"flavor_id":          "",
+				"tenant_id":          "lynn",
+				"qdrant_points":      42,
+			}},
+		},
+	}
+	obj := vm.Get("ChimeraSettings").ToObject(vm).Get("Derive").ToObject(vm)
+	bfn, ok := goja.AssertFunction(obj.Get("indexerBucketsFromCache"))
+	if !ok {
+		t.Fatal("missing indexerBucketsFromCache")
+	}
+	v, err := bfn(goja.Undefined(), vm.ToValue(cache), vm.Get("__getFlat"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := v.ToObject(vm).Get("buckets").ToObject(vm)
+	if got == nil {
+		t.Fatal("missing buckets")
+	}
+	if !goja.IsUndefined(got.Get("ik_orphan")) && got.Get("ik_orphan") != nil {
+		t.Fatalf("orphan storage.stats should not create workspace bucket alone, got keys")
+	}
+}
+
+func TestLogsDerive_indexerPartition_storageStatsJoinsExistingScopeBucket(t *testing.T) {
+	vm := goja.New()
+	loadIndexerPresentCtx(t, vm)
+	evalJS(t, vm, settingsUIPath(t, "derive", "indexerPartition.js"))
+	if _, err := vm.RunString(`function __getFlat(p) { return (p && p.rawFlat) || {}; }`); err != nil {
+		t.Fatal(err)
+	}
+	t1 := "lynn"
+	igKey := "ig\x1e" + t1 + "\x1eporcelain\x1e"
+	ikKey := "ik_porcelain_scope"
+	cache := []any{
+		map[string]any{
+			"parsed": map[string]any{"rawFlat": map[string]any{
+				"service":            "chimera-indexer",
+				"index_run_id":       "run-b",
+				"msg":                "indexer.job.ingested",
+				"tenant_id":          t1,
+				"ingest_project":     "porcelain",
+				"flavor_id":          "",
+				"indexer_target_key": ikKey,
+				"chunks":             3,
+			}},
+		},
+		map[string]any{
+			"parsed": map[string]any{"rawFlat": map[string]any{
+				"service":            "chimera-indexer",
+				"index_run_id":       "run-b",
+				"msg":                "indexer.storage.stats",
+				"tenant_id":          t1,
+				"ingest_project":     "porcelain",
+				"flavor_id":          "",
+				"indexer_target_key": ikKey,
+				"qdrant_points":      10711,
+			}},
+		},
+	}
+	obj := vm.Get("ChimeraSettings").ToObject(vm).Get("Derive").ToObject(vm)
+	bfn, ok := goja.AssertFunction(obj.Get("indexerBucketsFromCache"))
+	if !ok {
+		t.Fatal("missing indexerBucketsFromCache")
+	}
+	v, err := bfn(goja.Undefined(), vm.ToValue(cache), vm.Get("__getFlat"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := v.ToObject(vm).Get("buckets").ToObject(vm)
+	merged := got.Get(ikKey)
+	if merged == nil || goja.IsUndefined(merged) {
+		merged = got.Get(igKey)
+	}
+	if merged == nil || goja.IsUndefined(merged) {
+		t.Fatalf("want merged scope bucket ik or ig, buckets=%v", got.Keys())
+	}
+	arr := merged.Export().([]any)
+	if len(arr) != 2 {
+		t.Fatalf("want job + stats in one bucket, len=%d", len(arr))
+	}
+}
+
+func TestLogsDerive_indexerPartition_mergesIgIntoIkAlias(t *testing.T) {
+	vm := goja.New()
+	loadIndexerPresentCtx(t, vm)
+	evalJS(t, vm, settingsUIPath(t, "derive", "indexerPartition.js"))
+	if _, err := vm.RunString(`function __getFlat(p) { return (p && p.rawFlat) || {}; }`); err != nil {
+		t.Fatal(err)
+	}
+	t1 := "lynn"
+	igKey := "ig\x1e" + t1 + "\x1eporcelain\x1e"
+	ikKey := "ik_porcelain_scope"
+	cache := []any{
+		map[string]any{
+			"parsed": map[string]any{"rawFlat": map[string]any{
+				"service":        "indexer",
+				"index_run_id":   "run-c",
+				"msg":            "indexer.job.ingested",
+				"tenant_id":      t1,
+				"ingest_project": "porcelain",
+				"flavor_id":      "",
+				"chunks":         1,
+			}},
+		},
+		map[string]any{
+			"parsed": map[string]any{"rawFlat": map[string]any{
+				"service":            "indexer",
+				"index_run_id":       "run-c",
+				"msg":                "indexer.storage.stats",
+				"tenant_id":          t1,
+				"ingest_project":     "porcelain",
+				"flavor_id":          "",
+				"indexer_target_key": ikKey,
+				"qdrant_points":      9,
+			}},
+		},
+	}
+	obj := vm.Get("ChimeraSettings").ToObject(vm).Get("Derive").ToObject(vm)
+	bfn, ok := goja.AssertFunction(obj.Get("indexerBucketsFromCache"))
+	if !ok {
+		t.Fatal("missing indexerBucketsFromCache")
+	}
+	v, err := bfn(goja.Undefined(), vm.ToValue(cache), vm.Get("__getFlat"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := v.ToObject(vm).Get("buckets").ToObject(vm)
+	if got.Get(igKey) != nil && !goja.IsUndefined(got.Get(igKey)) {
+		t.Fatalf("expected ig bucket merged away, still have %q", igKey)
+	}
+	if got.Get(ikKey) == nil || goja.IsUndefined(got.Get(ikKey)) {
+		t.Fatalf("expected canonical ik bucket %q", ikKey)
+	}
+}
+
+func TestLogsDerive_collectIndexerRunMeta_chimeraIndexerServiceReadsProject(t *testing.T) {
+	vm := goja.New()
+	evalJS(t, vm, settingsUIPath(t, "testing", "loader.js"))
+	evalJS(t, vm, settingsUIPath(t, "derive", "indexerMetrics.js"))
+	derive := vm.Get("ChimeraSettings").ToObject(vm).Get("Derive").ToObject(vm)
+	fn, ok := goja.AssertFunction(derive.Get("collectIndexerRunMeta"))
+	if !ok {
+		t.Fatal("missing collectIndexerRunMeta")
+	}
+	evs := []map[string]any{
+		{"parsed": map[string]any{"rawFlat": map[string]any{
+			"service":        "chimera-indexer",
+			"msg":            "indexer.storage.stats",
+			"user_label":     "lynn",
+			"tenant_id":      "lynn",
+			"ingest_project": "porcelain",
+			"flavor_id":      "",
+			"qdrant_points":  10711,
+		}}},
+	}
+	opts := map[string]any{
+		"getFlat": func(call goja.FunctionCall) goja.Value {
+			p := call.Argument(0).ToObject(vm)
+			return p.Get("rawFlat")
+		},
+	}
+	v, err := fn(goja.Undefined(), vm.ToValue("ik_test"), vm.ToValue(evs), vm.ToValue(opts))
+	if err != nil {
+		t.Fatal(err)
+	}
+	obj := v.ToObject(vm)
+	if obj.Get("projectId").String() != "porcelain" {
+		t.Fatalf("projectId=%q want porcelain", obj.Get("projectId").String())
+	}
+	if obj.Get("userLabel").String() != "lynn" {
+		t.Fatalf("userLabel=%q want lynn", obj.Get("userLabel").String())
 	}
 }
 

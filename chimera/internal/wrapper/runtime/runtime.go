@@ -112,7 +112,7 @@ func Run(rootCtx context.Context, cfg Config, adapter Adapter, log *slog.Logger)
 		cfg.BackendMode = "binary"
 	}
 	if log == nil {
-		log = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
+		log = logfmt.NewLogger(os.Stderr, logfmt.JSONEnabled(), slog.LevelInfo)
 	}
 	if cfg.DebugEnableUpstream && !cfg.DebugAllowRemote && !IsLoopbackBind(cfg.Listen) {
 		return WrapExitError(

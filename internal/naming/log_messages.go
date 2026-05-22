@@ -84,6 +84,7 @@ const (
 	MsgBrokerProviderLoaded = "broker.provider.loaded"
 	MsgBrokerProviderHealthOk = "broker.provider.health.ok"
 	MsgBrokerProviderHealthFail = "broker.provider.health.fail"
+	MsgBrokerProviderModelDiscoveryFail = "broker.provider.model_discovery.fail"
 	MsgBrokerProviderKeyLoaded = "broker.provider.key_loaded"
 	MsgBrokerProviderKeyMissing = "broker.provider.key_missing"
 	MsgBrokerMaintenanceLogRetention = "broker.maintenance.log_retention"

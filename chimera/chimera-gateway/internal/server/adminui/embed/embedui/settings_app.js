@@ -15,20 +15,10 @@ globalThis.ChimeraSettings.Main = function () {
   var fltApp = document.getElementById("flt-app");
   var fltLevel = document.getElementById("flt-level");
   var C = globalThis.ChimeraSettings && globalThis.ChimeraSettings.Contracts;
-  var VIEW_LS = (C && C.SettingsUIPrefViewMode) || "chimera_settings_view_mode";
-  var FLT_APP_LS = (C && C.SettingsUIPrefFilterApp) || "chimera_settings_flt_app";
-  var FLT_LEVEL_LS = (C && C.SettingsUIPrefFilterLevel) || "chimera_settings_flt_level";
-  /**
-   * Persist watch roots per summarized indexer card (partition bucket id) + index_run_id.
-   * v1 used project+flavor only — multiple indexers sharing scope showed each other's roots.
-   */
-  var INDEXER_WATCH_ROOTS_LS = (C && C.SettingsUIPrefIndexerWatchRoots) || "chimera.indexer.watchRoots.v2";
   /** Gateway expanded panel: show 2xx HTTP rows for /health, /status, logs poll/stream, etc. */
-  var GW_PROBES_LS = (C && C.SettingsUIPrefGatewayShowProbes) || "chimera.settings.gateway.showProbes";
   var gatewayPanelShowProbes = false;
-  try {
-    gatewayPanelShowProbes = localStorage.getItem(GW_PROBES_LS) === "1";
-  } catch (eGwLs) {}
+  /** Session-only cache for indexer watch roots and stale card snapshots. */
+  var indexerWatchRootsStore = { byBucket: {}, byRunId: {}, snapshots: {} };
   var CONV_RECENT_N = 5;
   /** Last N events used for summary-strip status pills ("error" vs active/complete). Matches Last-events preview depth. */
   var RECENT_CARD_STATUS_N = 3;
@@ -334,8 +324,6 @@ globalThis.ChimeraSettings.Main = function () {
     fltLevelEl: fltLevel,
     tbodyEl: tbody,
     levelOptionSet: levelOptionSet,
-    FLT_APP_LS: FLT_APP_LS,
-    FLT_LEVEL_LS: FLT_LEVEL_LS,
     viewModeGetter: function () { return viewMode; },
     rebuildRawLogsTextarea: function (opts) { return rebuildRawLogsTextarea(opts); },
     nearBottomTextarea: nearBottomTextarea
@@ -783,7 +771,6 @@ globalThis.ChimeraSettings.Main = function () {
         appendTableRow(parsed, false, ent.seq, ent.ts, ent.text);
       }
     }
-    syncFiltersFromStorage();
     if (viewMode === "summarized") refreshSummarizedPanel();
     else if (viewMode === "raw_logs") rebuildRawLogsTextarea({ scrollBottom: rawWasAtBottom });
     else applyFilters();
@@ -907,8 +894,7 @@ globalThis.ChimeraSettings.Main = function () {
     tokenLabelByTenant: tokenLabelByTenant,
     chimeraBrokerProviderSnapshot: null,
     gatewayPanelShowProbes: gatewayPanelShowProbes,
-    GW_PROBES_LS: GW_PROBES_LS,
-    INDEXER_WATCH_ROOTS_LS: INDEXER_WATCH_ROOTS_LS,
+    indexerWatchRootsStore: indexerWatchRootsStore,
     RECENT_CARD_STATUS_N: RECENT_CARD_STATUS_N,
     CONV_RECENT_N: CONV_RECENT_N,
     CHIMERA_BROKER_PROVIDER_STALE_MS: 90000,

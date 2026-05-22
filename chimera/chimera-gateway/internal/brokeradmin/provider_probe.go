@@ -70,26 +70,27 @@ func ListConfiguredProviders(ctx context.Context, client *Client) (map[string]st
 	base := strings.TrimSuffix(strings.TrimSpace(client.BaseURL), "/")
 
 	configuredMu.Lock()
-	if configuredOK && configuredBaseURL == base && time.Since(configuredAt) < configuredProvidersCacheTTL && configuredNames != nil {
-		out := copyNameSet(configuredNames)
-		configuredMu.Unlock()
-		return out, true
-	}
-	configuredMu.Unlock()
+	defer configuredMu.Unlock()
 
+	if configuredOK && configuredBaseURL == base && time.Since(configuredAt) < configuredProvidersCacheTTL && configuredNames != nil {
+		return copyNameSet(configuredNames), true
+	}
+
+	// Fetch while holding the lock so concurrent /api/ui/state and
+	// /api/ui/chimera-broker/providers handlers share one governance list call.
 	names, ok := fetchConfiguredProviders(ctx, client)
-	if !ok {
+	if !ok || len(names) == 0 {
+		// BiFrost may return HTTP 200 with providers:null while GET /api/providers/{name}
+		// still works (file-backed config). Treat an empty list as unavailable so callers
+		// fall back to per-provider GET probes instead of skipping every provider.
 		return nil, false
 	}
 
-	configuredMu.Lock()
 	configuredAt = time.Now()
 	configuredOK = true
 	configuredBaseURL = base
 	configuredNames = names
-	out := copyNameSet(names)
-	configuredMu.Unlock()
-	return out, true
+	return copyNameSet(names), true
 }
 
 func fetchConfiguredProviders(ctx context.Context, client *Client) (map[string]struct{}, bool) {
@@ -203,6 +204,12 @@ func SyntheticProviderGETBody(name string, dec ProviderProbeDecision) (body []by
 // The httpProbed return is true only when a live HTTP GET /api/providers/{name} was attempted.
 func GetProviderForProbe(ctx context.Context, client *Client, name string) (body []byte, status int, err error, httpProbed bool) {
 	configured, listOK := ListConfiguredProviders(ctx, client)
+	return GetProviderForProbeWithList(ctx, client, name, configured, listOK)
+}
+
+// GetProviderForProbeWithList is like GetProviderForProbe but reuses a governance list already
+// fetched by the caller so one UI poll issues a single GET /api/governance/providers.
+func GetProviderForProbeWithList(ctx context.Context, client *Client, name string, configured map[string]struct{}, listOK bool) (body []byte, status int, err error, httpProbed bool) {
 	dec := probeDecision(name, configured, listOK)
 	if !dec.HTTPProbe {
 		body, status = SyntheticProviderGETBody(name, dec)

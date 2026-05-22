@@ -100,19 +100,12 @@
 (function () {
   var DEFAULT_ROUTE = "/ui/pwa";
   var SETTINGS_ROUTE = "/ui/settings?embed=1";
-  var LS_CURRENT_ROUTE = "chimera.shell.currentRoute.v1";
-  var LS_RETURN_ROUTE = "chimera.shell.settingsReturnRoute.v1";
+  var shellReturnRoute = DEFAULT_ROUTE;
   var origin = window.location.origin;
   var frame = document.getElementById("f-main");
   var reloadBtn = document.getElementById("btn-reload");
   var settingsBtn = document.getElementById("btn-settings");
 
-  function safeGetLS(k) {
-    try { return localStorage.getItem(k) || ""; } catch (_e) { return ""; }
-  }
-  function safeSetLS(k, v) {
-    try { localStorage.setItem(k, String(v || "")); } catch (_e) {}
-  }
   function normalizeRoute(raw) {
     var s = String(raw || "").trim();
     if (!s) return "";
@@ -159,7 +152,6 @@
     var target = getSafeRoute(route, DEFAULT_ROUTE);
     if (!frame) return;
     frame.src = target;
-    safeSetLS(LS_CURRENT_ROUTE, target);
     updateSettingsButton(isSettingsRoute(target));
   }
   function notifySettingsActive() {
@@ -175,13 +167,11 @@
   if (frame) {
     frame.addEventListener("load", function () {
       var loadedRoute = getSafeRoute(currentRouteFromFrame(), DEFAULT_ROUTE);
-      safeSetLS(LS_CURRENT_ROUTE, loadedRoute);
       updateSettingsButton(isSettingsRoute(loadedRoute));
       notifySettingsActive();
     });
   }
-  var startupRoute = getSafeRoute(safeGetLS(LS_CURRENT_ROUTE), DEFAULT_ROUTE);
-  navigateFrame(startupRoute);
+  navigateFrame(DEFAULT_ROUTE);
 
   function cacheBustedSrc(src) {
     var s = String(src || "");
@@ -195,16 +185,6 @@
 
   async function resetWebviewCacheBestEffort() {
     try { sessionStorage.clear(); } catch (_e) {}
-    try {
-      var keys = [];
-      for (var i = 0; i < localStorage.length; i++) keys.push(localStorage.key(i));
-      for (var j = 0; j < keys.length; j++) {
-        var k = keys[j] || "";
-        if (k.indexOf("chimera.") === 0 || k.indexOf("chimera_") === 0 || k.indexOf("chimeraLogs") === 0 || k.indexOf("chimera_logs_") === 0) {
-          try { localStorage.removeItem(k); } catch (_e2) {}
-        }
-      }
-    } catch (_e3) {}
     try {
       if (globalThis.caches && caches.keys) {
         var cks = await caches.keys();
@@ -263,11 +243,10 @@
     settingsBtn.addEventListener("click", function () {
       var route = getSafeRoute(currentRouteFromFrame(), DEFAULT_ROUTE);
       if (isSettingsRoute(route)) {
-        var backTo = getSafeRoute(safeGetLS(LS_RETURN_ROUTE), DEFAULT_ROUTE);
-        navigateFrame(backTo);
+        navigateFrame(getSafeRoute(shellReturnRoute, DEFAULT_ROUTE));
         return;
       }
-      safeSetLS(LS_RETURN_ROUTE, route);
+      shellReturnRoute = route;
       navigateFrame(SETTINGS_ROUTE);
     });
   }

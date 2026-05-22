@@ -251,18 +251,21 @@ func TestClassifyBrokerProviderResult_staleSnapshotDoesNotOverride(t *testing.T)
 	stale := buildSnapshotForTest(time.Now().Add(-10*time.Minute), []string{"groq"})
 	body := []byte(`{"name":"ollama","keys":[],"network_config":{"base_url":"http://127.0.0.1:11434"}}`)
 	got := adminui.ClassifyBrokerProviderResult("ollama", body, 200, nil, stale)
-	if got.State != "up" {
-		t.Fatalf("stale snapshot must not override; got %q", got.State)
+	if got.State != "unknown" {
+		t.Fatalf("stale snapshot must not confirm liveness; got %q", got.State)
 	}
 }
 
-func TestClassifyBrokerProviderResult_failedSnapshotDoesNotOverride(t *testing.T) {
+func TestClassifyBrokerProviderResult_failedSnapshotMarksConfiguredDown(t *testing.T) {
 	t.Parallel()
 	failed := &CatalogSnapshot{FetchedAt: time.Now(), OK: false, FetchErr: "boom"}
 	body := []byte(`{"name":"ollama","keys":[],"network_config":{"base_url":"http://127.0.0.1:11434"}}`)
 	got := adminui.ClassifyBrokerProviderResult("ollama", body, 200, nil, failed)
-	if got.State != "up" {
-		t.Fatalf("failed snapshot must not override; got %q", got.State)
+	if got.State != "down" {
+		t.Fatalf("fresh failed catalog poll should mark configured provider down; got %q", got.State)
+	}
+	if got.Error == "" {
+		t.Fatalf("error annotation should be set: %+v", got)
 	}
 }
 

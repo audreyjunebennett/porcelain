@@ -36,15 +36,6 @@ var LogsUITimelineKinds = []LogsUIStringConst{
 	{"TimelineKindGateway", TimelineKindGateway},
 }
 
-// SettingsUIPrefs are localStorage keys for operator UI preferences.
-var SettingsUIPrefs = []LogsUIStringConst{
-	{"SettingsUIPrefViewMode", SettingsUIPrefViewMode},
-	{"SettingsUIPrefFilterApp", SettingsUIPrefFilterApp},
-	{"SettingsUIPrefFilterLevel", SettingsUIPrefFilterLevel},
-	{"SettingsUIPrefIndexerWatchRoots", SettingsUIPrefIndexerWatchRoots},
-	{"SettingsUIPrefGatewayShowProbes", SettingsUIPrefGatewayShowProbes},
-}
-
 // LogsUITimelineBarKind is one segment on the request-timeline bar (key + display label).
 type LogsUITimelineBarKind struct {
 	Key   string

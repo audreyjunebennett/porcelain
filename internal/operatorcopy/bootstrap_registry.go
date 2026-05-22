@@ -294,6 +294,7 @@ func brokerMessages() []Message {
 		formatted("broker.provider.loaded", "broker_provider_id", "Provider registered", "Provider registered · openai", "chimera-broker.provider.loaded"),
 		formatted("broker.provider.health.ok", "broker_provider_id", "Provider healthy", "Provider healthy · openai", "chimera-broker.provider.health.ok"),
 		formatted("broker.provider.health.fail", "broker_provider_id", "Provider health failed", "Provider health failed · openai", "chimera-broker.provider.health.fail"),
+		formatted("broker.provider.model_discovery.fail", "broker_provider_id", "Model list sync failed", "Model list sync failed · openai", "chimera-broker.provider.model_discovery.fail"),
 		formatted("broker.provider.key_loaded", "broker_provider_id", "Provider API key loaded", "Provider API key loaded · openai", "chimera-broker.provider.key_loaded"),
 		formatted("broker.provider.key_missing", "broker_provider_id", "Missing API key", "Missing API key · openai", "chimera-broker.provider.key_missing"),
 		formatted("broker.maintenance.log_retention", "broker_log_retention", "Log retention / cleanup", "Request log retention · 30 days", "chimera-broker.maintenance.log_retention"),

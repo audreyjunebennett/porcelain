@@ -447,6 +447,12 @@ messages:
       - Provider health failed · openai
       - chimera-broker.provider.health.fail
     gallery_preview: Provider health failed
+  - slug: broker.provider.model_discovery.fail
+    formatter: broker_provider_id
+    aliases:
+      - Model list sync failed · openai
+      - chimera-broker.provider.model_discovery.fail
+    gallery_preview: Model list sync failed
   - slug: broker.provider.key_loaded
     formatter: broker_provider_id
     aliases:

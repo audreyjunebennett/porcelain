@@ -2,6 +2,7 @@
  * Pure derivations for Indexer run rollups.
  *
  * Exports:
+ * - ChimeraSettings.Derive.flatIsIndexerService(flat)
  * - ChimeraSettings.Derive.collectIndexerRunMeta(runId, evs, opts?)
  *   opts.getFlat(parsed) -> flat
  *   opts.tokenLabelByTenant -> map
@@ -12,6 +13,11 @@
  *   opts.flatLooksLikeIndexerJobIngested(flat) -> bool
  *   opts.partitionMeta — optional { workspace_id, ingest_project, flavor_id, paths[] } from root_scopes
  */
+
+function flatIsIndexerService(fl) {
+  var s = String((fl && fl.service) || "").toLowerCase();
+  return s === "indexer" || s === "chimera-indexer";
+}
 
 function collectIndexerRunMeta(runId, evs, opts) {
   evs = Array.isArray(evs) ? evs : [];
@@ -31,7 +37,7 @@ function collectIndexerRunMeta(runId, evs, opts) {
     : function (fl) {
         var m = indexerFlatMsg(fl);
         if (m === "indexer.run.start" || m === "indexer run start") return true;
-        if (String(fl.service || "").toLowerCase() !== "indexer") return false;
+        if (!flatIsIndexerService(fl)) return false;
         return fl.root_ids != null && (fl.roots != null || Array.isArray(fl.watch_root_paths));
       };
 
@@ -41,7 +47,7 @@ function collectIndexerRunMeta(runId, evs, opts) {
         var m = indexerFlatMsg(fl);
         if (m.indexOf("indexer.run.done") === 0) return true;
         if (m === "indexer run done" || m === "indexer run stopped") return true;
-        return String(fl.service || "").toLowerCase() === "indexer" && fl.ingest_completed != null && fl.mode != null && String(fl.mode).trim() !== "";
+        return flatIsIndexerService(fl) && fl.ingest_completed != null && fl.mode != null && String(fl.mode).trim() !== "";
       };
 
   var flatLooksLikeIndexerRunProgress = typeof opts.flatLooksLikeIndexerRunProgress === "function"
@@ -57,7 +63,7 @@ function collectIndexerRunMeta(runId, evs, opts) {
     ? opts.flatLooksLikeIndexerJobIngested
     : function (fl) {
         var m = indexerFlatMsg(fl);
-        if (String(fl.service || "").toLowerCase() !== "indexer") return false;
+        if (!flatIsIndexerService(fl)) return false;
         if (m !== "indexer.job.ingested" && m !== "ingested") return false;
         return fl.chunks != null;
       };
@@ -200,7 +206,7 @@ function collectIndexerRunMeta(runId, evs, opts) {
     defFlav = "";
   for (var bx = 0; bx < evs.length; bx++) {
     var fb = getFlat(evs[bx].parsed);
-    if (String(fb.service || "").toLowerCase() !== "indexer") continue;
+    if (!flatIsIndexerService(fb)) continue;
     var mb = indexerFlatMsg(fb);
     if (!ws && fb.scope_workspace_id) ws = String(fb.scope_workspace_id).trim();
     if (!sp && fb.scope_project_id) sp = String(fb.scope_project_id).trim();
@@ -438,5 +444,6 @@ function collectIndexerRunMeta(runId, evs, opts) {
 
 globalThis.ChimeraSettings = globalThis.ChimeraSettings || {};
 globalThis.ChimeraSettings.Derive = globalThis.ChimeraSettings.Derive || {};
+globalThis.ChimeraSettings.Derive.flatIsIndexerService = flatIsIndexerService;
 globalThis.ChimeraSettings.Derive.collectIndexerRunMeta = collectIndexerRunMeta;
 

@@ -15,22 +15,24 @@ func TestNormalizeTimestampUTCEmpty(t *testing.T) {
 
 func TestNormalizeTimestampUTCConvertsLocalOffset(t *testing.T) {
 	got := NormalizeTimestampUTC("2026-05-18T21:19:38.6562002-05:00")
-	if !strings.HasSuffix(got, "Z") {
-		t.Fatalf("expected UTC Z suffix, got %q", got)
+	want := "2026-05-19T02:19:38Z"
+	if got != want {
+		t.Fatalf("got %q want %q", got, want)
 	}
 }
 
-func TestNormalizeTimestampUTCPreservesUTC(t *testing.T) {
+func TestNormalizeTimestampUTCTruncatesToSeconds(t *testing.T) {
 	in := "2026-05-19T02:19:38.653148Z"
 	got := NormalizeTimestampUTC(in)
-	if got != in {
-		t.Fatalf("got %q want %q", got, in)
+	want := "2026-05-19T02:19:38Z"
+	if got != want {
+		t.Fatalf("got %q want %q", got, want)
 	}
 }
 
 func TestUTCTimestampNowParseable(t *testing.T) {
 	got := UTCTimestampNow()
-	if _, err := time.Parse(time.RFC3339Nano, got); err != nil {
+	if _, err := time.Parse(time.RFC3339, got); err != nil {
 		t.Fatalf("parse: %v", err)
 	}
 }

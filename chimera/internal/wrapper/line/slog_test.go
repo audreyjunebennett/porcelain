@@ -47,6 +47,21 @@ func TestPassthroughSlogJSONKeyOrder(t *testing.T) {
 	}
 }
 
+func TestPassthroughSlogJSONNormalizesTimestamp(t *testing.T) {
+	raw := []byte(`{"time":"2026-05-22T11:38:55.5597571-05:00","level":"INFO","msg":"wrapper.backend.starting","component":"chimera-broker"}`)
+	b, ok := PassthroughSlogJSON(raw, "broker")
+	if !ok {
+		t.Fatal("expected passthrough")
+	}
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatal(err)
+	}
+	if m["timestamp"] != "2026-05-22T16:38:55Z" {
+		t.Fatalf("timestamp=%v", m["timestamp"])
+	}
+}
+
 func TestPassthroughSlogJSONPreservesNormalized(t *testing.T) {
 	raw := []byte(`{"_chimera_norm":1,"child":"broker","level":"WARN","msg":"gateway.shutdown.child_force_kill","service":"gateway","timestamp":"2026-05-16T00:45:21Z"}`)
 	b, ok := PassthroughSlogJSON(raw, "gateway")
@@ -87,5 +102,20 @@ func TestReorderNormalizedJSON(t *testing.T) {
 	}
 	if m["msg"] != "broker.ready" {
 		t.Fatalf("msg=%v", m["msg"])
+	}
+}
+
+func TestReorderNormalizedJSONNormalizesTimestamp(t *testing.T) {
+	raw := []byte(`{"_chimera_norm":1,"msg":"wrapper.backend.starting","service":"chimera-broker","level":"INFO","timestamp":"2026-05-22T11:38:55.5597571-05:00"}`)
+	b, ok := ReorderNormalizedJSON(raw)
+	if !ok {
+		t.Fatal("expected reorder")
+	}
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatal(err)
+	}
+	if m["timestamp"] != "2026-05-22T16:38:55Z" {
+		t.Fatalf("timestamp=%v", m["timestamp"])
 	}
 }

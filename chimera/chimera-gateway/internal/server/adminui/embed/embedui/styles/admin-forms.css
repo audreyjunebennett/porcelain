@@ -482,12 +482,14 @@
 }
 .sum-bf-prov-health-seg--down {
   background: var(--embed-strip-down);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--embed-strip-down) 55%, #000);
 }
 .sum-bf-prov-health-seg--key_missing {
   background: var(--embed-strip-warn);
 }
 .sum-bf-prov-health-seg--unknown {
-  background: var(--embed-strip-unknown);
+  background: color-mix(in srgb, var(--embed-strip-unknown) 72%, var(--embed-surface-container-low, #eceff1));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--embed-strip-unknown) 45%, transparent);
 }
 .sum-bf-prov-health-track:not(.sum-bf-prov-health-track--compact):not(.sum-bf-prov-health-track--empty) .sum-bf-prov-health-seg:first-child {
   border-radius: 4px 0 0 4px;
@@ -522,6 +524,18 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.sum-bf-prov-health-label--up {
+  color: var(--embed-strip-up);
+}
+.sum-bf-prov-health-label--down {
+  color: var(--embed-strip-down);
+}
+.sum-bf-prov-health-label--key_missing {
+  color: var(--embed-strip-warn);
+}
+.sum-bf-prov-health-label--unknown {
+  color: var(--embed-strip-unknown);
 }
 /* Collapsed BiFrost card: inline with summary metrics (between chips and status) */
 .sum-bf-prov-health-root--compact {

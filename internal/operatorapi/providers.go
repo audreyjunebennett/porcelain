@@ -4,7 +4,7 @@ import "time"
 
 // ProviderHealthEntry is one row in the chimera-broker provider health strip.
 //
-// State values: "up", "down", "key_missing", "unknown".
+// State values: "up", "down", "key_missing", "unknown", "not_configured".
 type ProviderHealthEntry struct {
 	ID            string   `json:"id"`
 	State         string   `json:"state"`

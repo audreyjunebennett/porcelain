@@ -198,21 +198,51 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminShared = function (ctx) {
     );
   }
 
-  function sgOpHealthPillHtml(label, variant) {
+  function sgOpHealthPillHtml(label, variant, opts) {
+    opts = opts || {};
     var cls = "sg-op-health-pill";
     if (variant === "ok") cls += " sg-op-health-pill--ok";
     else if (variant === "metric") cls += " sg-op-health-pill--metric";
+    else if (variant === "down") cls += " sg-op-health-pill--down";
+    else if (variant === "unknown") cls += " sg-op-health-pill--unknown";
+    else if (variant === "not_configured") cls += " sg-op-health-pill--not_configured";
+    else if (variant === "warn") cls += " sg-op-health-pill--warn";
+    if (opts.pulse) cls += " sg-op-health-pill--pulse";
     return '<span class="' + cls + '">' + escapeHtml(label != null ? String(label) : "") + "</span>";
   }
 
-  function adminProviderAvailabilityHtml(providerId, fallbackOk) {
+  function adminProviderIsConfigured(providerId) {
+    var row = ((ctx.adminStateCache || {}).providers || {})[providerId] || {};
+    if (providerId === "ollama") {
+      return !!(String(row.ollama_base_url || "").trim());
+    }
+    if (row.key_configured === true) return true;
+    var keys = row.keys;
+    if (Array.isArray(keys)) {
+      for (var ki = 0; ki < keys.length; ki++) {
+        var kr = keys[ki] || {};
+        if (kr.key_configured === true) return true;
+      }
+    }
+    return false;
+  }
+
+  function adminProviderAvailabilityHtml(providerId) {
     var hp = adminProviderHealthEntry(providerId);
-    var st = hp && hp.state ? String(hp.state).toLowerCase() : (fallbackOk ? "up" : "unknown");
+    var st;
+    if (hp && hp.state) {
+      st = String(hp.state).toLowerCase();
+    } else if (!adminProviderIsConfigured(providerId)) {
+      st = "not_configured";
+    } else {
+      st = "unknown";
+    }
     var map = {
       up: { variant: "ok", label: "reachable" },
-      key_missing: { variant: "", label: "key missing" },
-      down: { variant: "", label: "down" },
-      unknown: { variant: "", label: "unknown" }
+      key_missing: { variant: "warn", label: "key missing" },
+      down: { variant: "down", label: "offline" },
+      unknown: { variant: "unknown", label: "configured" },
+      not_configured: { variant: "not_configured", label: "not configured" }
     };
     var meta = map[st] || map.unknown;
     return sgOpHealthPillHtml(meta.label, meta.variant);

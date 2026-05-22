@@ -229,6 +229,12 @@ globalThis.ChimeraSettings.Summarized.Model = globalThis.ChimeraSettings.Summari
     for (rj = 0; rj < rks.length; rj++) {
       var runG = byRun[rks[rj]];
       if (!runG) continue;
+      if (
+        deps.indexerRunQualifiesForWorkspaceCard &&
+        !deps.indexerRunQualifiesForWorkspaceCard(runG, partitionRegistry)
+      ) {
+        continue;
+      }
       var pmetaG = deps.indexerPartitionMetaForRun
         ? deps.indexerPartitionMetaForRun(partitionRegistry, runG.id, runG.events)
         : null;
@@ -245,6 +251,12 @@ globalThis.ChimeraSettings.Summarized.Model = globalThis.ChimeraSettings.Summari
       var grpRuns = dedupeGroups[dkIter];
       var run = deps.pickCanonicalIndexerRun(grpRuns);
       if (!run) continue;
+      if (
+        deps.indexerRunQualifiesForWorkspaceCard &&
+        !deps.indexerRunQualifiesForWorkspaceCard(run, partitionRegistry)
+      ) {
+        continue;
+      }
       var gi;
       for (gi = 0; gi < grpRuns.length; gi++) {
         seenIndexerBuckets[grpRuns[gi].id] = true;

@@ -19,8 +19,6 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
   var primaryLogMessage = ctx.primaryLogMessage;
   var stickPx = ctx.stickPx;
   var embedded = ctx.embedded;
-  var GW_PROBES_LS = ctx.GW_PROBES_LS;
-  var INDEXER_WATCH_ROOTS_LS = ctx.INDEXER_WATCH_ROOTS_LS;
   var RECENT_CARD_STATUS_N = ctx.RECENT_CARD_STATUS_N;
   var sumEvlogPanelHtml = ctx.sumEvlogPanelHtml;
   var sumEvlogBuildTbodyFromConvEvents = ctx.sumEvlogBuildTbodyFromConvEvents;
@@ -497,9 +495,6 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
 
   window.__chimeraToggleGatewayProbes = function (on) {
     ctx.gatewayPanelShowProbes = !!on;
-    try {
-      localStorage.setItem(GW_PROBES_LS, ctx.gatewayPanelShowProbes ? "1" : "0");
-    } catch (eTg) {}
     refreshSummarizedPanel();
   };
 
@@ -1099,7 +1094,7 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       .then(function (data) {
         if (!data) return;
         ctx.chimeraBrokerProviderSnapshot = { fetchedClientMs: Date.now(), data: data };
-        if (getViewMode() === "summarized") patchChimeraBrokerProviderHealthStrip();
+        if (getViewMode() === "summarized") patchChimeraBrokerProviderUiFromSnapshot();
       })
       .catch(function () {
         // Keep any prior snapshot — staleness check in the renderer handles fallback.
@@ -1140,6 +1135,17 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
         compactOld.parentNode.replaceChild(n2, compactOld);
       }
     }
+  }
+
+  /** After /api/ui/chimera-broker/providers returns, refresh broker strip + admin provider cards. */
+  function patchChimeraBrokerProviderUiFromSnapshot() {
+    if (getViewMode() !== "summarized") return;
+    patchChimeraBrokerProviderHealthStrip();
+    var needRebuild = false;
+    for (var pi = 0; pi < ADMIN_PROVIDER_PATCH_SPECS.length; pi++) {
+      if (!patchAdminProviderCard(ADMIN_PROVIDER_PATCH_SPECS[pi].id)) needRebuild = true;
+    }
+    if (needRebuild) refreshSummarizedPanel();
   }
 
   /** Mirror the chimera-broker-bucket selection in refreshSummarizedPanel so the patched strip's
@@ -2176,14 +2182,28 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
         return "Upstream fetch failed" + (es ? ": " + es : "");
       }
     }
+    if (
+      globalThis.ChimeraSettings &&
+      ChimeraSettings.Derive &&
+      typeof ChimeraSettings.Derive.chimeraBrokerCollapsedHealthSubtitle === "function"
+    ) {
+      var healthHint = ChimeraSettings.Derive.chimeraBrokerCollapsedHealthSubtitle(arr, function (p) {
+        return getFlat(p);
+      });
+      if (healthHint) return healthHint;
+    }
     for (ti = arr.length - 1; ti >= t0; ti--) {
       var fh = getFlat(arr[ti].parsed);
       var mh = String(fh.msg || "").trim();
-      if (mh === "chimera-broker.provider.health.fail") {
+      if (mh === "chimera-broker.provider.health.fail" || mh === "broker.provider.health.fail") {
         var pdn = fh.provider_id != null ? String(fh.provider_id).trim() : "";
         return "Provider health down" + (pdn ? ": " + pdn : "");
       }
-      if (mh === "chimera-broker.provider.key_missing") {
+      if (mh === "chimera-broker.provider.model_discovery.fail" || mh === "broker.provider.model_discovery.fail") {
+        var pdm = fh.provider_id != null ? String(fh.provider_id).trim() : "";
+        return "Model list sync failed" + (pdm ? " · " + pdm : "");
+      }
+      if (mh === "chimera-broker.provider.key_missing" || mh === "broker.provider.key_missing") {
         var pk = fh.provider_id != null ? String(fh.provider_id).trim() : "";
         return "Missing key" + (pk ? " for " + pk : "");
       }
@@ -2219,7 +2239,13 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
   }
 
   function chimeraBrokerProviderHealthResolve(arr) {
-    var stateLabel = { up: "up", down: "down", key_missing: "key missing", unknown: "unknown" };
+    var stateLabel = {
+      up: "reachable",
+      down: "offline",
+      key_missing: "key missing",
+      unknown: "configured",
+      not_configured: "not configured"
+    };
     var list = null;
     var liveErr = "";
     if (ctx.chimeraBrokerProviderSnapshot && ctx.chimeraBrokerProviderSnapshot.data && Array.isArray(ctx.chimeraBrokerProviderSnapshot.data.providers)) {
@@ -2231,6 +2257,11 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     }
     if (!list && globalThis.ChimeraSettings && ChimeraSettings.Derive && typeof ChimeraSettings.Derive.chimeraBrokerProviderHealthList === "function") {
       list = ChimeraSettings.Derive.chimeraBrokerProviderHealthList(arr, function (p) { return getFlat(p); });
+    }
+    if (list && list.length) {
+      list = list.filter(function (ent) {
+        return String((ent || {}).state || "").toLowerCase() !== "not_configured";
+      });
     }
     return {
       list: list,
@@ -2340,10 +2371,14 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       var lab = stateLabel[st];
       trackParts.push(healthSeg(chimeraBrokerProviderHealthSegTitle(entry, lab), st));
       labelParts.push(
-        '<span class="sum-bf-prov-health-label" title="' +
+        '<span class="sum-bf-prov-health-label sum-bf-prov-health-label--' +
+          escapeHtml(st) +
+          '" title="' +
           escapeHtml(chimeraBrokerProviderHealthSegTitle(entry, lab)) +
           '">' +
           escapeHtml(String(entry.id || "—")) +
+          " · " +
+          escapeHtml(lab) +
           "</span>"
       );
     }
@@ -3527,11 +3562,7 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       "</span>" +
       metrics +
       lifeCompact +
-      '<span class="sum-status ' +
-      st.cls +
-      '">' +
-      escapeHtml(st.st) +
-      "</span>" +
+      serviceSummaryStatusPillHtml(st) +
       '<span class="sum-chev"></span></summary>' +
       renderExpandedConv(g) +
       "</details>"
@@ -4274,12 +4305,15 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
   }
 
   function serviceSummaryStatusPillHtml(st) {
-    var variant = "";
-    if (st.st === "active" || st.st === "complete" || st.st === "idle") variant = "ok";
+    st = st || {};
+    var label = st.st != null ? String(st.st) : "";
+    var okStates = { active: 1, complete: 1, idle: 1, waiting: 1 };
+    var variant = okStates[label] ? "ok" : "";
+    var pulse = st.cls && String(st.cls).indexOf("sum-pulse") >= 0;
     if (typeof ctx.sgOpHealthPillHtml === "function") {
-      return ctx.sgOpHealthPillHtml(st.st, variant);
+      return ctx.sgOpHealthPillHtml(label, variant, { pulse: pulse });
     }
-    return '<span class="sum-status ' + st.cls + '">' + escapeHtml(st.st) + "</span>";
+    return '<span class="sum-status ' + (st.cls || "") + '">' + escapeHtml(label) + "</span>";
   }
 
   function buildServiceCard(name, arr, svcCtx) {
@@ -4535,33 +4569,27 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     );
   }
 
+  function emptyIndexerWatchRootsStore() {
+    return { byBucket: {}, byRunId: {}, snapshots: {} };
+  }
+
+  function normalizeIndexerWatchRootsStore(o) {
+    if (!o || typeof o !== "object") return emptyIndexerWatchRootsStore();
+    if (!o.byBucket || typeof o.byBucket !== "object") o.byBucket = {};
+    if (!o.byRunId || typeof o.byRunId !== "object") o.byRunId = {};
+    if (!o.snapshots || typeof o.snapshots !== "object") o.snapshots = {};
+    return o;
+  }
+
   function loadIndexerWatchRootsStore() {
-    try {
-      var s = localStorage.getItem(INDEXER_WATCH_ROOTS_LS);
-      if (!s) return { byBucket: {}, byRunId: {}, snapshots: {} };
-      var o = JSON.parse(s);
-      if (!o || typeof o !== "object") return { byBucket: {}, byRunId: {}, snapshots: {} };
-      if (!o.byBucket || typeof o.byBucket !== "object") o.byBucket = {};
-      if (!o.byRunId || typeof o.byRunId !== "object") o.byRunId = {};
-      if (!o.snapshots || typeof o.snapshots !== "object") o.snapshots = {};
-      return o;
-    } catch (_e) {
-      return { byBucket: {}, byRunId: {}, snapshots: {} };
+    if (!ctx.indexerWatchRootsStore) {
+      ctx.indexerWatchRootsStore = emptyIndexerWatchRootsStore();
     }
+    return normalizeIndexerWatchRootsStore(ctx.indexerWatchRootsStore);
   }
 
   function saveIndexerWatchRootsStore(store) {
-    try {
-      localStorage.setItem(INDEXER_WATCH_ROOTS_LS, JSON.stringify(store));
-    } catch (_e) {
-      try {
-        var st = loadIndexerWatchRootsStore();
-        var keys = Object.keys(st.byBucket);
-        keys.sort();
-        for (var ki = 0; ki < Math.min(24, keys.length); ki++) delete st.byBucket[keys[ki]];
-        localStorage.setItem(INDEXER_WATCH_ROOTS_LS, JSON.stringify(st));
-      } catch (_e2) { }
-    }
+    ctx.indexerWatchRootsStore = normalizeIndexerWatchRootsStore(store);
   }
 
   function latestIndexRunIdFromEvs(evs) {
@@ -4832,7 +4860,7 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
   }
 
   /**
-   * When indexer.run.start drops out of the ring buffer, restore watch roots from localStorage.
+   * When indexer.run.start drops out of the ring buffer, restore watch roots from the session cache.
    * Lookup order: summarized card bucket id (unique per indexer partition), then index_run_id.
    * (Project+flavor alone is ambiguous when multiple indexers share gateway scope.)
    */
@@ -5433,9 +5461,7 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     var avatarIndexer = indexerCollapsedIdle
       ? '<span class="sum-avatar sum-av-c sum-av-indexer-idle" aria-hidden="true">\u2713</span>'
       : '<span class="sum-avatar sum-av-c">IX</span>';
-    var statusSpan = indexerCollapsedIdle
-      ? ""
-      : '<span class="sum-status ' + st.cls + '">' + escapeHtml(st.st) + "</span>";
+    var statusSpan = indexerCollapsedIdle ? "" : serviceSummaryStatusPillHtml(st);
     var iid = indexerCardDomIdFromMeta(meta, run.id);
     rememberIndexerCardSnapshot(run.id, meta);
     var detailsCls = "sum-card";
@@ -6081,12 +6107,21 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       if (ibuilt && ibuilt.targetStateByRunId) partitionRegistry = ibuilt.targetStateByRunId;
       if (ibuilt && ibuilt.buckets) byRun = ibuilt.buckets;
     }
-    if (!ibuilt || !Object.keys(byRun).length) {
+    if (!ibuilt) {
       byRun = {};
       partitionRegistry = {};
       for (var ri = 0; ri < entryCache.length; ri++) {
         var entRL = entryCache[ri];
         var fRL = getFlat(entRL.parsed);
+        if (
+          globalThis.ChimeraSettings &&
+          ChimeraSettings.Derive &&
+          typeof ChimeraSettings.Derive.indexerFlatMsgForPresent === "function"
+        ) {
+          var msgRL = ChimeraSettings.Derive.indexerFlatMsgForPresent(fRL);
+          if (msgRL === "indexer.state") continue;
+          if (msgRL === "indexer.storage.stats" || msgRL.indexOf("indexer.storage.stats") === 0) continue;
+        }
         var groupIdL = indexerGroupIdForFlat(fRL);
         if (!groupIdL) continue;
         if (!byRun[groupIdL]) byRun[groupIdL] = { id: groupIdL, events: [] };
@@ -6269,6 +6304,41 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       workspaceDraftComparableManagedTitle: workspaceDraftComparableManagedTitle,
       operatorManagedWorkspaceTitleText: operatorManagedWorkspaceTitleText,
       operatorWorkspaceCoveredByIndexerRuns: operatorWorkspaceCoveredByIndexerRuns,
+      indexerRunQualifiesForWorkspaceCard: function (run, partitionRegistry) {
+        if (
+          globalThis.ChimeraSettings &&
+          ChimeraSettings.Derive &&
+          typeof ChimeraSettings.Derive.indexerRunQualifiesForWorkspaceCard === "function"
+        ) {
+          return ChimeraSettings.Derive.indexerRunQualifiesForWorkspaceCard(
+            run,
+            partitionRegistry,
+            getFlat,
+            function (runId, evs, opts) {
+              return collectIndexerRunMeta(runId, evs, opts && opts.partitionMeta);
+            },
+            {
+              tokenLabelByTenant: ctx.tokenLabelByTenant,
+              indexerFlatMsg: function (fl) {
+                return indexerFlatMsg(fl);
+              },
+              flatLooksLikeIndexerRunStart: function (fl) {
+                return flatLooksLikeIndexerRunStart(fl);
+              },
+              flatLooksLikeIndexerRunDone: function (fl) {
+                return flatLooksLikeIndexerRunDone(fl);
+              },
+              flatLooksLikeIndexerRunProgress: function (fl) {
+                return flatLooksLikeIndexerRunProgress(fl);
+              },
+              flatLooksLikeIndexerJobIngested: function (fl) {
+                return flatLooksLikeIndexerJobIngested(fl);
+              }
+            }
+          );
+        }
+        return true;
+      },
       adminProvidersSectionBreakHtml: function () {
         return "";
       },

@@ -509,6 +509,44 @@ html[data-theme="design-01"] #panel-summarized .sum-card.sum-card--collapsible:n
   border-color: color-mix(in srgb, var(--embed-semantic-success-fg) 22%, transparent);
 }
 
+.sg-op-health-pill--down {
+  color: var(--embed-semantic-error-fg);
+  background: color-mix(in srgb, var(--embed-strip-down) 14%, var(--embed-surface-container-low, #f4f3f0));
+  border-color: color-mix(in srgb, var(--embed-strip-down) 38%, transparent);
+}
+
+.sg-op-health-pill--unknown {
+  color: var(--embed-text-secondary);
+  background: var(--embed-surface-container-low, #f4f3f0);
+  border-color: var(--embed-border-medium, #e3e2e0);
+  border-style: dashed;
+}
+
+.sg-op-health-pill--not_configured {
+  color: var(--embed-text-tertiary, #9e9e9e);
+  background: transparent;
+  border-color: var(--embed-border-light, #ececec);
+  opacity: 0.9;
+}
+
+.sg-op-health-pill--warn {
+  color: var(--embed-strip-warn);
+  background: color-mix(in srgb, var(--embed-strip-warn) 12%, var(--embed-surface-container-low, #f4f3f0));
+  border-color: color-mix(in srgb, var(--embed-strip-warn) 35%, transparent);
+}
+
+.sg-op-health-pill--pulse::after {
+  content: "";
+  display: inline-block;
+  width: 0.35rem;
+  height: 0.35rem;
+  margin-left: 0.35rem;
+  border-radius: 50%;
+  background: var(--embed-status-pulse-dot);
+  vertical-align: middle;
+  animation: sum-pulse 1.2s ease-in-out infinite;
+}
+
 /* Neutral count pills on card summaries (keys, models, conv, rules, …) */
 .sg-op-health-pill--metric {
   color: var(--embed-text-secondary);

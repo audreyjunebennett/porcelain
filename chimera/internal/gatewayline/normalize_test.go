@@ -28,6 +28,18 @@ func TestNormalizePayloadGatewayAccess(t *testing.T) {
 	}
 }
 
+func TestNormalizePayloadGatewayAccessTruncatesTimestamp(t *testing.T) {
+	raw := `{"time":"2026-05-22T16:36:01.9668968Z","level":"INFO","msg":"gateway.http.access","method":"GET","path":"/api/ui/chimera-broker/providers","statusCode":200,"responseTimeMs":0,"timeline_kind":"web","service":"gateway"}`
+	b := NormalizePayload(raw)
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatal(err)
+	}
+	if m["timestamp"] != "2026-05-22T16:36:01Z" {
+		t.Fatalf("timestamp=%v", m["timestamp"])
+	}
+}
+
 func TestNormalizePayloadPlainLine(t *testing.T) {
 	raw := `gateway startup seed`
 	out := string(NormalizePayload(raw))

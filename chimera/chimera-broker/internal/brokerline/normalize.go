@@ -27,6 +27,11 @@ var (
 	catalogModelsRegRE     = regexp.MustCompile(`(?i)\b(\d+)\s+models?\s+registered\b`)
 	catalogListingModelsRE = regexp.MustCompile(`(?i)listing\s+(\d+)\s+models?\b`)
 	catalogPoolModelsRE    = regexp.MustCompile(`(?i)populated\s+model\s+pool[^\n\d]{0,160}(\d+)\s+models?\b`)
+	modelDiscoveryFailRE   = regexp.MustCompile(`(?i)model discovery failed for provider\s+([a-z0-9_.-]+)`)
+	providerHealthOkRE     = regexp.MustCompile(`(?i)(?:provider\s+([a-z0-9_.-]+)\s+health(?:y|\s+check\s+(?:passed|ok|succeeded))|health(?:\s+check)?\s+(?:passed|ok|succeeded)\s+for\s+provider\s+([a-z0-9_.-]+))`)
+	providerHealthFailRE   = regexp.MustCompile(`(?i)(?:provider\s+([a-z0-9_.-]+)\s+health(?:\s+check)?\s+failed|health(?:\s+check)?\s+failed\s+for\s+provider\s+([a-z0-9_.-]+))`)
+	providerKeyLoadedRE    = regexp.MustCompile(`(?i)key loaded for provider\s+([a-z0-9_.-]+)`)
+	providerKeyMissingRE   = regexp.MustCompile(`(?i)(?:no api key for provider\s+([a-z0-9_.-]+)|missing api key for provider\s+([a-z0-9_.-]+))`)
 )
 
 type normalized struct {
@@ -192,6 +197,31 @@ func normalizeJSON(raw string) []byte {
 		strings.Contains(strings.ToLower(message), "server started"):
 		out.Msg = "broker.listen.http"
 		out.ProgressDetail = wline.TrimRunes(message, 512)
+	case modelDiscoveryFailRE.MatchString(message):
+		out.Msg = naming.MsgBrokerProviderModelDiscoveryFail
+		if sm := modelDiscoveryFailRE.FindStringSubmatch(message); len(sm) == 2 {
+			out.ProviderID = strings.TrimSpace(sm[1])
+		}
+	case providerKeyMissingRE.MatchString(message):
+		out.Msg = naming.MsgBrokerProviderKeyMissing
+		if sm := providerKeyMissingRE.FindStringSubmatch(message); len(sm) >= 2 {
+			out.ProviderID = providerIDFromSubmatch(sm[1], pickSubmatch(sm, 2))
+		}
+	case providerKeyLoadedRE.MatchString(message):
+		out.Msg = naming.MsgBrokerProviderKeyLoaded
+		if sm := providerKeyLoadedRE.FindStringSubmatch(message); len(sm) == 2 {
+			out.ProviderID = strings.TrimSpace(sm[1])
+		}
+	case providerHealthFailRE.MatchString(message):
+		out.Msg = naming.MsgBrokerProviderHealthFail
+		if sm := providerHealthFailRE.FindStringSubmatch(message); len(sm) >= 2 {
+			out.ProviderID = providerIDFromSubmatch(sm[1], pickSubmatch(sm, 2))
+		}
+	case providerHealthOkRE.MatchString(message):
+		out.Msg = naming.MsgBrokerProviderHealthOk
+		if sm := providerHealthOkRE.FindStringSubmatch(message); len(sm) >= 2 {
+			out.ProviderID = providerIDFromSubmatch(sm[1], pickSubmatch(sm, 2))
+		}
 	case addedProviderRE.MatchString(message):
 		out.Msg = "broker.provider.loaded"
 		if sm := addedProviderRE.FindStringSubmatch(message); len(sm) == 2 {
@@ -256,6 +286,23 @@ func providerIDFromUpdateMessage(s string) string {
 	return strings.TrimSpace(last[2])
 }
 
+func pickSubmatch(sm []string, idx int) string {
+	if idx >= 0 && idx < len(sm) {
+		return sm[idx]
+	}
+	return ""
+}
+
+func providerIDFromSubmatch(groups ...string) string {
+	for _, g := range groups {
+		g = strings.TrimSpace(g)
+		if g != "" {
+			return g
+		}
+	}
+	return ""
+}
+
 func httpTargetPath(target string) string {
 	target = strings.TrimSpace(target)
 	if target == "" {
@@ -275,6 +322,37 @@ func httpTargetPath(target string) string {
 	return target
 }
 
+func providerIDFromAPIPath(path string) string {
+	path = strings.TrimSpace(path)
+	const prefix = "/api/providers/"
+	if !strings.HasPrefix(path, prefix) {
+		return ""
+	}
+	rest := strings.TrimPrefix(path, prefix)
+	if rest == "" {
+		return ""
+	}
+	if i := strings.IndexByte(rest, '/'); i >= 0 {
+		rest = rest[:i]
+	}
+	return strings.TrimSpace(rest)
+}
+
+func annotateHTTPAccessTarget(out *normalized, target string) {
+	path := httpTargetPath(target)
+	switch path {
+	case "/api/governance/providers":
+		out.ProgressDetail = "governance provider list"
+	case "/v1/models":
+		out.ProgressDetail = "model catalog"
+	default:
+		if pid := providerIDFromAPIPath(path); pid != "" {
+			out.ProviderID = pid
+			out.ProgressDetail = "provider " + pid
+		}
+	}
+}
+
 func classifyHTTPAccess(out *normalized, fields map[string]json.RawMessage, message string) (string, bool) {
 	if strings.TrimSpace(message) != "request completed" {
 		return "", false
@@ -291,6 +369,7 @@ func classifyHTTPAccess(out *normalized, fields map[string]json.RawMessage, mess
 	out.HTTPStatus = status
 	out.HTTPDurationMS = dur
 	out.TraceID = wline.JSONString(fields, "trace_id")
+	annotateHTTPAccessTarget(out, target)
 
 	if status >= 200 && status < 300 && method == "GET" && httpTargetPath(target) == "/v1/models" {
 		out.Level = "DEBUG"

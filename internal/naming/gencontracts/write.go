@@ -34,8 +34,6 @@ func WriteContractsJS(w io.Writer) error {
 	writeConsts(naming.LogsUILogSources)
 	b.WriteString("\n")
 	writeConsts(naming.LogsUITimelineKinds)
-	b.WriteString("\n")
-	writeConsts(naming.SettingsUIPrefs)
 
 	b.WriteString("\n    /** Request-timeline bar keys (product display names). */\n")
 	b.WriteString("    TimelineBarKinds: [\n")

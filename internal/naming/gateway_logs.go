@@ -1,6 +1,6 @@
 package naming
 
-// Gateway operator logs: timeline_kind values, structured-log msg prefixes, and logs UI prefs.
+// Gateway operator logs: timeline_kind values and structured-log msg prefixes.
 //
 // Per-message slugs: see log_messages.go (generated from internal/operatorcopy/messages.yaml).
 //
@@ -36,11 +36,3 @@ const (
 	LogMsgPrefixIndexer     = "indexer."
 )
 
-// Settings UI localStorage keys (operator prefs).
-const (
-	SettingsUIPrefViewMode          = "chimera_settings_view_mode"
-	SettingsUIPrefFilterApp         = "chimera_settings_flt_app"
-	SettingsUIPrefFilterLevel       = "chimera_settings_flt_level"
-	SettingsUIPrefIndexerWatchRoots = "chimera.indexer.watchRoots.v2"
-	SettingsUIPrefGatewayShowProbes = "chimera.settings.gateway.showProbes"
-)

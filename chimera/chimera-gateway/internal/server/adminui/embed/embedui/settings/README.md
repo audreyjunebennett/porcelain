@@ -21,7 +21,7 @@ See `settings.html`: `contracts.js` → `ChimeraUI` (`ui/`) → util/parse → d
 | `components/` | Settings-local widgets (also uses `ui/components/`) |
 | `util/` | hash, time, escape re-exports |
 | `testing/` | Test harness loader (not used in production HTML) |
-| `contracts.js` | Generated constants (`SettingsUIPref*`, products, timeline kinds) |
+| `contracts.js` | Generated constants (products, timeline kinds) |
 | `operator_copy.js` | Generated operator message registry |
 
 ## Related routes

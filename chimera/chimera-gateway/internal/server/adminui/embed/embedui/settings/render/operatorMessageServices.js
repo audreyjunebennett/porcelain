@@ -98,6 +98,11 @@
       var ms = Number(msRaw);
       var bits = [];
       bits.push(rateLimit ? "Rate limited" : "Inbound");
+      var pid = flat.provider_id != null ? String(flat.provider_id).trim() : "";
+      if (pid) bits.push("provider " + pid);
+      else if (flat.progress_detail != null && String(flat.progress_detail).trim()) {
+        bits.push(String(flat.progress_detail).trim());
+      }
       bits.push(meth + " " + path);
       if (!omitStatus) bits.push("→ " + st);
       if (!isNaN(ms) && ms >= 0) bits.push(Math.round(ms) + " ms");

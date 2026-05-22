@@ -67,6 +67,9 @@ func PassthroughSlogJSON(raw []byte, defaultService string) ([]byte, bool) {
 	if level == "" && ts == "" {
 		return nil, false
 	}
+	if ts != "" {
+		ts = NormalizeTimestampUTC(ts)
+	}
 	svc := strings.TrimSpace(JSONString(fields, "service"))
 	if svc == "" {
 		svc = serviceFromComponent(JSONString(fields, "component"), defaultService)

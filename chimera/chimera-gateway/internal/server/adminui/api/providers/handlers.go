@@ -7,6 +7,7 @@ package providers
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/adminui/apirut"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/adminui/handler"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/catalog"
+	gruntime "github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/runtime"
 	"github.com/lynn/porcelain/internal/operatorapi"
 )
 
@@ -38,7 +40,7 @@ func ClassifyBrokerProviderResult(name string, body []byte, status int, transpor
 	}
 	out.HTTPStatus = status
 	if brokeradmin.IsProviderMissingGET(status, body) {
-		out.State = "unknown"
+		out.State = "not_configured"
 		return out
 	}
 	if status < 200 || status >= 300 {
@@ -70,38 +72,46 @@ func ClassifyBrokerProviderResult(name string, body []byte, status int, transpor
 	if sum.OllamaBaseURL != "" {
 		out.OllamaBaseURL = sum.OllamaBaseURL
 	}
-	switch strings.ToLower(name) {
-	case "ollama":
-		// Ollama can run without API keys; treat a configured base_url as "up". A registered
-		// provider entry with neither base_url nor keys is still surface-able as key_missing
-		// because the operator did add it but didn't finish wiring it.
-		if sum.OllamaBaseURL != "" || sum.KeyConfigured {
-			out.State = "up"
-		} else {
-			out.State = "key_missing"
-		}
-	default:
-		if sum.KeyConfigured {
-			out.State = "up"
-		} else {
-			out.State = "key_missing"
-		}
+	if !providerConfigPresent(name, sum) {
+		out.State = "key_missing"
+		return out
 	}
-	// Live override: chimera-broker prunes a provider's models from /v1/models when it can't
-	// reach the upstream (most visible with local ollama: stop the daemon and `ollama/...`
-	// disappears from the merged catalog). When a fresh snapshot says "configured but no
-	// models present", treat that as the gruntime.Runtime liveness verdict and downgrade to "down".
-	// We only override the otherwise-positive states ("up") because a config-side
-	// "key_missing" / "unknown" already explains why the provider can't serve traffic.
-	if out.State == "up" && liveSnapshot != nil && liveSnapshot.OK &&
-		liveSnapshot.IsFresh(time.Now(), catalog.CatalogSnapshotFreshness) &&
-		!liveSnapshot.HasProvider(name) {
-		out.State = "down"
-		if out.Error == "" {
-			out.Error = "no models available in live catalog"
-		}
-	}
+	out.State, out.Error = providerLivenessState(name, liveSnapshot, out.Error)
 	return out
+}
+
+func providerConfigPresent(name string, sum brokeradmin.ProviderSummary) bool {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "ollama":
+		return sum.OllamaBaseURL != "" || sum.KeyConfigured
+	default:
+		return sum.KeyConfigured
+	}
+}
+
+// providerLivenessState maps configured providers to up/down/unknown using the live /v1/models
+// catalog. Config alone never yields "up" — only a fresh catalog snapshot with models present does.
+// A fresh failed catalog poll (e.g. chimera-broker /v1/models 400 when ollama is unreachable)
+// yields "down" for configured providers.
+func providerLivenessState(name string, liveSnapshot *catalog.CatalogSnapshot, errHint string) (state string, errText string) {
+	now := time.Now()
+	if liveSnapshot != nil && liveSnapshot.IsFresh(now, catalog.CatalogSnapshotFreshness) {
+		if liveSnapshot.OK {
+			if liveSnapshot.HasProvider(name) {
+				return "up", errHint
+			}
+			if errHint == "" {
+				errHint = "no models available in live catalog"
+			}
+			return "down", errHint
+		}
+		errText := strings.TrimSpace(liveSnapshot.FetchErr)
+		if errText == "" {
+			errText = "model catalog unavailable"
+		}
+		return "down", errText
+	}
+	return "unknown", errHint
 }
 
 // fetchChimeraBrokerProviderHealth queries Chimera Broker for each well-known provider in parallel-by-loop
@@ -112,6 +122,11 @@ func ClassifyBrokerProviderResult(name string, body []byte, status int, transpor
 // override the config-view verdict with the live `/v1/models` catalog (see that function for
 // the override rules). Pass nil from tests that only need to exercise the config branch.
 func fetchChimeraBrokerProviderHealth(ctx context.Context, client *brokeradmin.Client, names []string, liveSnapshot *catalog.CatalogSnapshot) operatorapi.ProviderHealthResponse {
+	configured, listOK := brokeradmin.ListConfiguredProviders(ctx, client)
+	return fetchChimeraBrokerProviderHealthWithList(ctx, client, names, configured, listOK, liveSnapshot)
+}
+
+func fetchChimeraBrokerProviderHealthWithList(ctx context.Context, client *brokeradmin.Client, names []string, configured map[string]struct{}, listOK bool, liveSnapshot *catalog.CatalogSnapshot) operatorapi.ProviderHealthResponse {
 	out := operatorapi.ProviderHealthResponse{
 		FetchedAt: time.Now().UTC(),
 		Providers: make([]operatorapi.ProviderHealthEntry, 0, len(names)),
@@ -127,7 +142,7 @@ func fetchChimeraBrokerProviderHealth(ctx context.Context, client *brokeradmin.C
 	}
 	anySuccess := false
 	for _, name := range names {
-		body, status, err, httpProbed := brokeradmin.GetProviderForProbe(ctx, client, name)
+		body, status, err, httpProbed := brokeradmin.GetProviderForProbeWithList(ctx, client, name, configured, listOK)
 		entry := ClassifyBrokerProviderResult(name, body, status, err, liveSnapshot)
 		if snapshotFresh {
 			entry.ModelIDs = catalogModelIDsForProvider(liveSnapshot, name)
@@ -194,10 +209,23 @@ func handleChimeraBrokerProviderHealth(h *handler.Handler, w http.ResponseWriter
 	ctx, cancel := context.WithTimeout(r.Context(), 12*time.Second)
 	defer cancel()
 	client := apirut.BrokerAdminClient(h.RT)
-	// Read the live `/v1/models` snapshot maintained by the periodic catalog poller (see
-	// availablemodels.go). When fresh, missing providers in that catalog override the
-	// config-view "up" verdict so the Provider health strip reflects gruntime.Runtime reality.
-	resp := fetchChimeraBrokerProviderHealth(ctx, client, apirut.BrokerProviderNames, h.RT.CatalogSnapshot())
+	liveSnapshot := catalogSnapshotForProviderHealth(ctx, h.RT, h.Log)
+	configured, listOK := brokeradmin.ListConfiguredProviders(ctx, client)
+	// Full UI roster so provider cards can distinguish configured vs not_configured; the health
+	// strip filters out not_configured entries client-side.
+	names := append([]string(nil), apirut.BrokerProviderNames...)
+	resp := fetchChimeraBrokerProviderHealthWithList(ctx, client, names, configured, listOK, liveSnapshot)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)
+}
+
+func catalogSnapshotForProviderHealth(ctx context.Context, rt *gruntime.Runtime, log *slog.Logger) *catalog.CatalogSnapshot {
+	if rt == nil {
+		return nil
+	}
+	snap := rt.CatalogSnapshot()
+	if snap != nil && snap.OK && snap.IsFresh(time.Now(), catalog.CatalogSnapshotFreshness) {
+		return snap
+	}
+	return gruntime.RefreshAvailableModels(ctx, rt, log)
 }

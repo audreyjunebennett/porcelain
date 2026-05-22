@@ -1,5 +1,5 @@
 /**
- * Filters (Application / Level) + preference persistence.
+ * Filters (Application / Level).
  *
  * Exports:
  * - ChimeraSettings.Filters.init(ctx)
@@ -13,7 +13,6 @@
  * - viewModeGetter(): string
  * - rebuildRawLogsTextarea(opts)
  * - levelOptionSet (object)
- * - FLT_APP_LS, FLT_LEVEL_LS (localStorage keys)
  */
 
 function ensureAppOption(ctx, app) {
@@ -82,55 +81,11 @@ function applyFilters(ctx) {
   }
 }
 
-function saveFilterPrefs(ctx) {
-  try {
-    localStorage.setItem(ctx.FLT_APP_LS, ctx.fltAppEl.value);
-    localStorage.setItem(ctx.FLT_LEVEL_LS, ctx.fltLevelEl.value);
-  } catch (x) {}
-}
-
-function syncFiltersFromStorage(ctx) {
-  try {
-    var fa = localStorage.getItem(ctx.FLT_APP_LS);
-    if (fa !== null && fa !== undefined && fa !== "") {
-      var foundA = false;
-      for (var a = 0; a < ctx.fltAppEl.options.length; a++) {
-        if (ctx.fltAppEl.options[a].value === fa) {
-          ctx.fltAppEl.value = fa;
-          foundA = true;
-          break;
-        }
-      }
-      if (!foundA) {
-        ctx.fltAppEl.value = "";
-        localStorage.removeItem(ctx.FLT_APP_LS);
-      }
-    }
-    var fl = localStorage.getItem(ctx.FLT_LEVEL_LS);
-    if (fl !== null && fl !== undefined && fl !== "") {
-      var foundL = false;
-      for (var b = 0; b < ctx.fltLevelEl.options.length; b++) {
-        if (ctx.fltLevelEl.options[b].value === fl) {
-          ctx.fltLevelEl.value = fl;
-          foundL = true;
-          break;
-        }
-      }
-      if (!foundL) {
-        ctx.fltLevelEl.value = "";
-        localStorage.removeItem(ctx.FLT_LEVEL_LS);
-      }
-    }
-  } catch (x) {}
-}
-
 function init(ctx) {
   ctx.fltAppEl.addEventListener("change", function () {
-    saveFilterPrefs(ctx);
     applyFilters(ctx);
   });
   ctx.fltLevelEl.addEventListener("change", function () {
-    saveFilterPrefs(ctx);
     applyFilters(ctx);
   });
 }
@@ -139,11 +94,9 @@ globalThis.ChimeraSettings = globalThis.ChimeraSettings || {};
 globalThis.ChimeraSettings.Filters = {
   init: init,
   apply: function (ctx) { return applyFilters(ctx); },
-  syncFromStorage: function (ctx) { return syncFiltersFromStorage(ctx); },
   ensureAppOption: function (ctx, app) { return ensureAppOption(ctx, app); },
   ensureLevelOption: function (ctx, lvl) { return ensureLevelOption(ctx, lvl); },
   entryMatches: function (ctx, parsed) { return entryMatchesFilters(ctx, parsed); },
   /** StructuredLogs table rows (dataset.app / dataset.level). */
   matchesRow: function (ctx, tr) { return rowMatchesFilter(ctx, tr); }
 };
-

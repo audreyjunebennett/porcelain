@@ -122,6 +122,9 @@ func ReorderNormalizedJSON(raw []byte) ([]byte, bool) {
 	rec := orderedLogFromFields(fields)
 	rec.Msg = msg
 	rec.Service = svc
+	if rec.Timestamp != "" {
+		rec.Timestamp = NormalizeTimestampUTC(rec.Timestamp)
+	}
 	rec.ChimeraNorm = ChimeraNormValue
 	b, err := marshalLosslessNormalized(rec, fields)
 	if err != nil {

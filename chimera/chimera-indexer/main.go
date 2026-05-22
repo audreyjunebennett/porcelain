@@ -47,6 +47,7 @@ import (
 	"github.com/lynn/porcelain/chimera/chimera-indexer/adapter"
 	idxconfig "github.com/lynn/porcelain/chimera/chimera-indexer/internal/config"
 	"github.com/lynn/porcelain/chimera/chimera-indexer/internal/indexer"
+	"github.com/lynn/porcelain/chimera/internal/logfmt"
 	"github.com/lynn/porcelain/chimera/internal/wrapper/contract"
 	wruntime "github.com/lynn/porcelain/chimera/internal/wrapper/runtime"
 )
@@ -575,7 +576,7 @@ func run(args []string) error {
 		}
 		return wruntime.WrapExitError(contract.ExitConfigError, err)
 	}
-	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	log := logfmt.NewLogger(os.Stderr, logfmt.JSONEnabled(), slog.LevelInfo)
 	idx := &adapter.Indexer{Cfg: cfg}
 	rootCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

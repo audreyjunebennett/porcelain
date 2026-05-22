@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+
+	"github.com/lynn/porcelain/chimera/internal/logfmt"
 )
 
 // ParseLogLevel maps indexer YAML/CLI log_level to slog.Level (default INFO).
@@ -23,11 +25,7 @@ func ParseLogLevel(s string) slog.Level {
 
 // StderrLogger builds the indexer process stderr logger used by chimera-indexer.
 func StderrLogger(logJSON bool, level slog.Level) *slog.Logger {
-	opts := &slog.HandlerOptions{Level: level}
-	if logJSON {
-		return slog.New(slog.NewJSONHandler(os.Stderr, opts))
-	}
-	return slog.New(slog.NewTextHandler(os.Stderr, opts))
+	return logfmt.NewLogger(os.Stderr, logJSON, level)
 }
 
 // JobSkipLogMode selects how per-file skip lines are emitted (see docs indexer.md).

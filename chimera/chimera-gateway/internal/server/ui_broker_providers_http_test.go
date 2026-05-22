@@ -24,6 +24,12 @@ func TestUIBrokerProviderHealth_endToEnd(t *testing.T) {
 		switch r.URL.Path {
 		case "/health":
 			w.WriteHeader(http.StatusOK)
+		case "/v1/models":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"object":"list","data":[
+				{"id":"groq/llama3","object":"model"},
+				{"id":"ollama/qwen","object":"model"}
+			]}`))
 		case "/api/providers/groq":
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"name":"groq","keys":[{"name":"chimera-groq-key-1","value":"env.GROQ_API_KEY"}]}`))
@@ -165,6 +171,87 @@ func TestUIChimeraBrokerProviderHealth_chimeraBrokerDown(t *testing.T) {
 		if p.State != "down" {
 			t.Fatalf("provider %q state=%q want down", p.ID, p.State)
 		}
+	}
+}
+
+func TestUIBrokerProviderHealth_onlyOllamaConfigured_catalogFail(t *testing.T) {
+	brokeradmin.InvalidateProviderConfigIndex()
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
+
+	chimeraBroker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/health":
+			w.WriteHeader(http.StatusOK)
+		case "/api/governance/providers":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"providers":[{"provider":"ollama"}],"count":1}`))
+		case "/v1/models":
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":"upstream unavailable"}`))
+		case "/api/providers/ollama":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"name":"ollama","keys":[],"network_config":{"base_url":"http://127.0.0.1:11434"}}`))
+		case "/api/providers/groq", "/api/providers/gemini":
+			t.Errorf("unexpected GET %s when only ollama is configured", r.URL.Path)
+			http.NotFound(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(chimeraBroker.Close)
+
+	dir := t.TempDir()
+	gwPath := filepath.Join(dir, naming.GatewayConfigFileTarget)
+	writeGateway(t, gwPath, chimeraBroker.URL, []string{"m"}, "")
+	tokPath := filepath.Join(dir, "api-keys.yaml")
+	writeTokens(t, tokPath, "gw-ollama-only", "t1")
+	routePath := filepath.Join(dir, "routing-policy.yaml")
+	if err := os.WriteFile(routePath, []byte("rules: []\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rt, err := NewRuntime(gwPath, testLog())
+	if err != nil {
+		t.Fatal(err)
+	}
+	front := httptest.NewServer(NewMux(rt, testLog(), nil, NewUIOptions()))
+	t.Cleanup(front.Close)
+
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar}
+	loginRes, err := client.Post(front.URL+"/api/ui/login", "application/json", strings.NewReader(`{"token":"gw-ollama-only"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	loginRes.Body.Close()
+	if loginRes.StatusCode != http.StatusOK {
+		t.Fatalf("login %d", loginRes.StatusCode)
+	}
+
+	res, err := client.Get(front.URL + "/api/ui/chimera-broker/providers")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	var doc adminui.ProviderHealthResponse
+	if err := json.NewDecoder(res.Body).Decode(&doc); err != nil {
+		t.Fatal(err)
+	}
+	if len(doc.Providers) != 3 {
+		t.Fatalf("providers len=%d want 3: %+v", len(doc.Providers), doc.Providers)
+	}
+	byID := map[string]adminui.ProviderHealthEntry{}
+	for _, p := range doc.Providers {
+		byID[p.ID] = p
+	}
+	if got := byID["groq"]; got.State != "not_configured" {
+		t.Fatalf("groq: %+v", got)
+	}
+	if got := byID["gemini"]; got.State != "not_configured" {
+		t.Fatalf("gemini: %+v", got)
+	}
+	if got := byID["ollama"]; got.State != "down" || got.OllamaBaseURL != "http://127.0.0.1:11434" {
+		t.Fatalf("ollama: %+v", got)
 	}
 }
 

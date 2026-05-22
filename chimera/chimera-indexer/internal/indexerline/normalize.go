@@ -50,6 +50,7 @@ func NormalizePayload(raw string) []byte {
 
 func normalizePlain(raw string) []byte {
 	out := indexerCore{
+		Timestamp:      wline.UTCTimestampNow(),
 		Msg:            "indexer.log.line",
 		Service:        naming.ProductIndexerBinName,
 		ProgressDetail: strings.TrimSpace(raw),
@@ -83,6 +84,9 @@ func normalizeJSON(raw string) []byte {
 	ts := strings.TrimSpace(wline.JSONString(fields, "time"))
 	if ts == "" {
 		ts = strings.TrimSpace(wline.JSONString(fields, "timestamp"))
+	}
+	if ts != "" {
+		ts = wline.NormalizeTimestampUTC(ts)
 	}
 
 	core := indexerCore{

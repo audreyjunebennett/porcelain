@@ -42,7 +42,7 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminProvider = function (ctx) {
         sgOpHealthPillHtml("models " + formatInt(modelCount), "metric") +
         "</span>";
     }
-    var availability = adminProviderAvailabilityHtml(providerId, !!row.ok);
+    var availability = adminProviderAvailabilityHtml(providerId);
     var usageRows = adminProviderUsageRows(providerId);
     var providerIntro = adminProviderIntro(providerId, subtitle);
     var usageHtml = "";

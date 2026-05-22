@@ -108,6 +108,82 @@ func TestNormalizePayloadPlainBannerTimestamp(t *testing.T) {
 	}
 }
 
+func TestNormalizePayloadProviderHealthAndDiscovery(t *testing.T) {
+	cases := []struct {
+		raw     string
+		wantMsg string
+		wantPID string
+	}{
+		{
+			raw:     `{"level":"warn","time":"t","message":"Model discovery failed for provider ollama"}`,
+			wantMsg: "broker.provider.model_discovery.fail",
+			wantPID: "ollama",
+		},
+		{
+			raw:     `{"level":"info","time":"t","message":"key loaded for provider groq"}`,
+			wantMsg: "broker.provider.key_loaded",
+			wantPID: "groq",
+		},
+		{
+			raw:     `{"level":"warn","time":"t","message":"no API key for provider gemini"}`,
+			wantMsg: "broker.provider.key_missing",
+			wantPID: "gemini",
+		},
+		{
+			raw:     `{"level":"info","time":"t","message":"provider ollama health check passed"}`,
+			wantMsg: "broker.provider.health.ok",
+			wantPID: "ollama",
+		},
+		{
+			raw:     `{"level":"warn","time":"t","message":"health check failed for provider openai"}`,
+			wantMsg: "broker.provider.health.fail",
+			wantPID: "openai",
+		},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.wantMsg, func(t *testing.T) {
+			t.Parallel()
+			b := NormalizePayload(tc.raw)
+			var m map[string]any
+			if err := json.Unmarshal(b, &m); err != nil {
+				t.Fatal(err)
+			}
+			if m["msg"] != tc.wantMsg {
+				t.Fatalf("msg=%v want %s", m["msg"], tc.wantMsg)
+			}
+			if m["provider_id"] != tc.wantPID {
+				t.Fatalf("provider_id=%v want %s", m["provider_id"], tc.wantPID)
+			}
+		})
+	}
+}
+
+func TestNormalizePayloadHTTPAccessProviderProbe(t *testing.T) {
+	raw := `{"level":"info","http.method":"GET","http.target":"/api/providers/ollama","http.status_code":200,"http.request_duration_ms":4,"time":"t","message":"request completed"}`
+	b := NormalizePayload(raw)
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatal(err)
+	}
+	if m["provider_id"] != "ollama" {
+		t.Fatalf("provider_id=%v", m["provider_id"])
+	}
+	if m["progress_detail"] != "provider ollama" {
+		t.Fatalf("progress_detail=%v", m["progress_detail"])
+	}
+
+	rawGov := `{"level":"info","http.method":"GET","http.target":"/api/governance/providers","http.status_code":200,"time":"t","message":"request completed"}`
+	bGov := NormalizePayload(rawGov)
+	var mGov map[string]any
+	if err := json.Unmarshal(bGov, &mGov); err != nil {
+		t.Fatal(err)
+	}
+	if mGov["progress_detail"] != "governance provider list" {
+		t.Fatalf("progress_detail=%v", mGov["progress_detail"])
+	}
+}
+
 func TestNormalizePayloadSupervisorSecondPass(t *testing.T) {
 	raw := `{"level":"info","http.method":"POST","http.target":"/v1/chat","http.status_code":200,"time":"t","message":"request completed"}`
 	first := NormalizePayload(raw)

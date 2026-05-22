@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"time"
 )
 
 const EnvLogJSON = "CHIMERA_LOG_JSON"
@@ -33,11 +34,23 @@ func parseBool(v string) bool {
 
 // NewHandler returns a text or JSON slog handler.
 func NewHandler(w io.Writer, json bool, level slog.Level) slog.Handler {
-	hopts := &slog.HandlerOptions{Level: level}
+	hopts := &slog.HandlerOptions{
+		Level:       level,
+		ReplaceAttr: replaceLogTimeAttr,
+	}
 	if json {
 		return slog.NewJSONHandler(w, hopts)
 	}
 	return slog.NewTextHandler(w, hopts)
+}
+
+func replaceLogTimeAttr(groups []string, a slog.Attr) slog.Attr {
+	if len(groups) == 0 && a.Key == slog.TimeKey {
+		if t, ok := a.Value.Any().(time.Time); ok {
+			return slog.String(slog.TimeKey, t.UTC().Truncate(time.Second).Format(time.RFC3339))
+		}
+	}
+	return a
 }
 
 // NewLogger builds a slog.Logger with the requested format.

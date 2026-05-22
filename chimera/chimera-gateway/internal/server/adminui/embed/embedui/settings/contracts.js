@@ -23,12 +23,6 @@
     TimelineKindIndexer: "indexer",
     TimelineKindGateway: "gateway",
 
-    SettingsUIPrefViewMode: "chimera_settings_view_mode",
-    SettingsUIPrefFilterApp: "chimera_settings_flt_app",
-    SettingsUIPrefFilterLevel: "chimera_settings_flt_level",
-    SettingsUIPrefIndexerWatchRoots: "chimera.indexer.watchRoots.v2",
-    SettingsUIPrefGatewayShowProbes: "chimera.settings.gateway.showProbes",
-
     /** Request-timeline bar keys (product display names). */
     TimelineBarKinds: [
       { key: "chimera-gateway", label: "chimera-gateway" },

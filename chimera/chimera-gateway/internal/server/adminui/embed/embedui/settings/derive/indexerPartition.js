@@ -154,6 +154,75 @@ function indexerExtractRunTargetsByRunId(entryCache, getFlat) {
  * target map from distinct (tenant, ingest_project, flavor) on job rows so partitioning
  * and titles still work.
  */
+function indexerIgSyntheticGid(tenant, project, flavor) {
+  var tid = String(tenant != null ? tenant : "").trim();
+  var proj = String(project != null ? project : "").trim();
+  if (!tid || !proj) return "";
+  return "ig\u001e" + tid + "\u001e" + proj + "\u001e" + String(flavor != null ? flavor : "").trim();
+}
+
+function indexerScopeFromFlat(f) {
+  if (!f || typeof f !== "object") f = {};
+  var tid = String(f.tenant_id || f.principal_id || f.tenant || "").trim();
+  var proj = String(f.project_id || f.ingest_project || "").trim();
+  var flav = String(f.flavor_id != null ? f.flavor_id : "").trim();
+  var itk = String(f.indexer_target_key || "").trim();
+  var ik = String(f.indexer_key || "").trim();
+  return {
+    tid: tid,
+    proj: proj,
+    flav: flav,
+    itk: itk,
+    ik: ik,
+    ig: indexerIgSyntheticGid(tid, proj, flav)
+  };
+}
+
+function indexerFlatIsState(f) {
+  return indexerFlatMsgLocal(f) === "indexer.state";
+}
+
+function indexerFlatIsStorageStats(f) {
+  var m = indexerFlatMsgLocal(f);
+  return m === "indexer.storage.stats" || m.indexOf("indexer.storage.stats") === 0;
+}
+
+function indexerFlatIsStatestatsOnly(f) {
+  if (
+    globalThis.ChimeraSettings &&
+    ChimeraSettings.Derive &&
+    typeof ChimeraSettings.Derive.indexerSlugHistogramBucket === "function"
+  ) {
+    return ChimeraSettings.Derive.indexerSlugHistogramBucket(indexerFlatMsgLocal(f)) === "statestats";
+  }
+  return indexerFlatIsState(f) || indexerFlatIsStorageStats(f);
+}
+
+function indexerBucketHasOnlyStatestatsLines(events, getFlat) {
+  if (!Array.isArray(events) || !events.length || typeof getFlat !== "function") return false;
+  for (var i = 0; i < events.length; i++) {
+    var f = indexerAugmentFlat(events[i], getFlat(events[i].parsed));
+    if (!indexerFlatIsStatestatsOnly(f)) return false;
+  }
+  return true;
+}
+
+function indexerScopeMetaFromFlat(f) {
+  var sc = indexerScopeFromFlat(f);
+  return {
+    ingest_project: sc.proj,
+    flavor_id: sc.flav,
+    workspace_id: f && f.scope_workspace_id != null ? String(f.scope_workspace_id).trim() : "",
+    paths: []
+  };
+}
+
+function indexerRegisterSyntheticKey(jb, key, meta) {
+  if (!key || !jb) return;
+  if (jb.keys.indexOf(key) < 0) jb.keys.push(key);
+  if (!jb.keyMeta[key]) jb.keyMeta[key] = meta;
+}
+
 function indexerSyntheticRunTargetsFromJobs(entryCache, getFlat) {
   var jobKeysByRid = {};
   if (!Array.isArray(entryCache) || typeof getFlat !== "function") return jobKeysByRid;
@@ -176,15 +245,17 @@ function indexerSyntheticRunTargetsFromJobs(entryCache, getFlat) {
     var tid = String(f.tenant_id || f.principal_id || f.tenant || "").trim();
     var fv = String(f.flavor_id != null ? f.flavor_id : "").trim();
     var sk = "ig\u001e" + tid + "\u001e" + ip + "\u001e" + fv;
-    if (!jobKeysByRid[rid]) jobKeysByRid[rid] = { keys: [], rootToKey: {}, keyMeta: {} };
-    var jb = jobKeysByRid[rid];
-    if (jb.keys.indexOf(sk) < 0) jb.keys.push(sk);
-    jb.keyMeta[sk] = {
+    var meta = {
       ingest_project: ip,
       flavor_id: fv,
-      workspace_id: "",
+      workspace_id: f.scope_workspace_id != null ? String(f.scope_workspace_id).trim() : "",
       paths: []
     };
+    if (!jobKeysByRid[rid]) jobKeysByRid[rid] = { keys: [], rootToKey: {}, keyMeta: {} };
+    var jb = jobKeysByRid[rid];
+    indexerRegisterSyntheticKey(jb, sk, meta);
+    var itkJob = String(f.indexer_target_key || "").trim();
+    if (itkJob) indexerRegisterSyntheticKey(jb, itkJob, meta);
     var rk = f.root != null ? String(f.root).trim() : "";
     if (rk) jb.rootToKey[rk] = sk;
   }
@@ -196,7 +267,7 @@ function indexerMergeSyntheticTargets(targetState, entryCache, getFlat) {
   for (var rid in synth) {
     if (!Object.prototype.hasOwnProperty.call(synth, rid)) continue;
     var jb = synth[rid];
-    if (!jb || !jb.keys || jb.keys.length <= 1) continue;
+    if (!jb || !jb.keys || jb.keys.length === 0) continue;
     var existing = targetState[rid];
     if (!existing || !existing.keys || existing.keys.length === 0) {
       targetState[rid] = jb;
@@ -244,6 +315,134 @@ function indexerGroupKeyFromFlatImport(fl) {
   return ik || rid || "";
 }
 
+/** Prefer an existing bucket id that matches scope (ik_* vs ig␞ alias). */
+function indexerFindExistingScopeBucketId(f, buckets) {
+  if (!buckets || typeof buckets !== "object") return "";
+  var sc = indexerScopeFromFlat(f);
+  var order = [];
+  if (sc.itk) order.push(sc.itk);
+  if (sc.ig) order.push(sc.ig);
+  if (sc.ik && order.indexOf(sc.ik) < 0) order.push(sc.ik);
+  var i;
+  for (i = 0; i < order.length; i++) {
+    if (buckets[order[i]] && buckets[order[i]].length) return order[i];
+  }
+  if (!sc.proj) return "";
+  for (var gid in buckets) {
+    if (!Object.prototype.hasOwnProperty.call(buckets, gid)) continue;
+    if (!buckets[gid] || !buckets[gid].length) continue;
+    if (String(gid).indexOf("ig\u001e") === 0) {
+      var syn = parseIgSyntheticGid(gid);
+      if (syn && syn.project === sc.proj && syn.flavor === sc.flav) return gid;
+    }
+    if (String(gid).indexOf("ik_") === 0 && sc.itk === gid) return gid;
+  }
+  return "";
+}
+
+function indexerCanonicalFallbackBucketId(f, buckets) {
+  var existing = indexerFindExistingScopeBucketId(f, buckets);
+  if (existing) return existing;
+  var sc = indexerScopeFromFlat(f);
+  if (sc.itk) return sc.itk;
+  if (sc.ig) return sc.ig;
+  return indexerGroupKeyFromFlatImport(f);
+}
+
+function indexerResolveWorkspaceBucketIds(f, st, buckets) {
+  if (indexerFlatIsState(f)) return [];
+  var gids = indexerBucketGidsForLine(f, st);
+  if (gids.length) return gids;
+  if (indexerFlatIsStorageStats(f)) {
+    var hit = indexerFindExistingScopeBucketId(f, buckets);
+    return hit ? [hit] : [];
+  }
+  var fb = indexerCanonicalFallbackBucketId(f, buckets);
+  return fb ? [fb] : [];
+}
+
+/** Merge ig␞tenant␞project␞flavor buckets into matching ik_* buckets (same ingest scope). */
+function indexerMergeAliasedBuckets(buckets, targetState) {
+  if (!buckets || typeof buckets !== "object") return buckets;
+  var igToIk = {};
+  var gid;
+  for (gid in buckets) {
+    if (!Object.prototype.hasOwnProperty.call(buckets, gid)) continue;
+    if (String(gid).indexOf("ig\u001e") !== 0) continue;
+    var syn = parseIgSyntheticGid(gid);
+    if (!syn) continue;
+    var matchIk = "";
+    var rid;
+    for (rid in targetState) {
+      if (!Object.prototype.hasOwnProperty.call(targetState, rid)) continue;
+      var st = targetState[rid];
+      if (!st || !st.keyMeta) continue;
+      var kmKey;
+      for (kmKey in st.keyMeta) {
+        if (!Object.prototype.hasOwnProperty.call(st.keyMeta, kmKey)) continue;
+        if (String(kmKey).indexOf("ik_") !== 0) continue;
+        var km = st.keyMeta[kmKey];
+        if (!km) continue;
+        var mp = String(km.ingest_project || "").trim();
+        var mf = String(km.flavor_id != null ? km.flavor_id : "").trim();
+        if (mp === syn.project && mf === syn.flavor) {
+          matchIk = kmKey;
+          break;
+        }
+      }
+      if (matchIk) break;
+    }
+    if (!matchIk) {
+      var ikGid;
+      for (ikGid in buckets) {
+        if (!Object.prototype.hasOwnProperty.call(buckets, ikGid)) continue;
+        if (String(ikGid).indexOf("ik_") !== 0) continue;
+        if (buckets[ikGid] && buckets[ikGid].length && igToIk[ikGid]) continue;
+        var evs = buckets[ikGid];
+        var ei;
+        for (ei = 0; ei < evs.length; ei++) {
+          var raw = evs[ei].parsed;
+          var flat = raw && raw.rawFlat ? raw.rawFlat : {};
+          var sc = indexerScopeFromFlat(flat);
+          if (sc.proj === syn.project && sc.flav === syn.flavor) {
+            matchIk = ikGid;
+            break;
+          }
+        }
+        if (matchIk) break;
+      }
+    }
+    if (matchIk && matchIk !== gid && buckets[matchIk]) igToIk[gid] = matchIk;
+  }
+  for (var igKey in igToIk) {
+    if (!Object.prototype.hasOwnProperty.call(igToIk, igKey)) continue;
+    var ikKey = igToIk[igKey];
+    if (!buckets[igKey] || !buckets[ikKey]) continue;
+    buckets[ikKey] = buckets[ikKey].concat(buckets[igKey]);
+    delete buckets[igKey];
+  }
+  for (var igKey2 in buckets) {
+    if (!Object.prototype.hasOwnProperty.call(buckets, igKey2)) continue;
+    if (String(igKey2).indexOf("ig\u001e") !== 0) continue;
+    var evsIg = buckets[igKey2];
+    var itkHit = "";
+    var ej;
+    for (ej = 0; ej < evsIg.length; ej++) {
+      var fIg = evsIg[ej].parsed && evsIg[ej].parsed.rawFlat ? evsIg[ej].parsed.rawFlat : {};
+      var itkLine = String(fIg.indexer_target_key || "").trim();
+      if (itkLine.indexOf("ik_") === 0) {
+        itkHit = itkLine;
+        break;
+      }
+    }
+    if (!itkHit) continue;
+    if (!buckets[itkHit]) buckets[itkHit] = [];
+    buckets[itkHit] = buckets[itkHit].concat(buckets[igKey2]);
+    delete buckets[igKey2];
+  }
+  return buckets;
+}
+
 function indexerBucketsFromCache(entryCache, getFlat) {
   var targetState = indexerExtractRunTargetsByRunId(entryCache, getFlat);
   indexerMergeSyntheticTargets(targetState, entryCache, getFlat);
@@ -258,18 +457,47 @@ function indexerBucketsFromCache(entryCache, getFlat) {
     var fRaw = getFlat(ent.parsed);
     var f = indexerAugmentFlat(ent, fRaw);
     if (!indexerInferIsIndexerLine(ent, f)) continue;
+    if (indexerFlatIsState(f)) continue;
     var rid = f.index_run_id != null && String(f.index_run_id).trim() !== "" ? String(f.index_run_id).trim() : "";
     var st = rid ? targetState[rid] : null;
-    var gids = indexerBucketGidsForLine(f, st);
+    var gids = indexerResolveWorkspaceBucketIds(f, st, buckets);
     var g;
-    if (gids.length) {
-      for (g = 0; g < gids.length; g++) push(gids[g], ent);
-      continue;
-    }
-    var fb = indexerGroupKeyFromFlatImport(f);
-    if (fb) push(fb, ent);
+    for (g = 0; g < gids.length; g++) push(gids[g], ent);
   }
+  indexerMergeAliasedBuckets(buckets, targetState);
   return { buckets: buckets, targetStateByRunId: targetState };
+}
+
+/**
+ * True when a partitioned indexer bucket should render a Workspaces card.
+ * Skips observation-only buckets and buckets without resolvable user + project.
+ */
+function indexerRunQualifiesForWorkspaceCard(run, partitionRegistry, getFlat, collectMetaFn, collectMetaOpts) {
+  if (!run || !Array.isArray(run.events) || !run.events.length || typeof getFlat !== "function") return false;
+  if (indexerBucketHasOnlyStatestatsLines(run.events, getFlat)) return false;
+  var pmeta = null;
+  if (
+    partitionRegistry &&
+    typeof globalThis.ChimeraSettings !== "undefined" &&
+    ChimeraSettings.Derive &&
+    typeof ChimeraSettings.Derive.indexerPartitionMetaForRun === "function"
+  ) {
+    pmeta = ChimeraSettings.Derive.indexerPartitionMetaForRun(partitionRegistry, run.id, run.events, getFlat);
+  }
+  var meta = null;
+  if (typeof collectMetaFn === "function") {
+    var opts = collectMetaOpts || {};
+    opts.getFlat = getFlat;
+    opts.partitionMeta = pmeta;
+    meta = collectMetaFn(run.id, run.events, opts);
+  }
+  if (!meta || typeof meta !== "object") return true;
+  var user =
+    meta.userLabel && meta.userLabel !== "—" ? String(meta.userLabel).trim() : "";
+  var proj =
+    meta.projectId && meta.projectId !== "—" ? String(meta.projectId).trim() : "";
+  if (!user || !proj) return false;
+  return true;
 }
 
 function indexerPartitionMetaForRun(partitionMetaRegistry, gid, sampleEvs, getFlat) {
@@ -373,6 +601,10 @@ globalThis.ChimeraSettings.Derive.indexerParseRootScopes = indexerParseRootScope
 globalThis.ChimeraSettings.Derive.indexerExtractRunTargetsByRunId = indexerExtractRunTargetsByRunId;
 globalThis.ChimeraSettings.Derive.indexerBucketGidsForLine = indexerBucketGidsForLine;
 globalThis.ChimeraSettings.Derive.indexerBucketsFromCache = indexerBucketsFromCache;
+globalThis.ChimeraSettings.Derive.indexerRunQualifiesForWorkspaceCard = indexerRunQualifiesForWorkspaceCard;
+globalThis.ChimeraSettings.Derive.indexerBucketHasOnlyStatestatsLines = indexerBucketHasOnlyStatestatsLines;
+globalThis.ChimeraSettings.Derive.indexerMergeAliasedBuckets = indexerMergeAliasedBuckets;
+globalThis.ChimeraSettings.Derive.indexerIgSyntheticGid = indexerIgSyntheticGid;
 globalThis.ChimeraSettings.Derive.indexerPartitionMetaForRun = indexerPartitionMetaForRun;
 globalThis.ChimeraSettings.Derive.indexerAugmentFlat = indexerAugmentFlat;
 globalThis.ChimeraSettings.Derive.indexerInferIsIndexerLine = indexerInferIsIndexerLine;

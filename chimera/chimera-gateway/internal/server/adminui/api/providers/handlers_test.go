@@ -5,6 +5,9 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/catalog"
 )
 
 func TestClassifyBrokerProviderResult_states(t *testing.T) {
@@ -20,13 +23,24 @@ func TestClassifyBrokerProviderResult_states(t *testing.T) {
 		wantKeys  int
 		wantCfg   bool
 		wantBase  string
+		live      *catalog.CatalogSnapshot
 	}{
 		{
-			name:      "groq up with one key",
+			name:      "groq up with one key and live catalog",
 			provider:  "groq",
 			body:      []byte(`{"name":"groq","keys":[{"name":"k","value":"env.GROQ_API_KEY"}]}`),
 			status:    200,
 			wantState: "up",
+			wantKeys:  1,
+			wantCfg:   true,
+			live:      catalog.NewTestSnapshot(time.Now(), []string{"groq"}),
+		},
+		{
+			name:      "groq configured unknown without live catalog",
+			provider:  "groq",
+			body:      []byte(`{"name":"groq","keys":[{"name":"k","value":"env.GROQ_API_KEY"}]}`),
+			status:    200,
+			wantState: "unknown",
 			wantKeys:  1,
 			wantCfg:   true,
 		},
@@ -40,13 +54,23 @@ func TestClassifyBrokerProviderResult_states(t *testing.T) {
 			wantCfg:   false,
 		},
 		{
-			name:      "ollama up via base_url even without keys",
+			name:      "ollama configured unknown without live catalog",
 			provider:  "ollama",
 			body:      []byte(`{"name":"ollama","keys":[],"network_config":{"base_url":"http://127.0.0.1:11434"}}`),
 			status:    200,
-			wantState: "up",
+			wantState: "unknown",
 			wantKeys:  0,
 			wantBase:  "http://127.0.0.1:11434",
+		},
+		{
+			name:      "ollama down when configured but absent from live catalog",
+			provider:  "ollama",
+			body:      []byte(`{"name":"ollama","keys":[],"network_config":{"base_url":"http://127.0.0.1:11434"}}`),
+			status:    200,
+			wantState: "down",
+			wantKeys:  0,
+			wantBase:  "http://127.0.0.1:11434",
+			live:      catalog.NewTestSnapshot(time.Now(), []string{"groq"}),
 		},
 		{
 			name:      "ollama key_missing when no base_url and no keys",
@@ -56,11 +80,20 @@ func TestClassifyBrokerProviderResult_states(t *testing.T) {
 			wantState: "key_missing",
 		},
 		{
-			name:      "unknown when provider missing 404",
+			name:      "not_configured when provider missing 404",
 			provider:  "groq",
 			body:      []byte(`{"is_chimera_broker_error":false,"status_code":404,"error":{"message":"Provider not found"}}`),
 			status:    200,
-			wantState: "unknown",
+			wantState: "not_configured",
+		},
+		{
+			name:      "ollama down when catalog poll failed",
+			provider:  "ollama",
+			body:      []byte(`{"name":"ollama","keys":[],"network_config":{"base_url":"http://127.0.0.1:11434"}}`),
+			status:    200,
+			wantState: "down",
+			wantBase:  "http://127.0.0.1:11434",
+			live:      catalog.NewTestFailedSnapshot(time.Now(), "fetch /v1/models failed (status=400)"),
 		},
 		{
 			name:      "down when chimera broker transport error",
@@ -87,7 +120,7 @@ func TestClassifyBrokerProviderResult_states(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got := ClassifyBrokerProviderResult(tc.provider, tc.body, tc.status, tc.err, nil)
+			got := ClassifyBrokerProviderResult(tc.provider, tc.body, tc.status, tc.err, tc.live)
 			if got.State != tc.wantState {
 				t.Fatalf("state=%q want %q (entry=%+v)", got.State, tc.wantState, got)
 			}

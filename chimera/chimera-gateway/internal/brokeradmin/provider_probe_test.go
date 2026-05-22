@@ -54,6 +54,24 @@ func TestListConfiguredProviders(t *testing.T) {
 	}
 }
 
+func TestListConfiguredProviders_emptyListNotCached(t *testing.T) {
+	resetProviderProbeCacheForTest(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/governance/providers" {
+			_ = json.NewEncoder(w).Encode(map[string]any{"count": 0, "providers": nil})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(srv.Close)
+
+	client := &Client{BaseURL: srv.URL}
+	names, ok := ListConfiguredProviders(context.Background(), client)
+	if ok {
+		t.Fatalf("empty governance list should not be treated as ok: names=%#v", names)
+	}
+}
+
 func TestGetProviderForProbe_skipsUnconfiguredFromGovernanceList(t *testing.T) {
 	resetProviderProbeCacheForTest(t)
 	var providerGets atomic.Int32
