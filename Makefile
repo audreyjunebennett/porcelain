@@ -76,10 +76,14 @@ else
 endif
 
 # Linux/macOS: use bash for recipes; unquoted () in @echo are subshell syntax in sh/bash.
-# Windows cmd echo prints literal quote characters — route SKIP lines through GITBASH (see help target).
+# Windows cmd echo prints literal quote characters — route parenthetical lines through GITBASH.
 ifneq ($(OS),Windows_NT)
 SHELL := /bin/bash
 endif
+
+define step_msg
+	@$(GITBASH) -c "echo '[STEP] $(1)'"
+endef
 
 define skip_desktop_msg
 	@$(GITBASH) -c "echo '[SKIP] $(1) (SKIP_DESKTOP=1)'"
@@ -119,12 +123,12 @@ help:
 up: configure install build locus-desktop-run
 
 install:
-	@echo [STEP] Installing all products (Chimera + Locus desktop)
+	$(call step_msg,Installing all products (Chimera + Locus desktop))
 	@$(MAKE) --no-print-directory chimera-install
 	@$(MAKE) --no-print-directory locus-desktop-install
 
 build:
-	@echo '[STEP] Building all products (Chimera + Locus)'
+	$(call step_msg,Building all products (Chimera + Locus))
 	@$(MAKE) --no-print-directory chimera-build
 	@$(MAKE) --no-print-directory locus-build
 
@@ -137,7 +141,7 @@ configure:
 	$(MAKE) --no-print-directory chimera-configure
 
 run:
-	@echo '[STEP] Running full stack (Locus)'
+	$(call step_msg,Running full stack (Locus))
 	@$(MAKE) --no-print-directory build
 	@$(MAKE) --no-print-directory locus-run
 
@@ -197,14 +201,14 @@ clean-all:
 	$(GITBASH) scripts/clean-all.sh $(CONFIRM)
 
 chimera-install:
-	@echo [STEP] Installing Chimera products (broker, gateway, indexer, vectorstore)
+	$(call step_msg,Installing Chimera products (broker, gateway, indexer, vectorstore))
 	@$(MAKE) --no-print-directory chimera-broker-install
 	@$(MAKE) --no-print-directory chimera-gateway-install
 	@$(MAKE) --no-print-directory chimera-indexer-install
 	@$(MAKE) --no-print-directory chimera-vectorstore-install
 
 chimera-build:
-	@echo [STEP] Building Chimera products (broker, gateway, indexer, supervisor, vectorstore)
+	$(call step_msg,Building Chimera products (broker, gateway, indexer, supervisor, vectorstore))
 	@$(MAKE) --no-print-directory chimera-broker-build
 	@$(MAKE) --no-print-directory chimera-gateway-build
 	@$(MAKE) --no-print-directory chimera-indexer-build
@@ -259,7 +263,7 @@ chimera-clean-run: chimera-gateway-clean-run chimera-supervisor-clean-run chimer
 
 # --- Chimera broker ---
 chimera-broker-install:
-	@echo [STEP] Installing Chimera broker runtime dependency (BiFrost HTTP)
+	$(call step_msg,Installing Chimera broker runtime dependency (BiFrost HTTP))
 	@$(GITBASH) -lc 'mkdir -p "$(CHIMERA_RUNTIME_DEPS_DIR)"'
 	@$(GITBASH) -lc 'CHIMERA_BROKER_BIN_DIR="$(CHIMERA_RUNTIME_BIN_DIR)" DEPS_DIR="$(CHIMERA_RUNTIME_DEPS_DIR)" BIFROST_SKIP_UI="$(BIFROST_SKIP_UI)" bash scripts/chimera-broker-install.sh'
 
@@ -423,7 +427,7 @@ chimera-supervisor-clean-run:
 
 # --- Chimera vectorstore ---
 chimera-vectorstore-install:
-	@echo [STEP] Installing Chimera vectorstore runtime dependency (Qdrant)
+	$(call step_msg,Installing Chimera vectorstore runtime dependency (Qdrant))
 	@$(GITBASH) -lc 'QDRANT_BIN_DIR="$(CHIMERA_RUNTIME_BIN_DIR)" DEPS_DIR="$(CHIMERA_RUNTIME_DEPS_DIR)" bash scripts/chimera-vectorstore-install.sh'
 
 chimera-vectorstore-build: chimera-vectorstore-install
@@ -524,7 +528,7 @@ locus-desktop-build:
 	@$(GITBASH) -lc 'cp -f "$(LOCUS_RUNTIME_BIN_DIR)/$(LOCUS_DESKTOP_BIN)" "$(LOCUS_DESKTOP_STAGE_OUT)"'
 
 locus-desktop-run:
-	@echo [STEP] Running Locus desktop (with Chimera runtime dependencies)
+	$(call step_msg,Running Locus desktop (with Chimera runtime dependencies))
 	@$(GITBASH) -lc '"$(LOCUS_DESKTOP_STAGE_OUT)" desktop \
 		-broker-bin "$(CHIMERA_BROKER_STAGE_OUT)" \
 		-vectorstore-bin "$(CHIMERA_VECTORSTORE_STAGE_OUT)" \
@@ -542,11 +546,11 @@ chimera-supervisor-dev-ui: chimera-configure
 locus-desktop-test: locus-desktop-test-unit locus-desktop-test-e2e
 
 locus-desktop-test-unit:
-	@echo [STEP] Running Locus desktop unit tests (desktop/CGO)
+	$(call step_msg,Running Locus desktop unit tests (desktop/CGO))
 	@go test $(LOCUS_CMD_DESKTOP)/... $(RACE_GATEWAY) -run Test -skip E2E -count=1
 
 locus-desktop-test-e2e:
-	@echo [STEP] Running Locus desktop end-to-end tests (desktop/CGO)
+	$(call step_msg,Running Locus desktop end-to-end tests (desktop/CGO))
 	@go test $(LOCUS_CMD_DESKTOP)/internal/... $(RACE_GATEWAY) -run E2E -count=1
 
 # --- Tools ---
@@ -585,11 +589,11 @@ catalog-calculate: catalog-available
 # --- Release (install → build → package) ---
 
 release-install:
-	@echo [STEP] Installing release tooling (GoReleaser)
+	$(call step_msg,Installing release tooling (GoReleaser))
 	@$(GITBASH) scripts/release-install.sh
 
 release-build: release-install
-	@echo [STEP] Building release archives (GoReleaser snapshot)
+	$(call step_msg,Building release archives (GoReleaser snapshot))
 	@$(GITBASH) scripts/release-build.sh
 
 release-package: chimera-build locus-desktop-build
@@ -601,7 +605,7 @@ release-package: chimera-build locus-desktop-build
 contracts-generate:
 	@echo [STEP] Generating data contracts from internal/naming
 	@go generate ./internal/naming/...
-	@echo [STEP] Regenerating operator copy (messages.yaml bootstrap + operator_copy.js)
+	$(call step_msg,Regenerating operator copy (messages.yaml bootstrap + operator_copy.js))
 	@go run ./internal/operatorcopy/cmd/bootstrap
 	@go generate ./internal/operatorcopy/...
 
