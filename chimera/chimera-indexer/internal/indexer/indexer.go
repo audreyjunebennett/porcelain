@@ -193,7 +193,7 @@ func (ix *Indexer) ScheduleInitialScan() bool {
 		Tier:   TierBulk,
 		ScanID: "initial",
 	})
-		if ok {
+	if ok {
 		ix.log.Info("scheduled initial scan job",
 			"msg", "indexer.run.progress",
 			"phase", "scan_scheduled",
