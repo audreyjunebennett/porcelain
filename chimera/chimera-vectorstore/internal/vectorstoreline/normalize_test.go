@@ -90,6 +90,96 @@ func TestNormalizePayloadHTTPUpsertOK(t *testing.T) {
 	if int(m["http_status"].(float64)) != 200 {
 		t.Fatal(m["http_status"])
 	}
+	if m["level"] != "INFO" {
+		t.Fatalf("level=%v want INFO", m["level"])
+	}
+}
+
+func TestNormalizePayloadHTTPCollectionMetaDemotedViaWriter(t *testing.T) {
+	raw := `{"timestamp":"t","level":"INFO","fields":{"message":"127.0.0.1 \"GET /collections/coll-a HTTP/1.1\" 200 42 \"-\" \"Go-http-client/1.1\" 0.001"},"target":"actix_web::middleware::logger"}`
+	b := postProcessNormalizedLine(NormalizePayload(raw))
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatal(err)
+	}
+	if m["msg"] != "vectorstore.http.collection_meta" {
+		t.Fatalf("msg=%v", m["msg"])
+	}
+	if m["level"] != "DEBUG" {
+		t.Fatalf("level=%v want DEBUG", m["level"])
+	}
+}
+
+func TestNormalizePayloadHTTPCollectionMetaNotFoundDemotedViaWriter(t *testing.T) {
+	raw := `{"timestamp":"t","level":"INFO","fields":{"message":"127.0.0.1 \"GET /collections/coll-a HTTP/1.1\" 404 42 \"-\" \"Go-http-client/1.1\" 0.001"},"target":"actix_web::middleware::logger"}`
+	b := postProcessNormalizedLine(NormalizePayload(raw))
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatal(err)
+	}
+	if m["level"] != "DEBUG" {
+		t.Fatalf("level=%v want DEBUG for 404 probe", m["level"])
+	}
+}
+
+func TestNormalizePayloadHTTPCollectionCreate(t *testing.T) {
+	raw := `{"timestamp":"t","level":"INFO","fields":{"message":"127.0.0.1 \"PUT /collections/coll-a HTTP/1.1\" 200 92 \"-\" \"Go-http-client/1.1\" 0.001"},"target":"actix_web::middleware::logger"}`
+	b := NormalizePayload(raw)
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatal(err)
+	}
+	if m["msg"] != "vectorstore.http.collection_create" {
+		t.Fatalf("msg=%v", m["msg"])
+	}
+	if m["collection"] != "coll-a" {
+		t.Fatal(m["collection"])
+	}
+	if m["level"] != "INFO" {
+		t.Fatalf("level=%v want INFO", m["level"])
+	}
+}
+
+func TestNormalizePayloadHTTPCollectionCreateConflict(t *testing.T) {
+	raw := `{"timestamp":"t","level":"INFO","fields":{"message":"127.0.0.1 \"PUT /collections/coll-a HTTP/1.1\" 409 92 \"-\" \"Go-http-client/1.1\" 0.001"},"target":"actix_web::middleware::logger"}`
+	b := NormalizePayload(raw)
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatal(err)
+	}
+	if m["msg"] != "vectorstore.http.collection_create_rejected" {
+		t.Fatalf("msg=%v", m["msg"])
+	}
+	if m["level"] != "INFO" {
+		t.Fatalf("level=%v want INFO", m["level"])
+	}
+}
+
+func TestNormalizePayloadHTTPCollectionIndex(t *testing.T) {
+	raw := `{"timestamp":"t","level":"INFO","fields":{"message":"127.0.0.1 \"PUT /collections/coll-a/index HTTP/1.1\" 200 92 \"-\" \"Go-http-client/1.1\" 0.001"},"target":"actix_web::middleware::logger"}`
+	b := NormalizePayload(raw)
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatal(err)
+	}
+	if m["msg"] != "vectorstore.http.collection_index" {
+		t.Fatalf("msg=%v", m["msg"])
+	}
+}
+
+func TestNormalizePayloadCreatingCollection(t *testing.T) {
+	raw := `{"timestamp":"t","level":"INFO","fields":{"message":"Creating collection chimera-default-x"},"target":"storage::content_manager::toc::collection_meta_ops"}`
+	b := NormalizePayload(raw)
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatal(err)
+	}
+	if m["msg"] != "vectorstore.collection.creating" {
+		t.Fatal(m["msg"])
+	}
+	if m["collection"] != "chimera-default-x" {
+		t.Fatal(m["collection"])
+	}
 }
 
 func TestNormalizePayloadIdempotent(t *testing.T) {

@@ -13,7 +13,6 @@ import (
 	"github.com/lynn/porcelain/chimera/chimera-broker/internal/chimerabroker"
 	"github.com/lynn/porcelain/chimera/chimera-broker/internal/config"
 	"github.com/lynn/porcelain/chimera/internal/wrapper/contract"
-	"github.com/lynn/porcelain/internal/naming"
 )
 
 // ChimeraBroker implements wruntime.Adapter for supervised chimera-broker-http (BiFrost).
@@ -46,7 +45,7 @@ func (a *ChimeraBroker) MetricsURL() string {
 }
 
 func (a *ChimeraBroker) BackendName() string {
-	return naming.ProductBrokerName
+	return "bifrost"
 }
 
 // ChildLogWriter normalizes supervised chimera-broker stdout for the operator log buffer.

@@ -29,6 +29,8 @@ func TestHTTPAccessLogLevel_probesAndErrors(t *testing.T) {
 		{"/ui/login", 200, slog.LevelInfo},
 		{"/v1/indexer/workspaces", 200, slog.LevelDebug},
 		{"/v1/indexer/workspaces", 503, slog.LevelInfo},
+		{"/v1/ingest", 200, slog.LevelDebug},
+		{"/v1/ingest", 502, slog.LevelInfo},
 		{"/health", 503, slog.LevelInfo},
 		{"/healthz", 503, slog.LevelInfo},
 		{"/readyz", 503, slog.LevelInfo},

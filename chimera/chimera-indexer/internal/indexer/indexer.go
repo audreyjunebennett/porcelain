@@ -35,6 +35,9 @@ type Indexer struct {
 	opsSkipCorpusClientHash int64
 	opsSkipCorpusSyncMatch  int64
 	opsSkipLocalSync        int64
+	opsSkipEmpty            int64
+	skipSummary             *skipSummaryTracker
+	ingestSummary           *ingestSummaryTracker
 	opsIngestOK             int64
 	opsIngestFail           int64
 	opsRetry                int64
@@ -42,6 +45,7 @@ type Indexer struct {
 
 	ingestInflight       atomic.Int32
 	inRecovery           atomic.Bool
+	ingestGate           *ingestGate
 	initialScanCompleted atomic.Bool
 	qdrantPoints         atomic.Int64
 
@@ -55,6 +59,13 @@ type Indexer struct {
 	activeFileLogMu       sync.Mutex
 	lastActiveFilePath    map[string]string
 	lastActiveFileEmit    map[string]time.Time
+
+	runWatchMode           atomic.Bool
+	scopeStatusEmitMu      sync.Mutex
+	lastScopeStatusEmitted map[string]scopeStatusEmitted
+	lastGlobalScopeStatus  scopeStatusGlobals
+	embedReasonMu          sync.Mutex
+	lastEmbedReasonCode    string
 }
 
 // Hooks is an optional set of callbacks tests can install to observe and
@@ -83,12 +94,15 @@ func New(cfg Resolved, client *GatewayClient, log *slog.Logger) *Indexer {
 		st = nil
 	}
 	return &Indexer{
-		cfg:       cfg,
-		client:    client,
-		log:       log,
-		queue:     NewQueue(cfg.QueueDepth),
-		matchers:  map[string]*Matcher{},
-		syncState: st,
+		cfg:           cfg,
+		client:        client,
+		log:           log,
+		queue:         NewQueue(cfg.QueueDepth),
+		matchers:      map[string]*Matcher{},
+		syncState:     st,
+		ingestGate:    newIngestGate(),
+		skipSummary:   newSkipSummaryTracker(),
+		ingestSummary: newIngestSummaryTracker(),
 	}
 }
 
@@ -179,11 +193,12 @@ func (ix *Indexer) ScheduleInitialScan() bool {
 		Tier:   TierBulk,
 		ScanID: "initial",
 	})
-	if ok {
+		if ok {
 		ix.log.Info("scheduled initial scan job",
 			"msg", "indexer.run.progress",
 			"phase", "scan_scheduled",
 			"scan_id", "initial",
+			"roots", len(ix.cfg.Roots),
 		)
 	}
 	return ok

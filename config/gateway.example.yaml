@@ -131,6 +131,10 @@ metrics:
 #   sqlite_path: "../data/gateway/operator.sqlite"
 #   migrations_dir: "../migrations/chimera-gateway/operator"
 
+# Operator logs UI: ring-buffer retention for supervised /ui/logs.
+# operator_logs:
+#   indexer_pinned_lines_max: 64  # reserve slots for run.start, scope.status, gate, skip summaries
+
 # Conversation merge: reuse an existing chat session when the client omits a conversation id.
 #
 # Uses rag.embedding (when RAG is on) plus operator SQLite to match recent sessions by similarity.
@@ -164,7 +168,8 @@ indexer:
     # The gateway can run the indexer provided at the given path.
     # bin: ""
     # When the gateway runs the indexer, it writes and reads its configuration from this file.
-    # config_path: "../data/indexer.supervised.yaml"
+    # Created by `make chimera-indexer-configure` from config/indexer.example.yaml.
+    config_path: "indexer.yaml"
     # When the gateway disables RAG it also disables the indexer.
     # With rag disabled, to run the indexer set this to true.
     # start_when_rag_disabled: false

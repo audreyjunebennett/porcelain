@@ -383,14 +383,10 @@ globalThis.ChimeraSettings.Render.mountSumEvlog = function (ctx) {
         source: ent2.source,
         seq: ent2.seq
       };
-      var summaryOpts =
-        name === "chimera-indexer"
-          ? { suppressIndexerBadge: true }
-          : name === "chimera-vectorstore"
-            ? { suppressVectorstoreBadge: true }
-            : name === "chimera-gateway"
-              ? { suppressGatewayBadge: true }
-              : {};
+      var summaryOpts = {};
+      if (name === "chimera-indexer" || opts.suppressIndexerBadge) summaryOpts.suppressIndexerBadge = true;
+      if (name === "chimera-vectorstore" || opts.suppressVectorstoreBadge) summaryOpts.suppressVectorstoreBadge = true;
+      if (name === "chimera-gateway" || opts.suppressGatewayBadge) summaryOpts.suppressGatewayBadge = true;
       var bd2 = opts.indexerRunLine
         ? typeof ctx.badgeForIndexerRunLine === "function"
           ? ctx.badgeForIndexerRunLine(ent2)

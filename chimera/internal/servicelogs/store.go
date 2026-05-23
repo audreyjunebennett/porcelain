@@ -47,6 +47,9 @@ type Store struct {
 	lines    []Entry
 	lastSeq  uint64
 
+	indexerPinnedMax int
+	indexerPinSeq    map[string]uint64
+
 	mirrorMu sync.Mutex
 	mirror   io.Writer // optional append-only sink (e.g. desktop disk log)
 
@@ -61,9 +64,32 @@ func New(maxLines int) *Store {
 		maxLines = DefaultMaxLines
 	}
 	return &Store{
-		maxLines: maxLines,
-		subs:     make(map[uint64]chan Entry),
+		maxLines:         maxLines,
+		indexerPinnedMax: DefaultIndexerPinnedLinesMax,
+		indexerPinSeq:    map[string]uint64{},
+		subs:             make(map[uint64]chan Entry),
 	}
+}
+
+// SetIndexerPinnedLinesMax reserves ring slots for critical indexer lifecycle lines.
+func (s *Store) SetIndexerPinnedLinesMax(n int) {
+	if n <= 0 {
+		n = DefaultIndexerPinnedLinesMax
+	}
+	s.mu.Lock()
+	s.indexerPinnedMax = n
+	s.mu.Unlock()
+}
+
+func (s *Store) applyIndexerPinLocked(pinKey string, seq uint64) {
+	if s.indexerPinSeq == nil {
+		s.indexerPinSeq = map[string]uint64{}
+	}
+	if oldSeq, ok := s.indexerPinSeq[pinKey]; ok && oldSeq != seq {
+		removeEntryBySeq(&s.lines, oldSeq)
+	}
+	s.indexerPinSeq[pinKey] = seq
+	trimPinnedIndexerLines(&s.lines, s.indexerPinSeq, s.indexerPinnedMax)
 }
 
 // Writer returns an io.Writer that splits on '\n' and records complete lines under source.
@@ -82,6 +108,11 @@ func (s *Store) add(source, text string) {
 
 	s.mu.Lock()
 	s.lines = append(s.lines, ent)
+	if source == sourceIndexer {
+		if pinKey, ok := indexerPinKey(text); ok {
+			s.applyIndexerPinLocked(pinKey, seq)
+		}
+	}
 	idxCap := MaxIndexerLinesPerSource
 	if s.maxLines < DefaultMaxLines {
 		idxCap = s.maxLines / 4
@@ -92,7 +123,7 @@ func (s *Store) add(source, text string) {
 	if idxCap > s.maxLines {
 		idxCap = s.maxLines
 	}
-	trimSourceToMax(&s.lines, sourceIndexer, idxCap)
+	trimSourceToMax(&s.lines, sourceIndexer, idxCap, s.indexerPinSeq)
 	if len(s.lines) > s.maxLines {
 		overflow := len(s.lines) - s.maxLines
 		s.lines = append([]Entry(nil), s.lines[overflow:]...)
@@ -162,15 +193,15 @@ func removeFirstSourceLineMatching(lines *[]Entry, source string, pred func(stri
 	return false
 }
 
-func trimSourceToMax(lines *[]Entry, source string, max int) {
+func trimSourceToMax(lines *[]Entry, source string, max int, pinSeq map[string]uint64) {
 	if max < 1 {
 		return
 	}
-	for countEntriesWithSource(*lines, source) > max {
-		if source == sourceIndexer && removeFirstSourceLineMatching(lines, source, isNoisyIndexerLine) {
+	for countUnpinnedSource(*lines, source, pinSeq) > max {
+		if source == sourceIndexer && removeFirstUnpinnedMatching(lines, source, pinSeq, isNoisyIndexerLine) {
 			continue
 		}
-		if !removeFirstWithSource(lines, source) {
+		if !removeFirstUnpinnedWithSource(lines, source, pinSeq) {
 			break
 		}
 	}
@@ -310,6 +341,11 @@ func (s *Store) Import(entries []Entry) {
 		}
 		s.lines = append(s.lines, ent)
 		added = append(added, ent)
+		if ent.Source == sourceIndexer {
+			if pinKey, ok := indexerPinKey(ent.Text); ok {
+				s.applyIndexerPinLocked(pinKey, ent.Seq)
+			}
+		}
 	}
 	idxCap := MaxIndexerLinesPerSource
 	if s.maxLines < DefaultMaxLines {
@@ -321,7 +357,7 @@ func (s *Store) Import(entries []Entry) {
 	if idxCap > s.maxLines {
 		idxCap = s.maxLines
 	}
-	trimSourceToMax(&s.lines, sourceIndexer, idxCap)
+	trimSourceToMax(&s.lines, sourceIndexer, idxCap, s.indexerPinSeq)
 	if len(s.lines) > s.maxLines {
 		overflow := len(s.lines) - s.maxLines
 		s.lines = append([]Entry(nil), s.lines[overflow:]...)

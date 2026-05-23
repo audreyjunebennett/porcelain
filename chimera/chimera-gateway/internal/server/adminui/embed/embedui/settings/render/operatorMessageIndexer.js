@@ -32,6 +32,31 @@
     return key ? key : "";
   }
 
+  function indexerScopeLabel(flat) {
+    var proj =
+      flat.ingest_project != null && String(flat.ingest_project).trim() !== ""
+        ? String(flat.ingest_project).trim()
+        : flat.project_id != null && String(flat.project_id).trim() !== ""
+          ? String(flat.project_id).trim()
+          : "";
+    return proj;
+  }
+
+  function skipSummaryTotals(flat) {
+    return (
+      (Number(flat.skip_unchanged_local_sync) || 0) +
+      (Number(flat.skip_unchanged_corpus_client_hash) || 0) +
+      (Number(flat.skip_unchanged_corpus_sync) || 0) +
+      (Number(flat.skip_empty_or_whitespace) || 0)
+    );
+  }
+
+  function windowSecondsLabel(flat) {
+    if (flat.window_ms == null || isNaN(Number(flat.window_ms))) return "?";
+    var sec = Math.round(Number(flat.window_ms) / 1000);
+    return sec === 1 ? "1 second" : sec + " seconds";
+  }
+
   function workKindShortLabel(flat) {
     var k = flat.kind;
     if (k === 1 || k === "1") return "scan";
@@ -70,10 +95,112 @@
         String(flat.rel != null ? flat.rel : "?")
       );
     },
+    indexer_supervised_hot_reload: function (flat, entry) {
+      var slug = entry && entry.slug ? entry.slug : "";
+      if (slug === "indexer.supervised.hot_reload_yaml_error") {
+        return "Couldn't reload indexer settings — config file has an error; keeping the current session";
+      }
+      if (slug === "indexer.supervised.hot_reload_resolve_error") {
+        var err = flat.err != null ? String(flat.err).replace(/\s+/g, " ").trim() : "";
+        return err
+          ? "Couldn't reload indexer settings — " + err.slice(0, 120)
+          : "Couldn't reload indexer settings — configuration could not be applied";
+      }
+      return "Indexer settings changed — restarting the watch session";
+    },
     indexer_supervised_wait_roots: function (flat, entry) {
       var base = entry.summary || "Waiting for at least one watch root";
       if (flat.config_path != null && String(flat.config_path).trim() !== "")
         return base + " in " + String(flat.config_path).trim();
+      return base;
+    },
+    indexer_supervised_workspaces_reload_stalled: function (flat, entry) {
+      var base = entry.summary || "Workspace reload stalled";
+      if (flat.timeout_sec != null) return base + " · waited " + flat.timeout_sec + "s";
+      return base;
+    },
+    indexer_supervised_workspaces_changed: function (flat, entry) {
+      var base = entry.summary || "Workspace paths changed";
+      var n = flat.roots != null ? flat.roots : null;
+      if (n == null && flat.watch_root_paths) {
+        n = Array.isArray(flat.watch_root_paths)
+          ? flat.watch_root_paths.length
+          : String(flat.watch_root_paths).split(",").filter(Boolean).length;
+      }
+      var bits = [base];
+      if (n != null) bits.push(n + " watch root(s)");
+      if (flat.new_paths_hash != null && String(flat.new_paths_hash).trim() !== "")
+        bits.push("hash " + String(flat.new_paths_hash).trim());
+      var paths = flat.watch_root_paths;
+      if (paths) {
+        var list = Array.isArray(paths) ? paths : String(paths).split(",");
+        var sample = list
+          .map(function (p) {
+            return String(p || "").trim();
+          })
+          .filter(Boolean)
+          .slice(-1)[0];
+        if (sample) {
+          var tail = sample.replace(/^.*[/\\]/, "");
+          if (tail) bits.push("includes " + tail);
+        }
+      }
+      return bits.join(" · ");
+    },
+    indexer_supervised_workspaces_reload: function (flat, entry) {
+      var base = entry.summary || "Reloading watch session";
+      var n = flat.roots != null ? flat.roots : null;
+      if (n == null && flat.watch_root_paths) {
+        n = Array.isArray(flat.watch_root_paths)
+          ? flat.watch_root_paths.length
+          : String(flat.watch_root_paths).split(",").filter(Boolean).length;
+      }
+      return n != null ? base + " · " + n + " watch root(s)" : base + " · paths updated";
+    },
+    indexer_supervised_workspaces_session_start: function (flat, entry) {
+      var base = entry.summary || "Watch session restarted";
+      var n = flat.roots != null ? flat.roots : "?";
+      return base + " · " + n + " watch root(s)";
+    },
+    indexer_supervised_workspaces_apply_failed: function (flat, entry) {
+      var base = entry.summary || "Couldn't apply workspace paths";
+      if (flat.err != null && String(flat.err).trim() !== "")
+        return base + " · " + String(flat.err).trim().slice(0, 120);
+      return base;
+    },
+    gateway_operator_workspace_path_added: function (flat, entry) {
+      var base = entry.summary || "Watch path added";
+      if (flat.path != null && String(flat.path).trim() !== "") {
+        var p = String(flat.path).trim();
+        var tail = p.replace(/^.*[/\\]/, "") || p;
+        return base + " · " + tail;
+      }
+      return base;
+    },
+    gateway_operator_workspace_path_deleted: function (flat, entry) {
+      var base = entry.summary || "Watch path removed";
+      if (flat.path != null && String(flat.path).trim() !== "") {
+        var p = String(flat.path).trim();
+        var tail = p.replace(/^.*[/\\]/, "") || p;
+        return base + " · " + tail;
+      }
+      return base;
+    },
+    indexer_supervised_watch_shutdown_timeout: function (flat, entry) {
+      var base = entry.summary || "Filesystem watchers did not stop after reload";
+      if (flat.grace_sec != null) return base + " · grace " + flat.grace_sec + "s";
+      return base;
+    },
+    indexer_supervised_session_fatal_exit: function (flat, entry) {
+      var base = entry.summary || "Indexer watch session exited unexpectedly";
+      if (flat.err != null && String(flat.err).trim() !== "")
+        return base + " · " + String(flat.err).trim().slice(0, 120);
+      return base;
+    },
+    indexer_supervised_process_exit: function (flat, entry) {
+      var base = entry.summary || "Supervised indexer stopped";
+      if (flat.err != null && String(flat.err).trim() !== "")
+        return base + " · " + String(flat.err).trim().slice(0, 120);
       return base;
     },
     indexer_state: function (flat) {
@@ -86,12 +213,29 @@
       if (infl != null && infl > 0) bits.push("uploads in flight " + infl);
       return bits.length ? bits.join(" · ") : "Indexer status update";
     },
-    indexer_storage_stats: function (flat) {
-      var pts = numOrDash(flat.qdrant_points);
+    indexer_storage_stats: function (flat, entry) {
       var avail = flat.available === true || flat.available === "true";
-      if (pts != null) return "Indexed vectors: " + pts;
-      if (!avail && flat.detail) return "Storage stats unavailable: " + String(flat.detail).slice(0, 120);
-      return "Storage stats sync";
+      if (!avail) {
+        if (flat.detail) {
+          return (
+            "Could not verify the stored search index — " +
+            String(flat.detail).slice(0, 120)
+          );
+        }
+        return "Could not verify the stored search index right now";
+      }
+      var pts = numOrDash(flat.qdrant_points);
+      if (pts === 0) {
+        return "Search index is empty — no embedded file content is stored for this workspace yet";
+      }
+      if (pts != null) {
+        return (
+          "Stored search index looks healthy — " +
+          pts +
+          " embedded text chunk(s) from your indexed files are saved and ready for retrieval"
+        );
+      }
+      return "Verified the stored search index is reachable";
     },
     indexer_gateway_config: function (flat) {
       return (
@@ -102,34 +246,65 @@
         ")"
       );
     },
-    indexer_run_start: function (flat) {
-      var nroots = flat.roots != null ? flat.roots : "?";
-      return "Indexer started · " + nroots + " watch root(s) · roots " + (flat.root_ids || "—");
+    indexer_run_start: function (flat, entry) {
+      var nroots = numOrDash(flat.roots);
+      var paths = flat.watch_root_paths;
+      var labels = [];
+      if (paths) {
+        var list = Array.isArray(paths)
+          ? paths
+          : String(paths)
+              .split(",")
+              .map(function (p) {
+                return String(p || "").trim();
+              })
+              .filter(Boolean);
+        var pi;
+        for (pi = 0; pi < list.length; pi++) {
+          var tail = String(list[pi]).replace(/^.*[/\\]/, "") || String(list[pi]);
+          if (tail && labels.indexOf(tail) < 0) labels.push(tail);
+        }
+      }
+      var pathPhrase = "";
+      if (labels.length === 1) pathPhrase = labels[0];
+      else if (labels.length === 2) pathPhrase = labels[0] + " and " + labels[1];
+      else if (labels.length > 2) {
+        pathPhrase = labels.slice(0, 3).join(", ") + ", and " + (labels.length - 3) + " more";
+      }
+      var dirWord = nroots === 1 ? "directory" : "directories";
+      if (nroots != null && pathPhrase) {
+        return "Watching " + nroots + " " + dirWord + ": " + pathPhrase;
+      }
+      if (nroots != null) {
+        return "Watching " + nroots + " " + dirWord + " for file changes";
+      }
+      return entry.summary || "Indexer started";
     },
     indexer_discovery: function (flat, entry) {
       var slug = entry && entry.slug ? entry.slug : "";
       if (slug === "indexer.discovery.summary.scope") {
+        var n = flat.candidates_discovered != null ? flat.candidates_discovered : "?";
         return (
-          "Discovery · " +
-          (flat.ingest_project != null ? String(flat.ingest_project) : "?") +
-          " / " +
-          (flat.flavor_id != null ? String(flat.flavor_id) : "?") +
-          " · " +
-          (flat.candidates_discovered != null ? flat.candidates_discovered : "?") +
-          " files · " +
-          (flat.path_sample_count != null ? flat.path_sample_count : "?") +
-          " path(s) logged" +
-          (flat.paths_truncated ? " (truncated)" : "")
+          "Discovery scan found " +
+          n +
+          " file(s) in this workspace's directories"
         );
       }
       if (slug === "indexer.scan.complete") {
+        var nWs = flat.n_scopes != null ? flat.n_scopes : "?";
+        var budget = flat.per_scope_fanout_budget != null ? flat.per_scope_fanout_budget : "?";
+        var cap = flat.queue_cap != null ? flat.queue_cap : "?";
+        var wsWord = Number(nWs) === 1 ? "workspace" : "workspaces";
         return (
-          "Scan done · " +
-          (flat.n_scopes != null ? flat.n_scopes : "?") +
-          " scope(s) · budget " +
-          (flat.per_scope_fanout_budget != null ? flat.per_scope_fanout_budget : "?") +
-          " pending bulk per scope · cap " +
-          (flat.queue_cap != null ? flat.queue_cap : "?")
+          "Directory walk finished across " +
+          nWs +
+          " " +
+          wsWord +
+          " — each workspace gets up to " +
+          budget +
+          " pending file slot(s) in the ingest queue (" +
+          cap +
+          " total queue capacity)"
         );
       }
       return (
@@ -141,17 +316,66 @@
       );
     },
     indexer_scope_status: function (flat) {
-      var wst = formatIntCount(flat.workspace_files_total);
-      var qIn = formatIntCount(flat.queue_ingest_pending);
-      var qFan = formatIntCount(flat.queue_fanout_files_pending);
+      if (flat.ingest_gate_closed === true) {
+        var gateReason =
+          flat.ingest_gate_reason_code != null
+            ? String(flat.ingest_gate_reason_code).replace(/_/g, " ")
+            : flat.embed_reason_code != null
+              ? String(flat.embed_reason_code).replace(/_/g, " ")
+              : "ingest paused";
+        return "Indexing is paused because " + gateReason;
+      }
+      if (flat.in_recovery === true) {
+        return "Waiting to resume — embedding or storage is still recovering";
+      }
+      if (flat.current_rel) {
+        return "Now embedding " + String(flat.current_rel);
+      }
+      var wst = numOrDash(flat.workspace_files_total);
+      var qIn = numOrDash(flat.queue_ingest_pending);
+      var qFan = numOrDash(flat.queue_fanout_files_pending);
+      var reason = flat.change_reason != null ? String(flat.change_reason).trim() : "";
+      var wStr = wst != null ? String(wst) : "?";
+      var inStr = qIn != null ? String(qIn) : "?";
+      var fanStr = qFan != null ? String(qFan) : "?";
+      if (qIn === 0 && qFan === 0) {
+        if (reason === "heartbeat") {
+          return (
+            "Everything looks up to date — tracking " +
+            wStr +
+            " files and nothing needs to be indexed right now"
+          );
+        }
+        return (
+          "Indexing is idle with nothing in the queue — " + wStr + " files tracked in this workspace"
+        );
+      }
+      if (qFan > 0 && qIn === 0) {
+        return (
+          "Still working through discovered files — " +
+          fanStr +
+          " of " +
+          wStr +
+          " tracked files are waiting to be examined"
+        );
+      }
+      if (qIn > 0 && qFan === 0) {
+        return (
+          "Embedding in progress — " +
+          inStr +
+          " of " +
+          wStr +
+          " tracked files are waiting to be embedded"
+        );
+      }
       return (
-        "~" +
-        wst +
-        " files in workspace · " +
-        qIn +
-        " waiting to embed · " +
-        qFan +
-        " waiting in discovery queue"
+        "Indexing in progress — " +
+        wStr +
+        " files tracked, " +
+        fanStr +
+        " waiting to be examined, and " +
+        inStr +
+        " waiting to be embedded"
       );
     },
     indexer_scope_active_file: function (flat) {
@@ -176,15 +400,44 @@
       var comp = numOrDash(flat.ingest_completed);
       var dStr = dep != null ? String(dep) : "?";
       var cStr = comp != null ? String(comp) : "?";
-      var idleLead = dep === 0 ? "idle · " : "";
-      return "Queue · " + idleLead + dStr + " waiting · " + cStr + " completed this run";
-    },
-    indexer_run_progress: function (flat) {
+      if (dep === 0 && (comp === 0 || comp == null)) {
+        return "Ingest workers idle · embed queue empty · 0 files embedded this run";
+      }
       return (
-        "Progress · " +
-        (flat.phase ? String(flat.phase) : "phase") +
-        (flat.candidates_enqueued != null ? " · " + flat.candidates_enqueued + " enqueued" : "")
+        "Ingest queue · " +
+        dStr +
+        " file(s) waiting for workers · " +
+        cStr +
+        " embedded this run"
       );
+    },
+    indexer_run_progress: function (flat, entry) {
+      var phase = flat.phase != null ? String(flat.phase).trim() : "";
+      var nRoots = numOrDash(flat.roots);
+      if (phase === "scan_scheduled") {
+        if (nRoots != null) {
+          var dirWord = Number(nRoots) === 1 ? "directory" : "directories";
+          return "Starting a scan of " + nRoots + " " + dirWord + " for files";
+        }
+        return "Starting a scan of directories for files";
+      }
+      if (phase === "initial_scan") {
+        var total = numOrDash(flat.candidates_total);
+        if (total != null && total > 0) {
+          return (
+            "Initial scan finished — found " +
+            total +
+            " file(s) and queued them for examination"
+          );
+        }
+        if (flat.candidates_enqueued != null && Number(flat.candidates_enqueued) === 0) {
+          return "Initial scan finished — no indexable files found in workspace directories";
+        }
+      }
+      if (phase) {
+        return "Indexer scan update — " + phase.replace(/_/g, " ");
+      }
+      return entry.summary || "Indexer scan in progress";
     },
     indexer_job_upload: function (flat) {
       var tr = flat.transport ? String(flat.transport) : "whole";
@@ -194,12 +447,63 @@
     indexer_job_ingested: function (flat) {
       return "Ingested · " + (flat.rel || "file") + " · " + (flat.chunks != null ? flat.chunks + " chunk(s)" : "done");
     },
+    indexer_job_ingested_summary: function (flat) {
+      var n = Number(flat.ingest_succeeded) || 0;
+      var chunks = Number(flat.chunks_total) || 0;
+      var win =
+        flat.window_ms != null && !isNaN(Number(flat.window_ms))
+          ? Math.round(Number(flat.window_ms) / 1000) + "s"
+          : "?";
+      var line = "Indexed " + n + " file(s) · " + chunks + " chunk(s)";
+      if (flat.last_rel) line += " · last " + String(flat.last_rel);
+      return line + " · last " + win;
+    },
     indexer_job_skipped: function (flat) {
       return (
         "Skipped · " +
         (flat.rel || "file") +
         (flat.skip_reason ? " · " + String(flat.skip_reason).replace(/_/g, " ") : "")
       );
+    },
+    indexer_job_skipped_summary: function (flat) {
+      var skip = skipSummaryTotals(flat);
+      var ing = Number(flat.ingest_succeeded) || 0;
+      var fail = Number(flat.ingest_failed) || 0;
+      var evaluated = numOrDash(flat.files_evaluated);
+      var win = windowSecondsLabel(flat);
+      var evalN = evaluated != null ? evaluated : skip;
+      if (evaluated != null && skip === evaluated && ing === 0 && fail === 0) {
+        return (
+          "Checked " +
+          evalN +
+          " files in the last " +
+          win +
+          " — everything was already indexed, so nothing new was embedded"
+        );
+      }
+      if (evaluated != null && skip === 0 && ing > 0 && fail === 0) {
+        return (
+          "Checked " +
+          evalN +
+          " files in the last " +
+          win +
+          " — embedded " +
+          ing +
+          " new file(s)"
+        );
+      }
+      var line =
+        "Checked " +
+        evalN +
+        " files in the last " +
+        win +
+        " — " +
+        skip +
+        " unchanged";
+      if (ing > 0) line += ", " + ing + " newly embedded";
+      else line += ", nothing newly embedded";
+      if (fail > 0) line += ", and " + fail + " failed";
+      return line;
     },
     indexer_retry_recovery: function (flat, entry) {
       var slug = entry && entry.slug ? entry.slug : "";
@@ -214,15 +518,38 @@
         );
       }
       if (slug === "indexer.recovery.poll") {
-        return (
+        var storage =
+          flat.storage_ok === true ? "OK" : flat.storage_ok === false ? "not OK" : "?";
+        var embed =
+          flat.embed_ok === true ? "OK" : flat.embed_ok === false ? "not OK" : "?";
+        var line =
           "Recovery poll #" +
           (flat.poll_n != null ? flat.poll_n : "?") +
           " · storage " +
-          (flat.storage_ok === true ? "OK" : flat.storage_ok === false ? "not OK" : "?")
-        );
+          storage +
+          " · embed " +
+          embed;
+        if (flat.embed_ok === false && flat.embed_reason_code) {
+          line += " · " + String(flat.embed_reason_code).replace(/_/g, " ");
+        }
+        return line;
       }
       if (slug === "indexer.worker.paused") {
         return "Worker paused for recovery · " + (flat.rel || "pending job");
+      }
+      return entry.summary || "";
+    },
+    indexer_ingest_gate: function (flat, entry) {
+      var slug = entry && entry.slug ? entry.slug : "";
+      if (slug === "indexer.ingest.gate.closed") {
+        var reason = flat.reason_code ? String(flat.reason_code).replace(/_/g, " ") : "ingest blocked";
+        var q = flat.queue_depth != null ? flat.queue_depth : "?";
+        return "Ingest paused — " + reason + " · queue " + q;
+      }
+      if (slug === "indexer.ingest.gate.open") {
+        var qOpen = flat.queue_depth != null ? flat.queue_depth : "?";
+        var model = flat.embed_model ? String(flat.embed_model) : "";
+        return "Ingest resumed · queue " + qOpen + (model ? " · " + model : "");
       }
       return entry.summary || "";
     },

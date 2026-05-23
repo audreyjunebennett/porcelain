@@ -16,11 +16,12 @@ func (ix *Indexer) tenantIDForLogs() string {
 
 func (ix *Indexer) replaceWorkspaceTotalsFromDiscovery(perScopeWalk map[string]*discoveryAgg) {
 	ix.workspaceFilesMu.Lock()
-	defer ix.workspaceFilesMu.Unlock()
 	ix.workspaceFilesByScope = make(map[string]int64, len(perScopeWalk))
 	for sk, d := range perScopeWalk {
 		ix.workspaceFilesByScope[sk] = int64(d.Candidates)
 	}
+	ix.workspaceFilesMu.Unlock()
+	ix.MaybeEmitScopeStatusEdge("workspace_files_total")
 }
 
 func (ix *Indexer) bumpWorkspaceFileCount(root Root, rel string) {
@@ -90,43 +91,65 @@ func unionScopeKeys(groups ...map[string]int64) []string {
 	return out
 }
 
-// EmitScopeStatus logs one indexer.scope.status line per active scope bundle.
+// EmitScopeStatus logs heartbeat indexer.scope.status lines for every active scope.
 func (ix *Indexer) EmitScopeStatus(phase string) {
 	if ix.log == nil {
 		return
 	}
-	tid := ix.tenantIDForLogs()
-	ingestTally, fanoutTally := ix.queue.TallyScopeQueues(ix.cfg)
-	bulkSnap := ix.pendingBulkSnapshot()
-	wsSnap := ix.workspaceTotalsSnapshot()
-	scopes := unionScopeKeys(wsSnap, ingestTally, fanoutTally, bulkSnap)
-
-	for _, sk := range scopes {
-		proj, flav := splitScopeKey(sk)
-		ik := IndexerKey(tid, proj, flav)
-		var wsTotal int64
-		if wsSnap != nil {
-			wsTotal = wsSnap[sk]
-		}
-		qIngest := ingestTally[sk]
-		qFan := fanoutTally[sk]
-		var pendingBulk int64
-		if bulkSnap != nil {
-			pendingBulk = bulkSnap[sk]
-		}
-		ix.log.Info("indexer scope status",
+	watchMode := ix.runWatchModeForScope()
+	for _, r := range ix.collectScopeStatusReadings(watchMode) {
+		args := []any{
 			"msg", "indexer.scope.status",
+			"change_reason", "heartbeat",
 			"phase", phase,
-			"tenant_id", tid,
-			"project_id", proj,
-			"ingest_project", proj,
-			"flavor_id", flav,
-			"indexer_target_key", ik,
-			"workspace_files_total", wsTotal,
-			"queue_ingest_pending", qIngest,
-			"queue_fanout_files_pending", qFan,
-			"pending_bulk_tier1", pendingBulk,
-		)
+			"declarative_state", r.globals.Phase,
+			"tenant_id", r.tenantID,
+			"project_id", r.projectID,
+			"ingest_project", r.projectID,
+			"flavor_id", r.flavorID,
+			"indexer_target_key", r.indexerTargetKey,
+			"workspace_files_total", r.workspaceTotal,
+			"queue_ingest_pending", r.queueIngest,
+			"queue_fanout_files_pending", r.queueFanout,
+			"pending_bulk_tier1", r.pendingBulk,
+			"ingest_gate_closed", r.globals.IngestGateClosed,
+			"in_recovery", r.globals.InRecovery,
+			"ingest_completed", r.globals.IngestCompleted,
+		}
+		if r.globals.IngestGateReason != "" {
+			args = append(args, "ingest_gate_reason_code", r.globals.IngestGateReason)
+		}
+		if r.globals.EmbedReasonCode != "" {
+			args = append(args, "embed_reason_code", r.globals.EmbedReasonCode)
+		}
+		if r.currentRel != "" {
+			args = append(args, "current_rel", r.currentRel)
+		}
+		ix.log.Info("indexer scope status", args...)
+	}
+	ix.syncScopeStatusSnapshots(watchMode)
+}
+
+func (ix *Indexer) syncScopeStatusSnapshots(watchMode bool) {
+	readings := ix.collectScopeStatusReadings(watchMode)
+	ix.scopeStatusEmitMu.Lock()
+	defer ix.scopeStatusEmitMu.Unlock()
+	if ix.lastScopeStatusEmitted == nil {
+		ix.lastScopeStatusEmitted = map[string]scopeStatusEmitted{}
+	}
+	for _, r := range readings {
+		ix.lastScopeStatusEmitted[r.scopeKey] = scopeStatusEmitted{
+			globals:             r.globals,
+			workspaceTotal:      r.workspaceTotal,
+			queueIngest:         r.queueIngest,
+			queueFanout:         r.queueFanout,
+			pendingBulk:         r.pendingBulk,
+			currentRel:          r.currentRel,
+			lastIngestMilestone: r.globals.IngestCompleted,
+		}
+	}
+	if len(readings) > 0 {
+		ix.lastGlobalScopeStatus = readings[0].globals
 	}
 }
 
@@ -148,7 +171,6 @@ func (ix *Indexer) emitScopeActiveFileIfDue(workerID int, j Job) {
 	rel := j.RelPath
 
 	ix.activeFileLogMu.Lock()
-	defer ix.activeFileLogMu.Unlock()
 	if ix.lastActiveFilePath == nil {
 		ix.lastActiveFilePath = map[string]string{}
 		ix.lastActiveFileEmit = map[string]time.Time{}
@@ -157,12 +179,14 @@ func (ix *Indexer) emitScopeActiveFileIfDue(workerID int, j Job) {
 	lastT := ix.lastActiveFileEmit[sk]
 	emit := rel != lastRel || now.Sub(lastT) >= minGap
 	if !emit {
+		ix.activeFileLogMu.Unlock()
 		return
 	}
 	ix.lastActiveFilePath[sk] = rel
 	ix.lastActiveFileEmit[sk] = now
+	ix.activeFileLogMu.Unlock()
 
-	ix.log.Info("indexer scope active file",
+	ix.log.Debug("indexer scope active file",
 		"msg", "indexer.scope.active_file",
 		"tenant_id", tid,
 		"project_id", proj,

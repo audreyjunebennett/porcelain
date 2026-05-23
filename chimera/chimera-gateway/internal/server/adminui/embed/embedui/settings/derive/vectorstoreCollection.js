@@ -63,6 +63,33 @@ function vectorstoreServiceMatch(flat) {
   return svc === "chimera-vectorstore" || svc === "qdrant" || svc === "vectorstore";
 }
 
+function pickWrapperBackendFromLogs(arr, getFlat, matchFn) {
+  arr = Array.isArray(arr) ? arr : [];
+  getFlat = typeof getFlat === "function" ? getFlat : function (p) { return (p && p.rawFlat) || {}; };
+  var backendName = "";
+  var backendMode = "";
+  var i;
+  for (i = arr.length - 1; i >= 0; i--) {
+    var f = getFlat(arr[i].parsed);
+    if (!matchFn(f)) continue;
+    var bn = f.backend_name != null ? String(f.backend_name).trim() : "";
+    var bm = f.backend_mode != null ? String(f.backend_mode).trim() : "";
+    if (bn && !backendName) backendName = bn;
+    if (bm && !backendMode) backendMode = bm;
+    if (backendName && backendMode) break;
+  }
+  return { backendName: backendName, backendMode: backendMode };
+}
+
+/** Panel label from wrapper log backend_name + backend_mode (e.g. qdrant (binary)); "—" when unknown. */
+function wrapperBackendPanelLabel(backendName, backendMode) {
+  var name = String(backendName != null ? backendName : "").trim();
+  var mode = String(backendMode != null ? backendMode : "").trim();
+  if (!name) return "—";
+  if (mode) return name + " (" + mode + ")";
+  return name;
+}
+
 function qdrantSliceCurrentProcess(arr, getFlat) {
   arr = Array.isArray(arr) ? arr : [];
   getFlat = typeof getFlat === "function" ? getFlat : function (p) { return (p && p.rawFlat) || {}; };
@@ -106,18 +133,33 @@ function qdrantIndexerCollectionStatusLabel(msg) {
   msg = String(msg || "").toLowerCase();
   switch (msg) {
     case "qdrant.collection.loading":
+    case "vectorstore.collection.loading":
+    case "qdrant.collection.creating":
+    case "vectorstore.collection.creating":
     case "qdrant.shard.recover_progress":
+    case "vectorstore.shard.recover_progress":
       return "Loading";
     case "qdrant.shard.recovered":
+    case "vectorstore.shard.recovered":
+    case "qdrant.http.collection_create":
+    case "vectorstore.http.collection_create":
       return "Loaded";
     case "qdrant.http.collection_meta":
+    case "vectorstore.http.collection_meta":
       return "Reading";
+    case "qdrant.http.collection_create_rejected":
+    case "vectorstore.http.collection_create_rejected":
+      return "Create failed";
     case "qdrant.http.points_upsert_ok":
+    case "vectorstore.http.points_upsert_ok":
     case "qdrant.http.points_upsert_rejected":
+    case "vectorstore.http.points_upsert_rejected":
       return "Upserting";
     case "qdrant.http.points_delete":
+    case "vectorstore.http.points_delete":
       return "Deleting";
     case "qdrant.http.vector_search":
+    case "vectorstore.http.vector_search":
       return "Searching";
     default:
       return "";
@@ -149,7 +191,9 @@ function qdrantCardModel(arr, getFlat, resolveColl) {
     deleteFail: 0,
     searchOk: 0,
     searchFail: 0,
-    subtitle: "—"
+    subtitle: "—",
+    backendName: "",
+    backendMode: ""
   };
 
   var i;
@@ -175,8 +219,19 @@ function qdrantCardModel(arr, getFlat, resolveColl) {
     if (f.rest_port != null && !isNaN(Number(f.rest_port))) out.restPort = Math.round(Number(f.rest_port));
     if (f.grpc_port != null && !isNaN(Number(f.grpc_port))) out.grpcPort = Math.round(Number(f.grpc_port));
 
+    if (msg === "vectorstore.http.upsert.summary" || msg === "qdrant.http.upsert.summary") {
+      out.upsertOk += Number(f.upserts_ok != null ? f.upserts_ok : 0) || 0;
+      out.deleteOk += Number(f.deletes_ok != null ? f.deletes_ok : 0) || 0;
+      out.searchOk += Number(f.searches_ok != null ? f.searches_ok : 0) || 0;
+      continue;
+    }
+
     if (msg === "vectorstore.collection.loading" || msg === "qdrant.collection.loading") out.collTotal++;
+    if (msg === "vectorstore.collection.creating" || msg === "qdrant.collection.creating") out.collTotal++;
     if (msg === "vectorstore.shard.recovered" || msg === "qdrant.shard.recovered") out.collLoaded++;
+    if (msg === "vectorstore.http.collection_create" || msg === "qdrant.http.collection_create") {
+      if (okHttp) out.collLoaded++;
+    }
 
     if (msg === "vectorstore.http.points_upsert_ok" || msg === "qdrant.http.points_upsert_ok") {
       if (okHttp) out.upsertOk++;
@@ -199,6 +254,9 @@ function qdrantCardModel(arr, getFlat, resolveColl) {
       break;
     }
   }
+  var wb = pickWrapperBackendFromLogs(arr, getFlat, vectorstoreServiceMatch);
+  out.backendName = wb.backendName;
+  out.backendMode = wb.backendMode;
   return out;
 }
 
@@ -211,4 +269,6 @@ globalThis.ChimeraSettings.Derive.vectorstoreSliceCurrentProcess = qdrantSliceCu
 globalThis.ChimeraSettings.Derive.vectorstoreCollectionDisplay = qdrantCollectionDisplay;
 globalThis.ChimeraSettings.Derive.vectorstoreOperatorLine = qdrantOperatorLine;
 globalThis.ChimeraSettings.Derive.vectorstoreIndexerCollectionStatusLabel = qdrantIndexerCollectionStatusLabel;
+globalThis.ChimeraSettings.Derive.pickWrapperBackendFromLogs = pickWrapperBackendFromLogs;
+globalThis.ChimeraSettings.Derive.wrapperBackendPanelLabel = wrapperBackendPanelLabel;
 globalThis.ChimeraSettings.Derive.vectorstoreCardModel = qdrantCardModel;

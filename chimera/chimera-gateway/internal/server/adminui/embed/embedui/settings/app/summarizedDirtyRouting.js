@@ -17,6 +17,10 @@ globalThis.ChimeraSettings.Summarized = globalThis.ChimeraSettings.Summarized ||
     return flatMsg(f).toLowerCase();
   }
 
+  function flatTimelineKind(f) {
+    return String(f.timeline_kind != null ? f.timeline_kind : "").trim().toLowerCase();
+  }
+
   /** Gateway upstream relay lines bucket under chimera-broker (mirrors summarizedFeed). */
   function entryIsGatewayUpstreamRelay(ent, getFlat) {
     var f = getFlat(ent.parsed);
@@ -70,6 +74,79 @@ globalThis.ChimeraSettings.Summarized = globalThis.ChimeraSettings.Summarized ||
     var msg = flatMsgLower(f);
     if (msg.indexOf("indexer.") === 0) return true;
     if (msg.indexOf("gateway.indexer") === 0) return true;
+    return false;
+  }
+
+  /** Gateway/broker/vectorstore lines that belong to an indexer run, not operator service cards. */
+  function entryIsIndexerPipelineLine(f) {
+    if (flatTimelineKind(f) !== "indexer") return false;
+    var msg = flatMsg(f);
+    if (msg === "ingest.complete" || msg === "ingest.failed" || msg.indexOf("ingest.") === 0) return true;
+    if (msg === "gateway.http.access") {
+      var path = String(f.path != null ? f.path : "").trim();
+      return path.indexOf("/v1/ingest") === 0 || path.indexOf("/v1/indexer") === 0;
+    }
+    if (msg === "broker.http.access") {
+      var target = String(f.http_target != null ? f.http_target : f.httpTarget != null ? f.httpTarget : "").trim();
+      return target.indexOf("/v1/embeddings") >= 0;
+    }
+    if (
+      msg.indexOf("vectorstore.http.") === 0 &&
+      (msg.indexOf("points_") >= 0 ||
+        msg.indexOf("collection_meta") >= 0 ||
+        msg.indexOf("collection_create") >= 0 ||
+        msg.indexOf("collection_index") >= 0)
+    ) {
+      return true;
+    }
+    if (msg === "vectorstore.collection.creating") return true;
+    if (msg === "vectorstore.http.upsert.summary") return true;
+    return false;
+  }
+
+  function scopeStatusChangeReason(f) {
+    return f.change_reason != null ? String(f.change_reason).trim().toLowerCase() : "";
+  }
+
+  function indexerWorkspaceDirtyMsg(f, msg) {
+    if (!msg) return false;
+    if (msg === "indexer.run.start" || msg.indexOf("indexer.run.done") === 0) return true;
+    if (msg === "indexer.job.skipped.summary" || msg === "indexer.job.ingested.summary") return true;
+    if (msg.indexOf("indexer.ingest.gate.") === 0) return true;
+    if (msg === "indexer.recovery.resumed") return true;
+    if (msg.indexOf("indexer.job.failed") === 0 || msg === "indexer.work.failed") return true;
+    if (msg.indexOf("indexer.discovery.") === 0 || msg === "indexer.scan.complete") return true;
+    if (msg === "indexer.reconcile.summary") return true;
+    if (msg.indexOf("indexer.run.progress") === 0) return true;
+    if (msg === "indexer.sync_state.write_failed") return true;
+    if (msg.indexOf("indexer.fanout.") === 0) return true;
+    if (msg === "indexer.scope.status") {
+      var cr = scopeStatusChangeReason(f);
+      return cr !== "" && cr !== "heartbeat";
+    }
+    if (msg === "indexer.recovery.poll") {
+      return f.embed_ok === false;
+    }
+    if (msg === "ingest.failed") return true;
+    return false;
+  }
+
+  function indexerServiceCardDirtyMsg(f, msg) {
+    if (!msg) return false;
+    if (msg === "indexer.queue.snapshot") return false;
+    if (msg === "indexer.scope.active_file") return false;
+    if (msg === "indexer.job.skipped" || msg === "indexer.job.upload" || msg === "indexer.job.ingested") return false;
+    if (msg.indexOf("indexer.skip.") === 0) return false;
+    if (msg === "indexer.scope.status") {
+      var cr = scopeStatusChangeReason(f);
+      return cr !== "" && cr !== "heartbeat";
+    }
+    if (msg === "indexer.recovery.poll") {
+      return f.embed_ok === false;
+    }
+    if (indexerWorkspaceDirtyMsg(f, msg)) return true;
+    if (msg.indexOf("indexer.retry") === 0 || msg.indexOf("indexer.worker.paused") === 0) return true;
+    if (msg === "indexer.state" || msg.indexOf("indexer.storage.") === 0) return true;
     return false;
   }
 
@@ -159,6 +236,10 @@ globalThis.ChimeraSettings.Summarized = globalThis.ChimeraSettings.Summarized ||
     if (!entry || !entry.parsed) return { cardIds: cardIds, indexerBucketIds: indexerBucketIds };
 
     var f = deps.getFlat(entry.parsed);
+    var msg = flatMsgLower(f);
+    var pipelineLine = entryIsIndexerPipelineLine(f);
+    var indexerLine = entryIsIndexerLine(entry, deps.getFlat);
+
     var cid = f.conversation_id != null ? String(f.conversation_id).trim() : "";
     var pid =
       f.principal_id != null
@@ -182,14 +263,36 @@ globalThis.ChimeraSettings.Summarized = globalThis.ChimeraSettings.Summarized ||
       }
     }
 
-    var svcKey = serviceBucketKeyForEntry(entry, deps);
-    if (svcKey) pushCard(serviceCardIdForBucketKey(svcKey, deps.strHash));
+    if (!pipelineLine) {
+      var svcKey = serviceBucketKeyForEntry(entry, deps);
+      var dirtyServiceCard = true;
+      if (indexerLine) {
+        dirtyServiceCard = indexerServiceCardDirtyMsg(f, msg);
+      } else if (flatTimelineKind(f) === "indexer") {
+        dirtyServiceCard = false;
+      }
+      if (svcKey && dirtyServiceCard) {
+        pushCard(serviceCardIdForBucketKey(svcKey, deps.strHash));
+      }
+    }
 
     var adminIds = adminProviderIdsForEntry(entry, deps);
     for (var ai = 0; ai < adminIds.length; ai++) pushCard(adminIds[ai]);
 
     var ixGroup = indexerGroupIdForFlat(f, deps);
-    if (ixGroup) pushIndexerBucket(ixGroup);
+    if (ixGroup) {
+      if (pipelineLine || indexerLine) {
+        if (pipelineLine && msg === "ingest.failed") {
+          pushIndexerBucket(ixGroup);
+        } else if (indexerLine && indexerWorkspaceDirtyMsg(f, msg)) {
+          pushIndexerBucket(ixGroup);
+        } else if (pipelineLine && msg === "ingest.complete") {
+          // Successful pipeline lines are DEBUG in operator profile; if visible, skip card churn.
+        }
+      } else {
+        pushIndexerBucket(ixGroup);
+      }
+    }
 
     return { cardIds: cardIds, indexerBucketIds: indexerBucketIds };
   }
@@ -199,5 +302,8 @@ globalThis.ChimeraSettings.Summarized = globalThis.ChimeraSettings.Summarized ||
   globalThis.ChimeraSettings.Summarized.serviceCardIdForBucketKey = serviceCardIdForBucketKey;
   globalThis.ChimeraSettings.Summarized.conversationCardIdForPrincipalAndCid = conversationCardIdForPrincipalAndCid;
   globalThis.ChimeraSettings.Summarized.adminProviderIdsForEntry = adminProviderIdsForEntry;
+  globalThis.ChimeraSettings.Summarized.indexerWorkspaceDirtyMsg = indexerWorkspaceDirtyMsg;
+  globalThis.ChimeraSettings.Summarized.indexerServiceCardDirtyMsg = indexerServiceCardDirtyMsg;
+  globalThis.ChimeraSettings.Summarized.entryIsIndexerPipelineLine = entryIsIndexerPipelineLine;
   globalThis.ChimeraSettings.Summarized.SERVICE_BUCKET_ORDER = SERVICE_BUCKET_ORDER;
 })();

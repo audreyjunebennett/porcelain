@@ -235,7 +235,7 @@ Implementation sketch: accumulator struct per scope on the indexer, incremented 
 - Idle watch mode (queue empty, no fs events): **no** repeating skip summaries.
 - `log_level: debug` still shows per-file `active_file` and skips.
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 
@@ -287,16 +287,16 @@ Keep periodic heartbeat as **fallback** (`scope_status_poll_ms`, default 45s) bu
 - Scrolling heavy per-file DEBUG traffic does not evict `indexer.run.start` from `/api/ui/logs` tail.
 - Recovery while Ollama down: one clear “paused for embedding” status line, not a wall of identical recovery polls at INFO.
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 
-## Open questions
+## Open questions answered
 
 1. **Lightweight embed probe on health** — Is catalog + provider classification enough, or should `HandleHealth` optionally POST a 1-token embed (expensive; cache result ~30s)?
-2. **Global gate vs per-worker pause** — Should fan-out list jobs continue while embed is down (queue unchanged files into ingest tier) or pause entire drain?
-3. **Summary deltas vs cumulative** — Operator preference: deltas per window (“+120 skipped this interval”) or run-to-date totals in summary line?
-4. **HTTP status on degraded health** — Keep 200 + `ok: false` for all degraded checks, or 503 when embed down (indexer client must handle both)?
+2. **Global gate** — fan-out list jobs are paused when embed is down
+3. **Summary deltas vs cumulative** — Operator preference: run-to-date totals in summary line
+4. **HTTP status on degraded health** — 503 when embed down
 
 ---
 

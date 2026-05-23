@@ -198,6 +198,29 @@ function indexerFlatIsStatestatsOnly(f) {
   return indexerFlatIsState(f) || indexerFlatIsStorageStats(f);
 }
 
+/** Process-wide worker/queue lines with no ingest scope — chimera-indexer service card only. */
+function indexerFlatIsServiceGlobalOnly(f) {
+  var m = indexerFlatMsgLocal(f);
+  return (
+    m === "indexer.queue.snapshot" ||
+    m.indexOf("indexer.queue.snapshot") === 0 ||
+    m === "indexer.scan.complete" ||
+    m === "indexer.supervised.hot_reload" ||
+    m === "indexer.supervised.hot_reload_yaml_error" ||
+    m === "indexer.supervised.hot_reload_resolve_error"
+  );
+}
+
+/** Omit from Workspaces card scoped event log (metrics may still use bucket events). */
+function indexerFlatOmitFromWorkspaceScopedLog(f) {
+  if (indexerFlatIsServiceGlobalOnly(f)) return true;
+  if (indexerFlatMsgLocal(f) === "indexer.scope.status") {
+    var cr = f && f.change_reason != null ? String(f.change_reason).trim().toLowerCase() : "";
+    if (cr === "heartbeat") return true;
+  }
+  return false;
+}
+
 function indexerBucketHasOnlyStatestatsLines(events, getFlat) {
   if (!Array.isArray(events) || !events.length || typeof getFlat !== "function") return false;
   for (var i = 0; i < events.length; i++) {
@@ -458,6 +481,7 @@ function indexerBucketsFromCache(entryCache, getFlat) {
     var f = indexerAugmentFlat(ent, fRaw);
     if (!indexerInferIsIndexerLine(ent, f)) continue;
     if (indexerFlatIsState(f)) continue;
+    if (indexerFlatIsServiceGlobalOnly(f)) continue;
     var rid = f.index_run_id != null && String(f.index_run_id).trim() !== "" ? String(f.index_run_id).trim() : "";
     var st = rid ? targetState[rid] : null;
     var gids = indexerResolveWorkspaceBucketIds(f, st, buckets);
@@ -608,4 +632,6 @@ globalThis.ChimeraSettings.Derive.indexerIgSyntheticGid = indexerIgSyntheticGid;
 globalThis.ChimeraSettings.Derive.indexerPartitionMetaForRun = indexerPartitionMetaForRun;
 globalThis.ChimeraSettings.Derive.indexerAugmentFlat = indexerAugmentFlat;
 globalThis.ChimeraSettings.Derive.indexerInferIsIndexerLine = indexerInferIsIndexerLine;
+globalThis.ChimeraSettings.Derive.indexerFlatIsServiceGlobalOnly = indexerFlatIsServiceGlobalOnly;
+globalThis.ChimeraSettings.Derive.indexerFlatOmitFromWorkspaceScopedLog = indexerFlatOmitFromWorkspaceScopedLog;
 globalThis.ChimeraSettings.Derive.parseIgSyntheticGid = parseIgSyntheticGid;

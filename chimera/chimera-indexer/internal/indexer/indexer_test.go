@@ -30,16 +30,27 @@ type ingestRecord struct {
 // fakeGateway implements the v0.2 indexer-facing surface the indexer relies
 // on (config, ingest, health). Optional toggles let tests force flakiness.
 type fakeGateway struct {
-	mu       sync.Mutex
-	ingest   []ingestRecord
-	failOnce map[string]int
-	srv      *httptest.Server
-	healthOK atomic.Bool
+	mu             sync.Mutex
+	ingest         []ingestRecord
+	failOnce       map[string]int
+	srv            *httptest.Server
+	healthOK       atomic.Bool
+	embedOK        atomic.Bool
+	forceIngest502 atomic.Bool
+	ingestCalls    atomic.Int32
+}
+
+func boolJSON(v bool) string {
+	if v {
+		return "true"
+	}
+	return "false"
 }
 
 func newFakeGateway(t *testing.T) *fakeGateway {
 	g := &fakeGateway{failOnce: map[string]int{}}
 	g.healthOK.Store(true)
+	g.embedOK.Store(true)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/indexer/config", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -47,15 +58,25 @@ func newFakeGateway(t *testing.T) *fakeGateway {
 	})
 	mux.HandleFunc("/v1/indexer/storage/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		if g.healthOK.Load() {
-			_, _ = w.Write([]byte(`{"ok":true,"status":"ready"}`))
-			return
+		vsOK := g.healthOK.Load()
+		embOK := g.embedOK.Load()
+		allOK := vsOK && embOK
+		status := "ok"
+		if !allOK {
+			status = "degraded"
 		}
-		_, _ = w.Write([]byte(`{"ok":false,"status":"down"}`))
+		embExtra := `"model":"m"`
+		if !embOK {
+			embExtra = `"reason_code":"embed_model_not_in_catalog","detail":"embedding down","model":"m"`
+		} else if !vsOK {
+			embExtra = `"model":"m"`
+		}
+		body := `{"ok":` + boolJSON(allOK) + `,"status":"` + status + `","checks":{"vectorstore":{"ok":` + boolJSON(vsOK) + `},"embedding":{"ok":` + boolJSON(embOK) + `,` + embExtra + `}}}`
+		_, _ = w.Write([]byte(body))
 	})
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		if !g.healthOK.Load() {
+		if !g.healthOK.Load() || !g.embedOK.Load() {
 			w.WriteHeader(http.StatusServiceUnavailable)
 			_, _ = w.Write([]byte(`{"degraded":true,"status":"degraded"}`))
 			return
@@ -95,6 +116,11 @@ func newFakeGateway(t *testing.T) *fakeGateway {
 			case "file":
 				rec.Body = string(b)
 			}
+		}
+		g.ingestCalls.Add(1)
+		if g.forceIngest502.Load() || !g.embedOK.Load() {
+			http.Error(w, "embed: connection refused", http.StatusBadGateway)
+			return
 		}
 		g.mu.Lock()
 		if remaining, ok := g.failOnce[rec.Source]; ok && remaining > 0 {
@@ -276,6 +302,95 @@ func TestIndexer_PausesAndResumesOnHealth(t *testing.T) {
 	<-done
 	if got := g.seenSources(); len(got) != 1 || got[0] != "a.txt" {
 		t.Fatalf("got=%v after recovery", got)
+	}
+}
+
+func TestIndexer_ShortCircuitsEmbed502(t *testing.T) {
+	g := newFakeGateway(t)
+	g.forceIngest502.Store(true)
+	g.embedOK.Store(false)
+	root := t.TempDir()
+	mustWrite(t, filepath.Join(root, "a.txt"), "alpha\n")
+
+	cfg := Resolved{
+		GatewayURL: g.srv.URL, Token: "tok",
+		Roots:                []Root{{ID: "r", AbsPath: root}},
+		SyncStatePath:        filepath.Join(root, "sync.json"),
+		RetryMaxAttempts:     5,
+		RetryBaseDelay:       1 * time.Millisecond,
+		RetryMaxDelay:        2 * time.Millisecond,
+		RecoveryPollInterval: 20 * time.Millisecond,
+		Workers:              1, QueueDepth: 4, MaxFileBytes: 1 << 20,
+		RequestTimeout:            2 * time.Second,
+		RecoveryIncludeRootHealth: false,
+		RetryShortCircuitOnEmbed:  true,
+		BinaryNullByteSample:      1024,
+		BinaryNullByteRatio:       0.001,
+	}
+	ix := New(cfg, NewGatewayClient(cfg.GatewayURL, cfg.Token, cfg.RequestTimeout), nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if !ix.ScheduleInitialScan() {
+		t.Fatal("schedule initial scan")
+	}
+	done := make(chan struct{})
+	go func() { ix.RunWorkers(ctx); close(done) }()
+
+	time.Sleep(300 * time.Millisecond)
+	ix.Queue().Close()
+	<-done
+	if n := g.ingestCalls.Load(); n != 1 {
+		t.Fatalf("expected one ingest attempt before short-circuit, got %d", n)
+	}
+	if !ix.ingestGate.isClosed() {
+		t.Fatal("expected ingest gate closed")
+	}
+}
+
+func TestIndexer_WaitsForEmbeddingRecovery(t *testing.T) {
+	g := newFakeGateway(t)
+	g.healthOK.Store(true)
+	g.embedOK.Store(false)
+	root := t.TempDir()
+	mustWrite(t, filepath.Join(root, "a.txt"), "alpha\n")
+
+	cfg := Resolved{
+		GatewayURL: g.srv.URL, Token: "tok",
+		Roots:                []Root{{ID: "r", AbsPath: root}},
+		SyncStatePath:        filepath.Join(root, "sync.json"),
+		RetryMaxAttempts:     2,
+		RetryBaseDelay:       1 * time.Millisecond,
+		RetryMaxDelay:        2 * time.Millisecond,
+		RecoveryPollInterval: 15 * time.Millisecond,
+		Workers:              1, QueueDepth: 4, MaxFileBytes: 1 << 20,
+		RequestTimeout:            2 * time.Second,
+		RecoveryIncludeRootHealth: false,
+		RetryShortCircuitOnEmbed:  true,
+		BinaryNullByteSample:      1024,
+		BinaryNullByteRatio:       0.001,
+	}
+	ix := New(cfg, NewGatewayClient(cfg.GatewayURL, cfg.Token, cfg.RequestTimeout), nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+	if !ix.ScheduleInitialScan() {
+		t.Fatal("schedule initial scan")
+	}
+	done := make(chan struct{})
+	go func() { ix.RunWorkers(ctx); close(done) }()
+
+	time.Sleep(120 * time.Millisecond)
+	g.embedOK.Store(true)
+
+	for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline); {
+		if len(g.seenSources()) > 0 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	ix.Queue().Close()
+	<-done
+	if got := g.seenSources(); len(got) != 1 || got[0] != "a.txt" {
+		t.Fatalf("got=%v after embed recovery", got)
 	}
 }
 

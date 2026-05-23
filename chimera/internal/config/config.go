@@ -81,6 +81,9 @@ type Resolved struct {
 	// WitnessSampleForceAtDebug enables payload samples at debug log level (still redacted).
 	// Trace log level always enables payload samples when the gateway logger is configured for trace.
 	WitnessSampleForceAtDebug bool
+
+	// OperatorLogsIndexerPinnedLinesMax reserves servicelogs ring slots for critical indexer lines.
+	OperatorLogsIndexerPinnedLinesMax int
 }
 
 // ShouldEmitPayloadSample reports whether conversation.payload.sample may be emitted
@@ -173,6 +176,10 @@ type gatewayDoc struct {
 	} `yaml:"indexer"`
 
 	ConversationMerge conversationMergeDoc `yaml:"conversation_merge"`
+
+	OperatorLogs struct {
+		IndexerPinnedLinesMax int `yaml:"indexer_pinned_lines_max"`
+	} `yaml:"operator_logs"`
 }
 
 const (
@@ -187,6 +194,7 @@ const (
 	// defaultAvailableModelsPollMs polls BiFrost `/v1/models` every 30s. Set to 0 in
 	// gateway.yaml (`health.available_models_poll_ms`) to disable periodic polling.
 	defaultAvailableModelsPollMs = 30_000
+	defaultIndexerPinnedLinesMax = 64
 )
 
 // LoadGatewayYAML reads and parses gateway.yaml at filePath (absolute or cwd-relative).
@@ -405,12 +413,17 @@ func LoadGatewayYAML(filePath string, log *slog.Logger) (*Resolved, error) {
 	}
 	idxCfgRel := strings.TrimSpace(doc.Indexer.Supervised.ConfigPath)
 	if idxCfgRel == "" {
-		// Same layout as metrics.sqlite: repo `config/` → data under ../data/gateway/
-		idxCfgRel = filepath.Join("..", "data", "gateway", "indexer.supervised.yaml")
+		// Same directory as gateway.yaml (materialized by make chimera-indexer-configure).
+		idxCfgRel = "indexer.yaml"
 	}
 	idxCfgPath := filepath.Join(baseDir, idxCfgRel)
 	if filepath.IsAbs(idxCfgRel) {
 		idxCfgPath = idxCfgRel
+	}
+
+	idxPinnedMax := doc.OperatorLogs.IndexerPinnedLinesMax
+	if idxPinnedMax <= 0 {
+		idxPinnedMax = defaultIndexerPinnedLinesMax
 	}
 
 	if log != nil {
@@ -458,6 +471,7 @@ func LoadGatewayYAML(filePath string, log *slog.Logger) (*Resolved, error) {
 		IndexerSupervisedConfigPath:           idxCfgPath,
 		IndexerSupervisedStartWhenRAGDisabled: idxStartWhenRAGOff,
 		IndexerSupervisedLogJSON:              idxLogJSON,
+		OperatorLogsIndexerPinnedLinesMax:     idxPinnedMax,
 	}, nil
 }
 

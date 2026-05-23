@@ -12,8 +12,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/rag"
+	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/catalog"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/vectorstore"
 )
 
@@ -103,7 +105,8 @@ func TestIndexerWorkspaces_HappyPath_LegacyTenant(t *testing.T) {
 }
 
 func TestIndexerHealth_OK(t *testing.T) {
-	_, _, srv := setupRAGServer(t)
+	rt, _, srv := setupRAGServer(t)
+	rt.SetCatalogSnapshot(catalog.NewTestSnapshotWithModels(time.Now(), []string{"test-embed"}))
 	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/v1/indexer/storage/health", nil)
 	req.Header.Set("Authorization", "Bearer ingest-tok")
 	res, err := http.DefaultClient.Do(req)
@@ -120,12 +123,21 @@ func TestIndexerHealth_OK(t *testing.T) {
 	if doc["ok"] != true || doc["status"] != "ok" {
 		t.Fatalf("doc: %+v", doc)
 	}
+	checks, _ := doc["checks"].(map[string]any)
+	if checks == nil {
+		t.Fatal("missing checks")
+	}
+	vs, _ := checks["vectorstore"].(map[string]any)
+	emb, _ := checks["embedding"].(map[string]any)
+	if vs["ok"] != true || emb["ok"] != true {
+		t.Fatalf("checks: %+v", checks)
+	}
 }
 
 func TestIndexerHealth_Degraded(t *testing.T) {
 	rt, store, srv := setupRAGServer(t)
 	store.healthErr = errors.New("connection refused")
-	_ = rt
+	rt.SetCatalogSnapshot(catalog.NewTestSnapshotWithModels(time.Now(), []string{"test-embed"}))
 	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/v1/indexer/storage/health", nil)
 	req.Header.Set("Authorization", "Bearer ingest-tok")
 	res, err := http.DefaultClient.Do(req)
@@ -133,7 +145,7 @@ func TestIndexerHealth_Degraded(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer res.Body.Close()
-	if res.StatusCode != http.StatusServiceUnavailable {
+	if res.StatusCode != http.StatusOK {
 		t.Fatalf("status %d", res.StatusCode)
 	}
 	var doc map[string]any
@@ -141,7 +153,104 @@ func TestIndexerHealth_Degraded(t *testing.T) {
 	if doc["ok"] != false {
 		t.Fatalf("doc: %+v", doc)
 	}
+	checks, _ := doc["checks"].(map[string]any)
+	vs, _ := checks["vectorstore"].(map[string]any)
+	if vs["ok"] != false || vs["reason_code"] != "vectorstore_unreachable" {
+		t.Fatalf("vectorstore check: %+v", vs)
+	}
 }
+
+func TestIndexerHealth_EmbedModelMissingFromCatalog(t *testing.T) {
+	rt, _, srv := setupRAGServer(t)
+	rt.SetCatalogSnapshot(catalog.NewTestSnapshotWithModels(time.Now(), []string{"groq/llama3"}))
+	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/v1/indexer/storage/health", nil)
+	req.Header.Set("Authorization", "Bearer ingest-tok")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	var doc map[string]any
+	_ = json.NewDecoder(res.Body).Decode(&doc)
+	if doc["ok"] != false {
+		t.Fatalf("doc: %+v", doc)
+	}
+	checks, _ := doc["checks"].(map[string]any)
+	vs, _ := checks["vectorstore"].(map[string]any)
+	emb, _ := checks["embedding"].(map[string]any)
+	if vs["ok"] != true {
+		t.Fatalf("vectorstore: %+v", vs)
+	}
+	if emb["ok"] != false || emb["reason_code"] != "embed_model_not_in_catalog" {
+		t.Fatalf("embedding: %+v", emb)
+	}
+}
+
+func TestIndexerHealth_OllamaDownQdrantUp(t *testing.T) {
+	rt, store, srv := setupRAGServerWithOllamaEmbedModel(t)
+	store.healthErr = nil
+	rt.SetCatalogSnapshot(catalog.NewTestSnapshotWithModels(time.Now(), []string{"groq/llama3"}))
+	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/v1/indexer/storage/health", nil)
+	req.Header.Set("Authorization", "Bearer ingest-tok")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	var doc map[string]any
+	_ = json.NewDecoder(res.Body).Decode(&doc)
+	if doc["ok"] != false {
+		t.Fatalf("doc: %+v", doc)
+	}
+	checks, _ := doc["checks"].(map[string]any)
+	vs, _ := checks["vectorstore"].(map[string]any)
+	emb, _ := checks["embedding"].(map[string]any)
+	if vs["ok"] != true {
+		t.Fatalf("vectorstore: %+v", vs)
+	}
+	if emb["ok"] != false || emb["reason_code"] == "" || emb["detail"] == "" {
+		t.Fatalf("embedding: %+v", emb)
+	}
+}
+
+func setupRAGServerWithOllamaEmbedModel(t *testing.T) (*Runtime, *inMemoryStore, *httptest.Server) {
+	t.Helper()
+	rt, store, srv := setupRAGServer(t)
+	svc, err := rag.New(rag.Options{
+		Store:        store,
+		Embedder:     ollamaStubEmbedder{dim: 8},
+		ChunkSize:    128,
+		ChunkOverlap: 32,
+		TopK:         4,
+		EmbeddingDim: 8,
+		Log:          testLog(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt.SetRAGForTest(svc)
+	return rt, store, srv
+}
+
+type ollamaStubEmbedder struct{ dim int }
+
+func (e ollamaStubEmbedder) EmbedBatch(ctx context.Context, in []string) ([][]float32, error) {
+	out := make([][]float32, len(in))
+	for i := range in {
+		v := make([]float32, e.dim)
+		v[0] = float32(i + 1)
+		out[i] = v
+	}
+	return out, nil
+}
+func (e ollamaStubEmbedder) EmbedOne(ctx context.Context, s string) ([]float32, error) {
+	v, err := e.EmbedBatch(ctx, []string{s})
+	if err != nil {
+		return nil, err
+	}
+	return v[0], nil
+}
+func (e ollamaStubEmbedder) Model() string { return "ollama/nomic-embed-text:latest" }
 
 func TestIndexerStats_AfterIngest(t *testing.T) {
 	rt, store, srv := setupRAGServer(t)

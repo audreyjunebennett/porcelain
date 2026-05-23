@@ -56,18 +56,46 @@ import (
 // changed and the watch session is cycling (not a hard failure).
 var errSupervisedReload = errors.New("indexer supervised config hot-reload")
 
+// errSupervisedReloadStalled is returned when a workspace reload was requested
+// but the previous watch session did not finish within the grace window.
+var errSupervisedReloadStalled = errors.New("indexer supervised workspace reload stalled")
+
+// shouldContinueHotReloadAfterSession reports whether runWatchSession returned
+// because the outer loop requested a reload. That outcome must cycle the loop,
+// not exit the supervised process (sessDone can win the select race vs reloadCh).
+func shouldContinueHotReloadAfterSession(err error) bool {
+	return errors.Is(err, errSupervisedReload)
+}
+
+// shouldCycleSupervisedReload reports whether the outer hot-reload loop should
+// start a new watch session instead of exiting. Workspace reload can surface
+// errSupervisedReload, plain context.Canceled, or a reloadPending flag when
+// sessDone wins the select race before reloadCh runs cancel.
+func shouldCycleSupervisedReload(err error, reloadPending bool) bool {
+	if reloadPending {
+		return true
+	}
+	return shouldContinueHotReloadAfterSession(err)
+}
+
 const componentName = contract.ComponentIndexer
 
-func materializeSupervisedRoots(ctx context.Context, log *slog.Logger, cfg *indexer.Resolved) {
+func materializeSupervisedRoots(ctx context.Context, log *slog.Logger, cfg *indexer.Resolved) bool {
 	if cfg == nil || !cfg.SupervisedLayer {
-		return
+		return true
 	}
 	cl := indexer.NewGatewayClient(cfg.GatewayURL, cfg.Token, cfg.RequestTimeout)
 	if err := indexer.MaterializeRootsFromGateway(ctx, cl, cfg, indexer.RetryPolicyFromResolved(*cfg)); err != nil {
 		if log != nil {
-			log.Warn("gateway workspaces fetch failed", "err", err)
+			log.Warn("gateway workspaces fetch failed",
+				"err", err,
+				"msg", "indexer.supervised.workspaces_apply_failed",
+				"type", "indexer.supervised.workspaces_apply_failed",
+			)
 		}
+		return false
 	}
+	return true
 }
 
 type rootList []string
@@ -108,7 +136,9 @@ func drainReloadSignals(ch <-chan struct{}) {
 }
 
 func runOneShot(parentCtx context.Context, cfg indexer.Resolved, logJSON bool, baseLog *slog.Logger) error {
-	materializeSupervisedRoots(parentCtx, baseLog, &cfg)
+	if !materializeSupervisedRoots(parentCtx, baseLog, &cfg) {
+		return fmt.Errorf("supervised indexer: could not load workspace directories from gateway")
+	}
 	if cfg.SupervisedLayer && len(cfg.Roots) == 0 {
 		return fmt.Errorf("supervised indexer: no workspace directories from gateway (GET /v1/indexer/workspaces); add paths in /ui/settings workspaces")
 	}
@@ -118,6 +148,7 @@ func runOneShot(parentCtx context.Context, cfg indexer.Resolved, logJSON bool, b
 	client.IndexRunID = runID
 
 	ix := indexer.New(cfg, client, log)
+	ix.SetRunWatchMode(false)
 	if _, err := ix.FetchAndLogConfig(parentCtx); err != nil {
 		var he *indexer.HTTPError
 		if errors.As(err, &he) && he.Status == 503 && strings.Contains(strings.ToLower(he.Body), "rag is not enabled") {
@@ -148,6 +179,8 @@ func runOneShot(parentCtx context.Context, cfg indexer.Resolved, logJSON bool, b
 	ix.RunWorkers(drainCtx)
 	ix.Queue().Close()
 	ix.EmitStorageStatsAndState(parentCtx, false)
+	ix.FlushSkipSummaries()
+	ix.FlushIngestSummaries()
 	log.Info("indexer run done", indexer.RunDoneAttrs("one-shot", ix.OpsSnapshot())...)
 	return nil
 }
@@ -193,6 +226,7 @@ func runWatchSession(sessionCtx context.Context, wd string, cfgPath string, gate
 	client.IndexRunID = runID
 
 	ix := indexer.New(cfg, client, log)
+	ix.SetRunWatchMode(true)
 	// Expose the queue so the outer loop can wait for idle before triggering
 	// a workspace-change reload, avoiding disruption of in-flight ingest work.
 	if sessionQueueCh != nil {
@@ -225,7 +259,7 @@ func runWatchSession(sessionCtx context.Context, wd string, cfgPath string, gate
 	go ix.RunObservationLoop(sessionCtx, true)
 	go func() { watchDone <- ix.RunWatchers(sessionCtx) }()
 
-	errW := <-watchDone
+	errW := waitWatchersShutdown(sessionCtx, log, watchDone)
 	ix.Queue().Close()
 	<-doneWorkers
 	if errW != nil {
@@ -243,6 +277,8 @@ func runWatchSession(sessionCtx context.Context, wd string, cfgPath string, gate
 	if errW != nil {
 		return errW
 	}
+	ix.FlushSkipSummaries()
+	ix.FlushIngestSummaries()
 	log.Info("indexer run stopped", indexer.RunDoneAttrs("watch", ix.OpsSnapshot())...)
 	return nil
 }
@@ -252,9 +288,66 @@ func runWatchSession(sessionCtx context.Context, wd string, cfgPath string, gate
 // A new workspace created in the operator UI will be picked up within this window.
 const defaultWorkspacesPollInterval = 30 * time.Second
 
+// Grace periods for supervised reload/shutdown diagnostics. If RunWatchers does
+// not exit promptly after cancel (e.g. walking a huge tree during fsnotify),
+// operators see ERROR logs instead of silent stall.
+const (
+	supervisedWatchShutdownGrace = 45 * time.Second
+	supervisedReloadSessionGrace = 90 * time.Second
+)
+
+func waitWatchersShutdown(sessionCtx context.Context, log *slog.Logger, watchDone <-chan error) error {
+	select {
+	case errW := <-watchDone:
+		return errW
+	case <-sessionCtx.Done():
+		timer := time.NewTimer(supervisedWatchShutdownGrace)
+		defer timer.Stop()
+		select {
+		case errW := <-watchDone:
+			return errW
+		case <-timer.C:
+			if log != nil {
+				log.Error("filesystem watchers did not stop after reload or shutdown was requested",
+					"msg", "indexer.supervised.watch_shutdown_timeout",
+					"type", "indexer.supervised.watch_shutdown_timeout",
+					"grace_sec", int(supervisedWatchShutdownGrace.Seconds()),
+					"cause", context.Cause(sessionCtx),
+					"hint", "restart locus-desktop to resume indexing; if this repeats, check for very large directory trees under watch roots",
+				)
+			}
+			return fmt.Errorf("watch shutdown timed out after %s: %w", supervisedWatchShutdownGrace, context.Cause(sessionCtx))
+		}
+	}
+}
+
+func waitForSessionAfterReload(baseLog *slog.Logger, sessDone <-chan error) error {
+	timer := time.NewTimer(supervisedReloadSessionGrace)
+	defer timer.Stop()
+	select {
+	case err := <-sessDone:
+		return err
+	case <-timer.C:
+		if baseLog != nil {
+			baseLog.Error("supervised workspace reload stalled: previous watch session did not finish after reload was requested",
+				"msg", "indexer.supervised.workspaces_reload_stalled",
+				"type", "indexer.supervised.workspaces_reload_stalled",
+				"timeout_sec", int(supervisedReloadSessionGrace.Seconds()),
+				"hint", "restart locus-desktop to resume indexing for new workspaces",
+			)
+		}
+		return fmt.Errorf("%w after %s", errSupervisedReloadStalled, supervisedReloadSessionGrace)
+	}
+}
+
 func runWatchWithHotReload(ctx context.Context, wd string, absSupervisedCfg string, cfgFlag string, gatewayURL string, roots rootList, logJSON bool, logLevel string, baseLog *slog.Logger) error {
 	reloadCh := make(chan struct{}, 1)
+	// workspaceReloadPending is set when the poll goroutine (or config watcher)
+	// signals reload so sessDone can cycle even if the session error is plain
+	// context.Canceled from a select race.
+	var workspaceReloadPending atomic.Bool
 	signalReload := func() {
+		workspaceReloadPending.Store(true)
 		select {
 		case reloadCh <- struct{}{}:
 		default:
@@ -307,7 +400,7 @@ func runWatchWithHotReload(ctx context.Context, wd string, absSupervisedCfg stri
 					)
 					continue
 				}
-				newFp := indexer.WorkspacesResponseFingerprint(resp)
+				newFp := indexer.WorkspacesRootsFingerprint(resp)
 				wsFpMu.Lock()
 				prev := wsFingerprint
 				wsFpMu.Unlock()
@@ -315,15 +408,19 @@ func runWatchWithHotReload(ctx context.Context, wd string, absSupervisedCfg stri
 					baseLog.Debug("workspace poll: no change",
 						"msg", "indexer.supervised.workspaces_poll",
 						"type", "indexer.supervised.workspaces_poll",
-						"workspaces", newFp,
+						"paths_hash", newFp,
 					)
 					continue
 				}
+				watchPaths := indexer.WatchRootPathsFromResponse(resp)
 				baseLog.Info("supervised workspace list changed; waiting for session idle before reload",
 					"msg", "indexer.supervised.workspaces_changed",
 					"type", "indexer.supervised.workspaces_changed",
-					"prev_workspaces", prev,
-					"new_workspaces", newFp,
+					"prev_paths_hash", prev,
+					"new_paths_hash", newFp,
+					"workspace_ids", indexer.WorkspaceIDsFromResponse(resp),
+					"roots", len(watchPaths),
+					"watch_root_paths", watchPaths,
 				)
 				// Optimistically advance the shared fingerprint to the new set so the
 				// next poll tick doesn't fire a duplicate reload while the outer loop
@@ -350,7 +447,9 @@ func runWatchWithHotReload(ctx context.Context, wd string, absSupervisedCfg stri
 				baseLog.Info("session idle (or timeout); reloading watch session for new workspace",
 					"msg", "indexer.supervised.workspaces_reload",
 					"type", "indexer.supervised.workspaces_reload",
-					"new_workspaces", newFp,
+					"paths_hash", newFp,
+					"roots", len(watchPaths),
+					"watch_root_paths", watchPaths,
 				)
 				signalReload()
 			}
@@ -403,12 +502,17 @@ func runWatchWithHotReload(ctx context.Context, wd string, absSupervisedCfg stri
 			}
 		}
 
-		materializeSupervisedRoots(ctx, baseLog, &cfg)
-
-		// Update fingerprint so workspace poll goroutine has a baseline after each session cycle.
-		wsFpMu.Lock()
-		wsFingerprint = indexer.WorkspacesFingerprint(cfg.Roots)
-		wsFpMu.Unlock()
+		if !materializeSupervisedRoots(ctx, baseLog, &cfg) {
+			// Revert optimistic poll advance so the next tick retries apply.
+			wsFpMu.Lock()
+			wsFingerprint = ""
+			wsFpMu.Unlock()
+		} else {
+			// Update fingerprint so workspace poll goroutine has a baseline after each session cycle.
+			wsFpMu.Lock()
+			wsFingerprint = indexer.RootsSnapshotFingerprint(cfg.Roots)
+			wsFpMu.Unlock()
+		}
 
 		if len(cfg.Roots) == 0 {
 			baseLog.Debug(
@@ -432,6 +536,20 @@ func runWatchWithHotReload(ctx context.Context, wd string, absSupervisedCfg stri
 			case <-timer.C:
 				continue
 			}
+		}
+
+		if hotN > 0 {
+			watchPaths := make([]string, 0, len(cfg.Roots))
+			for _, r := range cfg.Roots {
+				watchPaths = append(watchPaths, r.AbsPath)
+			}
+			baseLog.Info("starting supervised watch session after workspace reload",
+				"msg", "indexer.supervised.workspaces_session_start",
+				"type", "indexer.supervised.workspaces_session_start",
+				"hot_n", hotN,
+				"roots", len(cfg.Roots),
+				"watch_root_paths", watchPaths,
+			)
 		}
 
 		sessionCtx, cancel := context.WithCancelCause(ctx)
@@ -470,13 +588,44 @@ func runWatchWithHotReload(ctx context.Context, wd string, absSupervisedCfg stri
 			return ctx.Err()
 		case <-reloadCh:
 			cancel(errSupervisedReload)
-			<-sessDone
+			err := waitForSessionAfterReload(baseLog, sessDone)
 			activeSessionQueue.Store((*indexer.Queue)(nil))
+			workspaceReloadPending.Store(false)
+			if errors.Is(err, errSupervisedReloadStalled) {
+				return err
+			}
+			if err != nil && !shouldCycleSupervisedReload(err, true) {
+				baseLog.Warn("supervised reload: previous session ended with error; starting fresh session",
+					"err", err,
+					"msg", "indexer.supervised.workspaces_reload_session_error",
+					"type", "indexer.supervised.workspaces_reload_session_error",
+				)
+			}
 			hotN++
 			continue
 		case err := <-sessDone:
 			activeSessionQueue.Store((*indexer.Queue)(nil))
+			reloadPending := workspaceReloadPending.Load()
+			if shouldCycleSupervisedReload(err, reloadPending) {
+				if err != nil && !shouldContinueHotReloadAfterSession(err) {
+					baseLog.Info("supervised session ended for workspace reload",
+						"err", err,
+						"msg", "indexer.supervised.workspaces_reload_session_end",
+						"type", "indexer.supervised.workspaces_reload_session_end",
+					)
+				}
+				cancel(errSupervisedReload)
+				workspaceReloadPending.Store(false)
+				hotN++
+				continue
+			}
 			if err != nil {
+				baseLog.Error("supervised watch session exited unexpectedly; indexer will stop until restart",
+					"err", err,
+					"msg", "indexer.supervised.session_fatal_exit",
+					"type", "indexer.supervised.session_fatal_exit",
+					"hint", "restart locus-desktop; if this follows adding a workspace, check supervisor logs for reload stall messages",
+				)
 				cancel(context.Canceled)
 				return err
 			}
@@ -556,7 +705,16 @@ func runBackend(args []string) error {
 		if errPath != nil {
 			return fmt.Errorf("indexer supervised config path: %w", errPath)
 		}
-		return runWatchWithHotReload(ctx, wd, absCfg, cfgPath, gatewayURL, roots, logJSON, logLevel, baseLog)
+		err := runWatchWithHotReload(ctx, wd, absCfg, cfgPath, gatewayURL, roots, logJSON, logLevel, baseLog)
+		if err != nil {
+			baseLog.Error("supervised indexer process exiting",
+				"err", err,
+				"msg", "indexer.supervised.process_exit",
+				"type", "indexer.supervised.process_exit",
+				"hint", "restart locus-desktop to resume indexing",
+			)
+		}
+		return err
 	}
 
 	return runWatchSession(ctx, wd, cfgPath, gatewayURL, roots, logJSON, logLevel, 0, nil)

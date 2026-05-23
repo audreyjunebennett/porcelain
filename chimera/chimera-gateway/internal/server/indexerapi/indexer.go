@@ -13,7 +13,6 @@ import (
 	gruntime "github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/runtime"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/scope"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/vectorstore"
-	"github.com/lynn/porcelain/internal/naming"
 )
 
 // HandleWorkspaces returns persisted operator workspaces for the Bearer token tenant
@@ -131,8 +130,10 @@ func HandleConfig(w http.ResponseWriter, r *http.Request, rt *gruntime.Runtime, 
 	})
 }
 
-// HandleHealth probes vector store connectivity for the authenticated tenant.
-func HandleHealth(w http.ResponseWriter, r *http.Request, rt *gruntime.Runtime, _ *slog.Logger) {
+// HandleHealth probes vector store and embedding readiness for the authenticated tenant.
+// Degraded dependency checks return HTTP 200 with ok:false so the indexer can poll without
+// treating the JSON body as a transport error; auth and RAG-disabled errors remain 503.
+func HandleHealth(w http.ResponseWriter, r *http.Request, rt *gruntime.Runtime, log *slog.Logger) {
 	rt.Sync()
 	res, tokStore, _ := rt.Snapshot()
 	token := gwhttp.BearerToken(r.Header.Get("Authorization"))
@@ -145,25 +146,9 @@ func HandleHealth(w http.ResponseWriter, r *http.Request, rt *gruntime.Runtime, 
 		gwhttp.WriteJSONError(w, http.StatusServiceUnavailable, "RAG is not enabled", "gateway_config")
 		return
 	}
-	err := rt.RAG().StoreHealth(r.Context())
-	resp := map[string]any{
-		"object":    "indexer.storage.health",
-		"backend":   naming.ProductVectorstoreName,
-		"url":       res.RAG.QdrantURL,
-		"tenant_id": sess.TenantID,
-	}
-	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusServiceUnavailable)
-		resp["status"] = "degraded"
-		resp["ok"] = false
-		resp["detail"] = err.Error()
-		_ = json.NewEncoder(w).Encode(resp)
-		return
-	}
+	resp := BuildStorageHealthResponse(r.Context(), rt, log, sess.TenantID, res.RAG.QdrantURL)
 	w.Header().Set("Content-Type", "application/json")
-	resp["status"] = "ok"
-	resp["ok"] = true
+	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(resp)
 }
 

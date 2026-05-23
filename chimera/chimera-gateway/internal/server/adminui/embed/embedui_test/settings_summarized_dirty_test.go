@@ -218,3 +218,203 @@ func TestSummarizedDirtyRouting_brokerRelayBucketsToBrokerCard(t *testing.T) {
 		t.Fatalf("expected broker service card %q in %v", brokerID.String(), cardIds)
 	}
 }
+
+func TestSummarizedDirtyRouting_indexerSummaryDirtiesWorkspaceNotGateway(t *testing.T) {
+	vm := goja.New()
+	loadSummarizedDirtyRoutingCtx(t, vm)
+
+	fn, ok := goja.AssertFunction(vm.Get("ChimeraSettings").ToObject(vm).Get("Summarized").ToObject(vm).Get("dirtyTargetsForEntry"))
+	if !ok {
+		t.Fatal("missing dirtyTargetsForEntry")
+	}
+
+	v, err := fn(
+		goja.Undefined(),
+		vm.ToValue(map[string]any{
+			"parsed": map[string]any{
+				"rawFlat": map[string]any{
+					"service":            "chimera-indexer",
+					"msg":                "indexer.job.ingested.summary",
+					"index_run_id":       "run-1",
+					"indexer_target_key": "itk_a",
+					"ingest_succeeded":   12,
+				},
+			},
+		}),
+		vm.ToValue(map[string]any{}),
+		vm.Get("deps"),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	obj := v.ToObject(vm)
+	cardIds := obj.Get("cardIds").Export().([]any)
+	buckets := obj.Get("indexerBucketIds").Export().([]any)
+	if len(buckets) != 1 || buckets[0] != "itk_a" {
+		t.Fatalf("expected indexer bucket itk_a, got %v", buckets)
+	}
+	gatewayID, err := vm.RunString(`ChimeraSettings.Summarized.serviceCardIdForBucketKey("chimera-gateway", ChimeraSettings.strHash)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range cardIds {
+		if id == gatewayID.String() {
+			t.Fatalf("gateway service card should not be dirty for indexer summary, got %v", cardIds)
+		}
+	}
+	indexerSvcID, err := vm.RunString(`ChimeraSettings.Summarized.serviceCardIdForBucketKey("chimera-indexer", ChimeraSettings.strHash)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundIndexerSvc := false
+	for _, id := range cardIds {
+		if id == indexerSvcID.String() {
+			foundIndexerSvc = true
+			break
+		}
+	}
+	if !foundIndexerSvc {
+		t.Fatalf("expected chimera-indexer service card in %v", cardIds)
+	}
+}
+
+func TestSummarizedDirtyRouting_indexerQueueSnapshotSkipsDirty(t *testing.T) {
+	vm := goja.New()
+	loadSummarizedDirtyRoutingCtx(t, vm)
+
+	fn, ok := goja.AssertFunction(vm.Get("ChimeraSettings").ToObject(vm).Get("Summarized").ToObject(vm).Get("dirtyTargetsForEntry"))
+	if !ok {
+		t.Fatal("missing dirtyTargetsForEntry")
+	}
+
+	v, err := fn(
+		goja.Undefined(),
+		vm.ToValue(map[string]any{
+			"parsed": map[string]any{
+				"rawFlat": map[string]any{
+					"service":          "chimera-indexer",
+					"msg":              "indexer.queue.snapshot",
+					"index_run_id":     "run-1",
+					"queue_depth":      0,
+					"ingest_completed": 12,
+				},
+			},
+		}),
+		vm.ToValue(map[string]any{}),
+		vm.Get("deps"),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	obj := v.ToObject(vm)
+	if len(obj.Get("cardIds").Export().([]any)) != 0 {
+		t.Fatalf("queue snapshot should not dirty service cards, got %v", obj.Get("cardIds").Export())
+	}
+	if len(obj.Get("indexerBucketIds").Export().([]any)) != 0 {
+		t.Fatalf("queue snapshot should not dirty workspace buckets, got %v", obj.Get("indexerBucketIds").Export())
+	}
+}
+
+func TestSummarizedDirtyRouting_scopeStatusHeartbeatSkipsDirty(t *testing.T) {
+	vm := goja.New()
+	loadSummarizedDirtyRoutingCtx(t, vm)
+
+	fn, ok := goja.AssertFunction(vm.Get("ChimeraSettings").ToObject(vm).Get("Summarized").ToObject(vm).Get("dirtyTargetsForEntry"))
+	if !ok {
+		t.Fatal("missing dirtyTargetsForEntry")
+	}
+
+	v, err := fn(
+		goja.Undefined(),
+		vm.ToValue(map[string]any{
+			"parsed": map[string]any{
+				"rawFlat": map[string]any{
+					"service":            "chimera-indexer",
+					"msg":                "indexer.scope.status",
+					"change_reason":      "heartbeat",
+					"index_run_id":       "run-1",
+					"indexer_target_key": "itk_a",
+				},
+			},
+		}),
+		vm.ToValue(map[string]any{}),
+		vm.Get("deps"),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	obj := v.ToObject(vm)
+	if len(obj.Get("cardIds").Export().([]any)) != 0 || len(obj.Get("indexerBucketIds").Export().([]any)) != 0 {
+		t.Fatalf("heartbeat scope.status should not dirty cards, got cards=%v buckets=%v",
+			obj.Get("cardIds").Export(), obj.Get("indexerBucketIds").Export())
+	}
+}
+
+func TestSummarizedDirtyRouting_scopeStatusPhaseDirtiesWorkspace(t *testing.T) {
+	vm := goja.New()
+	loadSummarizedDirtyRoutingCtx(t, vm)
+
+	fn, ok := goja.AssertFunction(vm.Get("ChimeraSettings").ToObject(vm).Get("Summarized").ToObject(vm).Get("dirtyTargetsForEntry"))
+	if !ok {
+		t.Fatal("missing dirtyTargetsForEntry")
+	}
+
+	v, err := fn(
+		goja.Undefined(),
+		vm.ToValue(map[string]any{
+			"parsed": map[string]any{
+				"rawFlat": map[string]any{
+					"service":            "chimera-indexer",
+					"msg":                "indexer.scope.status",
+					"change_reason":      "phase",
+					"index_run_id":       "run-1",
+					"indexer_target_key": "itk_a",
+				},
+			},
+		}),
+		vm.ToValue(map[string]any{}),
+		vm.Get("deps"),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	obj := v.ToObject(vm)
+	buckets := obj.Get("indexerBucketIds").Export().([]any)
+	if len(buckets) != 1 || buckets[0] != "itk_a" {
+		t.Fatalf("expected workspace bucket dirty on phase change, got %v", buckets)
+	}
+}
+
+func TestSummarizedDirtyRouting_indexerPipelineSkipsGatewayServiceCard(t *testing.T) {
+	vm := goja.New()
+	loadSummarizedDirtyRoutingCtx(t, vm)
+
+	fn, ok := goja.AssertFunction(vm.Get("ChimeraSettings").ToObject(vm).Get("Summarized").ToObject(vm).Get("dirtyTargetsForEntry"))
+	if !ok {
+		t.Fatal("missing dirtyTargetsForEntry")
+	}
+
+	v, err := fn(
+		goja.Undefined(),
+		vm.ToValue(map[string]any{
+			"parsed": map[string]any{
+				"rawFlat": map[string]any{
+					"service":       "chimera-gateway",
+					"msg":           "ingest.complete",
+					"timeline_kind": "indexer",
+					"index_run_id":  "run-1",
+					"source":        "src/main.go",
+				},
+			},
+		}),
+		vm.ToValue(map[string]any{}),
+		vm.Get("deps"),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	obj := v.ToObject(vm)
+	if len(obj.Get("cardIds").Export().([]any)) != 0 {
+		t.Fatalf("indexer pipeline ingest.complete should not dirty gateway card, got %v", obj.Get("cardIds").Export())
+	}
+}

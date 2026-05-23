@@ -27,11 +27,11 @@ func (ix *Indexer) computePerScopeBudget(nScopes int) int {
 
 func (ix *Indexer) incPendingBulk(scopeKey string) {
 	ix.pendingBulkMu.Lock()
-	defer ix.pendingBulkMu.Unlock()
 	if ix.pendingBulkByScope == nil {
 		ix.pendingBulkByScope = map[string]int64{}
 	}
 	ix.pendingBulkByScope[scopeKey]++
+	ix.pendingBulkMu.Unlock()
 }
 
 func (ix *Indexer) decPendingBulk(scopeKey string) {
@@ -39,16 +39,17 @@ func (ix *Indexer) decPendingBulk(scopeKey string) {
 		return
 	}
 	ix.pendingBulkMu.Lock()
-	defer ix.pendingBulkMu.Unlock()
 	if ix.pendingBulkByScope == nil {
+		ix.pendingBulkMu.Unlock()
 		return
 	}
 	v := ix.pendingBulkByScope[scopeKey] - 1
 	if v <= 0 {
 		delete(ix.pendingBulkByScope, scopeKey)
-		return
+	} else {
+		ix.pendingBulkByScope[scopeKey] = v
 	}
-	ix.pendingBulkByScope[scopeKey] = v
+	ix.pendingBulkMu.Unlock()
 }
 
 func (ix *Indexer) pendingBulk(scopeKey string) int64 {
@@ -192,6 +193,7 @@ func (ix *Indexer) runScanJob(ctx context.Context, scanID string) error {
 			"candidates_enqueued", 0,
 		)
 		ix.initialScanCompleted.Store(true)
+		ix.MaybeEmitScopeStatusEdge("phase")
 		ix.LogQueueSnapshot("after_initial_scan")
 		return nil
 	}
@@ -207,6 +209,7 @@ func (ix *Indexer) runScanJob(ctx context.Context, scanID string) error {
 		"candidates_total", len(all),
 	)
 	ix.initialScanCompleted.Store(true)
+	ix.MaybeEmitScopeStatusEdge("phase")
 	ix.LogQueueSnapshot("after_initial_scan")
 	return nil
 }

@@ -103,4 +103,42 @@
 .sum-metrics-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .sum-metrics-table code { font-size: 0.72rem; }
 
+/* Indexer workspace card: recently evaluated files — header stays visible, body scrolls */
+.sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent {
+  display: block;
+  overflow: visible;
+}
+.sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent thead,
+.sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent tbody {
+  display: block;
+  width: 100%;
+}
+.sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent thead {
+  position: relative;
+  z-index: 2;
+  box-shadow:
+    0 5px 10px -4px color-mix(in srgb, var(--embed-text-primary) 14%, transparent),
+    0 2px 4px -2px color-mix(in srgb, var(--embed-text-primary) 10%, transparent);
+}
+.sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent tbody {
+  max-height: 14rem;
+  overflow-x: auto;
+  overflow-y: auto;
+}
+.sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent thead tr,
+.sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent tbody tr {
+  display: table;
+  width: 100%;
+  table-layout: fixed;
+}
+.sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent col.indexer-recent-col-time {
+  width: 19ch;
+}
+.sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent col.indexer-recent-col-status {
+  width: calc(10ch + 0.7rem);
+}
+.sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent col.indexer-recent-col-detail {
+  width: 13rem;
+}
+
 /* Conversation card — segmented lifecycle bar (gapped segments + labels in expanded body) */

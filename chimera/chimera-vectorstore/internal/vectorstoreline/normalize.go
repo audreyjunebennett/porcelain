@@ -23,6 +23,8 @@ var recoveredCollectionRE = regexp.MustCompile(`(?i)Recovered collection\s+([^:]
 
 var loadingCollectionRE = regexp.MustCompile(`(?i)Loading collection:\s*(.+)\s*$`)
 
+var creatingCollectionRE = regexp.MustCompile(`(?i)Creating collection\s+(.+?)\s*$`)
+
 // Recovering shard paths embed the collection directory name before segment "\d+:".
 var recoveringShardCollRE = regexp.MustCompile(`(?i)[/\\]collections[/\\]([^/\\]+)[/\\]`)
 
@@ -112,6 +114,11 @@ func normalizeJSON(raw string) []byte {
 	case tgt == "storage::content_manager::toc" && strings.HasPrefix(strings.TrimSpace(msg), "Loading collection:"):
 		out.Msg = "vectorstore.collection.loading"
 		if m := loadingCollectionRE.FindStringSubmatch(msg); len(m) == 2 {
+			out.Collection = strings.TrimSpace(m[1])
+		}
+	case strings.Contains(tgt, "collection_meta_ops") && strings.HasPrefix(strings.TrimSpace(msg), "Creating collection"):
+		out.Msg = "vectorstore.collection.creating"
+		if m := creatingCollectionRE.FindStringSubmatch(msg); len(m) == 2 {
 			out.Collection = strings.TrimSpace(m[1])
 		}
 	case tgt == "collection::shards::local_shard" && strings.Contains(msg, "Recovering shard"):
@@ -284,6 +291,18 @@ func normalizeAccessJSON(_ rustTracingLine, msg string, base normalized) []byte 
 	switch {
 	case method == "GET" && strings.Contains(lowPath, "/collections/") && !strings.Contains(lowPath, "/points"):
 		base.Msg = "vectorstore.http.collection_meta"
+	case method == "PUT" && strings.Contains(lowPath, "/collections/") && strings.HasSuffix(lowPath, "/index"):
+		if status >= 200 && status < 300 {
+			base.Msg = "vectorstore.http.collection_index"
+		} else {
+			base.Msg = "vectorstore.http.collection_index_rejected"
+		}
+	case method == "PUT" && strings.Contains(lowPath, "/collections/") && !strings.Contains(lowPath, "/points"):
+		if status >= 200 && status < 300 {
+			base.Msg = "vectorstore.http.collection_create"
+		} else {
+			base.Msg = "vectorstore.http.collection_create_rejected"
+		}
 	case method == "POST" && strings.Contains(lowPath, "/points/delete"):
 		base.Msg = "vectorstore.http.points_delete"
 	case method == "POST" && strings.Contains(lowPath, "/points/search"):
@@ -305,6 +324,8 @@ func normalizeAccessJSON(_ rustTracingLine, msg string, base normalized) []byte 
 
 // vectorstoreHTTPAccessLevel returns DEBUG for successful wrapper readiness / health
 // probes so default INFO streams (supervisor mirror, settings UI) stay readable.
+// Per-file ingest HTTP (collection meta, upserts) is demoted in postProcessNormalizedLine;
+// collection_create and vectorstore.http.upsert.summary stay at INFO.
 func vectorstoreHTTPAccessLevel(method, path string, status int) string {
 	if status < 200 || status >= 300 {
 		return ""

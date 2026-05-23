@@ -53,3 +53,25 @@ func ParseJobSkipLog(s string) (JobSkipLogMode, error) {
 		return JobSkipLogInfo, fmt.Errorf("job_skip_log: want info, debug, or off, got %q", s)
 	}
 }
+
+// JobIngestLogMode selects how per-file ingest success lines are emitted.
+type JobIngestLogMode uint8
+
+const (
+	// JobIngestLogInfo emits indexer.job.ingested at INFO.
+	JobIngestLogInfo JobIngestLogMode = iota
+	// JobIngestLogDebug emits indexer.job.ingested at DEBUG only.
+	JobIngestLogDebug
+)
+
+// ParseJobIngestLog parses job_ingest_log YAML (info, debug).
+func ParseJobIngestLog(s string) (JobIngestLogMode, error) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "", "info":
+		return JobIngestLogInfo, nil
+	case "debug":
+		return JobIngestLogDebug, nil
+	default:
+		return JobIngestLogInfo, fmt.Errorf("job_ingest_log: want info or debug, got %q", s)
+	}
+}

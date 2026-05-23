@@ -374,6 +374,9 @@ func classifyHTTPAccess(out *normalized, fields map[string]json.RawMessage, mess
 	if status >= 200 && status < 300 && method == "GET" && httpTargetPath(target) == "/v1/models" {
 		out.Level = "DEBUG"
 	}
+	if status >= 200 && status < 300 && method == "POST" && httpTargetPath(target) == "/v1/embeddings" {
+		out.Level = "DEBUG"
+	}
 
 	if status == 429 {
 		return "broker.rate_limit", true

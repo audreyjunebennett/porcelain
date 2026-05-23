@@ -40,6 +40,7 @@ function indexerSlugHistogramBucket(msgLower) {
   if (m.indexOf("gateway.indexer.config") === 0) return "config";
   if (
     m.indexOf("indexer.recovery") === 0 ||
+    m.indexOf("indexer.ingest.gate") === 0 ||
     m.indexOf("indexer.retry") === 0 ||
     m.indexOf("indexer.worker.paused") === 0
   ) {

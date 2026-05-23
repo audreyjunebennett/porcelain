@@ -2,6 +2,7 @@ package indexer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -21,7 +22,10 @@ func (ix *Indexer) RunWatchers(ctx context.Context) error {
 	defer w.Close()
 
 	for _, r := range ix.cfg.Roots {
-		if err := addRecursive(w, r.AbsPath); err != nil {
+		if err := addRecursiveWatch(ctx, w, r.AbsPath); err != nil {
+			if ctx.Err() != nil || errors.Is(err, context.Canceled) {
+				return nil
+			}
 			return fmt.Errorf("watch %s: %w", r.AbsPath, err)
 		}
 	}
@@ -60,9 +64,14 @@ func (ix *Indexer) RunWatchers(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
+			// Close before return so fsnotify unblocks promptly during supervised reload.
+			_ = w.Close()
 			return nil
 		case ev, ok := <-w.Events:
 			if !ok {
+				return nil
+			}
+			if ctx.Err() != nil {
 				return nil
 			}
 			if ev.Op&(fsnotify.Create|fsnotify.Write) != 0 {
@@ -77,11 +86,14 @@ func (ix *Indexer) RunWatchers(ctx context.Context) error {
 			}
 			if ev.Op&fsnotify.Create != 0 {
 				if st, err := os.Stat(ev.Name); err == nil && st.IsDir() {
-					_ = addRecursive(w, ev.Name)
+					_ = addRecursiveWatch(ctx, w, ev.Name)
 				}
 			}
 		case err, ok := <-w.Errors:
 			if !ok {
+				return nil
+			}
+			if ctx.Err() != nil {
 				return nil
 			}
 			ix.log.Warn("fsnotify error", "err", err)
@@ -89,8 +101,14 @@ func (ix *Indexer) RunWatchers(ctx context.Context) error {
 	}
 }
 
-func addRecursive(w *fsnotify.Watcher, root string) error {
+func addRecursiveWatch(ctx context.Context, w *fsnotify.Watcher, root string) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	return filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		if err != nil {
 			return nil
 		}

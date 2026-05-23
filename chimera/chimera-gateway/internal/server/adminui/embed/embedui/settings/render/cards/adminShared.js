@@ -184,6 +184,13 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminShared = function (ctx) {
     );
   }
 
+  function operatorCardChevronHtml() {
+    return (
+      '<span class="material-symbols-outlined sg-op-chev-icon" aria-hidden="true">chevron_right</span>' +
+      '<span class="sum-chev" aria-hidden="true"></span>'
+    );
+  }
+
   function operatorConfigureBtnInline(action, ariaLabel, title) {
     var lab = ariaLabel != null ? String(ariaLabel) : "Configure";
     var tit = title != null ? String(title) : "Configure";
@@ -615,6 +622,7 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminShared = function (ctx) {
   ctx.operatorSectionHeadHtml = operatorSectionHeadHtml;
   ctx.operatorSectionAddBtn = operatorSectionAddBtn;
   ctx.operatorSectionAddBarHtml = operatorSectionAddBarHtml;
+  ctx.operatorCardChevronHtml = operatorCardChevronHtml;
   ctx.operatorConfigureBtnInline = operatorConfigureBtnInline;
   ctx.sgOpHealthPillHtml = sgOpHealthPillHtml;
   ctx.fallbackChainToYAML = fallbackChainToYAML;

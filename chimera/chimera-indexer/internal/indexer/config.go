@@ -134,6 +134,11 @@ type FileConfig struct {
 	// from all merged files, Resolve defaults to true.
 	RecoveryIncludeRootHealth *bool `yaml:"recovery_include_root_health"`
 
+	// RetryShortCircuitOnEmbed, when true (default), skips remaining per-file
+	// retries after a 502/503 embed-classified ingest failure and opens the
+	// global ingest gate instead of burning retry_max_attempts.
+	RetryShortCircuitOnEmbed *bool `yaml:"retry_short_circuit_on_embed"`
+
 	RetryMaxAttempts     int     `yaml:"retry_max_attempts"`
 	RetryBaseDelayMS     int     `yaml:"retry_base_delay_ms"`
 	RetryMaxDelayMS      int     `yaml:"retry_max_delay_ms"`
@@ -164,6 +169,9 @@ type FileConfig struct {
 	// debug (DEBUG indexer.skip.* only), or off (no skip/upload INFO lines).
 	JobSkipLog string `yaml:"job_skip_log"`
 
+	// JobIngestLog selects per-file ingest success verbosity: info (default) or debug.
+	JobIngestLog string `yaml:"job_ingest_log"`
+
 	// StorageStatsPollMS sets GET /v1/indexer/storage/stats polling. Zero = default (~2 min).
 	// Negative = disable polling entirely.
 	StorageStatsPollMS int `yaml:"storage_stats_poll_ms"`
@@ -178,6 +186,17 @@ type FileConfig struct {
 
 	// ScopeActiveFileLogMinIntervalMS rate-limits indexer.scope.active_file per scope (default 2000).
 	ScopeActiveFileLogMinIntervalMS int `yaml:"scope_active_file_log_min_interval_ms"`
+
+	// SkipSummaryMinIntervalMS controls batched indexer.job.skipped.summary lines (default 5000).
+	// Zero uses default; negative disables summaries.
+	SkipSummaryMinIntervalMS int `yaml:"skip_summary_min_interval_ms"`
+
+	// ScopeStatusIngestMilestone emits edge scope.status every N successful ingests (default 25).
+	// Zero uses default; negative disables ingest milestones.
+	ScopeStatusIngestMilestone int `yaml:"scope_status_ingest_milestone"`
+
+	// ScopeStatusEdgeMinIntervalMS rate-limits edge-triggered scope.status lines per scope (default 2000).
+	ScopeStatusEdgeMinIntervalMS int `yaml:"scope_status_edge_min_interval_ms"`
 }
 
 // Resolved is the runtime indexer configuration after merging YAML, env vars,
@@ -211,11 +230,18 @@ type Resolved struct {
 	// are paused after exhausting ingest retries (defaults true when unset in YAML).
 	RecoveryIncludeRootHealth bool
 
+	// RetryShortCircuitOnEmbed skips remaining per-file retries after an
+	// embed-classified 502/503 and opens the ingest gate (defaults true).
+	RetryShortCircuitOnEmbed bool
+
 	// LogLevel is the minimum slog level for indexer stderr output.
 	LogLevel slog.Level
 
 	// JobSkipLog controls per-file skip / pre-upload lines (see ParseJobSkipLog).
 	JobSkipLog JobSkipLogMode
+
+	// JobIngestLog controls per-file indexer.job.ingested lines (see ParseJobIngestLog).
+	JobIngestLog JobIngestLogMode
 
 	// StorageStatsPoll is how often to call GET /v1/indexer/storage/stats and
 	// emit indexer.state / storage stats logs. Zero disables polling.
@@ -230,6 +256,16 @@ type Resolved struct {
 
 	// ScopeActiveFileLogMinInterval rate-limits indexer.scope.active_file lines per scope.
 	ScopeActiveFileLogMinInterval time.Duration
+
+	// SkipSummaryMinInterval is the minimum window between indexer.job.skipped.summary
+	// emissions per scope. Zero disables summaries.
+	SkipSummaryMinInterval time.Duration
+
+	// ScopeStatusIngestMilestone triggers edge scope.status every N ingests (0 = default 25).
+	ScopeStatusIngestMilestone int
+
+	// ScopeStatusEdgeMinInterval rate-limits edge scope.status emissions per scope (0 = default 2s).
+	ScopeStatusEdgeMinInterval time.Duration
 
 	// SupervisedLayer is true when --config names an explicit YAML file (desktop supervised).
 	// Effective watch roots come from GET /v1/indexer/workspaces; YAML roots and --root are ignored.
@@ -323,6 +359,7 @@ func Resolve(fc FileConfig, env func(string) string, ov Overrides) (Resolved, er
 		MaxWholeFileBytes:    fc.MaxWholeFileBytes,
 		LogLevel:             slog.LevelInfo,
 		JobSkipLog:           JobSkipLogInfo,
+		JobIngestLog:         JobIngestLogInfo,
 	}
 	if strings.TrimSpace(fc.LogLevel) != "" {
 		r.LogLevel = ParseLogLevel(fc.LogLevel)
@@ -339,6 +376,15 @@ func Resolve(fc FileConfig, env func(string) string, ov Overrides) (Resolved, er
 		} else {
 			r.JobSkipLog = JobSkipLogDebug
 		}
+	}
+	if ji := strings.TrimSpace(fc.JobIngestLog); ji != "" {
+		m, err := ParseJobIngestLog(ji)
+		if err != nil {
+			return Resolved{}, err
+		}
+		r.JobIngestLog = m
+	} else if r.JobSkipLog == JobSkipLogDebug {
+		r.JobIngestLog = JobIngestLogDebug
 	}
 	switch {
 	case fc.StorageStatsPollMS < 0:
@@ -363,6 +409,25 @@ func Resolve(fc FileConfig, env func(string) string, ov Overrides) (Resolved, er
 		r.ScopeActiveFileLogMinInterval = time.Duration(fc.ScopeActiveFileLogMinIntervalMS) * time.Millisecond
 	default:
 		r.ScopeActiveFileLogMinInterval = time.Duration(defaultScopeActiveFileMinMs) * time.Millisecond
+	}
+	switch {
+	case fc.SkipSummaryMinIntervalMS < 0:
+		r.SkipSummaryMinInterval = 0
+	case fc.SkipSummaryMinIntervalMS > 0:
+		r.SkipSummaryMinInterval = time.Duration(fc.SkipSummaryMinIntervalMS) * time.Millisecond
+	default:
+		r.SkipSummaryMinInterval = time.Duration(defaultSkipSummaryMinIntervalMs) * time.Millisecond
+	}
+	if fc.ScopeStatusIngestMilestone != 0 {
+		r.ScopeStatusIngestMilestone = fc.ScopeStatusIngestMilestone
+	}
+	switch {
+	case fc.ScopeStatusEdgeMinIntervalMS < 0:
+		r.ScopeStatusEdgeMinInterval = 0
+	case fc.ScopeStatusEdgeMinIntervalMS > 0:
+		r.ScopeStatusEdgeMinInterval = time.Duration(fc.ScopeStatusEdgeMinIntervalMS) * time.Millisecond
+	default:
+		r.ScopeStatusEdgeMinInterval = time.Duration(defaultScopeStatusEdgeMinIntervalMs) * time.Millisecond
 	}
 	switch {
 	case fc.QueueFanoutHWMPercent >= 1 && fc.QueueFanoutHWMPercent <= 100:
@@ -490,6 +555,11 @@ func Resolve(fc FileConfig, env func(string) string, ov Overrides) (Resolved, er
 	} else {
 		r.RecoveryIncludeRootHealth = true
 	}
+	if fc.RetryShortCircuitOnEmbed != nil {
+		r.RetryShortCircuitOnEmbed = *fc.RetryShortCircuitOnEmbed
+	} else {
+		r.RetryShortCircuitOnEmbed = true
+	}
 	return r, nil
 }
 
@@ -594,6 +664,10 @@ func MergeFileConfig(base, overlay FileConfig) FileConfig {
 		v := *overlay.RecoveryIncludeRootHealth
 		out.RecoveryIncludeRootHealth = &v
 	}
+	if overlay.RetryShortCircuitOnEmbed != nil {
+		v := *overlay.RetryShortCircuitOnEmbed
+		out.RetryShortCircuitOnEmbed = &v
+	}
 	if overlay.RetryMaxAttempts != 0 {
 		out.RetryMaxAttempts = overlay.RetryMaxAttempts
 	}
@@ -643,6 +717,9 @@ func MergeFileConfig(base, overlay FileConfig) FileConfig {
 	if strings.TrimSpace(overlay.JobSkipLog) != "" {
 		out.JobSkipLog = overlay.JobSkipLog
 	}
+	if strings.TrimSpace(overlay.JobIngestLog) != "" {
+		out.JobIngestLog = overlay.JobIngestLog
+	}
 	if overlay.QueueFanoutHWMPercent >= 1 && overlay.QueueFanoutHWMPercent <= 100 {
 		out.QueueFanoutHWMPercent = overlay.QueueFanoutHWMPercent
 	}
@@ -651,6 +728,15 @@ func MergeFileConfig(base, overlay FileConfig) FileConfig {
 	}
 	if overlay.ScopeActiveFileLogMinIntervalMS != 0 {
 		out.ScopeActiveFileLogMinIntervalMS = overlay.ScopeActiveFileLogMinIntervalMS
+	}
+	if overlay.SkipSummaryMinIntervalMS != 0 {
+		out.SkipSummaryMinIntervalMS = overlay.SkipSummaryMinIntervalMS
+	}
+	if overlay.ScopeStatusIngestMilestone != 0 {
+		out.ScopeStatusIngestMilestone = overlay.ScopeStatusIngestMilestone
+	}
+	if overlay.ScopeStatusEdgeMinIntervalMS != 0 {
+		out.ScopeStatusEdgeMinIntervalMS = overlay.ScopeStatusEdgeMinIntervalMS
 	}
 	return out
 }

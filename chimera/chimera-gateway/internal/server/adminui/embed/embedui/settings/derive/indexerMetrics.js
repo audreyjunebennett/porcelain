@@ -277,9 +277,13 @@ function collectIndexerRunMeta(runId, evs, opts) {
     return pj === (parts[2] || "") && fv === (parts[3] || "");
   }
 
-  var discoveryCandidatesForBucket = null,
+  var     discoveryCandidatesForBucket = null,
     lastScopeStatusFlat = null,
-    lastScopeActiveFlat = null;
+    lastScopeStatusEdgeFlat = null,
+    lastScopeActiveFlat = null,
+    lastRecoveryPollFlat = null,
+    lastSkipSummaryFlat = null,
+    lastIngestSummaryFlat = null;
   for (var sc = evs.length - 1; sc >= 0; sc--) {
     var fSc = getFlat(evs[sc].parsed);
     var mSc = indexerFlatMsg(fSc);
@@ -297,9 +301,17 @@ function collectIndexerRunMeta(runId, evs, opts) {
     var mSb = indexerFlatMsg(fSb);
     if (!lastScopeStatusFlat && mSb === "indexer.scope.status" && indexerFlatMatchesBucket(fSb, bucketGid))
       lastScopeStatusFlat = fSb;
+    if (mSb === "indexer.scope.status" && indexerFlatMatchesBucket(fSb, bucketGid)) {
+      var cr = fSb.change_reason != null ? String(fSb.change_reason).trim() : "";
+      if (!lastScopeStatusEdgeFlat && cr && cr !== "heartbeat") lastScopeStatusEdgeFlat = fSb;
+    }
     if (!lastScopeActiveFlat && mSb === "indexer.scope.active_file" && indexerFlatMatchesBucket(fSb, bucketGid))
       lastScopeActiveFlat = fSb;
-    if (lastScopeStatusFlat && lastScopeActiveFlat) break;
+    if (!lastRecoveryPollFlat && mSb === "indexer.recovery.poll") lastRecoveryPollFlat = fSb;
+    if (!lastSkipSummaryFlat && mSb === "indexer.job.skipped.summary" && indexerFlatMatchesBucket(fSb, bucketGid))
+      lastSkipSummaryFlat = fSb;
+    if (!lastIngestSummaryFlat && mSb === "indexer.job.ingested.summary" && indexerFlatMatchesBucket(fSb, bucketGid))
+      lastIngestSummaryFlat = fSb;
   }
 
   var scopeWorkspaceTotal = null,
@@ -309,13 +321,14 @@ function collectIndexerRunMeta(runId, evs, opts) {
     scopeLatestRel = null,
     scopeLatestRoot = null;
   if (lastScopeStatusFlat) {
-    scopeWorkspaceTotal = Number(lastScopeStatusFlat.workspace_files_total);
+    var statusForMetrics = lastScopeStatusEdgeFlat || lastScopeStatusFlat;
+    scopeWorkspaceTotal = Number(statusForMetrics.workspace_files_total);
     if (isNaN(scopeWorkspaceTotal)) scopeWorkspaceTotal = null;
-    scopeQueueIngestPending = Number(lastScopeStatusFlat.queue_ingest_pending);
+    scopeQueueIngestPending = Number(statusForMetrics.queue_ingest_pending);
     if (isNaN(scopeQueueIngestPending)) scopeQueueIngestPending = null;
-    scopeQueueFanoutPending = Number(lastScopeStatusFlat.queue_fanout_files_pending);
+    scopeQueueFanoutPending = Number(statusForMetrics.queue_fanout_files_pending);
     if (isNaN(scopeQueueFanoutPending)) scopeQueueFanoutPending = null;
-    scopePendingBulkTier1 = Number(lastScopeStatusFlat.pending_bulk_tier1);
+    scopePendingBulkTier1 = Number(statusForMetrics.pending_bulk_tier1);
     if (isNaN(scopePendingBulkTier1)) scopePendingBulkTier1 = null;
   }
   if (scopeWorkspaceTotal == null && discoveryCandidatesForBucket != null) {
@@ -437,8 +450,12 @@ function collectIndexerRunMeta(runId, evs, opts) {
     scopePendingBulkTier1: scopePendingBulkTier1,
     scopeLatestRel: scopeLatestRel,
     scopeLatestRoot: scopeLatestRoot,
-    scopeStatusFlat: lastScopeStatusFlat,
-    scopeActiveFlat: lastScopeActiveFlat
+    scopeStatusFlat: lastScopeStatusEdgeFlat || lastScopeStatusFlat,
+    scopeStatusEdgeFlat: lastScopeStatusEdgeFlat,
+    scopeActiveFlat: lastScopeActiveFlat,
+    lastRecoveryPollFlat: lastRecoveryPollFlat,
+    lastSkipSummaryFlat: lastSkipSummaryFlat,
+    lastIngestSummaryFlat: lastIngestSummaryFlat
   };
 }
 

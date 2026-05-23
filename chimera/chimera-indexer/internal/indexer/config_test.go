@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestResolve_AllowEmptyRoots(t *testing.T) {
@@ -170,6 +171,9 @@ func TestResolve_AppliesDefaults(t *testing.T) {
 	if r.LogLevel != slog.LevelInfo {
 		t.Fatal("expected LogLevel default info")
 	}
+	if r.SkipSummaryMinInterval != 5*time.Second {
+		t.Fatalf("expected SkipSummaryMinInterval default 5s, got %v", r.SkipSummaryMinInterval)
+	}
 }
 
 func TestResolve_LegacyVerboseJobLogsFalse(t *testing.T) {
@@ -191,6 +195,30 @@ func TestResolve_LegacyVerboseJobLogsFalse(t *testing.T) {
 	}
 	if r.JobSkipLog != JobSkipLogDebug {
 		t.Fatal("expected legacy verbose_job_logs false → job_skip_log debug")
+	}
+	if r.JobIngestLog != JobIngestLogDebug {
+		t.Fatal("expected job_ingest_log debug when job_skip_log debug via legacy verbose")
+	}
+}
+
+func TestResolve_JobIngestLogFollowsSkipDebug(t *testing.T) {
+	dir := t.TempDir()
+	env := func(k string) string {
+		if k == EnvGatewayToken {
+			return "tok"
+		}
+		return ""
+	}
+	r, err := Resolve(FileConfig{
+		GatewayURL: "http://x",
+		Roots:      FlexibleRoots{{Path: dir}},
+		JobSkipLog: "debug",
+	}, env, Overrides{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.JobIngestLog != JobIngestLogDebug {
+		t.Fatalf("expected JobIngestLog debug, got %v", r.JobIngestLog)
 	}
 }
 

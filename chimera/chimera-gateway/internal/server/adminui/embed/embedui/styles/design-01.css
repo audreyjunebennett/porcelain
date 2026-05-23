@@ -342,11 +342,6 @@ html[data-theme="design-01"] #panel-summarized .sum-card > .sum-body,
   padding: 1.25rem var(--embed-space-card-pad-x, 1.25rem) var(--embed-space-card-pad-y, 1.25rem);
 }
 
-.sg-op-rail .sum-card > .sum-body:has(.sg-op-configure-btn),
-html[data-theme="design-01"] #panel-summarized .sum-card > .sum-body:has(.sg-op-configure-btn) {
-  padding-right: 3.5rem;
-}
-
 html[data-theme="design-01"] .sg-op-rail .sum-avatar,
 html[data-theme="design-01"] #panel-summarized .sum-avatar {
   width: 3rem;
@@ -752,16 +747,60 @@ html[data-theme="design-01"] .sg-op-rail .sum-card > .sum-card__hdr .sum-metrics
   color: var(--embed-color-secondary, #4a654e);
 }
 
-/* Admin / routing card bodies: tables and YAML use full card width */
+/* Card summary rows — gateway overview parity (avatar | main | trailing metrics/status | chevron) */
+html[data-theme="design-01"] #panel-summarized .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary,
+html[data-theme="design-01"] #panel-summarized .sum-card.sum-card--collapsible:not(.sg-op-user-saved) > .sum-card__hdr {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  align-items: center;
+}
+
+html[data-theme="design-01"] #panel-summarized .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary > .sum-main,
+html[data-theme="design-01"] #panel-summarized .sum-card.sum-card--collapsible:not(.sg-op-user-saved) > .sum-card__hdr > .sum-main {
+  min-width: 0;
+}
+
+html[data-theme="design-01"] #panel-summarized .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary > .sum-metrics,
+html[data-theme="design-01"] #panel-summarized .sum-card.sum-card--collapsible:not(.sg-op-user-saved) > .sum-card__hdr > .sum-metrics {
+  max-width: none;
+  justify-self: end;
+}
+
+html[data-theme="design-01"] #panel-summarized .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary > .sum-status,
+html[data-theme="design-01"] #panel-summarized .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary > .sg-op-health-pill,
+html[data-theme="design-01"] #panel-summarized .sum-card.sum-card--collapsible:not(.sg-op-user-saved) > .sum-card__hdr > .sum-status,
+html[data-theme="design-01"] #panel-summarized .sum-card.sum-card--collapsible:not(.sg-op-user-saved) > .sum-card__hdr > .sg-op-health-pill {
+  justify-self: end;
+}
+
+/* Expanded bodies: use full card inner width (routing, workspace, admin forms) */
 html[data-theme="design-01"] #panel-summarized .sum-card > .sum-body .sum-metrics-table-wrap,
-html[data-theme="design-01"] #panel-summarized .sum-card > .sum-body .sg-op-yaml-wrap.sg-op-yaml-wrap--full {
+html[data-theme="design-01"] #panel-summarized .sum-card > .sum-body .sg-op-yaml-wrap,
+html[data-theme="design-01"] #panel-summarized .sum-card > .sum-body .indexer-run-kv,
+html[data-theme="design-01"] #panel-summarized .sum-card > .sum-body .sum-full-log,
+html[data-theme="design-01"] #panel-summarized .sum-card > .sum-body .sum-evlog,
+html[data-theme="design-01"] #panel-summarized .sum-card > .sum-body .sg-op-head-row,
+html[data-theme="design-01"] #panel-summarized .sum-card > .sum-body .sg-op-eval-out,
+html[data-theme="design-01"] #panel-summarized .sum-card > .sum-body .ws-managed-toolbar,
+html[data-theme="design-01"] #panel-summarized .sum-card > .sum-body [id^="admin-routing-"],
+html[data-theme="design-01"] #panel-summarized .sum-card > .sum-body [id^="admin-fallback-"],
+html[data-theme="design-01"] #panel-summarized .sum-card > .sum-body [id^="admin-router-"] {
   width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+}
+
+html[data-theme="design-01"] #panel-summarized .sum-card > .sum-body .sg-op-input,
+html[data-theme="design-01"] #panel-summarized .sum-card > .sum-body .sg-op-code {
   max-width: none;
 }
 
 html[data-theme="design-01"] #panel-summarized .sum-metrics-table-wrap.indexer-recent-files.sg-op-indexer-recent-scroll {
+  max-height: none;
+  overflow: visible;
+}
+html[data-theme="design-01"] #panel-summarized .sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent tbody {
   max-height: 18.5rem;
-  overflow-y: auto;
 }
 
 html[data-theme="design-01"] .sum-feed-section-head .sum-feed-section-title {
@@ -772,15 +811,28 @@ html[data-theme="design-01"] .sum-feed-section-head .sum-feed-section-title {
   color: var(--embed-text-heading);
 }
 
-/* Workspace + service cards in operator gallery */
+/* Workspace cards: scope progress lives in summary metrics column, not under title */
 .sg-op-rail .sum-card--indexer-operator-workspace > summary .indexer-scope-progress,
-.sg-op-rail .sum-card--indexer-operator-workspace > .sum-card__hdr .indexer-scope-progress {
+.sg-op-rail .sum-card--indexer-operator-workspace > .sum-card__hdr .indexer-scope-progress,
+html[data-theme="design-01"] #panel-summarized .sum-card--indexer-operator-workspace > summary .indexer-scope-progress,
+html[data-theme="design-01"] #panel-summarized .sum-card--indexer-operator-workspace > .sum-card__hdr .indexer-scope-progress,
+html[data-theme="design-01"] #panel-summarized .sum-card > summary .sum-metrics--indexer-scope .indexer-scope-progress {
   max-width: 12.5rem;
-  margin-top: 0.35rem;
+  margin-top: 0;
+}
+
+.sg-op-rail .sum-card--indexer-operator-workspace > summary .sum-metrics--indexer-scope,
+.sg-op-rail .sum-card--indexer-operator-workspace > .sum-card__hdr .sum-metrics--indexer-scope,
+html[data-theme="design-01"] #panel-summarized .sum-card > summary .sum-metrics--indexer-scope {
+  flex: 0 1 auto;
+  max-width: min(50%, 14rem);
+  min-width: 8rem;
 }
 
 .sg-op-rail .sum-card--indexer-operator-workspace > summary .sum-main,
-.sg-op-rail .sum-card--indexer-operator-workspace > .sum-card__hdr .sum-main {
+.sg-op-rail .sum-card--indexer-operator-workspace > .sum-card__hdr .sum-main,
+html[data-theme="design-01"] #panel-summarized .sum-card--indexer-operator-workspace > summary .sum-main,
+html[data-theme="design-01"] #panel-summarized .sum-card--indexer-operator-workspace > .sum-card__hdr .sum-main {
   flex: 1 1 0;
   min-width: 0;
 }

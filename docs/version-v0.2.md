@@ -145,7 +145,7 @@ This document pulls together **everything scoped to product v0.2** from `[porcel
 
 **Status:** `**done`** — shipped across **v0.2.1** and **v0.2.2**; concrete bullets for those patches sit in § **[Shipped releases](#shipped-releases-v020-through-v022)** · [v0.2.1](#v021--logging-correlation-logs-ui-optional-conversation-merge) and [v0.2.2](#v022--desktop-shell-supervised-indexer-indexer--continue-operator-ui).
 
-**Intent:** Treat logs as a **presentation layer**: structured lines stay **verbatim** in the gateway’s in-memory buffer (and any other capture paths), while `**/ui/logs`** **interprets, groups, threads, and summarizes** them so operators see **what happened** without scanning opaque JSON. Design rationale and vocabulary live in `**[plans/log-presentation-layer.md](plans/log-presentation-layer.md)`** (Phases **A–D** shipped; **Phase E** — optional server-side event store for cross-restart history — remains `**todo`**).
+**Intent:** Treat logs as a **presentation layer**: structured lines stay **verbatim** in the gateway’s in-memory buffer (and any other capture paths), while `**/ui/logs`** **interprets, groups, threads, and summarizes** them so operators see **what happened** without scanning opaque JSON. Design rationale and vocabulary live in `**[plans/log-presentation-layer.md](plans/log-presentation-layer.md)`** (Phases **A–D** shipped; **Phase E** — optional server-side event store for cross-restart history — remains `**done`**).
 
 #### Themes — logs and operator observability
 

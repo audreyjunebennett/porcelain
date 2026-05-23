@@ -18,6 +18,7 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminProvider = function (ctx) {
   var providerRowsHtml = ctx.providerRowsHtml;
   var adminProviderAvatarClass = ctx.adminProviderAvatarClass;
   var sgOpHealthPillHtml = ctx.sgOpHealthPillHtml;
+  var operatorCardChevronHtml = ctx.operatorCardChevronHtml;
   var adminScopedEventsForPrincipal = ctx.adminScopedEventsForPrincipal;
   var adminScopedEvlogPanelFromEvents = ctx.adminScopedEvlogPanelFromEvents;
 
@@ -99,7 +100,8 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminProvider = function (ctx) {
       '<span class="sum-sub sum-sub--clamp">' + escapeHtml(subtitle) + "</span></span>" +
       metrics +
       availability +
-      '<span class="sum-chev"></span></summary><div class="sum-body">' + body +
+      operatorCardChevronHtml() +
+      "</summary><div class=\"sum-body\">" + body +
       adminScopedEvlogPanelFromEvents("Scoped log — " + title, "provider-" + providerId, scoped) +
       "</div></details>"
     );

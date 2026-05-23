@@ -1246,6 +1246,45 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     return i >= 0 ? s.slice(i + 1) : s;
   }
 
+  function formatWatchPathDisplayLine(p) {
+    var full = String(p || "").trim();
+    if (!full) return "";
+    var base = dirBasenameForWorkspace(full);
+    if (base && base !== full) return base + " — " + full;
+    return full;
+  }
+
+  function formatWatchPathsPreHtml(paths) {
+    if (!paths || !paths.length) return "";
+    var lines = [];
+    var pi;
+    for (pi = 0; pi < paths.length; pi++) {
+      var line = formatWatchPathDisplayLine(paths[pi]);
+      if (line) lines.push(line);
+    }
+    return lines.join("\n");
+  }
+
+  function applyOperatorWorkspacePathsToMeta(meta, ws) {
+    if (!meta || !ws) return meta;
+    var opPaths = operatorWorkspacePaths(ws);
+    if (!opPaths.length) return meta;
+    var cur = meta.watchRootPaths && meta.watchRootPaths.length ? meta.watchRootPaths.slice() : [];
+    var changed = false;
+    var oi;
+    for (oi = 0; oi < opPaths.length; oi++) {
+      if (cur.indexOf(opPaths[oi]) < 0) {
+        cur.push(opPaths[oi]);
+        changed = true;
+      }
+    }
+    if (changed || !meta.watchRootPaths || !meta.watchRootPaths.length) {
+      meta.watchRootPaths = cur.length ? cur : opPaths.slice();
+      meta.filepath = meta.watchRootPaths.join("\n");
+    }
+    return meta;
+  }
+
   function nativeFolderPickerFn() {
     try {
       var topw = window.top;
@@ -2529,6 +2568,38 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
   }
 
   function indexerBuildCardSubtitle(meta, evs) {
+    if (meta && meta.lastRecoveryPollFlat && meta.lastRecoveryPollFlat.embed_ok === false) {
+      var reason =
+        meta.lastRecoveryPollFlat.embed_reason_code ||
+        meta.lastRecoveryPollFlat.embed_detail ||
+        "embedding unavailable";
+      return "Waiting for embedding — " + String(reason).replace(/_/g, " ");
+    }
+    if (meta && meta.scopeStatusEdgeFlat) {
+      var renderGate = globalThis.ChimeraSettings && ChimeraSettings.Render;
+      if (renderGate && typeof renderGate.operatorMessage === "function") {
+        var gateLine = renderGate.operatorMessage(meta.scopeStatusEdgeFlat, { slug: "indexer.scope.status" });
+        if (gateLine && String(gateLine).trim() !== "") return String(gateLine).trim();
+      }
+    }
+    if (meta && meta.lastIngestSummaryFlat) {
+      var renderIngest = globalThis.ChimeraSettings && ChimeraSettings.Render;
+      if (renderIngest && typeof renderIngest.operatorMessage === "function") {
+        var ingestLine = renderIngest.operatorMessage(meta.lastIngestSummaryFlat, {
+          slug: "indexer.job.ingested.summary"
+        });
+        if (ingestLine && String(ingestLine).trim() !== "") return String(ingestLine).trim();
+      }
+    }
+    if (meta && meta.lastSkipSummaryFlat) {
+      var render = globalThis.ChimeraSettings && ChimeraSettings.Render;
+      if (render && typeof render.operatorMessage === "function") {
+        var sumLine = render.operatorMessage(meta.lastSkipSummaryFlat, {
+          slug: "indexer.job.skipped.summary"
+        });
+        if (sumLine && String(sumLine).trim() !== "") return String(sumLine).trim();
+      }
+    }
     var stateLine = indexerHumanDeclaredState(meta.lastDeclaredState);
     var ft = indexerLastFileEventTime(evs);
     if (!stateLine) {
@@ -3069,10 +3140,20 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     if (M.restPort != null && M.grpcPort != null) ports = String(M.restPort) + " / " + String(M.grpcPort);
     else if (M.restPort != null) ports = String(M.restPort) + " / —";
     else if (M.grpcPort != null) ports = "— / " + String(M.grpcPort);
+    var backendLab = "—";
+    if (
+      globalThis.ChimeraSettings &&
+      ChimeraSettings.Derive &&
+      typeof ChimeraSettings.Derive.wrapperBackendPanelLabel === "function"
+    ) {
+      backendLab = ChimeraSettings.Derive.wrapperBackendPanelLabel(M.backendName, M.backendMode);
+    }
     var kv =
       '<dl class="indexer-run-kv indexer-run-kv--vectorstore-summary">' +
       "<dt>component</dt><dd>chimera-vectorstore</dd>" +
-      '<dt>backend</dt><dd>Vectorstore (binary)</dd>' +
+      "<dt>backend</dt><dd>" +
+      escapeHtml(backendLab) +
+      "</dd>" +
       "<dt>version</dt><dd>" +
       escapeHtml(M.version || "—") +
       '</dd><dt>configuration</dt><dd>' +
@@ -3116,7 +3197,9 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       auth: "—",
       mcp: "—",
       governance: "—",
-      lastModel: "—"
+      lastModel: "—",
+      backendName: "",
+      backendMode: ""
     };
     if (globalThis.ChimeraSettings && ChimeraSettings.Derive && typeof ChimeraSettings.Derive.chimeraBrokerCardModel === "function") {
       var d = ChimeraSettings.Derive.chimeraBrokerCardModel(arr, function (p) { return getFlat(p); });
@@ -3127,11 +3210,23 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       if (d.mcp) M.mcp = d.mcp;
       if (d.governance) M.governance = d.governance;
       if (d.lastModel) M.lastModel = chimeraBrokerShortModelLabel(d.lastModel);
+      if (d.backendName) M.backendName = d.backendName;
+      if (d.backendMode) M.backendMode = d.backendMode;
+    }
+    var brokerBackendLab = "—";
+    if (
+      globalThis.ChimeraSettings &&
+      ChimeraSettings.Derive &&
+      typeof ChimeraSettings.Derive.wrapperBackendPanelLabel === "function"
+    ) {
+      brokerBackendLab = ChimeraSettings.Derive.wrapperBackendPanelLabel(M.backendName, M.backendMode);
     }
     return (
       '<dl class="indexer-run-kv indexer-run-kv--chimera-broker-summary">' +
       "<dt>component</dt><dd>chimera-broker</dd>" +
-      '<dt>backend</dt><dd>Chimera Broker (binary)</dd>' +
+      "<dt>backend</dt><dd>" +
+      escapeHtml(brokerBackendLab) +
+      "</dd>" +
       "<dt>version</dt><dd>" +
       escapeHtml(M.version) +
       '</dd><dt>configuration</dt><dd>' +
@@ -3209,9 +3304,23 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       return { rel: rel, st: "skipped", cls: "sum-st-complete", detail: why };
     }
     if (m.indexOf("indexer.job.failed") === 0) {
-      var err = f && (f.err != null ? f.err : f.error != null ? f.error : "");
-      var es = err != null ? String(err).replace(/\s+/g, " ").trim() : "";
-      if (es.length > 80) es = es.slice(0, 78) + "…";
+      var errFlat = f && typeof f === "object" ? f : {};
+      var detailFn =
+        globalThis.ChimeraSettings &&
+        ChimeraSettings.Derive &&
+        typeof ChimeraSettings.Derive.shortIngestFailureDetail === "function"
+          ? ChimeraSettings.Derive.shortIngestFailureDetail
+          : globalThis.ChimeraSettings &&
+              ChimeraSettings.Render &&
+              typeof ChimeraSettings.Render.shortIngestFailureDetail === "function"
+            ? ChimeraSettings.Render.shortIngestFailureDetail
+            : null;
+      var es = detailFn ? detailFn(errFlat) : "";
+      if (!es) {
+        var err = f && (f.err != null ? f.err : f.error != null ? f.error : "");
+        es = err != null ? String(err).replace(/\s+/g, " ").trim() : "";
+        if (es.length > 80) es = es.slice(0, 78) + "…";
+      }
       return { rel: rel, st: "failed", cls: "sum-st-error", detail: es };
     }
     if (m.indexOf("indexer.retry") === 0) {
@@ -3264,7 +3373,14 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       '<div class="sum-metrics-table-wrap indexer-recent-files sg-op-indexer-recent-scroll" id="' +
       escapeHtml(sid) +
       '">' +
-      '<table class="sum-metrics-table"><thead><tr><th>Time</th><th>Status</th><th>Path</th><th>Detail</th></tr></thead><tbody>';
+      '<table class="sum-metrics-table sum-metrics-table--indexer-recent">' +
+      "<colgroup>" +
+      '<col class="indexer-recent-col-time">' +
+      '<col class="indexer-recent-col-status">' +
+      '<col class="indexer-recent-col-path">' +
+      '<col class="indexer-recent-col-detail">' +
+      "</colgroup>" +
+      "<thead><tr><th>Time</th><th>Status</th><th>Path</th><th>Detail</th></tr></thead><tbody>";
     if (!rows.length) {
       html +=
         '<tr><td colspan="4" class="muted">No file-level activity in the loaded window yet. Scroll up to load older lines.</td></tr>';
@@ -4511,11 +4627,11 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
         ? String(expOpts.pathsBlockHtml)
         : meta.watchRootPaths && meta.watchRootPaths.length
           ? "<pre class=\"indexer-paths-pre\">" +
-          escapeHtml(meta.watchRootPaths.join("\n")) +
+          escapeHtml(formatWatchPathsPreHtml(meta.watchRootPaths)) +
           "</pre>"
           : '<span class="muted">—</span>';
     var summaryRows =
-      '<dl class="indexer-run-kv">' +
+      '<dl class="indexer-run-kv indexer-run-kv--gateway-summary">' +
       indexerExpandedSummaryKvInnerHtml(meta, kvOpts) +
       "<dt>Watched paths</dt><dd>" +
       pathsBlock +
@@ -4539,7 +4655,8 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       tbodyInner = sumEvlogBuildTbodyFromServiceEntries("indexer", evsFull, {
         cardScope: ixScope,
         filterGatewayProbe: false,
-        indexerRunLine: true
+        indexerRunLine: true,
+        suppressIndexerBadge: true
       });
       mc = sumEvlogCountWarnFailFromEntries(evsFull);
     }
@@ -4923,7 +5040,10 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     if (out.length) {
       meta.watchRootPaths = out;
       meta.filepath = out.join("\n");
+      return meta;
     }
+    var wsMatch = findOperatorWorkspaceMatchingIndexerMeta(meta);
+    if (wsMatch) applyOperatorWorkspacePathsToMeta(meta, wsMatch);
     return meta;
   }
 
@@ -5102,7 +5222,7 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
         ? "Configure workspace " + String(titleText).trim()
         : "Configure workspace";
     return (
-      '<button type="button" class="sg-op-configure-btn ws-managed-btn-configure" data-ws-managed-id="' +
+      '<button type="button" class="sg-op-configure-btn sg-op-configure-btn--overlay ws-managed-btn-configure" data-ws-managed-id="' +
       escapeHtml(String(wsNum)) +
       '" aria-label="' +
       escapeHtml(lab) +
@@ -5264,6 +5384,7 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     meta = mergePersistedIndexerWatchRoots(meta, scopedEvs, bucketId);
     meta = mergeOperatorStorePathsIntoIndexerMeta(meta);
     var opPaths = operatorWorkspacePaths(ws);
+    applyOperatorWorkspacePathsToMeta(meta, ws);
     if ((!meta.watchRootPaths || !meta.watchRootPaths.length) && opPaths.length) {
       meta.watchRootPaths = opPaths.slice();
       meta.filepath = opPaths.join("\n");
@@ -5301,7 +5422,6 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     var editToolbar = isEdit ? buildManagedWorkspaceEditToolbarHtml(wsNum) : "";
     var expanded = renderExpandedIndexer(syntheticRun, entryCache, meta, partitionRegistry, {
       kvOpts: { omitFileCountIfZero: true },
-      recentOpts: { omitWhenEmpty: true },
       pathsBlockHtml: pathsBlockHtml,
       configureBtnHtml: configureBtn,
       extraAfterSummaryHtml: editToolbar
@@ -5326,8 +5446,7 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       '</span><span class="sum-sub sum-sub--clamp muted">' +
       escapeHtml(subProse) +
       "</span></span>" +
-      '<span class="material-symbols-outlined sg-op-chev-icon" aria-hidden="true">chevron_right</span>' +
-      '<span class="sum-chev" aria-hidden="true"></span></header>' +
+      '<span class="material-symbols-outlined sg-op-chev-icon" aria-hidden="true">chevron_right</span></header>' +
       expanded +
       "</article>"
     );
@@ -5366,6 +5485,7 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
           ? String(opWsForIx.flavor_id).trim()
           : "—";
       meta.workspaceId = canonicalWorkspaceRowIdKey(opWsForIx.id) || meta.workspaceId;
+      applyOperatorWorkspacePathsToMeta(meta, opWsForIx);
     }
     var isIxEdit =
       wsNumIx > 0 &&
@@ -5386,7 +5506,6 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
         omitFileCountIfZero: true,
         workspaceRowId: wsNumIx > 0 ? canonicalWorkspaceRowIdKey(opWsForIx.id) : undefined
       },
-      recentOpts: { omitWhenEmpty: true },
       pathsBlockHtml: pathsBlockIx,
       configureBtnHtml: configureBtnIx,
       extraAfterSummaryHtml: editToolbarIx
@@ -5462,6 +5581,10 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       ? '<span class="sum-avatar sum-av-c sum-av-indexer-idle" aria-hidden="true">\u2713</span>'
       : '<span class="sum-avatar sum-av-c">IX</span>';
     var statusSpan = indexerCollapsedIdle ? "" : serviceSummaryStatusPillHtml(st);
+    var progressMetrics =
+      progressStack !== ""
+        ? '<span class="sum-metrics sum-metrics--indexer-scope">' + progressStack + "</span>"
+        : "";
     var iid = indexerCardDomIdFromMeta(meta, run.id);
     rememberIndexerCardSnapshot(run.id, meta);
     var detailsCls = "sum-card";
@@ -5482,10 +5605,11 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       titleInner +
       '</span>' +
       sub +
-      progressStack +
       "</span>" +
+      progressMetrics +
       statusSpan +
-      '<span class="sum-chev"></span></summary>' +
+      '<span class="material-symbols-outlined sg-op-chev-icon" aria-hidden="true">chevron_right</span>' +
+      '<span class="sum-chev" aria-hidden="true"></span></summary>' +
       renderExpandedIndexer(run, evs, meta, partitionRegistry, expOptsIx) +
       "</details>"
     );
@@ -5807,6 +5931,53 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     return "";
   }
 
+  function indexerSupervisedWorkspaceLifecycleSlug(msg) {
+    return (
+      msg === "indexer.supervised.workspaces_changed" ||
+      msg === "indexer.supervised.workspaces_reload" ||
+      msg === "indexer.supervised.workspaces_session_start" ||
+      msg === "indexer.supervised.workspaces_apply_failed" ||
+      msg === "gateway.operator.workspace.path_added" ||
+      msg === "gateway.operator.workspace.path_deleted"
+    );
+  }
+
+  function csvFieldIds(raw) {
+    if (raw == null) return [];
+    return String(raw)
+      .split(",")
+      .map(function (s) {
+        return s.trim();
+      })
+      .filter(Boolean);
+  }
+
+  function indexerLifecycleEventMatchesBucket(f, bucketScopeCoords) {
+    if (!f || typeof f !== "object") return false;
+    var msgSlug = String(f.msg != null ? f.msg : f.message != null ? f.message : "").trim();
+    if (!indexerSupervisedWorkspaceLifecycleSlug(msgSlug)) return false;
+    if (!bucketScopeCoords || !bucketScopeCoords.project) return true;
+    var logWsIds = csvFieldIds(f.workspace_ids);
+    if (msgSlug === "gateway.operator.workspace.path_added" || msgSlug === "gateway.operator.workspace.path_deleted") {
+      var wsId = f.workspace_id != null ? String(f.workspace_id).trim() : "";
+      if (wsId) logWsIds = [wsId];
+    }
+    if (!logWsIds.length) return true;
+    var nested = ctx.lastIndexerOperatorWorkspacesNested || [];
+    var wi;
+    for (wi = 0; wi < nested.length; wi++) {
+      var wsRow = nested[wi];
+      var wsKey = canonicalWorkspaceRowIdKey(wsRow.id);
+      var wsNum = String(operatorWorkspaceNumericId(wsRow));
+      var hi;
+      for (hi = 0; hi < logWsIds.length; hi++) {
+        if (logWsIds[hi] !== wsKey && logWsIds[hi] !== wsNum) continue;
+        if (String(wsRow.project_id || "").trim() === bucketScopeCoords.project) return true;
+      }
+    }
+    return false;
+  }
+
   function indexerScopeFullLogInclude(ent, bucketId, partitionRegistry, expectedVectorstoreCollection, bucketScopeCoords) {
     bucketId = bucketId != null ? String(bucketId).trim() : "";
     if (!bucketId) return true;
@@ -5820,6 +5991,17 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     ) {
       f = ChimeraSettings.Derive.indexerAugmentFlat(ent, rawFlat);
     }
+
+    if (
+      globalThis.ChimeraSettings &&
+      ChimeraSettings.Derive &&
+      typeof ChimeraSettings.Derive.indexerFlatOmitFromWorkspaceScopedLog === "function" &&
+      ChimeraSettings.Derive.indexerFlatOmitFromWorkspaceScopedLog(f)
+    ) {
+      return false;
+    }
+
+    if (indexerLifecycleEventMatchesBucket(f, bucketScopeCoords)) return true;
 
     var srcL = String(ent.source || "").toLowerCase();
     var svcL = String(f.service || "").toLowerCase();

@@ -130,7 +130,11 @@ func HandleV1(w http.ResponseWriter, r *http.Request, rt *gruntime.Runtime, log 
 		if convID != "" {
 			args = append(args, "conversation_id", convID)
 		}
-		log.Info("ingest complete", args...)
+		lvl := slog.LevelInfo
+		if indexRun != "" {
+			lvl = slog.LevelDebug
+		}
+		log.Log(r.Context(), lvl, "ingest complete", args...)
 	}
 	if rec := rt.Metrics(); rec != nil {
 		if rag := rt.RAG(); rag != nil {

@@ -276,8 +276,17 @@
         }
         return line;
       }
+      if (slug === "vectorstore.collection.creating") return "Creating collection " + coll;
       if (slug === "vectorstore.shard.recovered") return "Loaded collection " + coll;
       if (slug === "vectorstore.http.collection_meta") return "Reading collection " + coll + (stLab !== "" ? " · " + stLab : "");
+      if (slug === "vectorstore.http.collection_create") return "Created collection " + coll + (stLab !== "" ? " · " + stLab : "");
+      if (slug === "vectorstore.http.collection_create_rejected") {
+        return "Create collection " + coll + (stLab !== "" ? " · " + stLab : "");
+      }
+      if (slug === "vectorstore.http.collection_index") return "Indexed collection " + coll + (stLab !== "" ? " · " + stLab : "");
+      if (slug === "vectorstore.http.collection_index_rejected") {
+        return "Index collection " + coll + (stLab !== "" ? " · " + stLab : "");
+      }
       if (slug === "vectorstore.http.points_upsert_ok" || slug === "vectorstore.http.points_upsert_rejected") {
         return "Upsert into collection " + coll + (stLab !== "" ? " · " + stLab : "");
       }
@@ -308,6 +317,23 @@
         return base + (igp != null ? " on port " + igp : "");
       }
       return base;
+    },
+    vectorstore_http_upsert_summary: function (flat) {
+      var cols = flat.collections != null ? String(flat.collections).trim() : "";
+      if (!cols && flat.collection != null) cols = String(flat.collection).trim();
+      var u = Number(flat.upserts_ok != null ? flat.upserts_ok : 0) || 0;
+      var d = Number(flat.deletes_ok != null ? flat.deletes_ok : 0) || 0;
+      var s = Number(flat.searches_ok != null ? flat.searches_ok : 0) || 0;
+      var win =
+        flat.window_ms != null && !isNaN(Number(flat.window_ms))
+          ? Math.round(Number(flat.window_ms) / 1000) + "s"
+          : "?";
+      var bits = [];
+      if (cols) bits.push(cols);
+      if (u > 0) bits.push(u + " upsert(s)");
+      if (d > 0) bits.push(d + " delete(s)");
+      if (s > 0) bits.push(s + " search(es)");
+      return (bits.length ? bits.join(" · ") : "Vectorstore HTTP activity") + " · last " + win;
     }
   };
 

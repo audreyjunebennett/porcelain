@@ -243,7 +243,7 @@ func TestE2E_Broker_001_002_003_004_HappyStatusMetricsDebugDefault(t *testing.T)
 	waitForHTTPStatus(t, base+"/readyz", 200, 8*time.Second)
 
 	doc := statusDoc(t, base)
-	if doc["component"] != naming.ProductBrokerName || doc["backend_name"] != naming.ProductBrokerName || doc["backend_mode"] != "binary" {
+	if doc["component"] != naming.ProductBrokerName || doc["backend_name"] != "bifrost" || doc["backend_mode"] != "binary" {
 		t.Fatalf("status identity mismatch: %+v", doc)
 	}
 	if _, ok := doc["version"]; !ok {

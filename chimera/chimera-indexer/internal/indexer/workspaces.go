@@ -2,6 +2,8 @@ package indexer
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math/rand"
@@ -120,30 +122,112 @@ func RootsFromWorkspacesResponse(resp *WorkspacesAPIResponse) ([]Root, error) {
 	return roots, nil
 }
 
-// WorkspacesFingerprint returns a stable comma-separated string of sorted
-// workspace IDs present in a Root slice. Used by the supervised workspace poll
-// loop to detect when the active set changes between outer loop iterations.
-func WorkspacesFingerprint(roots []Root) string {
-	seen := make(map[string]bool, len(roots))
-	for _, r := range roots {
-		wid := strings.TrimSpace(r.Scope.WorkspaceID)
-		if wid != "" {
-			seen[wid] = true
-		}
-	}
-	ids := make([]string, 0, len(seen))
-	for id := range seen {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-	return strings.Join(ids, ",")
+// rootsSnapshotTuple is one stable row in the supervised workspace snapshot.
+func rootsSnapshotTuple(workspaceID int64, absPath, projectID, flavorID string) string {
+	return strings.Join([]string{
+		strconv.FormatInt(workspaceID, 10),
+		filepath.Clean(strings.TrimSpace(absPath)),
+		strings.TrimSpace(projectID),
+		strings.TrimSpace(flavorID),
+	}, "\x1f")
 }
 
-// WorkspacesResponseFingerprint returns a stable comma-separated string of
-// sorted workspace IDs from a raw API response. Only workspaces that have at
-// least one path are counted, matching the behaviour of RootsFromWorkspacesResponse.
-// Safe to call without materialising paths to disk.
-func WorkspacesResponseFingerprint(resp *WorkspacesAPIResponse) string {
+func hashRootsSnapshot(tuples []string) string {
+	if len(tuples) == 0 {
+		return ""
+	}
+	sorted := append([]string(nil), tuples...)
+	sort.Strings(sorted)
+	sum := sha256.Sum256([]byte(strings.Join(sorted, "\n")))
+	return hex.EncodeToString(sum[:6])
+}
+
+func rootsSnapshotTuplesFromResponse(resp *WorkspacesAPIResponse) []string {
+	if resp == nil {
+		return nil
+	}
+	var tuples []string
+	for _, w := range resp.Workspaces {
+		if len(w.Paths) == 0 {
+			continue
+		}
+		wid := w.effectiveWorkspaceID()
+		if wid == 0 {
+			continue
+		}
+		for _, p := range w.Paths {
+			pabs := strings.TrimSpace(p.Path)
+			if pabs == "" {
+				continue
+			}
+			tuples = append(tuples, rootsSnapshotTuple(
+				wid,
+				pabs,
+				w.ProjectID,
+				w.FlavorID,
+			))
+		}
+	}
+	return tuples
+}
+
+func rootsSnapshotTuplesFromRoots(roots []Root) []string {
+	if len(roots) == 0 {
+		return nil
+	}
+	tuples := make([]string, 0, len(roots))
+	for _, r := range roots {
+		wid, _ := strconv.ParseInt(strings.TrimSpace(r.Scope.WorkspaceID), 10, 64)
+		if wid == 0 {
+			continue
+		}
+		tuples = append(tuples, rootsSnapshotTuple(
+			wid,
+			r.AbsPath,
+			r.Scope.ProjectID,
+			r.Scope.FlavorID,
+		))
+	}
+	return tuples
+}
+
+// WatchRootPathsFromResponse returns sorted unique absolute paths from a workspaces payload.
+func WatchRootPathsFromResponse(resp *WorkspacesAPIResponse) []string {
+	if resp == nil {
+		return nil
+	}
+	seen := make(map[string]bool)
+	var out []string
+	for _, w := range resp.Workspaces {
+		for _, p := range w.Paths {
+			pabs := filepath.Clean(strings.TrimSpace(p.Path))
+			if pabs == "" || seen[pabs] {
+				continue
+			}
+			seen[pabs] = true
+			out = append(out, pabs)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// WorkspacesRootsFingerprint returns a stable short hex hash of the gateway
+// workspace snapshot, including every watched path. Used by the supervised poll
+// loop to detect add/remove/modify path operations within an existing workspace.
+func WorkspacesRootsFingerprint(resp *WorkspacesAPIResponse) string {
+	return hashRootsSnapshot(rootsSnapshotTuplesFromResponse(resp))
+}
+
+// RootsSnapshotFingerprint returns the same hash format as
+// WorkspacesRootsFingerprint for materialised watch roots.
+func RootsSnapshotFingerprint(roots []Root) string {
+	return hashRootsSnapshot(rootsSnapshotTuplesFromRoots(roots))
+}
+
+// WorkspaceIDsFromResponse returns a stable comma-separated list of workspace
+// ids that have at least one configured path.
+func WorkspaceIDsFromResponse(resp *WorkspacesAPIResponse) string {
 	if resp == nil {
 		return ""
 	}
@@ -163,6 +247,35 @@ func WorkspacesResponseFingerprint(resp *WorkspacesAPIResponse) string {
 	}
 	sort.Strings(ids)
 	return strings.Join(ids, ",")
+}
+
+// WorkspaceIDsFromRoots returns sorted workspace ids present in materialised roots.
+func WorkspaceIDsFromRoots(roots []Root) string {
+	seen := make(map[string]bool, len(roots))
+	for _, r := range roots {
+		wid := strings.TrimSpace(r.Scope.WorkspaceID)
+		if wid != "" {
+			seen[wid] = true
+		}
+	}
+	ids := make([]string, 0, len(seen))
+	for id := range seen {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return strings.Join(ids, ",")
+}
+
+// WorkspacesFingerprint returns a stable roots snapshot hash for materialised
+// watch roots. Prefer RootsSnapshotFingerprint for new call sites.
+func WorkspacesFingerprint(roots []Root) string {
+	return RootsSnapshotFingerprint(roots)
+}
+
+// WorkspacesResponseFingerprint returns a stable roots snapshot hash from a
+// raw gateway workspaces payload. Prefer WorkspacesRootsFingerprint for new call sites.
+func WorkspacesResponseFingerprint(resp *WorkspacesAPIResponse) string {
+	return WorkspacesRootsFingerprint(resp)
 }
 
 // MaterializeRootsFromGateway fetches workspaces and replaces cfg.Roots.

@@ -8,6 +8,15 @@ globalThis.ChimeraSettings.Render.Cards = globalThis.ChimeraSettings.Render.Card
 
 globalThis.ChimeraSettings.Render.Cards.mountGatewayUsage = function (ctx) {
   var escapeHtml = ctx.escapeHtml;
+  var operatorCardChevronHtml =
+    typeof ctx.operatorCardChevronHtml === "function"
+      ? ctx.operatorCardChevronHtml
+      : function () {
+          return (
+            '<span class="material-symbols-outlined sg-op-chev-icon" aria-hidden="true">chevron_right</span>' +
+            '<span class="sum-chev" aria-hidden="true"></span>'
+          );
+        };
   var formatInt = ctx.formatInt;
   var formatCompactTok = ctx.formatCompactTok;
   var formatUtcToMinute = ctx.formatUtcToMinute;
@@ -119,7 +128,8 @@ globalThis.ChimeraSettings.Render.Cards.mountGatewayUsage = function (ctx) {
       sub +
       "</span>" +
       metrics +
-      '<span class="sum-chev"></span></summary>' +
+      operatorCardChevronHtml() +
+      "</summary>" +
       '<div class="sum-body">' +
       expandedInner +
       "</div></details>"

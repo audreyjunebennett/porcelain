@@ -35,6 +35,7 @@ func (ix *Indexer) RunWorkers(ctx context.Context) {
 				return
 			case <-t.C:
 				ix.LogQueueSnapshot("worker_drain_tick")
+				ix.MaybeEmitScopeStatusEdge("")
 			}
 		}
 	}()
@@ -53,6 +54,8 @@ func (ix *Indexer) RunWorkers(ctx context.Context) {
 			}
 		}()
 	}
+	go ix.runSkipSummaryLoop(tickCtx)
+	go ix.runIngestSummaryLoop(tickCtx)
 	var wg sync.WaitGroup
 	for i := 0; i < ix.cfg.Workers; i++ {
 		wg.Add(1)
@@ -67,6 +70,11 @@ func (ix *Indexer) RunWorkers(ctx context.Context) {
 				atomic.AddInt64(&ix.opsDequeued, 1)
 				if wi.Kind == WorkIngest && wi.FromFanout && wi.BulkScopeKey != "" {
 					ix.decPendingBulk(wi.BulkScopeKey)
+				}
+				if wi.Kind == WorkIngest {
+					if err := ix.waitIngestGateOpen(ctx); err != nil {
+						return
+					}
 				}
 				if err := ix.processWorkItem(ctx, wi, rng, id); err != nil {
 					if errors.Is(err, ErrPaused) {
@@ -84,6 +92,7 @@ func (ix *Indexer) RunWorkers(ctx context.Context) {
 						}
 						ix.log.Warn("worker paused; awaiting health recovery", args...)
 						ix.LogQueueSnapshot("worker_paused_before_recovery")
+						ix.closeIngestGateFromHealth(ctx)
 						if perr := ix.waitForRecovery(ctx); perr != nil {
 							return
 						}
@@ -113,6 +122,7 @@ func (ix *Indexer) RunWorkers(ctx context.Context) {
 					}
 					if wi.Kind == WorkIngest {
 						atomic.AddInt64(&ix.opsIngestFail, 1)
+						ix.noteSkipSummaryIngestFailed(wi.Job)
 						args := []any{
 							"msg", "indexer.job.failed",
 							"worker", id, "rel", wi.Job.RelPath, "err", err,
@@ -134,6 +144,8 @@ func (ix *Indexer) RunWorkers(ctx context.Context) {
 		}(i)
 	}
 	wg.Wait()
+	ix.FlushSkipSummaries()
+	ix.FlushIngestSummaries()
 	ix.LogQueueSnapshot("run_workers_exit")
 }
 
@@ -153,65 +165,86 @@ func (ix *Indexer) processWorkItem(ctx context.Context, wi WorkItem, rng *rand.R
 
 func (ix *Indexer) waitForRecovery(ctx context.Context) error {
 	ix.inRecovery.Store(true)
-	defer ix.inRecovery.Store(false)
+	defer func() {
+		ix.inRecovery.Store(false)
+		ix.MaybeEmitScopeStatusEdge("recovery_exited")
+	}()
+	ix.MaybeEmitScopeStatusEdge("recovery_entered")
+
+	pollOnce := func(pollN int) (bool, error) {
+		h, errProbe := ix.client.CheckHealth(ctx)
+		vectorstoreOK := errProbe == nil && h != nil && h.VectorstoreOK()
+		ragDisabled := h != nil && h.RAGDisabled
+		if errProbe != nil {
+			ix.log.Warn("storage health probe failed", "err", errProbe)
+		}
+		if ragDisabled {
+			ix.recoveryPollLog(pollN, false, true, h, nil, errProbe)
+			ix.log.Error("gateway has RAG disabled; nothing to recover",
+				"detail", h.Message, "type", h.ErrorType,
+				"hint", "set rag.enabled=true in config/gateway.yaml and restart the chimera gateway")
+			return false, fmt.Errorf("gateway rejects ingest: %s (%s)", h.Message, h.ErrorType)
+		}
+		if h != nil && !h.IngestReady() {
+			ix.log.Warn("storage health degraded",
+				"status", h.Status, "detail", h.HealthDetail(), "http_status", h.HTTPStatus,
+				"embed_ok", h.EmbedOK(), "embed_reason_code", h.ReasonCode())
+			ix.syncIngestGateFromHealth(ctx, h)
+		}
+
+		recovered := errProbe == nil && h != nil && h.IngestReady()
+		var rootHealthOK *bool
+		if recovered && ix.cfg.RecoveryIncludeRootHealth {
+			rh, rerr := ix.client.CheckGatewayRootHealth(ctx)
+			if rerr != nil {
+				ix.log.Warn("gateway /health probe failed", "err", rerr)
+				recovered = false
+			} else if rh == nil || !rh.OK {
+				if rh != nil {
+					ix.log.Warn("gateway /health not ready", "status", rh.Status, "degraded", rh.Degraded)
+					b := rh.OK
+					rootHealthOK = &b
+				}
+				recovered = false
+			} else {
+				b := true
+				rootHealthOK = &b
+			}
+		} else if recovered {
+			b := true
+			rootHealthOK = &b
+		}
+
+		ix.recoveryPollLog(pollN, vectorstoreOK, false, h, rootHealthOK, errProbe)
+		if recovered {
+			ix.openIngestGate(embedModelFromHealth(h))
+			ix.log.Info("health recovered; resuming", "msg", "indexer.recovery.resumed")
+			return true, nil
+		}
+		return false, nil
+	}
+
+	pollN := 0
+	pollN++
+	if recovered, err := pollOnce(pollN); err != nil {
+		return err
+	} else if recovered {
+		return nil
+	}
+
 	t := time.NewTicker(ix.cfg.RecoveryPollInterval)
 	defer t.Stop()
-	pollN := 0
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-t.C:
 			pollN++
-			h, errProbe := ix.client.CheckHealth(ctx)
-			storageOK := errProbe == nil && h != nil && h.OK
-			ragDisabled := h != nil && h.RAGDisabled
-			status, detail := "", ""
-			if h != nil {
-				status = h.Status
-				detail = h.Detail
+			recovered, err := pollOnce(pollN)
+			if err != nil {
+				return err
 			}
-			if errProbe != nil {
-				ix.log.Warn("storage health probe failed", "err", errProbe)
-			}
-			if ragDisabled {
-				ix.recoveryPollLog(pollN, false, true, status, detail, nil, errProbe)
-				ix.log.Error("gateway has RAG disabled; nothing to recover",
-					"detail", h.Message, "type", h.ErrorType,
-					"hint", "set rag.enabled=true in config/gateway.yaml and restart the chimera gateway")
-				return fmt.Errorf("gateway rejects ingest: %s (%s)", h.Message, h.ErrorType)
-			}
-			if h != nil && !storageOK {
-				ix.log.Warn("storage health degraded",
-					"status", h.Status, "detail", h.Detail, "http_status", h.HTTPStatus)
-			}
-
-			recovered := storageOK
-			var rootHealthOK *bool
-			if recovered && ix.cfg.RecoveryIncludeRootHealth {
-				rh, rerr := ix.client.CheckGatewayRootHealth(ctx)
-				if rerr != nil {
-					ix.log.Warn("gateway /health probe failed", "err", rerr)
-					recovered = false
-				} else if rh == nil || !rh.OK {
-					if rh != nil {
-						ix.log.Warn("gateway /health not ready", "status", rh.Status, "degraded", rh.Degraded)
-						b := rh.OK
-						rootHealthOK = &b
-					}
-					recovered = false
-				} else {
-					b := true
-					rootHealthOK = &b
-				}
-			} else if recovered {
-				b := true
-				rootHealthOK = &b
-			}
-
-			ix.recoveryPollLog(pollN, recovered, false, status, detail, rootHealthOK, errProbe)
 			if recovered {
-				ix.log.Info("health recovered; resuming", "msg", "indexer.recovery.resumed")
 				return nil
 			}
 		}

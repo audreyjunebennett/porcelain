@@ -203,8 +203,8 @@ func TestClient_CheckHealth_DegradedDetailShape(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/indexer/storage/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusServiceUnavailable)
-		_, _ = w.Write([]byte(`{"object":"indexer.storage.health","status":"degraded","ok":false,"detail":"qdrant down"}`))
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"object":"indexer.storage.health","status":"degraded","ok":false,"checks":{"vectorstore":{"ok":false,"status":"unavailable","detail":"qdrant down","reason_code":"vectorstore_unreachable"},"embedding":{"ok":true,"status":"ok","model":"m","model_in_catalog":true}}}`))
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -213,8 +213,43 @@ func TestClient_CheckHealth_DegradedDetailShape(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if h.OK || h.RAGDisabled || h.Detail != "qdrant down" || h.Status != "degraded" {
+	if h.OK || h.RAGDisabled || h.Status != "degraded" {
 		t.Fatalf("unexpected: %+v", h)
+	}
+	if h.VectorstoreOK() {
+		t.Fatalf("vectorstore should be down")
+	}
+	if !h.EmbedOK() {
+		t.Fatalf("embedding should be ok in fixture")
+	}
+	if h.ReasonCode() != "vectorstore_unreachable" {
+		t.Fatalf("reason=%q", h.ReasonCode())
+	}
+	if d := h.HealthDetail(); d != "qdrant down" {
+		t.Fatalf("detail=%q", d)
+	}
+}
+
+func TestHealthStatus_IngestReady(t *testing.T) {
+	allOK := &HealthStatus{
+		OK: true,
+		Checks: &HealthChecks{
+			Vectorstore: HealthCheck{OK: true},
+			Embedding:   HealthCheck{OK: true},
+		},
+	}
+	if !allOK.IngestReady() {
+		t.Fatal("expected ingest ready")
+	}
+	embedDown := &HealthStatus{
+		OK: false,
+		Checks: &HealthChecks{
+			Vectorstore: HealthCheck{OK: true},
+			Embedding:   HealthCheck{OK: false, ReasonCode: "embed_provider_down"},
+		},
+	}
+	if embedDown.IngestReady() {
+		t.Fatal("expected not ingest ready")
 	}
 }
 

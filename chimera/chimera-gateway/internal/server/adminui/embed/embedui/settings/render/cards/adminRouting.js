@@ -16,6 +16,7 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminRouting = function (ctx) {
   var adminScopedEventsForRouting = ctx.adminScopedEventsForRouting;
   var operatorConfigureBtnInline = ctx.operatorConfigureBtnInline;
   var sgOpHealthPillHtml = ctx.sgOpHealthPillHtml;
+  var operatorCardChevronHtml = ctx.operatorCardChevronHtml;
 
   function buildAdminRoutingRulesCardHtml() {
     var gw = (ctx.adminStateCache && ctx.adminStateCache.gateway) || {};
@@ -63,7 +64,8 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminRouting = function (ctx) {
       '<summary><span class="sum-avatar sum-av-svc-chimera-gateway">Rt</span><span class="sum-main"><span class="sum-title">Routing rules</span>' +
       '<span class="sum-sub sum-sub--clamp">Virtual model policy with editable YAML and live catalog generation.</span></span>' +
       '<span class="sum-metrics">' + sgOpHealthPillHtml(formatInt(rulesCount) + " active rules", "metric") + "</span>" +
-      '<span class="sum-chev"></span></summary>' +
+      operatorCardChevronHtml() +
+      "</summary>" +
       '<div class="sum-body">' +
       '<div class="sg-op-card-note">Review active routing rules and 24h hits; use Configure to edit policy YAML.</div>' +
       '<div class="sg-op-head-row">' +

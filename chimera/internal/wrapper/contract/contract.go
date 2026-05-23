@@ -27,8 +27,8 @@ var AllowedComponents = map[string]struct{}{
 
 var AllowedBackendNames = map[string]struct{}{
 	naming.ProductQdrantBinName: {},
-	"bifrost":                   {}, // legacy alias; new broker wrapper reports chimera-broker
-	naming.ProductBrokerName:    {},
+	"bifrost":                   {}, // chimera-broker binary-mode upstream (BiFrost)
+	naming.ProductBrokerName:    {}, // legacy alias for older status payloads
 	"milvus":                    {},
 	"weaviate":                  {},
 	"redis_vector":              {},

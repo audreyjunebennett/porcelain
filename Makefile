@@ -95,7 +95,7 @@ endif
 	chimera-supervisor-build chimera-supervisor-run chimera-supervisor-test chimera-supervisor-test-unit chimera-supervisor-test-e2e \
 	chimera-broker-install chimera-broker-build chimera-broker-run chimera-broker-test chimera-broker-test-unit chimera-broker-test-e2e \
 	chimera-vectorstore-install chimera-vectorstore-build chimera-vectorstore-run chimera-vectorstore-test chimera-vectorstore-test-unit chimera-vectorstore-test-e2e \
-	chimera-indexer-build chimera-indexer-run chimera-indexer-install chimera-indexer-test chimera-indexer-test-unit chimera-indexer-test-e2e \
+	chimera-indexer-build chimera-indexer-run chimera-indexer-install chimera-indexer-configure chimera-indexer-test chimera-indexer-test-unit chimera-indexer-test-e2e \
 	locus-install locus-build locus-run locus-test locus-vet-if-enabled locus-test-if-enabled \
 	locus-test-unit-if-enabled locus-test-e2e-if-enabled \
 	locus-desktop-install locus-desktop-build locus-desktop-run locus-desktop-dev-ui chimera-supervisor-dev-ui \
@@ -335,6 +335,10 @@ chimera-gateway-clean-run:
 	$(GITBASH) scripts/clean-product.sh gateway run $(CONFIRM)
 
 # --- Chimera indexer ---
+chimera-indexer-configure:
+	@echo [STEP] Generating Chimera indexer configuration
+	@$(GITBASH) scripts/configure-copy.sh indexer.example.yaml indexer.yaml
+
 chimera-indexer-install:
 	@echo [STEP] Installing Chimera indexer to GOBIN
 	@go install $(CHIMERA_CMD_INDEXER)

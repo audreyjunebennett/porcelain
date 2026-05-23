@@ -18,6 +18,7 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminFallback = function (ctx) {
   var adminScopedEventsForRouting = ctx.adminScopedEventsForRouting;
   var operatorConfigureBtnInline = ctx.operatorConfigureBtnInline;
   var sgOpHealthPillHtml = ctx.sgOpHealthPillHtml;
+  var operatorCardChevronHtml = ctx.operatorCardChevronHtml;
 
   function buildAdminFallbackCardHtml() {
     var gw = (ctx.adminStateCache && ctx.adminStateCache.gateway) || {};
@@ -51,7 +52,8 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminFallback = function (ctx) {
       '<summary><span class="sum-avatar sum-av-svc-chimera-gateway">Fb</span><span class="sum-main"><span class="sum-title">Fallback chain</span>' +
       '<span class="sum-sub sum-sub--clamp">Ordered failover list used when the first route cannot serve.</span></span>' +
       '<span class="sum-metrics">' + sgOpHealthPillHtml(formatInt(fallback.length) + " tiers", "metric") + "</span>" +
-      '<span class="sum-chev"></span></summary>' +
+      operatorCardChevronHtml() +
+      "</summary>" +
       '<div class="sum-body">' +
       '<div class="sg-op-card-note">Define the fallback sequence used when the selected route cannot serve a request.</div>' +
       '<div class="sg-op-head-row">' +

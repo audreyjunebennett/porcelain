@@ -53,11 +53,16 @@ After a successful `GET /v1/indexer/config`, the logger adds `tenant_id`, `princ
 | `indexer.queue.snapshot` | Run workers start/exit, after initial scan, pause/resume, **`phase`=`worker_drain_tick`** (immediate once + every 30s while draining) | `queue_depth`, `queue_cap`, `workers`, counters below |
 | `indexer.run.progress` | Milestone (unchanged) | e.g. `phase`=`initial_scan`, `candidates_enqueued` |
 | `indexer.retry.scheduled` | Before backoff sleep | `rel`, `attempt`, `max_attempts`, `delay_ms`, `err`, plus scope: `tenant_id`, `project_id`, `ingest_project`, `flavor_id`, `indexer_target_key`, `root` |
-| `indexer.recovery.poll` | Each recovery poll tick | `poll_n`, `interval_ms`, `storage_ok`, `rag_disabled`, optional `root_health_ok` |
-| `indexer.recovery.resumed` | Storage (and root health if enabled) OK again | (human line; pairs with recovery polls) |
+| `indexer.recovery.poll` | Each recovery poll while waiting (WARN; `poll_n` at DEBUG) | `embed_ok`, `embed_reason_code`, `storage_ok`, optional health detail fields |
+| `indexer.recovery.resumed` | Ingest ready (vector store + embedding) again | (human line; pairs with recovery polls) |
+| `indexer.ingest.gate.closed` | Global ingest pause opened | `reason_code`, `detail`, `queue_depth` |
+| `indexer.ingest.gate.open` | Global ingest pause cleared | `embed_model`, `queue_depth` |
 | `indexer.worker.paused` | Worker entering recovery | `worker`, `rel`, `work_kind`, plus scope: `tenant_id`, `project_id`, `ingest_project`, `flavor_id`, `indexer_target_key`, `root` (ingest only) |
-| `indexer.job.skipped` | Skipped before upload (unchanged / empty text) | `rel`, `skip_reason` — one of `empty_or_whitespace`, `unchanged_corpus_client_hash`, `unchanged_corpus_sync`, `unchanged_local_sync`, plus the same **scope** fields as `indexer.retry.scheduled` |
-| `indexer.job.upload` | About to call gateway ingest (whole or chunked) | `rel`, `bytes`, `transport` (`whole` \| `chunked`), plus the same **scope** fields (includes `ingest_project`, `flavor_id`, `root`, …) |
+| `indexer.scope.status` | Per-scope progress (edge-triggered on change + ~45s heartbeat fallback) | `change_reason` (`heartbeat` on periodic lines), `declarative_state`, queue/workspace counts, optional `current_rel`, `ingest_gate_closed`, `ingest_gate_reason_code`, `embed_reason_code`, `in_recovery`, `ingest_completed`, plus scope fields |
+| `indexer.scope.active_file` | DEBUG — file entering upload path (after skip checks) | `rel`, `worker`, plus scope fields |
+| `indexer.job.skipped` | Skipped before upload (unchanged / empty text) | `rel`, `skip_reason`, plus scope fields (DEBUG when `job_skip_log: debug`) |
+| `indexer.job.skipped.summary` | Batched skip/ingest rollup per scope (default ~every 5s while active) | `window_ms`, skip/ingest deltas, `queue_depth`, plus scope fields |
+| `indexer.job.upload` | About to call gateway ingest (whole or chunked) | `rel`, `bytes`, `transport` (`whole` \| `chunked`), plus scope fields |
 | `indexer.job.ingested` | Successful ingest | `rel`, `mode`, `chunks`, `collection`, `content_sha256`, plus the same **scope** fields |
 | `indexer.job.failed` | Dropped after non-pause failure | `worker`, `rel`, `err`, plus the same **scope** fields |
 | `indexer.sync_state.write_failed` | Local sync-state DB write failed after ingest | `rel`, `err`, plus the same **scope** fields |
@@ -68,7 +73,16 @@ After a successful `GET /v1/indexer/config`, the logger adds `tenant_id`, `princ
 | `indexer.fanout.enqueue_failed` | Fan-out chunk could not be queued | `candidates` (chunk size); one scope: same **scope** fields; **multi-scope** chunk: `indexer_multi_scope_chunk`, `distinct_scope_count`, `indexer_target_keys` (comma-separated) |
 | `indexer.fanout.remainder_blocked` | Queue full requeueing fan-out remainder | `remainder_size`; scope fields as for `indexer.fanout.enqueue_failed` |
 | `indexer.work.failed` | Non-ingest work dropped (e.g. fan-out) | `worker`, `kind`, `err`; for **fan-out** list items, same multi-scope **scope** fields as `indexer.fanout.enqueue_failed` when candidates are present |
-| `indexer.run.done` | One-shot or watch exit | `mode`, `ingest_completed`, `ingest_failed_dropped`, `retry_events`, `jobs_dequeued`, `skip_unchanged_*` |
+| `indexer.run.done` | One-shot or watch exit | `mode`, `ingest_completed`, `ingest_failed_dropped`, `retry_events`, `jobs_dequeued`, `skip_unchanged_*`, `skip_empty_or_whitespace` |
+
+### Log profiles (operator vs trace)
+
+| Profile | Settings | INFO lines |
+|---------|----------|------------|
+| **Operator (supervised default)** | `log_level: info`, `job_skip_log: debug` | Run lifecycle, errors, `indexer.job.ingested`, `indexer.job.skipped.summary` rollups (~5s while draining), gate/recovery — not per-file skips |
+| **Trace** | `log_level: debug`, `job_skip_log: info` | Above plus DEBUG `indexer.scope.active_file`, per-file `indexer.job.skipped` / `indexer.job.upload` |
+
+Disable batched summaries with `skip_summary_min_interval_ms: -1` in indexer YAML.
 
 ### Stderr level (`log_level`)
 
@@ -83,8 +97,8 @@ Indexer YAML may set `job_skip_log` to `info`, `debug`, or `off`:
 
 | Value | Effect |
 |-------|--------|
-| `info` (default) | `indexer.job.skipped` (INFO) for skips; `indexer.job.upload` (INFO) before ingest; DEBUG `indexer.skip.*` lines still apply when the process log level is DEBUG. |
-| `debug` | No INFO `indexer.job.skipped` / `indexer.job.upload`; DEBUG `indexer.skip.*` only (same as legacy `verbose_job_logs: false`). |
+| `info` | `indexer.job.skipped` (INFO) for skips; `indexer.job.upload` (INFO) before ingest; DEBUG `indexer.skip.*` lines still apply when the process log level is DEBUG. |
+| `debug` (supervised default) | No INFO `indexer.job.skipped` / `indexer.job.upload`; DEBUG `indexer.skip.*` and `indexer.scope.active_file` when log level is DEBUG; use `indexer.job.skipped.summary` at INFO for rollups. |
 | `off` | No per-file skip or pre-upload INFO lines (queue snapshots and `indexer.job.ingested` / errors unchanged). |
 
 **Legacy:** `verbose_job_logs` (bool) is deprecated. When `job_skip_log` is
@@ -218,6 +232,55 @@ Per [§ Failure handling](plans/indexer.plan.md#failure-handling-normative):
   in YAML to only use storage health.
 - `401`/`403` responses are treated as fatal and surfaced in logs without
   retry.
+
+### Gateway storage health (`GET /v1/indexer/storage/health`)
+
+The gateway returns HTTP **200** for degraded dependency checks (vector store
+and/or embedding unavailable) so the indexer can poll without treating the JSON
+body as a transport error. Auth failures and RAG-disabled responses remain **503**
+with the structured `{"error":{...}}` shape.
+
+Top-level `ok` is `true` only when **both** checks required for ingest succeed:
+vector store reachability and configured embedding model availability.
+
+| Field | Meaning |
+|-------|---------|
+| `checks.vectorstore.ok` | Qdrant / vector store probe (`StoreHealth`) |
+| `checks.embedding.ok` | Configured embedding model is present in a fresh chimera-broker `/v1/models` snapshot and its provider is usable |
+| `checks.embedding.model` | Configured embedding model id from gateway RAG config |
+| `checks.embedding.model_in_catalog` | Whether the model appears in the live catalog |
+| `checks.embedding.provider` | Provider prefix from the model id (e.g. `ollama`) |
+| `checks.embedding.provider_state` | Classified provider liveness (`up`, `down`, `key_missing`, …) |
+| `checks.embedding.reason_code` | Stable machine-readable reason when `checks.embedding.ok` is false |
+| `checks.embedding.detail` | Human-readable detail (transport error, catalog miss, etc.) |
+
+**Embedding `reason_code` values:**
+
+| Code | When |
+|------|------|
+| `vectorstore_unreachable` | Vector store probe failed (`checks.vectorstore`) |
+| `embed_model_not_in_catalog` | Configured model absent from fresh catalog |
+| `embed_provider_down` | Provider classified unavailable |
+| `embed_provider_key_missing` | Provider missing required API key / config |
+| `embed_catalog_stale` | Catalog snapshot missing or older than freshness window |
+
+The indexer client exposes helpers on `HealthStatus`: `IngestReady()`,
+`VectorstoreOK()`, `EmbedOK()`, `ReasonCode()`, and `HealthDetail()`. Recovery
+poll logs (`indexer.recovery.poll`) include embed fields.
+
+**Phase 2 — ingest gate.** When health reports not ingest-ready, the indexer
+opens a process-wide **ingest gate** so workers block before dequeuing ingest
+jobs. Gate transitions log once at INFO:
+
+| `msg` | When |
+|-------|------|
+| `indexer.ingest.gate.closed` | Ingest paused (`reason_code`, `detail`, `queue_depth`) |
+| `indexer.ingest.gate.open` | Ingest resumed (`embed_model`, `queue_depth`) |
+
+Recovery waits for `IngestReady()` (vector store **and** embedding). After the
+first **502/503 embed-classified** ingest failure, `retry_short_circuit_on_embed`
+(default **true**) skips remaining per-file retries and closes the gate instead
+of burning `retry_max_attempts`.
 
 ## Modes
 

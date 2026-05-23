@@ -17,6 +17,7 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminRouterModels = function (ctx) 
   var adminScopedEvlogPanelFromEvents = ctx.adminScopedEvlogPanelFromEvents;
   var adminScopedEventsForRouting = ctx.adminScopedEventsForRouting;
   var operatorConfigureBtnInline = ctx.operatorConfigureBtnInline;
+  var operatorCardChevronHtml = ctx.operatorCardChevronHtml;
 
   function buildAdminRouterModelCardHtml() {
     var gw = (ctx.adminStateCache && ctx.adminStateCache.gateway) || {};
@@ -57,7 +58,8 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminRouterModels = function (ctx) 
       '<button class="sum-router-toggle" type="button" id="admin-router-enabled" data-admin-action="router-enabled-toggle" aria-label="Toggle tool router" aria-pressed="' + (routerEnabled ? "true" : "false") + '">' +
       '<span class="sum-router-toggle__track"><span class="sum-router-toggle__thumb"></span></span>' +
       "</button>" +
-      '<span class="sum-chev"></span></summary>' +
+      operatorCardChevronHtml() +
+      "</summary>" +
       '<div class="sum-body">' +
       '<div class="sg-op-head-row">' +
       '<div class="sg-op-card-note sg-op-card-note--tight">Manage tool-router model order, enabled state, and confidence threshold from one panel.</div>' +

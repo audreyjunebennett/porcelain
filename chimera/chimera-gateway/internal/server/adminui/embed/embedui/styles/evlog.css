@@ -392,8 +392,6 @@
   align-items: center;
 }
 .sum-evlog__footer-row .sum-evlog__footer {
-  display: flex;
-  align-items: center;
   min-height: 1.35rem;
   line-height: 1.35;
   padding: 0;

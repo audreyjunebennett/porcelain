@@ -40,3 +40,6 @@ chimera/.deps/
 locus/run/
 chimera/run/
 run/
+
+# indexer sync data
+config/indexer.sync-state.json

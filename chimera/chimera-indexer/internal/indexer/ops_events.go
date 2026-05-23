@@ -102,6 +102,7 @@ func (ix *Indexer) OpsSnapshot() map[string]int64 {
 		"skip_unchanged_corpus_client_hash": atomic.LoadInt64(&ix.opsSkipCorpusClientHash),
 		"skip_unchanged_corpus_sync":        atomic.LoadInt64(&ix.opsSkipCorpusSyncMatch),
 		"skip_unchanged_local_sync":         atomic.LoadInt64(&ix.opsSkipLocalSync),
+		"skip_empty_or_whitespace":          atomic.LoadInt64(&ix.opsSkipEmpty),
 	}
 }
 
@@ -117,6 +118,7 @@ func appendOpsAttrs(dst []any, snap map[string]int64) []any {
 		"skip_unchanged_corpus_client_hash",
 		"skip_unchanged_corpus_sync",
 		"skip_unchanged_local_sync",
+		"skip_empty_or_whitespace",
 	}
 	for _, k := range keys {
 		if v, ok := snap[k]; ok {
@@ -132,23 +134,47 @@ func RunDoneAttrs(mode string, snap map[string]int64) []any {
 	return appendOpsAttrs(out, snap)
 }
 
-// recoveryPollLog emits one structured line per recovery poll (default interval is long).
-func (ix *Indexer) recoveryPollLog(pollN int, storageOK bool, ragDisabled bool, storageStatus, storageDetail string, rootHealthOK *bool, errProbe error) {
+// recoveryPollLog emits one structured line per recovery poll. Routine waiting polls
+// use WARN; poll_n and full detail remain at DEBUG.
+func (ix *Indexer) recoveryPollLog(pollN int, storageOK bool, ragDisabled bool, h *HealthStatus, rootHealthOK *bool, errProbe error) {
 	if ix.log == nil {
 		return
 	}
+	embedReason := ""
+	if h != nil {
+		embedReason = h.ReasonCode()
+	}
+	prevReason := ix.getEmbedReasonCode()
+	if embedReason != prevReason {
+		ix.setLastEmbedReasonCode(embedReason)
+		ix.MaybeEmitScopeStatusEdge("embed_reason_code")
+	}
 	args := []any{
 		"msg", "indexer.recovery.poll",
-		"poll_n", pollN,
 		"interval_ms", ix.cfg.RecoveryPollInterval.Milliseconds(),
 		"storage_ok", storageOK,
 		"rag_disabled", ragDisabled,
 	}
-	if storageStatus != "" {
-		args = append(args, "storage_status", storageStatus)
-	}
-	if storageDetail != "" {
-		args = append(args, "storage_detail", storageDetail)
+	if h != nil {
+		args = append(args, "embed_ok", h.EmbedOK())
+		if rc := h.ReasonCode(); rc != "" {
+			args = append(args, "embed_reason_code", rc)
+		}
+		if h.Checks != nil {
+			emb := h.Checks.Embedding
+			if emb.Model != "" {
+				args = append(args, "embed_model", emb.Model)
+			}
+			args = append(args, "embed_model_in_catalog", emb.ModelInCatalog)
+			if d := strings.TrimSpace(emb.Detail); d != "" {
+				args = append(args, "embed_detail", d)
+			}
+			if d := strings.TrimSpace(h.Checks.Vectorstore.Detail); d != "" {
+				args = append(args, "vectorstore_detail", d)
+			}
+		} else if d := h.HealthDetail(); d != "" {
+			args = append(args, "storage_detail", d)
+		}
 	}
 	if rootHealthOK != nil {
 		args = append(args, "root_health_ok", *rootHealthOK)
@@ -156,5 +182,7 @@ func (ix *Indexer) recoveryPollLog(pollN int, storageOK bool, ragDisabled bool, 
 	if errProbe != nil {
 		args = append(args, "probe_err", errProbe.Error())
 	}
-	ix.log.Info("recovery poll", args...)
+	ix.log.Warn("recovery poll", args...)
+	debugArgs := append([]any{"msg", "indexer.recovery.poll", "poll_n", pollN}, args[2:]...)
+	ix.log.Debug("recovery poll tick", debugArgs...)
 }

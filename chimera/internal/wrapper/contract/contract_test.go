@@ -52,7 +52,7 @@ func TestStatusPayloadValidate_restartsNonNegative(t *testing.T) {
 	n := -1
 	s := StatusPayload{
 		Component:   ComponentBroker,
-		BackendName: "chimera-broker",
+		BackendName: "bifrost",
 		BackendMode: "binary",
 		Status:      "degraded",
 		Timestamp:   time.Now().UTC(),

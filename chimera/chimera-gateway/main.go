@@ -391,6 +391,9 @@ func runGatewayBackend(args []string) error {
 	uiOpts := server.NewUIOptions()
 	if logfmt.SupervisedMode() {
 		logStore := servicelogs.New(servicelogs.DefaultMaxLines)
+		if rtRes, _, _ := rt.Snapshot(); rtRes != nil && rtRes.OperatorLogsIndexerPinnedLinesMax > 0 {
+			logStore.SetIndexerPinnedLinesMax(rtRes.OperatorLogsIndexerPinnedLinesMax)
+		}
 		uiOpts.LogStore = logStore
 		if supURL := strings.TrimSpace(os.Getenv(naming.EnvSupervisorControlURLTarget)); supURL != "" {
 			supervisorlogs.StartMirror(rootCtx, supURL, logStore, log, func(ent servicelogs.Entry) {

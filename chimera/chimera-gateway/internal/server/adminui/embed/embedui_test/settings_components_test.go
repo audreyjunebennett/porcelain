@@ -901,6 +901,122 @@ func TestLogsDerive_vectorstoreCardModel_canonicalSlugs(t *testing.T) {
 	}
 }
 
+func TestLogsDerive_wrapperBackendPanelLabel(t *testing.T) {
+	vm := goja.New()
+	evalJS(t, vm, settingsUIPath(t, "testing", "loader.js"))
+	evalJS(t, vm, settingsUIPath(t, "derive", "vectorstoreCollection.js"))
+
+	fn, ok := goja.AssertFunction(vm.Get("ChimeraSettings").ToObject(vm).Get("Derive").ToObject(vm).Get("wrapperBackendPanelLabel"))
+	if !ok {
+		t.Fatal("missing wrapperBackendPanelLabel")
+	}
+	v, err := fn(goja.Undefined(), vm.ToValue("qdrant"), vm.ToValue("binary"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.String() != "qdrant (binary)" {
+		t.Fatalf("label=%q", v.String())
+	}
+	v2, err := fn(goja.Undefined(), vm.ToValue(""), vm.ToValue(""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v2.String() != "—" {
+		t.Fatalf("empty label=%q want em dash", v2.String())
+	}
+}
+
+func TestLogsDerive_vectorstoreCardModel_wrapperBackend(t *testing.T) {
+	vm := goja.New()
+	evalJS(t, vm, settingsUIPath(t, "testing", "loader.js"))
+	evalJS(t, vm, settingsUIPath(t, "derive", "vectorstoreCollection.js"))
+
+	fn, ok := goja.AssertFunction(vm.Get("ChimeraSettings").ToObject(vm).Get("Derive").ToObject(vm).Get("vectorstoreCardModel"))
+	if !ok {
+		t.Fatal("missing vectorstoreCardModel")
+	}
+	arr := []map[string]any{
+		{"parsed": map[string]any{"rawFlat": map[string]any{
+			"msg": "vectorstore.ready", "service": "chimera-vectorstore",
+			"backend_name": "qdrant", "backend_mode": "binary",
+		}}},
+	}
+	v, err := fn(goja.Undefined(), vm.ToValue(arr), goja.Undefined(), goja.Undefined())
+	if err != nil {
+		t.Fatal(err)
+	}
+	o := v.ToObject(vm)
+	if o.Get("backendName").String() != "qdrant" {
+		t.Fatalf("backendName=%q", o.Get("backendName").String())
+	}
+	if o.Get("backendMode").String() != "binary" {
+		t.Fatalf("backendMode=%q", o.Get("backendMode").String())
+	}
+}
+
+func TestLogsDerive_chimeraBrokerCardModel_wrapperBackend(t *testing.T) {
+	vm := goja.New()
+	evalJS(t, vm, settingsUIPath(t, "testing", "loader.js"))
+	evalJS(t, vm, settingsUIPath(t, "derive", "chimeraBrokerMetrics.js"))
+	evalJS(t, vm, settingsUIPath(t, "derive", "vectorstoreCollection.js"))
+
+	fn, ok := goja.AssertFunction(vm.Get("ChimeraSettings").ToObject(vm).Get("Derive").ToObject(vm).Get("chimeraBrokerCardModel"))
+	if !ok {
+		t.Fatal("missing chimeraBrokerCardModel")
+	}
+	arr := []map[string]any{
+		{"parsed": map[string]any{"rawFlat": map[string]any{
+			"msg": "broker.ready", "service": "chimera-broker",
+			"backend_name": "bifrost", "backend_mode": "binary",
+		}}},
+	}
+	v, err := fn(goja.Undefined(), vm.ToValue(arr), goja.Undefined())
+	if err != nil {
+		t.Fatal(err)
+	}
+	o := v.ToObject(vm)
+	if o.Get("backendName").String() != "bifrost" {
+		t.Fatalf("backendName=%q", o.Get("backendName").String())
+	}
+	if o.Get("backendMode").String() != "binary" {
+		t.Fatalf("backendMode=%q", o.Get("backendMode").String())
+	}
+}
+
+func TestLogsDerive_vectorstoreCardModel_httpUpsertSummary(t *testing.T) {
+	vm := goja.New()
+	evalJS(t, vm, settingsUIPath(t, "testing", "loader.js"))
+	evalJS(t, vm, settingsUIPath(t, "derive", "vectorstoreCollection.js"))
+
+	fn, ok := goja.AssertFunction(vm.Get("ChimeraSettings").ToObject(vm).Get("Derive").ToObject(vm).Get("vectorstoreCardModel"))
+	if !ok {
+		t.Fatal("missing vectorstoreCardModel")
+	}
+	arr := []map[string]any{
+		{"parsed": map[string]any{"rawFlat": map[string]any{
+			"msg": "vectorstore.version", "service": "chimera-vectorstore", "qdrant_version": "1.12.0",
+		}}},
+		{"parsed": map[string]any{"rawFlat": map[string]any{
+			"msg": "vectorstore.http.upsert.summary", "service": "chimera-vectorstore",
+			"upserts_ok": 42, "deletes_ok": 1, "searches_ok": 3,
+		}}},
+	}
+	v, err := fn(goja.Undefined(), vm.ToValue(arr), goja.Undefined())
+	if err != nil {
+		t.Fatal(err)
+	}
+	o := v.ToObject(vm)
+	if o.Get("upsertOk").Export() != int64(42) {
+		t.Fatalf("upsertOk=%v", o.Get("upsertOk").Export())
+	}
+	if o.Get("deleteOk").Export() != int64(1) {
+		t.Fatalf("deleteOk=%v", o.Get("deleteOk").Export())
+	}
+	if o.Get("searchOk").Export() != int64(3) {
+		t.Fatalf("searchOk=%v", o.Get("searchOk").Export())
+	}
+}
+
 func TestLogsDerive_chimeraBrokerProviderHealthList_pickLatest(t *testing.T) {
 	vm := goja.New()
 	evalJS(t, vm, settingsUIPath(t, "testing", "loader.js"))
@@ -1560,13 +1676,17 @@ func TestLogsDerive_indexerPresent_proseStateAndStats(t *testing.T) {
 	if !strings.Contains(psStr, "Waiting for file changes") || !strings.Contains(psStr, "queue depth 0") {
 		t.Fatalf("state prose: %q", psStr)
 	}
-	statsFlat := map[string]any{"service": "indexer", "msg": "indexer.storage.stats", "qdrant_points": 120, "available": true, "collection": "c-test"}
+	statsFlat := map[string]any{
+		"service": "indexer", "msg": "indexer.storage.stats",
+		"qdrant_points": 120, "available": true, "collection": "c-test", "ingest_project": "task-orchestrator",
+	}
 	pg, err := proseFn(goja.Undefined(), vm.ToValue(statsFlat))
 	if err != nil {
 		t.Fatal(err)
 	}
 	g := pg.String()
-	if !strings.Contains(g, "120") || !strings.Contains(g, "Indexed vectors") {
+	if !strings.Contains(g, "120") || !strings.Contains(g, "Stored search index looks healthy") ||
+		!strings.Contains(g, "saved and ready for retrieval") {
 		t.Fatalf("stats prose: %q", g)
 	}
 	scopeFlat := map[string]any{
@@ -1578,9 +1698,121 @@ func TestLogsDerive_indexerPresent_proseStateAndStats(t *testing.T) {
 		t.Fatal(err)
 	}
 	ps2Str := ps2.String()
-	if !strings.Contains(ps2Str, "12") || !strings.Contains(ps2Str, "files in workspace") ||
-		!strings.Contains(ps2Str, "waiting to embed") || !strings.Contains(ps2Str, "discovery queue") {
+	if !strings.Contains(ps2Str, "12") || !strings.Contains(ps2Str, "waiting to be examined") ||
+		!strings.Contains(ps2Str, "waiting to be embedded") || strings.Contains(ps2Str, "Pipeline") {
 		t.Fatalf("scope status prose: %q", ps2Str)
+	}
+	skipFlat := map[string]any{
+		"service": "indexer", "msg": "indexer.job.skipped.summary",
+		"files_evaluated": 1476, "skip_unchanged_local_sync": 1476,
+		"ingest_succeeded": 0, "window_ms": 5000, "ingest_project": "task-orchestrator",
+	}
+	psSkip, err := proseFn(goja.Undefined(), vm.ToValue(skipFlat))
+	if err != nil {
+		t.Fatal(err)
+	}
+	psSkipStr := psSkip.String()
+	if !strings.Contains(psSkipStr, "everything was already indexed") || !strings.Contains(psSkipStr, "1476") ||
+		strings.Contains(psSkipStr, "task-orchestrator") || !strings.Contains(psSkipStr, "5 seconds") {
+		t.Fatalf("skipped summary prose: %q", psSkipStr)
+	}
+	skipNewFlat := map[string]any{
+		"service": "indexer", "msg": "indexer.job.skipped.summary",
+		"files_evaluated": 9, "skip_unchanged_local_sync": 0,
+		"ingest_succeeded": 9, "window_ms": 5000,
+	}
+	psSkipNew, err := proseFn(goja.Undefined(), vm.ToValue(skipNewFlat))
+	if err != nil {
+		t.Fatal(err)
+	}
+	psSkipNewStr := psSkipNew.String()
+	if !strings.Contains(psSkipNewStr, "embedded 9 new file") || strings.Contains(psSkipNewStr, "0 unchanged") {
+		t.Fatalf("skipped summary new embed prose: %q", psSkipNewStr)
+	}
+	hotFlat := map[string]any{"service": "indexer", "msg": "indexer.supervised.hot_reload", "n": 2}
+	psHot, err := proseFn(goja.Undefined(), vm.ToValue(hotFlat))
+	if err != nil {
+		t.Fatal(err)
+	}
+	psHotStr := psHot.String()
+	if !strings.Contains(psHotStr, "Indexer settings changed") || !strings.Contains(psHotStr, "restarting the watch session") {
+		t.Fatalf("hot reload prose: %q", psHotStr)
+	}
+	queueFlat := map[string]any{
+		"service": "indexer", "msg": "indexer.queue.snapshot",
+		"queue_depth": 0, "ingest_completed": 0, "phase": "worker_drain_tick",
+	}
+	pq, err := proseFn(goja.Undefined(), vm.ToValue(queueFlat))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pqStr := pq.String()
+	if !strings.Contains(pqStr, "Ingest workers idle") || !strings.Contains(pqStr, "embed queue") {
+		t.Fatalf("queue snapshot prose: %q", pqStr)
+	}
+	scanFlat := map[string]any{
+		"service": "indexer", "msg": "indexer.run.progress",
+		"phase": "scan_scheduled", "roots": 6, "ingest_project": "task-orchestrator",
+	}
+	psScan, err := proseFn(goja.Undefined(), vm.ToValue(scanFlat))
+	if err != nil {
+		t.Fatal(err)
+	}
+	psScanStr := psScan.String()
+	if !strings.Contains(psScanStr, "Starting a scan of") || !strings.Contains(psScanStr, "6 directories for files") {
+		t.Fatalf("scan_scheduled prose: %q", psScanStr)
+	}
+	discFlat := map[string]any{
+		"service": "indexer", "msg": "indexer.discovery.summary.scope",
+		"candidates_discovered": 1489, "ingest_project": "task-orchestrator", "flavor_id": "default",
+	}
+	psDisc, err := proseFn(goja.Undefined(), vm.ToValue(discFlat))
+	if err != nil {
+		t.Fatal(err)
+	}
+	psDiscStr := psDisc.String()
+	if !strings.Contains(psDiscStr, "1489") || !strings.Contains(psDiscStr, "workspace's directories") ||
+		strings.Contains(psDiscStr, "default") || strings.Contains(psDiscStr, "watch root") {
+		t.Fatalf("discovery scope prose: %q", psDiscStr)
+	}
+	scanCompleteFlat := map[string]any{
+		"service": "indexer", "msg": "indexer.scan.complete",
+		"n_scopes": 3, "per_scope_fanout_budget": 50, "queue_cap": 200,
+	}
+	psFan, err := proseFn(goja.Undefined(), vm.ToValue(scanCompleteFlat))
+	if err != nil {
+		t.Fatal(err)
+	}
+	psFanStr := psFan.String()
+	if !strings.Contains(psFanStr, "pending file slot") || !strings.Contains(psFanStr, "total queue capacity") ||
+		strings.Contains(psFanStr, "scope(s)") {
+		t.Fatalf("scan complete prose: %q", psFanStr)
+	}
+	doneFlat := map[string]any{
+		"service": "indexer", "msg": "indexer.run.progress",
+		"phase": "initial_scan", "candidates_total": 1476, "ingest_project": "task-orchestrator",
+	}
+	psDone, err := proseFn(goja.Undefined(), vm.ToValue(doneFlat))
+	if err != nil {
+		t.Fatal(err)
+	}
+	psDoneStr := psDone.String()
+	if !strings.Contains(psDoneStr, "Initial scan finished") || !strings.Contains(psDoneStr, "1476") {
+		t.Fatalf("initial_scan prose: %q", psDoneStr)
+	}
+	startFlat := map[string]any{
+		"service": "indexer", "msg": "indexer.run.start",
+		"roots": 3, "ingest_project": "task-orchestrator",
+		"watch_root_paths": []any{`C:\repo\alpha`, `C:\repo\beta`, `C:\repo\gamma`},
+	}
+	psStart, err := proseFn(goja.Undefined(), vm.ToValue(startFlat))
+	if err != nil {
+		t.Fatal(err)
+	}
+	psStartStr := psStart.String()
+	if !strings.Contains(psStartStr, "Watching") || !strings.Contains(psStartStr, "3 directories") ||
+		!strings.Contains(psStartStr, "alpha") || strings.Contains(psStartStr, "Indexer is now") {
+		t.Fatalf("run.start prose: %q", psStartStr)
 	}
 	failFlat := map[string]any{
 		"service": "indexer", "msg": "indexer.job.failed", "rel": "spotify/track.json",
@@ -1608,6 +1840,18 @@ func TestLogsDerive_indexerPresent_proseStateAndStats(t *testing.T) {
 	pwStr := pw.String()
 	if !strings.Contains(pwStr, "Waiting for at least one watch root") || !strings.Contains(pwStr, "indexer.supervised.yaml") {
 		t.Fatalf("wait_roots prose: %q", pwStr)
+	}
+	changedFlat := map[string]any{
+		"service": "indexer", "msg": "indexer.supervised.workspaces_changed",
+		"roots": 3, "new_paths_hash": "abc123", "watch_root_paths": []any{`C:\repo\alpha`, `C:\repo\beta`, `C:\repo\new`},
+	}
+	pc, err := proseFn(goja.Undefined(), vm.ToValue(changedFlat))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pcStr := pc.String()
+	if !strings.Contains(pcStr, "Workspace paths changed") || !strings.Contains(pcStr, "3 watch root") || !strings.Contains(pcStr, "new") {
+		t.Fatalf("workspaces_changed prose: %q", pcStr)
 	}
 }
 
@@ -1738,6 +1982,100 @@ func TestLogsDerive_indexerPartition_humanStartMsgSplitsBuckets(t *testing.T) {
 	}
 	if got.Get("ik_one") == nil || got.Get("ik_two") == nil {
 		t.Fatalf("want ik_one and ik_two buckets, buckets=%v", got)
+	}
+}
+
+func TestLogsDerive_indexerPartition_queueSnapshotExcludedFromWorkspaceBuckets(t *testing.T) {
+	vm := goja.New()
+	loadIndexerPresentCtx(t, vm)
+	evalJS(t, vm, settingsUIPath(t, "derive", "indexerPartition.js"))
+
+	if _, err := vm.RunString(`function __getFlat(p) { return (p && p.rawFlat) || {}; }`); err != nil {
+		t.Fatal(err)
+	}
+
+	rs := `[{"root_id":"r1","path":"/a","ingest_project":"p1","flavor_id":"","indexer_target_key":"ik_one"}]`
+	cache := []any{
+		map[string]any{
+			"parsed": map[string]any{"rawFlat": map[string]any{
+				"service":          "indexer",
+				"index_run_id":     "run1",
+				"msg":              "indexer.run.start",
+				"root_ids":         "r1",
+				"watch_root_paths": []any{"/a"},
+				"root_scopes":      rs,
+			}},
+		},
+		map[string]any{
+			"parsed": map[string]any{"rawFlat": map[string]any{
+				"service":                  "indexer",
+				"index_run_id":             "run1",
+				"msg":                      "indexer.scan.complete",
+				"n_scopes":                 3,
+				"per_scope_fanout_budget":  50,
+				"queue_cap":                200,
+			}},
+		},
+		map[string]any{
+			"parsed": map[string]any{"rawFlat": map[string]any{
+				"service":      "indexer",
+				"index_run_id":   "run1",
+				"msg":            "indexer.queue.snapshot",
+				"queue_depth":    0,
+				"phase":          "worker_drain_tick",
+				"ingest_completed": 0,
+			}},
+		},
+	}
+
+	obj := vm.Get("ChimeraSettings").ToObject(vm).Get("Derive").ToObject(vm)
+	bfn, ok := goja.AssertFunction(obj.Get("indexerBucketsFromCache"))
+	if !ok {
+		t.Fatal("missing indexerBucketsFromCache")
+	}
+	v, err := bfn(goja.Undefined(), vm.ToValue(cache), vm.Get("__getFlat"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := v.ToObject(vm).Get("buckets").ToObject(vm)
+	one := got.Get("ik_one")
+	if one == nil || goja.IsUndefined(one) {
+		t.Fatal("missing ik_one bucket")
+	}
+	arr, ok := one.Export().([]any)
+	if !ok {
+		t.Fatalf("ik_one bucket type %T", one.Export())
+	}
+	if len(arr) != 1 {
+		t.Fatalf("ik_one should only contain run.start, got %d events", len(arr))
+	}
+}
+
+func TestLogsDerive_indexerFlatOmitFromWorkspaceScopedLog(t *testing.T) {
+	vm := goja.New()
+	evalJS(t, vm, settingsUIPath(t, "derive", "indexerPartition.js"))
+	obj := vm.Get("ChimeraSettings").ToObject(vm).Get("Derive").ToObject(vm)
+	fn, ok := goja.AssertFunction(obj.Get("indexerFlatOmitFromWorkspaceScopedLog"))
+	if !ok {
+		t.Fatal("missing indexerFlatOmitFromWorkspaceScopedLog")
+	}
+	cases := []struct {
+		flat map[string]any
+		want bool
+	}{
+		{map[string]any{"msg": "indexer.queue.snapshot", "queue_depth": 0}, true},
+		{map[string]any{"msg": "indexer.scope.status", "change_reason": "heartbeat"}, true},
+		{map[string]any{"msg": "indexer.scope.status", "change_reason": "phase"}, false},
+		{map[string]any{"msg": "indexer.job.ingested", "rel": "a.go"}, false},
+	}
+	for _, tc := range cases {
+		v, err := fn(goja.Undefined(), vm.ToValue(tc.flat))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if v.ToBoolean() != tc.want {
+			t.Fatalf("flat=%v want omit=%v got %v", tc.flat, tc.want, v.ToBoolean())
+		}
 	}
 }
 
@@ -2081,5 +2419,59 @@ func TestLogsApp_normalizeServiceBucketKey_fullChimeraNames(t *testing.T) {
 		if got.String() != tc.want {
 			t.Fatalf("%q/%q: got %q want %q", tc.svc, tc.src, got.String(), tc.want)
 		}
+	}
+}
+
+func TestLogsRender_sumEvlog_workspaceScopedLogOmitsIndexerBadge(t *testing.T) {
+	vm := goja.New()
+	evalJS(t, vm, settingsUIPath(t, "testing", "loader.js"))
+	evalJS(t, vm, settingsUIPath(t, "util", "escape.js"))
+	evalJS(t, vm, settingsUIPath(t, "render", "sumEvlog.js"))
+	_, err := vm.RunString(`
+		var ctx = {
+			getFlat: function (p) { return (p && p.rawFlat) || {}; },
+			escapeHtml: ChimeraSettings.escapeHtml,
+			primaryLogMessage: function () { return "Indexed example.go"; },
+			formatLogDateTimeLocal: function () { return "12:00:00"; },
+			formatLogRelativeAgo: function () { return "just now"; },
+			toIsoDatetimeAttr: function () { return "2026-05-22T12:00:00"; },
+			strHash: function (s) { return String(s); },
+			badgeForIndexerRunLine: function () {
+				return { cls: "sum-svc-chimera-indexer", lab: "chimera-indexer" };
+			}
+		};
+		ChimeraSettings.Render.mountSumEvlog(ctx);
+		globalThis.__sumEvlogBuild = ctx.sumEvlogBuildTbodyFromServiceEntries;
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fn, ok := goja.AssertFunction(vm.Get("__sumEvlogBuild"))
+	if !ok {
+		t.Fatal("missing sumEvlogBuildTbodyFromServiceEntries")
+	}
+	entries := []any{
+		map[string]any{
+			"parsed": map[string]any{"rawFlat": map[string]any{"msg": "indexer.job.ingested", "rel": "example.go"}},
+			"text":   "",
+			"ts":     "2026-05-22T12:00:00Z",
+			"source": "indexer",
+		},
+	}
+	v, err := fn(
+		goja.Undefined(),
+		vm.ToValue("indexer"),
+		vm.ToValue(entries),
+		vm.ToValue(map[string]any{"indexerRunLine": true, "suppressIndexerBadge": true, "cardScope": "ws-test"}),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := v.String()
+	if strings.Contains(html, "chimera-indexer") {
+		t.Fatalf("workspace scoped log should omit chimera-indexer badge, got %q", html)
+	}
+	if !strings.Contains(html, "Indexed example.go") {
+		t.Fatalf("expected message body, got %q", html)
 	}
 }

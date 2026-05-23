@@ -338,7 +338,9 @@ function chimeraBrokerCardModel(arr, getFlat) {
     providersTotal: 0,
     providersAnyDown: false,
     lastModel: "",
-    catalogModelCount: 0
+    catalogModelCount: 0,
+    backendName: "",
+    backendMode: ""
   };
 
   var i;
@@ -413,6 +415,18 @@ function chimeraBrokerCardModel(arr, getFlat) {
       break;
     }
   }
+
+  var pickBackend =
+    globalThis.ChimeraSettings &&
+    ChimeraSettings.Derive &&
+    typeof ChimeraSettings.Derive.pickWrapperBackendFromLogs === "function"
+      ? ChimeraSettings.Derive.pickWrapperBackendFromLogs
+      : function () {
+          return { backendName: "", backendMode: "" };
+        };
+  var wb = pickBackend(arr, getFlat, brokerServiceMatch);
+  out.backendName = wb.backendName;
+  out.backendMode = wb.backendMode;
 
   return out;
 }

@@ -57,13 +57,16 @@ func (ix *Indexer) emitSkippedFile(j Job, skipReason, debugSlug, debugHuman stri
 }
 
 // processIngestWithRetries runs ingestOne with backoff. Returns ErrPaused if
-// retries are exhausted while errors remain retryable.
+// retries are exhausted while errors remain retryable, or when the ingest gate
+// is closed / embed short-circuit fires.
 func (ix *Indexer) processIngestWithRetries(ctx context.Context, wi WorkItem, rng *rand.Rand, workerID int) error {
 	j := wi.Job
 	for attempt := 0; attempt < ix.cfg.RetryMaxAttempts; attempt++ {
-		ix.emitScopeActiveFileIfDue(workerID, j)
+		if ix.ingestGateClosed() {
+			return ErrPaused
+		}
 		ix.ingestInflight.Add(1)
-		err := ix.ingestOne(ctx, j)
+		err := ix.ingestOne(ctx, j, workerID)
 		ix.ingestInflight.Add(-1)
 		if err == nil {
 			return nil
@@ -73,6 +76,13 @@ func (ix *Indexer) processIngestWithRetries(ctx context.Context, wi WorkItem, rn
 		}
 		if !IsRetryable(err) {
 			return err
+		}
+		if ix.cfg.RetryShortCircuitOnEmbed && IsEmbedClassifiedHTTPError(err) {
+			ix.closeIngestGateFromHealth(ctx)
+			return ErrPaused
+		}
+		if ix.ingestGateClosed() {
+			return ErrPaused
 		}
 		d := Backoff(attempt, ix.cfg.RetryBaseDelay, ix.cfg.RetryMaxDelay, rng)
 		atomic.AddInt64(&ix.opsRetry, 1)
@@ -95,7 +105,7 @@ func (ix *Indexer) processIngestWithRetries(ctx context.Context, wi WorkItem, rn
 	return ErrPaused
 }
 
-func (ix *Indexer) ingestOne(ctx context.Context, j Job) error {
+func (ix *Indexer) ingestOne(ctx context.Context, j Job, workerID int) error {
 	st, err := os.Stat(j.AbsPath)
 	if err != nil {
 		return fmt.Errorf("stat %s: %w", j.RelPath, err)
@@ -108,6 +118,8 @@ func (ix *Indexer) ingestOne(ctx context.Context, j Job) error {
 		return fmt.Errorf("read %s: %w", j.RelPath, err)
 	}
 	if noText {
+		atomic.AddInt64(&ix.opsSkipEmpty, 1)
+		ix.noteSkipSummaryEmpty(j)
 		ix.emitSkippedFile(j, "empty_or_whitespace", "indexer.skip.empty_or_whitespace", "skip ingest: empty or whitespace-only document")
 		return nil
 	}
@@ -119,12 +131,14 @@ func (ix *Indexer) ingestOne(ctx context.Context, j Job) error {
 		if row, ok := ix.remoteInv[j.RelPath]; ok {
 			if row.ClientContentHash != "" && row.ClientContentHash == hash {
 				atomic.AddInt64(&ix.opsSkipCorpusClientHash, 1)
+				ix.noteSkipSummaryUnchanged(j, "unchanged_corpus_client_hash")
 				ix.emitSkippedFile(j, "unchanged_corpus_client_hash", "indexer.skip.unchanged_corpus_client_hash", "skip unchanged (corpus inventory)")
 				return nil
 			}
 			if row.ClientContentHash == "" && ix.syncState != nil {
 				if ent, ok := ix.syncState.Get(j.Key()); ok && ent.ServerSHA == row.ContentSHA256 && ent.ClientSHA == hash {
 					atomic.AddInt64(&ix.opsSkipCorpusSyncMatch, 1)
+					ix.noteSkipSummaryUnchanged(j, "unchanged_corpus_sync")
 					ix.emitSkippedFile(j, "unchanged_corpus_sync", "indexer.skip.unchanged_corpus_sync", "skip unchanged (corpus inventory + sync state)")
 					return nil
 				}
@@ -134,6 +148,7 @@ func (ix *Indexer) ingestOne(ctx context.Context, j Job) error {
 	if ix.syncState != nil {
 		if ent, ok := ix.syncState.Get(j.Key()); ok && ent.ClientSHA == hash {
 			atomic.AddInt64(&ix.opsSkipLocalSync, 1)
+			ix.noteSkipSummaryUnchanged(j, "unchanged_local_sync")
 			ix.emitSkippedFile(j, "unchanged_local_sync", "indexer.skip.unchanged_local_sync", "skip unchanged (sync state)")
 			return nil
 		}
@@ -153,7 +168,10 @@ func (ix *Indexer) ingestOne(ctx context.Context, j Job) error {
 	useChunked := gw != nil && strings.TrimSpace(gw.IngestSessionPath) != "" &&
 		wholeLimit < maxIngest && st.Size() > wholeLimit
 
-	if ix.log != nil && ix.cfg.JobSkipLog == JobSkipLogInfo {
+	ix.emitScopeActiveFileIfDue(workerID, j)
+	ix.noteSkipSummaryIngestStarted(j)
+
+	if ix.log != nil && ix.cfg.JobSkipLog != JobSkipLogOff {
 		transport := "whole"
 		if useChunked {
 			transport = "chunked"
@@ -165,7 +183,12 @@ func (ix *Indexer) ingestOne(ctx context.Context, j Job) error {
 			"transport", transport,
 		}
 		args = append(args, ix.logScopeFieldsForJob(j)...)
-		ix.log.Info("job upload", args...)
+		switch ix.cfg.JobSkipLog {
+		case JobSkipLogInfo:
+			ix.log.Info("job upload", args...)
+		case JobSkipLogDebug:
+			ix.log.Debug("job upload", args...)
+		}
 	}
 
 	var res *IngestResponse
@@ -214,20 +237,34 @@ func (ix *Indexer) ingestOne(ctx context.Context, j Job) error {
 		mode = "chunked"
 	}
 	atomic.AddInt64(&ix.opsIngestOK, 1)
-	args := []any{
-		"msg", "indexer.job.ingested",
-		"rel", j.RelPath,
-		"mode", mode,
-		"chunks", res.Chunks,
-		"collection", res.Collection,
-		"content_sha256", serverSHA,
-	}
-	args = append(args, ix.logScopeFieldsForJob(j)...)
-	ix.log.Info("ingested", args...)
+	ix.noteSkipSummaryIngestSucceeded(j)
+	ix.noteIngestSummarySucceeded(j, res.Chunks)
+	ix.logIngestedSuccess(j, mode, res.Chunks, res.Collection, serverSHA)
 	if ix.hooks.AfterIngest != nil {
 		ix.hooks.AfterIngest(j, res)
 	}
 	return nil
+}
+
+func (ix *Indexer) logIngestedSuccess(j Job, mode string, chunks int, collection, contentSHA string) {
+	if ix.log == nil {
+		return
+	}
+	args := []any{
+		"msg", "indexer.job.ingested",
+		"rel", j.RelPath,
+		"mode", mode,
+		"chunks", chunks,
+		"collection", collection,
+		"content_sha256", contentSHA,
+	}
+	args = append(args, ix.logScopeFieldsForJob(j)...)
+	switch ix.cfg.JobIngestLog {
+	case JobIngestLogDebug:
+		ix.log.Debug("ingested", args...)
+	default:
+		ix.log.Info("ingested", args...)
+	}
 }
 
 func (ix *Indexer) effectiveWholeFileLimit(gw *IndexerConfig) int64 {

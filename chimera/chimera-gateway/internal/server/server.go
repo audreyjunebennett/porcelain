@@ -948,6 +948,8 @@ func httpAccessLogLevel(path string, status int) slog.Level {
 	case "/health", "/healthz", "/readyz", "/status", "/api/ui/logs", "/api/ui/logs/stream",
 		"/ui/settings", "/api/ui/metrics":
 		return slog.LevelDebug
+	case "/v1/ingest":
+		return slog.LevelDebug
 	default:
 		return slog.LevelInfo
 	}

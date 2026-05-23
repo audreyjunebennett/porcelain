@@ -135,13 +135,31 @@ func (c *GatewayClient) FetchStorageStats(ctx context.Context, hdrs map[string]s
 	return &out, nil
 }
 
+// HealthCheck mirrors one element of the gateway storage health `checks` object.
+type HealthCheck struct {
+	OK             bool   `json:"ok"`
+	Status         string `json:"status"`
+	Detail         string `json:"detail"`
+	ReasonCode     string `json:"reason_code"`
+	Model          string `json:"model"`
+	ModelInCatalog bool   `json:"model_in_catalog"`
+	Provider       string `json:"provider"`
+	ProviderState  string `json:"provider_state"`
+}
+
+// HealthChecks groups vectorstore and embedding readiness from GET /v1/indexer/storage/health.
+type HealthChecks struct {
+	Vectorstore HealthCheck `json:"vectorstore"`
+	Embedding   HealthCheck `json:"embedding"`
+}
+
 // HealthStatus mirrors GET /v1/indexer/storage/health.
 //
 // The gateway returns one of two body shapes on this endpoint:
 //
-//  1. The healthy / Qdrant-degraded shape:
-//     {"ok":true,"status":"ok"} or
-//     {"ok":false,"status":"degraded","detail":"<store error>"}
+//  1. The healthy / degraded shape with optional `checks`:
+//     {"ok":true,"status":"ok","checks":{"vectorstore":{...},"embedding":{...}}}
+//     or {"ok":false,"status":"degraded","checks":{...}}
 //  2. The structured-error shape (e.g. RAG not enabled):
 //     {"error":{"message":"RAG is not enabled","type":"gateway_config"}}
 //
@@ -149,13 +167,74 @@ func (c *GatewayClient) FetchStorageStats(ctx context.Context, hdrs map[string]s
 // error indicates the gateway has RAG turned off so the indexer can decide
 // whether to keep polling forever or surface a fatal configuration error.
 type HealthStatus struct {
-	OK          bool   `json:"ok"`
-	Status      string `json:"status"`
-	Detail      string `json:"detail"`
-	Message     string `json:"-"` // populated from the structured error message.
-	ErrorType   string `json:"-"` // populated from the structured error type.
-	RAGDisabled bool   `json:"-"`
-	HTTPStatus  int    `json:"-"`
+	OK          bool          `json:"ok"`
+	Status      string        `json:"status"`
+	Detail      string        `json:"detail"`
+	Checks      *HealthChecks `json:"checks"`
+	Message     string        `json:"-"` // populated from the structured error message.
+	ErrorType   string        `json:"-"` // populated from the structured error type.
+	RAGDisabled bool          `json:"-"`
+	HTTPStatus  int           `json:"-"`
+}
+
+// IngestReady reports whether gateway health indicates both vector store and embedding are OK.
+func (h *HealthStatus) IngestReady() bool {
+	if h == nil || h.RAGDisabled {
+		return false
+	}
+	if h.Checks == nil {
+		return h.OK
+	}
+	return h.VectorstoreOK() && h.EmbedOK()
+}
+
+// VectorstoreOK reports whether the vector store check passed.
+func (h *HealthStatus) VectorstoreOK() bool {
+	if h == nil {
+		return false
+	}
+	if h.Checks == nil {
+		return h.OK
+	}
+	return h.Checks.Vectorstore.OK
+}
+
+// EmbedOK reports whether the embedding check passed.
+func (h *HealthStatus) EmbedOK() bool {
+	if h == nil {
+		return false
+	}
+	if h.Checks == nil {
+		return h.OK
+	}
+	return h.Checks.Embedding.OK
+}
+
+// ReasonCode returns the first non-empty reason code from embedding, then vectorstore checks.
+func (h *HealthStatus) ReasonCode() string {
+	if h == nil || h.Checks == nil {
+		return ""
+	}
+	if rc := strings.TrimSpace(h.Checks.Embedding.ReasonCode); rc != "" {
+		return rc
+	}
+	return strings.TrimSpace(h.Checks.Vectorstore.ReasonCode)
+}
+
+// HealthDetail returns the most specific human-readable detail from structured checks.
+func (h *HealthStatus) HealthDetail() string {
+	if h == nil {
+		return ""
+	}
+	if h.Checks != nil {
+		if d := strings.TrimSpace(h.Checks.Embedding.Detail); d != "" {
+			return d
+		}
+		if d := strings.TrimSpace(h.Checks.Vectorstore.Detail); d != "" {
+			return d
+		}
+	}
+	return strings.TrimSpace(h.Detail)
 }
 
 // rawErrorEnvelope mirrors writeJSONError on the server side.
@@ -645,6 +724,24 @@ func IsRetryable(err error) bool {
 		return true
 	}
 	return he.Status >= 500
+}
+
+// IsEmbedClassifiedHTTPError reports whether err is a gateway ingest failure
+// likely caused by embedding unavailability (502 from RAG embed, or 503 with
+// embed hints in the response body).
+func IsEmbedClassifiedHTTPError(err error) bool {
+	var he *HTTPError
+	if !errors.As(err, &he) {
+		return false
+	}
+	switch he.Status {
+	case http.StatusBadGateway:
+		return true
+	case http.StatusServiceUnavailable:
+		return strings.Contains(strings.ToLower(he.Body), "embed")
+	default:
+		return false
+	}
 }
 
 // IsFatal reports whether the error indicates the indexer must stop or

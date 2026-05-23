@@ -39,6 +39,10 @@ formatters:
     description: Optional Active keys count suffix
   gateway_health_upstream:
     description: ok, status, detail, target host
+  gateway_operator_workspace_path_added:
+    description: operator UI path add
+  gateway_operator_workspace_path_deleted:
+    description: operator UI path delete
   gateway_startup_config_resolved:
     description: filePath, api_keys_path, routingPolicyPath
   gateway_startup_disk_log:
@@ -63,12 +67,18 @@ formatters:
     description: fanout enqueue/remainder
   indexer_gateway_config:
     description: chunk_size, embedding_model tail
+  indexer_ingest_gate:
+    description: ingest gate closed/open with reason and queue depth
   indexer_job_failed:
     description: shortIngestFailureDetail tail
   indexer_job_ingested:
     description: rel, chunks
+  indexer_job_ingested_summary:
+    description: batched ingest successes for a scope window
   indexer_job_skipped:
     description: rel, skip_reason
+  indexer_job_skipped_summary:
+    description: batched skip/ingest window deltas
   indexer_job_upload:
     description: rel, bytes, transport
   indexer_queue_snapshot:
@@ -79,6 +89,8 @@ formatters:
     description: retry/recovery/pause lines
   indexer_run_done:
     description: mode, ingest_completed, failures
+  indexer_run_progress:
+    description: scan_scheduled and initial_scan milestones
   indexer_run_start:
     description: roots count and root_ids
   indexer_scope_active_file:
@@ -89,8 +101,26 @@ formatters:
     description: state label, queue_depth, ingest_inflight
   indexer_storage_stats:
     description: qdrant_points or unavailable detail
+  indexer_supervised_hot_reload:
+    description: config hot-reload session restart
+  indexer_supervised_process_exit:
+    description: supervised process exit detail
+  indexer_supervised_session_fatal_exit:
+    description: session fatal exit detail
   indexer_supervised_wait_roots:
     description: optional config_path suffix
+  indexer_supervised_watch_shutdown_timeout:
+    description: watch shutdown timeout detail
+  indexer_supervised_workspaces_apply_failed:
+    description: workspace path apply failure
+  indexer_supervised_workspaces_changed:
+    description: workspace path snapshot change
+  indexer_supervised_workspaces_reload:
+    description: watch session reload after path change
+  indexer_supervised_workspaces_reload_stalled:
+    description: reload stall detail
+  indexer_supervised_workspaces_session_start:
+    description: post-reload session start
   indexer_work_failed:
     description: work kind label
   ingest_complete:
@@ -103,6 +133,8 @@ formatters:
     description: Optional count suffix
   vectorstore_collection_http:
     description: collection display + optional http status
+  vectorstore_http_upsert_summary:
+    description: batched upsert/delete/search counts and collections
   vectorstore_listen_ports:
     description: REST/gRPC port suffix
   vectorstore_progress_detail:
@@ -286,6 +318,16 @@ messages:
   - slug: gateway.startup.config_resolved
     formatter: gateway_startup_config_resolved
     gallery_preview: Gateway configuration paths resolved.
+  - slug: gateway.operator.workspace.path_added
+    formatter: gateway_operator_workspace_path_added
+    aliases:
+      - gateway operator workspace path added
+    gallery_preview: Watch path added · C:\repo\new-path
+  - slug: gateway.operator.workspace.path_deleted
+    formatter: gateway_operator_workspace_path_deleted
+    aliases:
+      - gateway operator workspace path deleted
+    gallery_preview: Watch path removed · C:\repo\old-path
   - slug: broker.http.access
     formatter: http_broker_inbound
     aliases:
@@ -543,6 +585,11 @@ messages:
     aliases:
       - qdrant.collection.loading
     gallery_preview: Loading collection chimera-tenant-project-abc12345
+  - slug: vectorstore.collection.creating
+    formatter: vectorstore_collection_http
+    aliases:
+      - qdrant.collection.creating
+    gallery_preview: Creating collection chimera-tenant-project-abc12345
   - slug: vectorstore.shard.recover_progress
     formatter: vectorstore_progress_detail
     aliases:
@@ -718,6 +765,31 @@ messages:
     aliases:
       - qdrant.http.collection_meta
     gallery_preview: Reading collection chimera-tenant-project-abc12345 · 200
+  - slug: vectorstore.http.collection_create
+    formatter: vectorstore_collection_http
+    aliases:
+      - qdrant.http.collection_create
+    gallery_preview: Created collection chimera-tenant-project-abc12345 · 200
+  - slug: vectorstore.http.collection_create_rejected
+    formatter: vectorstore_collection_http
+    aliases:
+      - qdrant.http.collection_create_rejected
+    gallery_preview: Create collection chimera-tenant-project-abc12345 · 409
+  - slug: vectorstore.http.collection_index
+    formatter: vectorstore_collection_http
+    aliases:
+      - qdrant.http.collection_index
+    gallery_preview: Indexed collection chimera-tenant-project-abc12345 · 200
+  - slug: vectorstore.http.collection_index_rejected
+    formatter: vectorstore_collection_http
+    aliases:
+      - qdrant.http.collection_index_rejected
+    gallery_preview: Index collection chimera-tenant-project-abc12345 · 400
+  - slug: vectorstore.http.upsert.summary
+    formatter: vectorstore_http_upsert_summary
+    aliases:
+      - qdrant.http.upsert.summary
+    gallery_preview: chimera-lynn-porcelain · 42 upsert(s) · last 5s
   - slug: vectorstore.http.points_upsert_ok
     formatter: vectorstore_collection_http
     aliases:
@@ -748,6 +820,61 @@ messages:
     aliases:
       - indexer supervised wait roots
     gallery_preview: Waiting for at least one watch root
+  - slug: indexer.supervised.hot_reload
+    formatter: indexer_supervised_hot_reload
+    aliases:
+      - indexer supervised config hot-reload; starting new watch session
+    gallery_preview: Indexer settings changed — restarting the watch session
+  - slug: indexer.supervised.hot_reload_yaml_error
+    formatter: indexer_supervised_hot_reload
+    aliases:
+      - indexer supervised config reload skipped (invalid YAML)
+    gallery_preview: Couldn't reload indexer settings — config file has an error; keeping the current session
+  - slug: indexer.supervised.hot_reload_resolve_error
+    formatter: indexer_supervised_hot_reload
+    aliases:
+      - indexer supervised config reload skipped (resolve error)
+    gallery_preview: Couldn't reload indexer settings — configuration could not be applied
+  - slug: indexer.supervised.workspaces_reload_stalled
+    formatter: indexer_supervised_workspaces_reload_stalled
+    aliases:
+      - indexer supervised workspaces reload stalled
+    gallery_preview: Workspace reload stalled
+  - slug: indexer.supervised.workspaces_changed
+    formatter: indexer_supervised_workspaces_changed
+    aliases:
+      - indexer supervised workspaces changed
+    gallery_preview: Workspace paths changed · 3 watch root(s)
+  - slug: indexer.supervised.workspaces_reload
+    formatter: indexer_supervised_workspaces_reload
+    aliases:
+      - indexer supervised workspaces reload
+    gallery_preview: Reloading watch session · 3 watch root(s)
+  - slug: indexer.supervised.workspaces_session_start
+    formatter: indexer_supervised_workspaces_session_start
+    aliases:
+      - indexer supervised workspaces session start
+    gallery_preview: Watch session restarted · 3 watch root(s)
+  - slug: indexer.supervised.workspaces_apply_failed
+    formatter: indexer_supervised_workspaces_apply_failed
+    aliases:
+      - indexer supervised workspaces apply failed
+    gallery_preview: Couldn't apply workspace paths · stat failed
+  - slug: indexer.supervised.watch_shutdown_timeout
+    formatter: indexer_supervised_watch_shutdown_timeout
+    aliases:
+      - indexer supervised watch shutdown timeout
+    gallery_preview: Filesystem watchers did not stop after reload
+  - slug: indexer.supervised.session_fatal_exit
+    formatter: indexer_supervised_session_fatal_exit
+    aliases:
+      - indexer supervised session fatal exit
+    gallery_preview: Indexer watch session exited unexpectedly
+  - slug: indexer.supervised.process_exit
+    formatter: indexer_supervised_process_exit
+    aliases:
+      - indexer supervised process exit
+    gallery_preview: Supervised indexer stopped
   - slug: indexer.state
     formatter: indexer_state
     aliases:
@@ -758,7 +885,7 @@ messages:
     aliases:
       - indexer storage stats
       - indexer storage stats sync
-    gallery_preview: 'Indexed vectors: 1204'
+    gallery_preview: Stored indexes look healthy — 1204 embedded text chunk(s) are ready for retrieval
   - slug: gateway.indexer.config
     formatter: indexer_gateway_config
     aliases:
@@ -768,7 +895,7 @@ messages:
     formatter: indexer_run_start
     aliases:
       - indexer run start
-    gallery_preview: Indexer started · 2 watch root(s) · roots root-a,root-b
+    gallery_preview: 'Watching 2 directories: alpha and beta'
   - slug: indexer.discovery.summary
     formatter: indexer_discovery
     aliases:
@@ -778,17 +905,17 @@ messages:
     formatter: indexer_discovery
     aliases:
       - discovery summary (scope)
-    gallery_preview: Discovery · my-project / default · 12 files · 12 path(s) logged
+    gallery_preview: Discovery scan found 1489 file(s) in this workspace's directories
   - slug: indexer.scan.complete
     formatter: indexer_discovery
     aliases:
       - scan fan-out budget
-    gallery_preview: Scan done · 3 scope(s) · budget 50 pending bulk per scope · cap 200
+    gallery_preview: Directory walk finished across 3 workspaces — each workspace gets up to 50 pending file slot(s) in the ingest queue (200 total queue capacity)
   - slug: indexer.scope.status
     formatter: indexer_scope_status
     aliases:
       - indexer scope status
-    gallery_preview: ~42 files in workspace · 3 waiting to embed · 1 waiting in discovery queue
+    gallery_preview: Still working through discovered files — 1476 of 1476 tracked files are waiting to be examined
   - slug: indexer.scope.active_file
     formatter: indexer_scope_active_file
     aliases:
@@ -801,10 +928,12 @@ messages:
     formatter: indexer_queue_snapshot
     aliases:
       - indexer queue snapshot
-    gallery_preview: Queue · idle · 0 waiting · 12 completed this run
+    gallery_preview: Ingest workers idle · embed queue empty · 0 files embedded this run
   - slug: indexer.run.progress
-    summary: Progress · scanning · 4 enqueued
-    gallery_preview: Progress · scanning · 4 enqueued
+    formatter: indexer_run_progress
+    aliases:
+      - Progress · scanning · 4 enqueued
+    gallery_preview: Starting a scan of 4 directories for files
   - slug: indexer.job.upload
     formatter: indexer_job_upload
     aliases:
@@ -815,20 +944,36 @@ messages:
     aliases:
       - ingested
     gallery_preview: Ingested · src/main.go · 8 chunk(s)
+  - slug: indexer.job.ingested.summary
+    formatter: indexer_job_ingested_summary
+    aliases:
+      - indexer job ingested summary
+    gallery_preview: Indexed 81 files · 412 chunks · last 5s
   - slug: indexer.job.skipped
     formatter: indexer_job_skipped
     aliases:
       - job skipped
     gallery_preview: Skipped · README.md · unchanged
+  - slug: indexer.job.skipped.summary
+    formatter: indexer_job_skipped_summary
+    aliases:
+      - indexer job skipped summary
+    gallery_preview: Checked 1476 files in the last 5 seconds — everything was already indexed, so nothing new was embedded
   - slug: indexer.retry.scheduled
     formatter: indexer_retry_recovery
     gallery_preview: Retry scheduled · src/main.go · attempt 2 · backoff 500 ms
   - slug: indexer.recovery.poll
     formatter: indexer_retry_recovery
-    gallery_preview: 'Recovery poll #3 · storage OK'
+    gallery_preview: 'Recovery poll #3 · storage OK · embed OK'
   - slug: indexer.recovery.resumed
-    summary: Storage recovered — resuming workers
-    gallery_preview: Storage recovered — resuming workers
+    summary: Ingest ready — resuming workers
+    gallery_preview: Ingest ready — resuming workers
+  - slug: indexer.ingest.gate.closed
+    formatter: indexer_ingest_gate
+    gallery_preview: Ingest paused — embed provider down · queue 42
+  - slug: indexer.ingest.gate.open
+    formatter: indexer_ingest_gate
+    gallery_preview: Ingest resumed · queue 42 · ollama/nomic-embed-text
   - slug: indexer.worker.paused
     formatter: indexer_retry_recovery
     gallery_preview: Worker paused for recovery · src/main.go

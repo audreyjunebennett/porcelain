@@ -9,6 +9,15 @@ globalThis.ChimeraSettings.Render.Cards = globalThis.ChimeraSettings.Render.Card
 globalThis.ChimeraSettings.Render.Cards.mountGatewayOverview = function (ctx) {
   var escapeHtml = ctx.escapeHtml;
   var formatUtcLikeLogTimestamp = ctx.formatUtcLikeLogTimestamp;
+  var operatorCardChevronHtml =
+    typeof ctx.operatorCardChevronHtml === "function"
+      ? ctx.operatorCardChevronHtml
+      : function () {
+          return (
+            '<span class="material-symbols-outlined sg-op-chev-icon" aria-hidden="true">chevron_right</span>' +
+            '<span class="sum-chev" aria-hidden="true"></span>'
+          );
+        };
 
   function gatewayServiceHealthTone(raw) {
     var s = String(raw || "").trim().toLowerCase();
@@ -143,7 +152,8 @@ globalThis.ChimeraSettings.Render.Cards.mountGatewayOverview = function (ctx) {
       sub +
       "</span>" +
       compactHealth +
-      '<span class="sum-chev"></span></summary>' +
+      operatorCardChevronHtml() +
+      "</summary>" +
       '<div class="sum-body">' + body + "</div></details>"
     );
   }
