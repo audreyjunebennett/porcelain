@@ -21,7 +21,7 @@ LOCUS_RUNTIME_DIR := locus
 LOCUS_RUNTIME_BIN_DIR := $(LOCUS_RUNTIME_DIR)/bin
 
 BIN_STAGE_DIR := bin
-FMT_DIRS := chimera locus
+FMT_DIRS := chimera locus internal
 
 
 ifeq ($(OS),Windows_NT)

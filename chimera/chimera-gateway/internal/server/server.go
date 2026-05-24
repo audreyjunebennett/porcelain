@@ -695,9 +695,15 @@ func handleV1Chat(w http.ResponseWriter, r *http.Request, rt *Runtime, log *slog
 			dedupLog := chatRouteLogger(log, rid, cid, sess.TenantID, turnIdx)
 			w.Header().Set(headerConversationID, cid)
 			if dedupLog != nil {
-				dedupLog.Info("conversation received", "msg", naming.MsgConversationReceived,
+				dedupRecv := []any{
+					"msg", naming.MsgConversationReceived,
 					"clientModel", clientModel, "stream", stream, "tenant", sess.TenantID,
-					"project", proj, "flavor", flav, "cid_source", "merge", "timeline_kind", naming.TimelineKindBroker)
+					"project", proj, "flavor", flav, "cid_source", "merge", "timeline_kind", naming.TimelineKindBroker,
+				}
+				if mc := conversationwitness.RequestMessageCount(raw); mc > 0 {
+					dedupRecv = append(dedupRecv, "message_count", mc)
+				}
+				dedupLog.Info("conversation received", dedupRecv...)
 				emitConversationRequestWitness(dedupLog, res, raw)
 			}
 			if fp := mergeSvc.RollingFingerprint(ctx, cid); fp != "" {
@@ -747,9 +753,16 @@ func handleV1Chat(w http.ResponseWriter, r *http.Request, rt *Runtime, log *slog
 	})
 
 	if routeLog != nil {
-		routeLog.Info("conversation received", "msg", naming.MsgConversationReceived,
+		msgCount := conversationwitness.RequestMessageCount(raw)
+		recvArgs := []any{
+			"msg", naming.MsgConversationReceived,
 			"clientModel", clientModel, "stream", stream, "tenant", sess.TenantID,
-			"project", proj, "flavor", flav, "cid_source", cidSource, "timeline_kind", naming.TimelineKindBroker)
+			"project", proj, "flavor", flav, "cid_source", cidSource, "timeline_kind", naming.TimelineKindBroker,
+		}
+		if msgCount > 0 {
+			recvArgs = append(recvArgs, "message_count", msgCount)
+		}
+		routeLog.Info("conversation received", recvArgs...)
 		routeLog.Info("chat completion request", "msg", "chat.request", "clientModel", clientModel, "stream", stream, "tenant", sess.TenantID, "timeline_kind", naming.TimelineKindBroker)
 	}
 	if routeLog != nil && trSum.Ran {

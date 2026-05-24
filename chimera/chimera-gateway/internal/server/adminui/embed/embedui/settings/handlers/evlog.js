@@ -18,6 +18,52 @@ globalThis.ChimeraSettings.Handlers.Evlog.wire = function (ctx) {
     var searchTimers = typeof WeakMap !== "undefined" ? new WeakMap() : null;
     /** Pixels from tbody bottom to treat as "stuck to tail" when summarized panel is rebuilt. */
     var SUM_EVLOG_TB_TAIL_SLACK = 6;
+    var SUM_EVLOG_TBODY_MIN_PX = 64;
+    var SUM_EVLOG_TBODY_MAX_PX = 720;
+
+    function sumEvlogTbodyEl(root) {
+      return root ? root.querySelector("[data-sum-evlog-tbody]") : null;
+    }
+    function sumEvlogDefaultTbodyHeightPx(root) {
+      var tb = sumEvlogTbodyEl(root);
+      if (!tb) return 176;
+      var cs = window.getComputedStyle(tb);
+      var mh = cs && cs.maxHeight ? cs.maxHeight : "";
+      if (mh && mh !== "none") {
+        var n = parseFloat(mh);
+        if (isFinite(n) && n > 0) return n;
+      }
+      return root && root.classList && root.classList.contains("sum-evlog--in-card") ? 176 : 256;
+    }
+    function sumEvlogReadTbodyHeightPx(root) {
+      if (!root) return null;
+      if (root._sumEvlogTbodyHeightPx != null && isFinite(root._sumEvlogTbodyHeightPx)) {
+        return root._sumEvlogTbodyHeightPx;
+      }
+      var tb = sumEvlogTbodyEl(root);
+      if (!tb || !tb.style || !tb.style.maxHeight) return null;
+      var inline = parseFloat(tb.style.maxHeight);
+      return isFinite(inline) && inline > 0 ? inline : null;
+    }
+    function sumEvlogClampTbodyHeightPx(px) {
+      var n = Number(px);
+      if (!isFinite(n)) n = SUM_EVLOG_TBODY_MIN_PX;
+      var cap = SUM_EVLOG_TBODY_MAX_PX;
+      try {
+        if (window.innerHeight) cap = Math.min(cap, Math.round(window.innerHeight * 0.72));
+      } catch (eCap) {}
+      return Math.max(SUM_EVLOG_TBODY_MIN_PX, Math.min(cap, Math.round(n)));
+    }
+    function sumEvlogApplyTbodyHeightPx(root, px, opts) {
+      opts = opts || {};
+      if (!root) return;
+      var tb = sumEvlogTbodyEl(root);
+      if (!tb) return;
+      var next = sumEvlogClampTbodyHeightPx(px != null ? px : sumEvlogDefaultTbodyHeightPx(root));
+      tb.style.maxHeight = next + "px";
+      root._sumEvlogTbodyHeightPx = next;
+      if (opts.persist !== false) root.setAttribute("data-sum-evlog-tbody-height", String(next));
+    }
 
     globalThis.sumEvlogCapturePanelState = function (container) {
       var out = {};
@@ -57,13 +103,15 @@ globalThis.ChimeraSettings.Handlers.Evlog.wire = function (ctx) {
         var sh = tb.scrollHeight;
         var ch = tb.clientHeight;
         var nearBottom = sh - st - ch <= SUM_EVLOG_TB_TAIL_SLACK;
+        var tbHeightPx = sumEvlogReadTbodyHeightPx(root);
         out[tb.id] = {
           q: q,
           mode: mode,
           selectedIds: selectedIds,
           anchorId: anchorId,
           scrollTop: st,
-          nearBottom: nearBottom
+          nearBottom: nearBottom,
+          tbodyHeightPx: tbHeightPx
         };
       }
       return out;
@@ -99,6 +147,16 @@ globalThis.ChimeraSettings.Handlers.Evlog.wire = function (ctx) {
             tb.scrollTop = Math.min(wantSo, maxSo);
           }
           continue;
+        }
+
+        if (pack.tbodyHeightPx != null && isFinite(Number(pack.tbodyHeightPx))) {
+          sumEvlogApplyTbodyHeightPx(root, Number(pack.tbodyHeightPx));
+        } else {
+          var savedAttr = root.getAttribute("data-sum-evlog-tbody-height");
+          if (savedAttr) {
+            var savedPx = parseFloat(savedAttr);
+            if (isFinite(savedPx) && savedPx > 0) sumEvlogApplyTbodyHeightPx(root, savedPx);
+          }
         }
 
         var inpAp = root.querySelector(".sum-evlog__search");
@@ -358,6 +416,11 @@ globalThis.ChimeraSettings.Handlers.Evlog.wire = function (ctx) {
     function sumEvlogHydrateRoot(root) {
       var tbody = root.querySelector("[data-sum-evlog-tbody]");
       if (!tbody) return;
+      var savedAttr = root.getAttribute("data-sum-evlog-tbody-height");
+      if (savedAttr) {
+        var savedPx = parseFloat(savedAttr);
+        if (isFinite(savedPx) && savedPx > 0) sumEvlogApplyTbodyHeightPx(root, savedPx);
+      }
       ensureSearchEmptyRow(tbody);
       ensureDataEmptyRow(tbody);
       sumEvlogRebuildRoot(root);
@@ -472,6 +535,45 @@ globalThis.ChimeraSettings.Handlers.Evlog.wire = function (ctx) {
         tr.classList.add("sum-evlog__row--selected");
         root._sumEvlogAnchor = idx;
         sumEvlogSyncFooter(root);
+      },
+      false
+    );
+    document.body.addEventListener(
+      "pointerdown",
+      function (ev) {
+        var t = ev.target;
+        if (!t || typeof t.closest !== "function") return;
+        var handle = t.closest("[data-sum-evlog-resize-handle]");
+        if (!handle) return;
+        var root = handle.closest("[data-sum-evlog-root]");
+        if (!root || !root.closest("#panel-summarized")) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        var tb = sumEvlogTbodyEl(root);
+        if (!tb) return;
+        var startY = ev.clientY;
+        var startH = sumEvlogReadTbodyHeightPx(root);
+        if (startH == null) startH = sumEvlogDefaultTbodyHeightPx(root);
+        root.classList.add("sum-evlog--resizing");
+        try {
+          handle.setPointerCapture(ev.pointerId);
+        } catch (eCap0) {}
+        function onMove(eMove) {
+          var dy = eMove.clientY - startY;
+          sumEvlogApplyTbodyHeightPx(root, startH + dy);
+        }
+        function onUp(eUp) {
+          root.classList.remove("sum-evlog--resizing");
+          try {
+            handle.releasePointerCapture(eUp.pointerId);
+          } catch (eCap1) {}
+          handle.removeEventListener("pointermove", onMove);
+          handle.removeEventListener("pointerup", onUp);
+          handle.removeEventListener("pointercancel", onUp);
+        }
+        handle.addEventListener("pointermove", onMove);
+        handle.addEventListener("pointerup", onUp);
+        handle.addEventListener("pointercancel", onUp);
       },
       false
     );

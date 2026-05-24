@@ -2,8 +2,8 @@ package operatorapi
 
 // StateResponse is GET /api/ui/state.
 type StateResponse struct {
-	Gateway   GatewayState                    `json:"gateway"`
-	Providers map[string]StateProviderEntry   `json:"providers"`
+	Gateway   GatewayState                  `json:"gateway"`
+	Providers map[string]StateProviderEntry `json:"providers"`
 }
 
 // GatewayState is the gateway section of GET /api/ui/state.
@@ -31,12 +31,12 @@ type GatewayState struct {
 
 // ServiceOverview is gateway.service_overview in GET /api/ui/state.
 type ServiceOverview struct {
-	OverallState     string                 `json:"overall_state"`
-	Gateway          ServiceState           `json:"gateway"`
-	ChimeraBroker    ServiceEndpointState   `json:"chimera-broker"`
+	OverallState       string               `json:"overall_state"`
+	Gateway            ServiceState         `json:"gateway"`
+	ChimeraBroker      ServiceEndpointState `json:"chimera-broker"`
 	ChimeraVectorstore VectorstoreState     `json:"chimera-vectorstore"`
-	ChimeraIndexer   IndexerOverviewState   `json:"chimera-indexer"`
-	RefreshedAt      string                 `json:"refreshed_at"`
+	ChimeraIndexer     IndexerOverviewState `json:"chimera-indexer"`
+	RefreshedAt        string               `json:"refreshed_at"`
 }
 
 // ServiceState is a minimal {state} service block.

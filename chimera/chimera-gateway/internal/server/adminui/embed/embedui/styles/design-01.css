@@ -118,6 +118,10 @@ html[data-theme="design-01"] #panel-summarized .sum-feed-section--workspaces > .
   margin-top: 0;
 }
 
+html[data-theme="design-01"] #panel-summarized .sum-feed-section--conversations > .sg-op-section-head {
+  margin-top: 0;
+}
+
 html[data-theme="design-01"] #panel-summarized .sum-feed-section:not(.sum-feed-section--workspaces) + .sum-feed-section > .sg-op-section-head {
   margin-top: 2.5rem;
 }

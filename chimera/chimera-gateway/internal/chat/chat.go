@@ -63,6 +63,90 @@ func excerptUpstreamErrorForLog(body []byte, errMsg string, max int) string {
 	return excerptOpenAIStyleErrorMessage(body, max)
 }
 
+func clientModelFromBody(body map[string]json.RawMessage) string {
+	if body == nil {
+		return ""
+	}
+	m, ok := body["model"]
+	if !ok || len(m) == 0 {
+		return ""
+	}
+	var s string
+	if err := json.Unmarshal(m, &s); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(s)
+}
+
+func conversationRoutingLogArgs(clientModel, upstreamModel string, attempt, chainLen int, stream bool, outgoingTokens int) []any {
+	args := []any{
+		"msg", naming.MsgConversationRoutingResolved,
+		"upstreamModel", upstreamModel,
+		"attempt", attempt,
+		"chainLen", chainLen,
+		"stream", stream,
+	}
+	if clientModel != "" {
+		args = append(args, "clientModel", clientModel)
+	}
+	if outgoingTokens > 0 {
+		args = append(args, "outgoingTokens", outgoingTokens)
+	}
+	return args
+}
+
+func finishReasonFromChatJSON(stream bool, respBody []byte) string {
+	if len(respBody) == 0 {
+		return ""
+	}
+	if stream {
+		return lastFinishReasonFromSSE(respBody)
+	}
+	var root struct {
+		Choices []struct {
+			FinishReason string `json:"finish_reason"`
+		} `json:"choices"`
+	}
+	if err := json.Unmarshal(respBody, &root); err != nil || len(root.Choices) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(root.Choices[0].FinishReason)
+}
+
+func lastFinishReasonFromSSE(buf []byte) string {
+	var last string
+	for _, line := range bytes.Split(buf, []byte("\n")) {
+		line = bytes.TrimSpace(line)
+		if !bytes.HasPrefix(line, []byte("data:")) {
+			continue
+		}
+		payload := bytes.TrimSpace(bytes.TrimPrefix(line, []byte("data:")))
+		if len(payload) == 0 || bytes.Equal(payload, []byte("[DONE]")) || !json.Valid(payload) {
+			continue
+		}
+		var probe struct {
+			Choices []struct {
+				FinishReason string `json:"finish_reason"`
+				Delta        *struct {
+					FinishReason string `json:"finish_reason"`
+				} `json:"delta"`
+			} `json:"choices"`
+		}
+		if json.Unmarshal(payload, &probe) != nil {
+			continue
+		}
+		for _, ch := range probe.Choices {
+			if ch.FinishReason != "" {
+				last = ch.FinishReason
+			}
+			if ch.Delta != nil && ch.Delta.FinishReason != "" {
+				last = ch.Delta.FinishReason
+			}
+		}
+	}
+	return strings.TrimSpace(last)
+}
+
 func appendFallbackFailure(dst *[]fallbackFailureRecord, upstreamModel string, status int, jsonBody []byte, errMsg string) {
 	*dst = append(*dst, fallbackFailureRecord{
 		UpstreamModel: upstreamModel,
@@ -269,8 +353,8 @@ func ProxyChatCompletion(ctx context.Context, w http.ResponseWriter, baseURL, ap
 		conversationwitness.LogPayloadSample(log, true, mc, "request", out)
 	}
 	if log != nil {
-		log.Info("conversation routed", "msg", naming.MsgConversationRoutingResolved,
-			"upstreamModel", upstreamModel, "attempt", 1, "chainLen", 1, "stream", stream)
+		clientModel := clientModelFromBody(body)
+		log.Info("conversation routed", conversationRoutingLogArgs(clientModel, upstreamModel, 1, 1, stream, est)...)
 	}
 	return proxyChatCompletionPayload(ctx, w, baseURL, apiKey, upstreamModel, stream, out, est, timeout, log, rec, opts)
 }
@@ -614,6 +698,16 @@ func logUpstreamChatResponse(log *slog.Logger, url string, statusCode int, upstr
 		}
 		if ex != "" {
 			args = append(args, "responseBodyExcerpt", ex)
+			if !statusOK(statusCode) {
+				if sum := excerptOpenAIStyleErrorMessage(respBody, 220); sum != "" {
+					args = append(args, "upstreamErrorExcerpt", sum)
+				}
+			}
+		}
+		if statusOK(statusCode) {
+			if fr := finishReasonFromChatJSON(stream, respBody); fr != "" {
+				args = append(args, "finish_reason", fr)
+			}
 		}
 		if p, c, tot, okU := usageFromChatCompletionJSON(respBody); okU {
 			args = append(args,
@@ -698,6 +792,7 @@ func mustRawJSON(v any) json.RawMessage {
 // WithVirtualModelFallback implements src/chat.ts chatWithVirtualModelFallback.
 func WithVirtualModelFallback(ctx context.Context, w http.ResponseWriter, initialUpstream string, fallbackChain []string, baseURL, apiKey string, stream bool, body map[string]json.RawMessage, timeout time.Duration, log *slog.Logger, rec gatewaymetrics.Recorder, guard *providerlimits.Guard, opts *ProxyOpts) {
 	t0 := time.Now()
+	clientModel := clientModelFromBody(body)
 	deliver := func(st int, stream bool, nb int64) {
 		if opts != nil && opts.OnChatDelivery != nil {
 			opts.OnChatDelivery(st, stream, nb, time.Since(t0).Milliseconds())
@@ -791,8 +886,7 @@ func WithVirtualModelFallback(ctx context.Context, w http.ResponseWriter, initia
 						"msg", "chat.routing.resolved",
 						"upstreamModel", upstreamModel, "attempt", i+1, "chainLen", len(chain), "stream", true)
 				}
-				log.Info("conversation routed", "msg", naming.MsgConversationRoutingResolved,
-					"upstreamModel", upstreamModel, "attempt", i+1, "chainLen", len(chain), "stream", true)
+				log.Info("conversation routed", conversationRoutingLogArgs(clientModel, upstreamModel, i+1, len(chain), true, est)...)
 			}
 			deliver(http.StatusOK, true, r.DeliveryBytes)
 			return
@@ -834,8 +928,7 @@ func WithVirtualModelFallback(ctx context.Context, w http.ResponseWriter, initia
 							"msg", "chat.routing.resolved",
 							"upstreamModel", upstreamModel, "attempt", i+1, "chainLen", len(chain), "statusCode", r.Status, "stream", false)
 					}
-					log.Info("conversation routed", "msg", naming.MsgConversationRoutingResolved,
-						"upstreamModel", upstreamModel, "attempt", i+1, "chainLen", len(chain), "statusCode", r.Status, "stream", false)
+					log.Info("conversation routed", conversationRoutingLogArgs(clientModel, upstreamModel, i+1, len(chain), false, est)...)
 				}
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(r.Status)

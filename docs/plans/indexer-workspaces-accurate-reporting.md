@@ -4,7 +4,7 @@
 |-------|-------|
 | **Doc kind** | `feature-plan` |
 | **Owners / areas** | Gateway embed UI (`/ui/logs`), `chimera-indexer`, `servicelogs`, operator SQLite store |
-| **Status** | `draft` |
+| **Status** | `done` |
 | **Targets** | Next gateway + indexer minor after operator-store workspaces are default |
 | **Last updated** | 2026-05-19 |
 | **Supersedes / superseded by** | Complements [`indexer-workspaces-sqlite-gateway-api.md`](indexer-workspaces-sqlite-gateway-api.md) (Phase 1 done; Phases 2–3 still open). UI flicker/summary fixes are in flight separately. |
@@ -15,10 +15,10 @@ Operators should see **one stable workspace card per row in the operator databas
 
 | Phase | Outcome | Status |
 |-------|---------|--------|
-| [Phase 1 — DB-first Workspaces cards](#phase-1--db-first-workspaces-cards) | Workspaces section lists cards from operator SQLite, not orphan log buckets | `todo` |
-| [Phase 2 — Scope metadata from the operator store](#phase-2--scope-metadata-from-the-operator-store) | Titles, paths, and scoped logs use DB fields; logs only enrich progress | `todo` |
-| [Phase 3 — Operator log fidelity and volume](#phase-3--operator-log-fidelity-and-volume) | Critical indexer lifecycle lines and UI copy stay understandable under buffer pressure | `todo` |
-| [Phase 4 — Indexer logging and workspace lifecycle sync](#phase-4--indexer-logging-and-workspace-lifecycle-sync) | Adds, path edits, and deletes propagate to watches and indexing within documented bounds | `todo` |
+| [Phase 1 — DB-first Workspaces cards](#phase-1--db-first-workspaces-cards) | Workspaces section lists cards from operator SQLite, not orphan log buckets | `done` |
+| [Phase 2 — Scope metadata from the operator store](#phase-2--scope-metadata-from-the-operator-store) | Titles, paths, and scoped logs use DB fields; logs only enrich progress | `done` |
+| [Phase 3 — Operator log fidelity and volume](#phase-3--operator-log-fidelity-and-volume) | Critical indexer lifecycle lines and UI copy stay understandable under buffer pressure | `done` |
+| [Phase 4 — Indexer logging and workspace lifecycle sync](#phase-4--indexer-logging-and-workspace-lifecycle-sync) | Adds, path edits, and deletes propagate to watches and indexing within documented bounds | `done` |
 
 ---
 
@@ -80,7 +80,7 @@ Operators should see **one stable workspace card per row in the operator databas
 - With indexer spam in logs but **no** DB workspaces, Workspaces section is empty (or drafts only); chimera-indexer service card still shows aggregate progress.
 - Deleting a workspace in the UI removes its card on next config hydrate (already partially true); card list does not respawn from old log buckets.
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 
@@ -95,7 +95,7 @@ Operators should see **one stable workspace card per row in the operator databas
   - Apply to both DB-driven cards and any log-enriched card tied to a workspace id.
 - **`collectIndexerRunMeta` / card render:** When `workspace_id` is known (DB or log), never show `"—"` for project if DB has `project_id`; same for flavor.
 - **Scoped full log** (`filterEventsForIndexerScopeFullLog`): For `opws\x1e…` buckets, allow matching when project is known from DB even if log lines omit `ingest_project` (pass scope coords from store, not only from `opws` segments).
-- **Session scope registry** in `ctx` (memory, optional `localStorage` keyed by `workspace_id`): last known `{ project_id, flavor_id, paths[] }` updated on each successful `/api/ui/indexer/config` fetch—survives `indexer.run.start` scrolling out of the buffer.
+- **Session scope registry** in `ctx` (memory only, keyed by `workspace_id`): last known `{ project_id, flavor_id, paths[] }` updated on each successful `/api/ui/indexer/config` fetch—survives `indexer.run.start` scrolling out of the buffer.
 - Enforce **non-empty `project_id`** on create/update in API (`handlers.go`) and UI save; reject or migrate legacy empty rows that produce `USER:—` and broken `opws` matching.
 - **Indexer service card** “Managed workspaces” list: already one link per workspace; ensure labels use same `operatorManagedWorkspaceTitleText` (done in recent UI work).
 
@@ -105,7 +105,7 @@ Operators should see **one stable workspace card per row in the operator databas
 - Expanding scoped log shows lines when jobs exist for that scope, without requiring `indexer.run.start` in-window.
 - No workspace row in DB with blank `project_id` after migration guard.
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 
@@ -166,7 +166,7 @@ Operators should see **one stable workspace card per row in the operator databas
 - Operators do not see `USER:—` on newly created workspaces.
 - Delete/add path toasts set expectations on delay (poll + queue drain).
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 
@@ -241,7 +241,7 @@ Document operator expectation: **“Delete workspace stops new indexing immediat
 - **One bad path on disk:** Other paths continue to index; warning visible in logs/UI.
 - Logs for a workspace remain attachable to the correct card via `workspace_id` without `indexer.run.start` in the client tail.
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 

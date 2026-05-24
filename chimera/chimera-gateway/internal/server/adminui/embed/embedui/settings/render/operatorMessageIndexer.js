@@ -75,14 +75,31 @@
     var e = flat.err != null ? String(flat.err) : "";
     if (!e) return "";
     var el = e.toLowerCase().replace(/\s+/g, " ");
-    if (el.indexOf("unknown or expired session") >= 0)
-      return "chunked upload session missing or expired on gateway (restart, long stall, or different host)";
+    if (
+      el.indexOf("session exceeds max_total") >= 0 ||
+      el.indexOf("exceeds max_total_bytes") >= 0 ||
+      el.indexOf("body exceeds rag.ingest.max_bytes") >= 0 ||
+      el.indexOf("file larger than gateway max_ingest_bytes") >= 0
+    )
+      return "file exceeds gateway ingest size limit (rag.ingest.max_bytes)";
+    if (el.indexOf("file exceeds max_file_bytes") >= 0)
+      return "file exceeds indexer max_file_bytes limit";
+    if (el.indexOf("unknown or expired session") >= 0) {
+      var sizeBit = "";
+      var b = flat.bytes != null ? Number(flat.bytes) : NaN;
+      if (!isNaN(b) && b > 0) sizeBit = " (" + formatBytesShort(b) + " file)";
+      return (
+        "chunked upload session lost before finish" +
+        sizeBit +
+        " — gateway restarted, stalled >15 min between chunks, or ingest/chunk limits (check rag.ingest.max_bytes)"
+      );
+    }
     if (
       el.indexOf("/v1/ingest/session/") >= 0 &&
       el.indexOf("/complete") >= 0 &&
       (el.indexOf("404") >= 0 || el.indexOf("status 404") >= 0)
     )
-      return "ingest /complete returned 404 — session gone before upload finished";
+      return "chunked upload /complete returned 404 — session gone (restart, slow/large upload, or ingest size limits)";
     return e.replace(/\s+/g, " ").slice(0, 140);
   }
 

@@ -9,6 +9,8 @@ globalThis.ChimeraSettings.App = globalThis.ChimeraSettings.App || {};
 globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
   var statusEl = ctx.statusEl;
   var formatLogDateTimeLocal = ctx.formatLogDateTimeLocal;
+  var formatLogRelativeAgo = ctx.formatLogRelativeAgo;
+  var toIsoDatetimeAttr = ctx.toIsoDatetimeAttr;
   var entryCache = ctx.entryCache;
   var getViewMode = ctx.getViewMode;
   var getFlat = ctx.getFlat;
@@ -99,6 +101,45 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     if (ctx.adminRoutingEditing) return true;
     if (ctx.adminFallbackEditing) return true;
     if (ctx.adminRouterEditing) return true;
+    if (ctx.workspaceManagedEditId != null) return true;
+    return false;
+  }
+
+  function syncSummarizedModelCache() {
+    var snap = buildSummarizedFeedSnapshot();
+    ctx.lastSummarizedModel = snap.model;
+    ctx.lastSummarizedAggregate = snap.agg;
+  }
+
+  /** Enter/exit admin card edit mode: patch one card (bypasses skipCardIds) or full rebuild. */
+  function refreshAdminCardAfterEditToggle(patchFn) {
+    if (typeof patchFn === "function" && patchFn()) {
+      syncSummarizedModelCache();
+      return;
+    }
+    ctx.summarizedForceFullRebuild = true;
+    refreshSummarizedPanel();
+  }
+
+  /** Skipped cards (e.g. while editing) may still need a rebuild when their hash changes. */
+  function summarizedSkippedCardsHashDelta(prevModel, nextModel) {
+    var skip = summarizedPatchSkipCardIds();
+    if (!prevModel || !nextModel || !prevModel.cards || !nextModel.cards) return false;
+    var prevMap = Object.create(null);
+    var nextMap = Object.create(null);
+    var i;
+    for (i = 0; i < prevModel.cards.length; i++) {
+      var pc = prevModel.cards[i];
+      if (pc && pc.id && pc.kind !== "section-break") prevMap[pc.id] = pc;
+    }
+    for (i = 0; i < nextModel.cards.length; i++) {
+      var nc = nextModel.cards[i];
+      if (nc && nc.id && nc.kind !== "section-break") nextMap[nc.id] = nc;
+    }
+    for (var id in skip) {
+      if (!Object.prototype.hasOwnProperty.call(skip, id) || !skip[id]) continue;
+      if (prevMap[id] && nextMap[id] && prevMap[id].hash !== nextMap[id].hash) return true;
+    }
     return false;
   }
 
@@ -147,6 +188,18 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     if (ctx.adminRoutingEditing) skip["admin-routing-rules"] = true;
     if (ctx.adminFallbackEditing) skip["admin-fallback-chain"] = true;
     if (ctx.adminRouterEditing) skip["admin-router-model"] = true;
+    if (ctx.workspaceManagedEditId != null) {
+      var wsn = ctx.lastIndexerOperatorWorkspacesNested || [];
+      var wi;
+      for (wi = 0; wi < wsn.length; wi++) {
+        var w = wsn[wi];
+        if (!w || w.id == null) continue;
+        if (operatorWorkspaceNumericId(w) === ctx.workspaceManagedEditId) {
+          skip["ix-opws-" + strHash(String(w.id))] = true;
+          break;
+        }
+      }
+    }
     return skip;
   }
 
@@ -470,6 +523,12 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       if (!Patch.shouldUseFullRebuildFromOps(ops)) {
         var replaceCount = Patch.countReplaceCardOps(ops);
         if (replaceCount === 0) {
+          if (summarizedSkippedCardsHashDelta(prevModel, nextModel)) {
+            applySummarizedFullPanelRebuild(psu, nextModel, agg);
+            ctx.lastSummarizedModel = nextModel;
+            ctx.lastSummarizedAggregate = agg;
+            return;
+          }
           ctx.lastSummarizedModel = nextModel;
           ctx.lastSummarizedAggregate = agg;
           return;
@@ -3353,8 +3412,32 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       if (!st) continue;
       if (seen[st.rel]) continue;
       seen[st.rel] = true;
+      if (st.st === "failed" && (f.bytes == null || f.bytes === undefined)) {
+        for (var j = i - 1; j >= 0; j--) {
+          var fj = getFlat(evs[j].parsed);
+          if (String(fj.rel || "").trim() !== st.rel) continue;
+          if (indexerFlatMsg(fj) !== "indexer.job.upload" || fj.bytes == null) continue;
+          var detailFnBytes =
+            globalThis.ChimeraSettings &&
+            ChimeraSettings.Derive &&
+            typeof ChimeraSettings.Derive.shortIngestFailureDetail === "function"
+              ? ChimeraSettings.Derive.shortIngestFailureDetail
+              : globalThis.ChimeraSettings &&
+                  ChimeraSettings.Render &&
+                  typeof ChimeraSettings.Render.shortIngestFailureDetail === "function"
+                ? ChimeraSettings.Render.shortIngestFailureDetail
+                : null;
+          if (detailFnBytes) {
+            st = Object.assign({}, st, {
+              detail: detailFnBytes(Object.assign({}, f, { bytes: fj.bytes }))
+            });
+          }
+          break;
+        }
+      }
       var t = formatLogDateTimeLocal(evs[i].ts);
       rows.push({
+        ts: evs[i].ts,
         t: t || "—",
         rel: st.rel,
         st: st.st,
@@ -3392,11 +3475,17 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
         else if (it.st === "retrying" || it.st === "skipped") lvlClass = "lvl-WARN";
         else if (it.st === "evaluating" || it.st === "uploading") lvlClass = "lvl-DEBUG";
         else if (it.st === "retrieved") lvlClass = "lvl-INFO";
+        var iso = typeof toIsoDatetimeAttr === "function" ? toIsoDatetimeAttr(it.ts) : "";
+        var relAgo = typeof formatLogRelativeAgo === "function" ? formatLogRelativeAgo(it.ts) : "";
         html +=
           "<tr>" +
-          '<td class="sg-op-indexer-recent-time muted">' +
+          '<td class="sum-evlog__cell--time">' +
+          "<time" +
+          (iso ? ' datetime="' + escapeHtml(iso) + '"' : "") +
+          (relAgo ? ' title="' + escapeHtml(relAgo) + '"' : "") +
+          ">" +
           escapeHtml(it.t) +
-          "</td>" +
+          "</time></td>" +
           '<td><span class="log-line-sum__lvl ' +
           escapeHtml(lvlClass) +
           '">' +
@@ -5260,13 +5349,15 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       initialSnapshot: cloneManagedPathRows(snap),
       paths: cloneManagedPathRows(snap)
     };
-    scheduleStoryRebuild();
+    ctx.summarizedForceFullRebuild = true;
+    refreshSummarizedPanel();
   }
 
   function cancelWorkspaceManagedEdit() {
     ctx.workspaceManagedEditId = null;
     ctx.workspaceManagedStaging = null;
-    scheduleStoryRebuild();
+    ctx.summarizedForceFullRebuild = true;
+    refreshSummarizedPanel();
   }
 
   function refreshOperatorIndexerWorkspaceStateFromConfig() {
@@ -5422,6 +5513,7 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     var editToolbar = isEdit ? buildManagedWorkspaceEditToolbarHtml(wsNum) : "";
     var expanded = renderExpandedIndexer(syntheticRun, entryCache, meta, partitionRegistry, {
       kvOpts: { omitFileCountIfZero: true },
+      recentOpts: { omitWhenEmpty: true },
       pathsBlockHtml: pathsBlockHtml,
       configureBtnHtml: configureBtn,
       extraAfterSummaryHtml: editToolbar
@@ -5506,6 +5598,7 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
         omitFileCountIfZero: true,
         workspaceRowId: wsNumIx > 0 ? canonicalWorkspaceRowIdKey(opWsForIx.id) : undefined
       },
+      recentOpts: wsNumIx > 0 ? { omitWhenEmpty: true } : undefined,
       pathsBlockHtml: pathsBlockIx,
       configureBtnHtml: configureBtnIx,
       extraAfterSummaryHtml: editToolbarIx
@@ -6448,6 +6541,7 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       adminRoutingEditing: ctx.adminRoutingEditing,
       adminFallbackEditing: ctx.adminFallbackEditing,
       adminRouterEditing: ctx.adminRouterEditing,
+      workspaceManagedEditId: ctx.workspaceManagedEditId,
       lastIndexerOperatorWorkspacesNested: ctx.lastIndexerOperatorWorkspacesNested
     };
   }
@@ -6486,6 +6580,13 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       workspaceDraftComparableManagedTitle: workspaceDraftComparableManagedTitle,
       operatorManagedWorkspaceTitleText: operatorManagedWorkspaceTitleText,
       operatorWorkspaceCoveredByIndexerRuns: operatorWorkspaceCoveredByIndexerRuns,
+      operatorWorkspaceNumericId: operatorWorkspaceNumericId,
+      indexerWorkspaceEditActiveForMeta: function (meta) {
+        if (ctx.workspaceManagedEditId == null || !ctx.workspaceManagedStaging) return false;
+        var opWs = findOperatorWorkspaceMatchingIndexerMeta(meta);
+        if (!opWs) return false;
+        return operatorWorkspaceNumericId(opWs) === ctx.workspaceManagedEditId;
+      },
       indexerRunQualifiesForWorkspaceCard: function (run, partitionRegistry) {
         if (
           globalThis.ChimeraSettings &&
@@ -6602,6 +6703,16 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
   function summarizedHtmlRenderers() {
     return {
       renderCard: renderSummarizedCardFromModel,
+      conversationsSectionHead: function () {
+        if (typeof ctx.operatorSectionHeadHtml !== "function") {
+          return (
+            '<div class="sum-feed-section-head">' +
+            '<span class="material-symbols-outlined sum-feed-section-icon" aria-hidden="true">forum</span>' +
+            '<span class="sum-feed-section-title sum-section-label">Conversations</span></div>'
+          );
+        }
+        return ctx.operatorSectionHeadHtml("Conversations", "forum");
+      },
       workspacesSectionHead: function () {
         if (typeof ctx.operatorSectionHeadHtml !== "function") {
           return (
@@ -6719,6 +6830,8 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
   ctx.patchAdminRoutingCard = patchAdminRoutingCard;
   ctx.patchAdminFallbackCard = patchAdminFallbackCard;
   ctx.patchAdminRouterModelsCard = patchAdminRouterModelsCard;
+  ctx.syncSummarizedModelCache = syncSummarizedModelCache;
+  ctx.refreshAdminCardAfterEditToggle = refreshAdminCardAfterEditToggle;
   ctx.patchAdminCardsFromPoll = patchAdminCardsFromPoll;
   ctx.fetchTokenLabels = fetchTokenLabels;
   ctx.fetchGatewayMetrics = fetchGatewayMetrics;

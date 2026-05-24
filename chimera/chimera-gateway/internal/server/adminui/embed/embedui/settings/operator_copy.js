@@ -44,6 +44,7 @@
   }
   var aliasToCanonical = {
     "http response": "gateway.http.access",
+    "turn started.": "conversation.received",
     "conversation.routing.resolve": "conversation.routing.resolved",
     "client credentials reloaded from disk.": "gateway.auth.reloaded",
     "chimera-supervisor.indexer.starting": "gateway.supervisor.indexer.starting",
@@ -232,7 +233,7 @@
     "conversation.fallback.exhausted": {summary: "All models in the routing fallback chain were exhausted."},
     "conversation.fallback.model_not_found": {summary: "No model in the fallback chain could serve this request."},
     "rag.query": {summary: "Vector search for this request: querying the index for chunks relevant to the user message.", formatter: "rag_collection", shape: "rag", metricsCounter: "ragQuery"},
-    "conversation.received": {summary: "Inbound chat message recorded for this conversation."},
+    "conversation.received": {summary: "Turn started.", formatter: "conversation_turn_started"},
     "chat.request": {summary: "Chat completion request accepted and prepared for upstream routing.", shape: "chat.request", metricsCounter: "chatReq"},
     "conversation.rag.span": {summary: "RAG retrieval span recorded for this conversation turn (links retrieval to the chat scope).", formatter: "rag_collection"},
     "upstream.models.ok": {summary: "Upstream model catalog responded successfully.", formatter: "upstream_models_ok"},

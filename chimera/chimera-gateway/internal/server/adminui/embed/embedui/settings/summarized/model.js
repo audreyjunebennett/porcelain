@@ -281,7 +281,10 @@ globalThis.ChimeraSettings.Summarized.Model = globalThis.ChimeraSettings.Summari
             runId: run.id,
             title: ixHead,
             doneSeen: !!metaLive.doneSeen,
-            eventCount: seqSig.count
+            eventCount: seqSig.count,
+            workspaceEditing: deps.indexerWorkspaceEditActiveForMeta
+              ? !!deps.indexerWorkspaceEditActiveForMeta(metaLive)
+              : false
           },
           seqSig,
           { run: run, partitionRegistry: partitionRegistry }
@@ -355,13 +358,19 @@ globalThis.ChimeraSettings.Summarized.Model = globalThis.ChimeraSettings.Summari
         seenManagedWsTitle[headTtl] = true;
         if (deps.operatorWorkspaceCoveredByIndexerRuns(ows, byRun, partitionRegistry)) continue;
         var opId = "ix-opws-" + deps.strHash(String(ows.id));
+        var wsNumOp =
+          typeof deps.operatorWorkspaceNumericId === "function" ? deps.operatorWorkspaceNumericId(ows) : 0;
+        var wsEditing =
+          state.workspaceManagedEditId != null &&
+          wsNumOp > 0 &&
+          state.workspaceManagedEditId === wsNumOp;
         cards.push(
           makeCard(
             opId,
             "indexer-operator-workspace",
             SECTION_WORKSPACES,
             headTtl + "\u0001opws-" + deps.canonicalWorkspaceRowIdKey(ows.id),
-            { workspaceId: ows.id, title: headTtl },
+            { workspaceId: ows.id, title: headTtl, editing: wsEditing },
             {},
             { workspace: ows, partitionRegistry: partitionRegistry }
           )

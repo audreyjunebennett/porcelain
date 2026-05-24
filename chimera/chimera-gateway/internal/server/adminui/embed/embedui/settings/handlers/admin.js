@@ -8,6 +8,7 @@ globalThis.ChimeraSettings.Handlers.Admin = globalThis.ChimeraSettings.Handlers.
 
 globalThis.ChimeraSettings.Handlers.Admin.wire = function (ctx) {
   var refreshSummarizedPanel = ctx.refreshSummarizedPanel;
+  var refreshAdminCardAfterEditToggle = ctx.refreshAdminCardAfterEditToggle;
   var scheduleStoryRebuild = ctx.scheduleStoryRebuild;
   var findWorkspaceDraft = ctx.findWorkspaceDraft;
   var appendWorkspaceDraftPath = ctx.appendWorkspaceDraftPath;
@@ -356,16 +357,24 @@ globalThis.ChimeraSettings.Handlers.Admin.wire = function (ctx) {
         return;
       }
 
+      function refreshAdminEditCard(patchFn) {
+        if (typeof refreshAdminCardAfterEditToggle === "function") {
+          refreshAdminCardAfterEditToggle(patchFn);
+          return;
+        }
+        refreshSummarizedPanel();
+      }
+
       if (act === "fallback-configure") {
         ctx.adminFallbackEditing = true;
-        refreshSummarizedPanel();
+        refreshAdminEditCard(ctx.patchAdminFallbackCard);
         return;
       }
 
       if (act === "routing-configure") {
         ctx.adminRoutingEditing = true;
         if (ctx.routingPolicyDraft == null) ctx.routingPolicyDraft = String((((ctx.adminStateCache && ctx.adminStateCache.gateway) || {}).routing_policy_yaml) || "");
-        refreshSummarizedPanel();
+        refreshAdminEditCard(ctx.patchAdminRoutingCard);
         return;
       }
 
@@ -373,13 +382,13 @@ globalThis.ChimeraSettings.Handlers.Admin.wire = function (ctx) {
         ctx.adminRoutingEditing = false;
         ctx.routingPolicyTouched = false;
         ctx.routingPolicyDraft = String((((ctx.adminStateCache && ctx.adminStateCache.gateway) || {}).routing_policy_yaml) || "");
-        refreshSummarizedPanel();
+        refreshAdminEditCard(ctx.patchAdminRoutingCard);
         return;
       }
 
       if (act === "router-configure") {
         ctx.adminRouterEditing = true;
-        refreshSummarizedPanel();
+        refreshAdminEditCard(ctx.patchAdminRouterModelsCard);
         return;
       }
 
@@ -391,14 +400,14 @@ globalThis.ChimeraSettings.Handlers.Admin.wire = function (ctx) {
         ctx.routerThresholdDraft = null;
         ctx.routerEnabledTouched = false;
         ctx.routerEnabledDraft = null;
-        refreshSummarizedPanel();
+        refreshAdminEditCard(ctx.patchAdminRouterModelsCard);
         return;
       }
 
       if (act === "fallback-cancel") {
         ctx.adminFallbackEditing = false;
         ctx.fallbackTouched = false;
-        refreshSummarizedPanel();
+        refreshAdminEditCard(ctx.patchAdminFallbackCard);
         return;
       }
 

@@ -107,4 +107,11 @@ const (
 
 	// Local hidden state directories.
 	IndexerHiddenStateDirTarget = ".locus"
+
+	// Runtime data layout (relative to porcelain runtime root).
+	DirDataTarget                = "data"
+	SupervisorStateDirName       = "chimera-supervisor"
+	DefaultSupervisorStateDir    = "data/chimera-supervisor"
+	DefaultSupervisorPIDBasename = ProductSupervisorName
+	DefaultSupervisorLogBasename = ProductSupervisorName
 )

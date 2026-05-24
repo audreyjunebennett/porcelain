@@ -119,23 +119,67 @@
         return entry.summary || "Model list for routing refreshed";
       }
       if (msg === "chat.chimera-broker.request") {
+        if (opts.forEventLog === true) {
+          var bitsSend = ["Sent prompt to provider"];
+          var modSend = brokerShortTailModel(flat.upstreamModel);
+          if (modSend) bitsSend.push(modSend);
+          var otSend = Number(flat.outgoingTokens != null ? flat.outgoingTokens : flat.outgoing_tokens);
+          var estSend = !isNaN(otSend) && otSend > 0 ? "~" + Math.round(otSend).toLocaleString() + " input tokens (estimated)" : "";
+          if (estSend) bitsSend.push(estSend);
+          return bitsSend.join(" · ") + ".";
+        }
         var bitsRq = ["Relay request"];
         var modRq = brokerShortTailModel(flat.upstreamModel);
         if (modRq) bitsRq.push(modRq);
-        if (flat.stream === true) bitsRq.push("streaming on");
-        else if (flat.stream === false) bitsRq.push("streaming off");
         var ot = Number(flat.outgoingTokens != null ? flat.outgoingTokens : flat.outgoing_tokens);
-        if (!isNaN(ot) && ot > 0) bitsRq.push(ot + " tok out");
+        if (!isNaN(ot) && ot > 0) bitsRq.push(ot + " input tok est");
         return bitsRq.join(" · ");
       }
       if (msg === "chat.chimera-broker.response" || ml === "upstream chat response") {
-        var bitsRes = ["Relay response"];
         var scR = Number(flat.statusCode != null ? flat.statusCode : flat.status_code);
+        var isOk = !isNaN(scR) && scR >= 200 && scR <= 299;
+        if (opts.forEventLog === true) {
+          if (!isOk) {
+            var rawErr =
+              flat.err != null
+                ? String(flat.err)
+                : flat.upstreamErrorExcerpt != null
+                  ? String(flat.upstreamErrorExcerpt)
+                  : flat.responseBodyExcerpt != null
+                    ? String(flat.responseBodyExcerpt)
+                    : "";
+            var errMsg = "";
+            if (globalThis.ChimeraSettings && ChimeraSettings.Render && ChimeraSettings.Render._operatorFormatters) {
+              var fmt = ChimeraSettings.Render._operatorFormatters;
+              if (typeof fmt._extractOpenAIErrorMessage === "function") {
+                errMsg = fmt._extractOpenAIErrorMessage(rawErr);
+              }
+            }
+            if (!errMsg && rawErr) {
+              var msgMatch = rawErr.match(/"message"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+              if (msgMatch && msgMatch[1]) errMsg = msgMatch[1].replace(/\\"/g, '"').trim();
+            }
+            if (!errMsg) errMsg = rawErr.replace(/\s+/g, " ").trim().slice(0, 220);
+            return errMsg ? "Provider rejected request: " + errMsg : "Provider rejected request.";
+          }
+          var bitsOk = ["Provider responded"];
+          var modOk = brokerShortTailModel(flat.upstreamModel);
+          if (modOk) bitsOk.push(modOk);
+          var utOk = usageTokensFromFlat(flat);
+          if (!isNaN(utOk)) bitsOk.push(Math.round(utOk).toLocaleString() + " tokens used (prompt + completion)");
+          var fr =
+            flat.finish_reason != null
+              ? String(flat.finish_reason).trim()
+              : flat.finishReason != null
+                ? String(flat.finishReason).trim()
+                : "";
+          if (fr) bitsOk.push("finish: " + fr);
+          return bitsOk.join(" · ");
+        }
+        var bitsRes = ["Relay response"];
         if (!omitHttpInMsg && !isNaN(scR) && scR > 0) bitsRes.push("HTTP " + scR);
         var ut = usageTokensFromFlat(flat);
         if (!isNaN(ut)) bitsRes.push(ut + " usage tok");
-        var rb = Number(flat.responseBytes != null ? flat.responseBytes : flat.response_bytes);
-        if (!isNaN(rb) && rb >= 0) bitsRes.push(rb + " B");
         return bitsRes.join(" · ");
       }
       if (msg === "chat.chimera-broker.error") {

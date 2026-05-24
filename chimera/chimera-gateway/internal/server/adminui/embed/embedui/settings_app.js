@@ -594,6 +594,7 @@ globalThis.ChimeraSettings.Main = function () {
       return line.length > MAX_PRIMARY_MSG_CHARS ? line.slice(0, MAX_PRIMARY_MSG_CHARS - 1) + "…" : line;
     }
     var opOpts = { forEventLog: forEventLog };
+    if (opts.convEvlogMeta) opOpts.convEvlogMeta = opts.convEvlogMeta;
     if (typeof chimeraVectorstoreCollectionScopeLabelForLogs === "function") {
       opOpts.resolveColl = chimeraVectorstoreCollectionScopeLabelForLogs;
     }

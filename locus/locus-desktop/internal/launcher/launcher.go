@@ -50,7 +50,7 @@ func FilterSupervisorArgs(args []string) []string {
 func LogDir(args []string, runtimeRoot string) string {
 	dir := strings.TrimSpace(os.Getenv(locus.EnvLogDir))
 	if dir == "" {
-		dir = filepath.Join(runtimeRoot, locus.DirData)
+		dir = locus.SupervisorStateDirPath(runtimeRoot)
 	}
 	for i := 0; i < len(args); i++ {
 		raw := strings.TrimSpace(args[i])
@@ -68,7 +68,7 @@ func LogDir(args []string, runtimeRoot string) string {
 		}
 	}
 	if strings.TrimSpace(dir) == "" {
-		dir = filepath.Join(runtimeRoot, locus.DirData)
+		dir = locus.SupervisorStateDirPath(runtimeRoot)
 	}
 	if !isRootedPath(dir) {
 		dir = filepath.Join(runtimeRoot, dir)
@@ -123,7 +123,7 @@ func AcquireLaunchLock(runtimeRoot string, timeout time.Duration) (func(), error
 		timeout = LaunchLockTimeout
 	}
 	lockPath := telemetry.LaunchLockPath(runtimeRoot)
-	if err := os.MkdirAll(locus.RunDirPath(runtimeRoot), 0o755); err != nil {
+	if err := os.MkdirAll(locus.DesktopStateDirPath(runtimeRoot), 0o755); err != nil {
 		return nil, err
 	}
 	deadline := time.Now().Add(timeout)

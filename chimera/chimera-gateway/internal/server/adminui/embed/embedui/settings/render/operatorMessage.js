@@ -27,14 +27,92 @@
     return " Reading collection " + collRaw + ".";
   }
 
-  function gatewayLifecycleErrorHint(errorType) {
-    var e = String(errorType || "").trim().toLowerCase();
-    if (e === "invalid_request") return "Check the request body (model, messages, parameters).";
-    if (e === "invalid_api_key") return "Verify the API key or gateway credentials.";
-    if (e === "gateway_provider_limits") return "Provider or gateway quota blocked this request.";
-    if (e === "gateway_config") return "Gateway routing or configuration could not satisfy this request.";
-    if (e === "gateway_upstream") return "The upstream LLM or network returned an error.";
+  function brokerShortModel(model) {
+    var m = model != null ? String(model).trim() : "";
+    if (!m) return "";
+    var parts = m.split("/");
+    var tail = parts[parts.length - 1] || m;
+    return tail.length > 48 ? tail.slice(0, 46) + "…" : tail;
+  }
+
+  function formatConvDurationMs(ms) {
+    var n = Number(ms);
+    if (isNaN(n) || n < 0) return "";
+    if (n >= 1000) {
+      var sec = n / 1000;
+      return (sec >= 10 ? Math.round(sec) : Math.round(sec * 10) / 10) + " s";
+    }
+    return Math.round(n) + " ms";
+  }
+
+  function formatEstInputTokens(n) {
+    var t = Number(n);
+    if (isNaN(t) || t <= 0) return "";
+    return "~" + Math.round(t).toLocaleString() + " input tokens (estimated)";
+  }
+
+  function formatUsageTokens(n) {
+    var t = Number(n);
+    if (isNaN(t) || t <= 0) return "";
+    return Math.round(t).toLocaleString() + " tokens used (prompt + completion)";
+  }
+
+  function extractOpenAIErrorMessage(raw) {
+    var er = String(raw || "").replace(/\s+/g, " ").trim();
+    if (!er) return "";
+    var msgMatch = er.match(/"message"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+    if (msgMatch && msgMatch[1]) {
+      var inner = msgMatch[1].replace(/\\"/g, '"').replace(/\\n/g, " ").trim();
+      if (inner.length > 220) inner = inner.slice(0, 219) + "…";
+      return inner;
+    }
+    if (er.charAt(0) === "{") {
+      try {
+        var root = JSON.parse(er);
+        if (root && root.error && root.error.message) {
+          var m = String(root.error.message).trim();
+          return m.length > 220 ? m.slice(0, 219) + "…" : m;
+        }
+      } catch (eJson) {
+        /* fall through */
+      }
+    }
+    if (er.length > 220) er = er.slice(0, 219) + "…";
+    return er;
+  }
+
+  function convEvlogMetaFromOpts(opts) {
+    opts = opts || {};
+    return opts.convEvlogMeta && typeof opts.convEvlogMeta === "object" ? opts.convEvlogMeta : null;
+  }
+
+  function virtualModelIdFromMetaOrFlat(flat, meta) {
+    if (flat.virtualModelId != null && String(flat.virtualModelId).trim() !== "") {
+      return String(flat.virtualModelId).trim();
+    }
+    if (flat.virtual_model_id != null && String(flat.virtual_model_id).trim() !== "") {
+      return String(flat.virtual_model_id).trim();
+    }
+    if (meta && meta.routingSummary && meta.routingSummary.virtualModelId) {
+      return meta.routingSummary.virtualModelId;
+    }
+    var cache = globalThis.gatewayOverviewCache;
+    if (cache && cache.virtual_model_id != null && String(cache.virtual_model_id).trim() !== "") {
+      return String(cache.virtual_model_id).trim();
+    }
     return "";
+  }
+
+  function isRoutingPassthrough(flat, meta) {
+    if (flat.routingPassthrough === true || flat.routing_passthrough === true) return true;
+    var rs = meta && meta.routingSummary ? meta.routingSummary : null;
+    var client = flat.clientModel != null ? String(flat.clientModel).trim() : rs && rs.clientModel ? rs.clientModel : "";
+    var upstream = flat.upstreamModel != null ? String(flat.upstreamModel).trim() : rs && rs.upstream ? rs.upstream : "";
+    var chain = flat.chainLen != null ? Number(flat.chainLen) : rs ? Number(rs.chainLen) : NaN;
+    var virtualId = virtualModelIdFromMetaOrFlat(flat, meta);
+    if (client && virtualId && client !== virtualId && client === upstream) return true;
+    if (!isNaN(chain) && chain <= 1 && client && upstream && client === upstream) return true;
+    return false;
   }
 
   function summarizeRagRetrieveErr(rawErr) {
@@ -83,6 +161,21 @@
   }
 
   formatters.rag_collection = function (flat, entry) {
+      var slug = entry.slug || "";
+      if (slug === "conversation.rag.span") {
+        var collLab = "";
+        var collRaw = flat.collection != null ? String(flat.collection).trim() : "";
+        if (collRaw && typeof ragCollectionLabelForUi === "function") {
+          collLab = ragCollectionLabelForUi(collRaw);
+        }
+        if (!collLab && collRaw) {
+          var dash = collRaw.indexOf("-_-");
+          collLab = dash >= 0 ? collRaw.slice(0, dash) : collRaw;
+        }
+        return collLab
+          ? "Searched collection " + collLab + " · context attached for this turn."
+          : "Searched collection · context attached for this turn.";
+      }
       var base = entry.summary || "";
       return base + ragCollectionSuffix(flat);
   };
@@ -92,38 +185,86 @@
     var sum = summarizeRagRetrieveErr(rawEr);
     return sum ? baseErr + " Cause: " + sum : baseErr;
   };
-  formatters.conversation_errored = function (flat, entry) {
-      var baseConvErr = entry.summary || "";
-      var scErr = flat.statusCode != null ? Number(flat.statusCode) : NaN;
-      var etErr = flat.errorType != null ? String(flat.errorType).trim() : "";
-      var bitsErr = [];
-      if (!isNaN(scErr)) bitsErr.push("HTTP " + Math.round(scErr));
-      var hintErr = gatewayLifecycleErrorHint(etErr);
-      if (hintErr) bitsErr.push(hintErr);
-      return bitsErr.length ? baseConvErr + " · " + bitsErr.join(" · ") : baseConvErr;
+  formatters.conversation_turn_started = function (flat, entry, opts) {
+      var meta = convEvlogMetaFromOpts(opts);
+      var turnIdx =
+        flat.turn_index != null && !isNaN(Number(flat.turn_index))
+          ? Math.round(Number(flat.turn_index))
+          : meta && meta.turnIndex != null
+            ? meta.turnIndex
+            : null;
+      var client = flat.clientModel != null ? String(flat.clientModel).trim() : "";
+      var msgCount = flat.message_count != null ? Number(flat.message_count) : flat.messageCount != null ? Number(flat.messageCount) : NaN;
+      var bits = [];
+      if (turnIdx != null) bits.push("Turn " + turnIdx + " started");
+      else bits.push("Turn started");
+      var showNew = meta ? meta.isNewConversation : turnIdx === 1;
+      if (showNew) bits.push("new conversation");
+      if (client) bits.push("client asked for " + client);
+      if (!isNaN(msgCount) && msgCount > 0) {
+        bits.push(msgCount + " message" + (msgCount === 1 ? "" : "s") + " in prompt");
+      }
+      return bits.join(" · ") + ".";
   };
-  formatters.conversation_delivered = function (flat, entry) {
-      var baseD = entry.summary || "";
-      var sc = flat.statusCode != null ? Number(flat.statusCode) : NaN;
+  formatters.conversation_errored = function (flat, entry, opts) {
+      opts = opts || {};
+      if (opts.forEventLog !== true) {
+        var scErr = flat.statusCode != null ? Number(flat.statusCode) : NaN;
+        var msLegacy = flat.total_ms != null ? Number(flat.total_ms) : flat.totalMs != null ? Number(flat.totalMs) : NaN;
+        var bitsLegacy = ["This conversation turn ended with an error (no successful completion delivered)."];
+        if (!isNaN(scErr)) bitsLegacy.push("HTTP " + Math.round(scErr));
+        if (!isNaN(msLegacy) && msLegacy >= 0) bitsLegacy.push(Math.round(msLegacy) + " ms");
+        return bitsLegacy.join(" · ");
+      }
       var ms = flat.total_ms != null ? Number(flat.total_ms) : flat.totalMs != null ? Number(flat.totalMs) : NaN;
-      var bitsD = [];
-      if (!isNaN(sc)) bitsD.push("HTTP " + Math.round(sc));
-      if (!isNaN(ms) && ms >= 0) bitsD.push(Math.round(ms) + " ms");
-      return bitsD.length ? baseD + " · " + bitsD.join(" · ") : baseD;
+      var dur = formatConvDurationMs(ms);
+      return dur ? "Turn failed · " + dur + "." : "Turn failed.";
   };
-  formatters.conversation_routing = function (flat, entry) {
-      var partsR = [entry.summary || "Routing resolved: upstream model chosen for this completion."];
-      var modR = flat.upstreamModel != null ? String(flat.upstreamModel).trim() : "";
-      if (modR) partsR.push("Model " + modR);
-      var att = flat.attempt != null ? Number(flat.attempt) : NaN;
-      var chain = flat.chainLen != null ? Number(flat.chainLen) : NaN;
-      if (!isNaN(att) && !isNaN(chain) && chain > 1) partsR.push("attempt " + Math.round(att) + "/" + Math.round(chain));
-      return partsR.join(" · ");
+  formatters.conversation_delivered = function (flat, entry, opts) {
+      opts = opts || {};
+      var ms = flat.total_ms != null ? Number(flat.total_ms) : flat.totalMs != null ? Number(flat.totalMs) : NaN;
+      var dur = formatConvDurationMs(ms);
+      if (opts.forEventLog === true) {
+        return dur ? "Turn completed · " + dur + " · response delivered to client." : "Turn completed · response delivered to client.";
+      }
+      var bitsD = ["Completion delivered to the client (this turn finished successfully)."];
+      if (!isNaN(ms) && ms >= 0) bitsD.push(Math.round(ms) + " ms");
+      return bitsD.join(" · ");
+  };
+  formatters.conversation_routing = function (flat, entry, opts) {
+      var meta = convEvlogMetaFromOpts(opts);
+      var rs = meta && meta.routingSummary ? meta.routingSummary : null;
+      var upstream = brokerShortModel(flat.upstreamModel || (rs && rs.upstream));
+      var client =
+        flat.clientModel != null ? String(flat.clientModel).trim() : rs && rs.clientModel ? rs.clientModel : "";
+      var att = flat.attempt != null ? Number(flat.attempt) : rs ? Number(rs.attempt) : NaN;
+      var chain = flat.chainLen != null ? Number(flat.chainLen) : rs ? Number(rs.chainLen) : NaN;
+      var est = flat.outgoingTokens != null ? Number(flat.outgoingTokens) : flat.outgoing_tokens != null ? Number(flat.outgoing_tokens) : rs && !isNaN(Number(rs.outgoingTokens)) ? Number(rs.outgoingTokens) : NaN;
+
+      if (isRoutingPassthrough(flat, meta)) {
+        var passBits = ["Client model used as-is (not a configured virtual model)"];
+        if (client || upstream) passBits.push("sent `" + (client || upstream) + "` to provider");
+        var estPass = formatEstInputTokens(est);
+        if (estPass) passBits.push(estPass);
+        return passBits.join(" · ") + ".";
+      }
+
+      var virtualId = virtualModelIdFromMetaOrFlat(flat, meta) || client;
+      var partsR = ["Routed virtual model " + virtualId + " → " + (upstream || "?")];
+      if (!isNaN(att) && !isNaN(chain) && chain > 0) {
+        partsR.push("attempt " + Math.round(att) + " of " + Math.round(chain));
+      }
+      if (rs && rs.skipped && rs.skipped.length) {
+        var skipNames = [];
+        var si;
+        for (si = 0; si < rs.skipped.length; si++) skipNames.push(rs.skipped[si].model);
+        var skipReason = rs.skipped[0].reason === "tpm" ? "provider TPM quota" : rs.skipped[0].reason || "quota";
+        partsR.push("skipped " + rs.skipped.length + " (" + skipReason + "): " + skipNames.join(", "));
+      }
+      return partsR.join(" · ") + ".";
   };
   formatters.conversation_broker_started = function (flat, entry) {
-      var baseUp = entry.summary || "";
-      var modUp = flat.upstreamModel != null ? String(flat.upstreamModel).trim() : "";
-      return modUp ? baseUp + " Model: " + modUp + "." : baseUp;
+      return "";
   };
   formatters.ingest_complete = function (flat, entry) {
       var bitsIc = [entry.summary || "Ingest finished — document indexed."];
@@ -313,4 +454,5 @@
   ChimeraSettings.Render.resolveCanonicalSlug = resolveCanonicalSlug;
   ChimeraSettings.Render.operatorMessage = operatorMessage;
   ChimeraSettings.Render.operatorFriendlyGatewayMsg = operatorMessage;
+  formatters._extractOpenAIErrorMessage = extractOpenAIErrorMessage;
 })();

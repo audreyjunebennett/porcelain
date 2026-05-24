@@ -63,10 +63,13 @@ globalThis.ChimeraSettings.Summarized.Render = globalThis.ChimeraSettings.Summar
 
     var convCards = sortCards(cardsInSection(model, SECTION_CONVERSATIONS), true);
     if (convCards.length) {
-      body +=
-        '<div class="sum-feed-section"><div class="sum-section-label sum-feed-section-title">Conversations</div>' +
-        renderCardList(convCards, renderers) +
-        "</div>";
+      body += '<div class="sum-feed-section sum-feed-section--conversations">';
+      if (renderers.conversationsSectionHead) {
+        body += renderers.conversationsSectionHead();
+      } else {
+        body += '<div class="sum-section-label sum-feed-section-title">Conversations</div>';
+      }
+      body += renderCardList(convCards, renderers) + "</div>";
     }
 
     var wsCards = sortCards(cardsInSection(model, SECTION_WORKSPACES), false);

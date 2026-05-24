@@ -419,7 +419,7 @@ The virtual model id stays `**Chimera-<gateway.semver>`** (set in `config/gatewa
 
 **Logs UI (`/ui/logs`)**
 
-- Views: **Detailed**, **Summary**, **Conversations**, **Subsystems**; preferred view stored in `localStorage`.
+- Views: **Detailed**, **Summary**, **Conversations**, **Subsystems**.
 - `wrapResponse` logging fix so logged **statusCode** matches the handler outcome on early errors.
 
 **Optional conversation merge (`conversation_merge` in `gateway.yaml`)**

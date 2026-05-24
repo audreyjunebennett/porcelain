@@ -108,7 +108,7 @@ Use this table when replacing the fixed trio. **Roster** = code that defines whi
 
 - New module e.g. `settings/providers/catalog.js` exporting `ADMIN_PROVIDER_CATALOG` and `lookupProviderSpec(id)`.
 - Replace `ADMIN_PROVIDER_PATCH_SPECS` usages with `visibleIds.map(lookup)` (or equivalent on `ctx`).
-- `ctx.adminVisibleProviderIds` (array) + optional `localStorage` persistence key documented in module header.
+- `ctx.adminVisibleProviderIds` (array) documented in module header.
 - Initial visible set policy implemented (see [Open questions](#open-questions)).
 - `summarizedDirtyRouting.js`: derive provider ids from visible list or catalog, not `ADMIN_PROVIDER_IDS` constant.
 - `adminProviderKeyDraft` becomes a string-keyed map (`draft[id]`), not `{ groq, gemini }`.
@@ -204,7 +204,7 @@ Use this table when replacing the fixed trio. **Roster** = code that defines whi
 
 ## Open questions answered
 
-1. **Initial visible providers:** seed from broker `governance/providers`; Do not use or restore from `localStorage`.
+1. **Initial visible providers:** seed from broker `governance/providers`.
 2. **Catalog source of truth:** Use `GET /api/ui/providers/catalog` so Go BFF and UI stay aligned. Remove the embed JS.
 3. **Removing a card:** When a provider card is removed it should also DELETE provider from broker config. Currently there is no provider card removal path only managment of the API keys. But when the card is removed when there are API keye it would remove the provider from the broker config.
 4. **Health strip on service cards:** show only configured providers.

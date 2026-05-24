@@ -30,11 +30,13 @@ formatters:
   conversation_broker_started:
     description: upstreamModel for broker POST
   conversation_delivered:
-    description: HTTP status + total_ms tail
+    description: Turn completed + duration in event log
   conversation_errored:
-    description: HTTP status + gateway lifecycle error hint
+    description: Turn failed + duration in event log
   conversation_routing:
-    description: upstreamModel, attempt/chainLen
+    description: virtual vs passthrough routing summary
+  conversation_turn_started:
+    description: turn_index, clientModel, message_count
   gateway_auth_reloaded:
     description: Optional Active keys count suffix
   gateway_health_upstream:
@@ -233,8 +235,10 @@ messages:
     metrics_counter: ragQuery
     gallery_preview: 'Vector search for this request: querying the index for chunks relevant to the user message.'
   - slug: conversation.received
-    summary: Inbound chat message recorded for this conversation.
-    gallery_preview: Inbound chat message recorded for this conversation.
+    formatter: conversation_turn_started
+    aliases:
+      - Turn started.
+    gallery_preview: Turn started.
   - slug: chat.request
     summary: Chat completion request accepted and prepared for upstream routing.
     shape: chat.request

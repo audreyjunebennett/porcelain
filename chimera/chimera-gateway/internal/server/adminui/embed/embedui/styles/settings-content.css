@@ -132,13 +132,37 @@
   table-layout: fixed;
 }
 .sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent col.indexer-recent-col-time {
-  width: 19ch;
+  width: 21ch;
 }
+/* Longest status label is "evaluating" (10ch); badge padding included */
 .sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent col.indexer-recent-col-status {
-  width: calc(10ch + 0.7rem);
+  width: calc(10ch + 0.55rem);
+}
+.sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent col.indexer-recent-col-path {
+  width: auto;
 }
 .sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent col.indexer-recent-col-detail {
-  width: 13rem;
+  width: 8rem;
+  max-width: 28%;
+}
+.sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent .sum-evlog__cell--time {
+  width: 21ch;
+  max-width: 21ch;
+  box-sizing: border-box;
+}
+.sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent .sum-evlog__cell--time time {
+  display: inline-block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--embed-text-mono-dt);
+  font-variant-numeric: tabular-nums;
+}
+.sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent td:nth-child(3) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Conversation card — segmented lifecycle bar (gapped segments + labels in expanded body) */

@@ -51,12 +51,9 @@ Untangle the operator log page so future changes are safe. Split CSS, HTML, and 
   - `/api/ui/metrics` (gateway metrics snapshot)
   - `/api/ui/tokens` (token labels for tenant ids)
 
-### Log view modes (URL + localStorage)
+### Log view modes (URL)
+
 - View modes: `summarized`, `raw` (StructuredLogs), `raw_logs` (Raw Logs)
-- LocalStorage keys:
-  - `chimera_logs_view_mode`
-  - `chimera_logs_flt_app`
-  - `chimera_logs_flt_level`
 - URL params (must remain compatible): `view`, `principal`, `conversation|conv`, `seq`, `embed`
 
 ### Known issue(s)

@@ -384,6 +384,37 @@
   padding: 0.15rem 0.32rem;
   box-sizing: border-box;
   min-height: 1.65rem;
+  position: relative;
+}
+.sum-evlog__resize-handle {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -0.35rem;
+  height: 0.65rem;
+  cursor: ns-resize;
+  touch-action: none;
+  z-index: 3;
+}
+.sum-evlog__resize-handle::after {
+  content: "";
+  display: block;
+  width: 2.25rem;
+  height: 3px;
+  margin: 0.28rem auto 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--embed-text-muted) 55%, transparent);
+  opacity: 0.85;
+  transition: opacity 0.12s ease, background-color 0.12s ease;
+}
+.sum-evlog__resize-handle:hover::after,
+.sum-evlog--resizing .sum-evlog__resize-handle::after {
+  opacity: 1;
+  background: color-mix(in srgb, var(--embed-link-accent) 70%, var(--embed-text-muted));
+}
+.sum-evlog--resizing,
+.sum-evlog--resizing * {
+  user-select: none !important;
 }
 .sum-evlog__footer-left {
   flex: 1 1 0;

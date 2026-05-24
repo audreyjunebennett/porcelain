@@ -668,15 +668,15 @@ func TestLogsDerive_chimeraBrokerOperatorLine(t *testing.T) {
 		},
 		{
 			flat: map[string]any{"msg": "chat.chimera-broker.request", "upstreamModel": "groq/openai/gpt-oss-20b", "stream": true, "outgoingTokens": 128},
-			want: "Relay request · gpt-oss-20b · streaming on · 128 tok out",
+			want: "Relay request · gpt-oss-20b · 128 input tok est",
 		},
 		{
 			flat: map[string]any{"msg": "chat.chimera-broker.response", "statusCode": 200, "usageTotalTokens": 50, "responseBytes": 1200},
-			want: "Relay response · HTTP 200 · 50 usage tok · 1200 B",
+			want: "Relay response · HTTP 200 · 50 usage tok",
 		},
 		{
 			flat: map[string]any{"msg": "upstream chat response", "statusCode": 201, "usageTotalTokens": 1, "responseBytes": 10},
-			want: "Relay response · HTTP 201 · 1 usage tok · 10 B",
+			want: "Relay response · HTTP 201 · 1 usage tok",
 		},
 		{
 			flat: map[string]any{"msg": "chat.routing.attempt", "attempt": 2, "upstreamModel": "x/y/z", "chainLen": 3},
@@ -720,8 +720,8 @@ func TestLogsDerive_chimeraBrokerOperatorLine(t *testing.T) {
 			want: "Inbound · GET /v1/models · 3 ms",
 		},
 		{
-			flat: map[string]any{"msg": "chat.chimera-broker.response", "statusCode": 200, "usageTotalTokens": 50, "responseBytes": 1200},
-			want: "Relay response · 50 usage tok · 1200 B",
+			flat: map[string]any{"msg": "chat.chimera-broker.response", "statusCode": 200, "usageTotalTokens": 50, "responseBytes": 1200, "finish_reason": "stop"},
+			want: "Provider responded · 50 tokens used (prompt + completion) · finish: stop",
 		},
 	}
 	opts := map[string]any{"forEventLog": true}
@@ -1826,7 +1826,7 @@ func TestLogsDerive_indexerPresent_proseStateAndStats(t *testing.T) {
 	if strings.Contains(fs, "/v1/ingest/session") {
 		t.Fatalf("ingest failure prose should not repeat raw HTTP path: %q", fs)
 	}
-	if !strings.Contains(fs, "chunked upload session missing") {
+	if !strings.Contains(fs, "chunked upload session lost") {
 		t.Fatalf("ingest failure prose: %q", fs)
 	}
 	waitFlat := map[string]any{

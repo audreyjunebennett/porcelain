@@ -4,9 +4,9 @@ import "encoding/json"
 
 // RoutingRuleSummary is one rule in routing policy summary JSON.
 type RoutingRuleSummary struct {
-	Name              string `json:"name"`
-	InitialModel      string `json:"initial_model"`
-	MinMessageChars   *int   `json:"min_message_chars,omitempty"`
+	Name            string `json:"name"`
+	InitialModel    string `json:"initial_model"`
+	MinMessageChars *int   `json:"min_message_chars,omitempty"`
 }
 
 // RoutingPolicySummary is the routing object inside generate/preview responses.
@@ -101,7 +101,7 @@ type RoutingFallbackChainSaveRequest struct {
 
 // RoutingFallbackChainSaveResponse is POST /api/ui/routing/fallback_chain success JSON.
 type RoutingFallbackChainSaveResponse struct {
-	OK             bool     `json:"ok"`
-	Saved          bool     `json:"saved"`
-	FallbackChain  []string `json:"fallback_chain"`
+	OK            bool     `json:"ok"`
+	Saved         bool     `json:"saved"`
+	FallbackChain []string `json:"fallback_chain"`
 }

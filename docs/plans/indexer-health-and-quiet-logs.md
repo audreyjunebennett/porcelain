@@ -4,7 +4,7 @@
 |-------|-------|
 | **Doc kind** | `feature-plan` |
 | **Owners / areas** | Gateway (`indexerapi`, `/health`, catalog), `chimera-indexer`, operator logs (`servicelogs`, embed UI) |
-| **Status** | `draft` |
+| **Status** | `done` |
 | **Targets** | Gateway + indexer minor after v0.3 operator-log work |
 | **Last updated** | 2026-05-22 |
 | **Supersedes / superseded by** | Extends [`indexer-workspaces-accurate-reporting.md`](indexer-workspaces-accurate-reporting.md) Phase 3 (log volume); complements [`indexer.md`](indexer.md) failure handling |
@@ -15,10 +15,10 @@ When embedding or vector storage is unavailable, the indexer should **pause for 
 
 | Phase | Outcome | Status |
 |-------|---------|--------|
-| [Phase 1 — Rich indexer health from the gateway](#phase-1--rich-indexer-health-from-the-gateway) | `/v1/indexer/storage/health` tells the indexer why ingest is blocked (vectorstore and/or embedding) | `todo` |
-| [Phase 2 — Indexer recovery and global embed gate](#phase-2--indexer-recovery-and-global-embed-gate) | Recovery waits for embed readiness; workers stop hammering ingest when health says embed is down | `todo` |
-| [Phase 3 — Quiet INFO logs and batched skip summaries](#phase-3--quiet-info-logs-and-batched-skip-summaries) | Per-file noise at DEBUG; INFO shows periodic skip batches only while work is in flight | `todo` |
-| [Phase 4 — Edge-triggered scope status and log retention](#phase-4--edge-triggered-scope-status-and-log-retention) | Scope cards update on meaningful changes; lifecycle lines survive indexer log trimming | `todo` |
+| [Phase 1 — Rich indexer health from the gateway](#phase-1--rich-indexer-health-from-the-gateway) | `/v1/indexer/storage/health` tells the indexer why ingest is blocked (vectorstore and/or embedding) | `done` |
+| [Phase 2 — Indexer recovery and global embed gate](#phase-2--indexer-recovery-and-global-embed-gate) | Recovery waits for embed readiness; workers stop hammering ingest when health says embed is down | `done` |
+| [Phase 3 — Quiet INFO logs and batched skip summaries](#phase-3--quiet-info-logs-and-batched-skip-summaries) | Per-file noise at DEBUG; INFO shows periodic skip batches only while work is in flight | `done` |
+| [Phase 4 — Edge-triggered scope status and log retention](#phase-4--edge-triggered-scope-status-and-log-retention) | Scope cards update on meaningful changes; lifecycle lines survive indexer log trimming | `done` |
 
 ---
 
@@ -124,7 +124,7 @@ Keep top-level `ok`, `status`, `tenant_id`, `backend`, `url`. Add a **`checks`**
 - With embedding model not listed in chimera-broker `/v1/models`, health reports `embed_model_not_in_catalog` even if provider process is up.
 - Indexer recovery poll logs include embed reason fields; no code change yet to pause behavior (Phase 2).
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 
@@ -165,7 +165,7 @@ Keep top-level `ok`, `status`, `tenant_id`, `backend`, `url`. Add a **`checks`**
 - Start Ollama: within one health poll, gate opens, queue drain resumes, ingests succeed.
 - Qdrant down: gate closed with `vectorstore_unreachable`; embed check may be skipped or marked unknown in JSON.
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 

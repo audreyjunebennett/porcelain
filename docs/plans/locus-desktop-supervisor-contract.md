@@ -100,10 +100,10 @@ This section is the implementation contract for Phase 2+ work. Changes to these 
 - **Runtime directory contract (desktop bundle launch)**
   - Desktop binary output path is `porcelain/locus/bin`.
   - On double-click launch, desktop resolves runtime root as parent of the binary directory.
-  - Runtime-root-relative directories are canonical for `config`, `data`, `logs`, and `run`.
-  - PID/lock files are stored under runtime-root `run`.
+  - Runtime-root-relative directories are canonical for `config` and `data`.
+  - Desktop launcher state (lock, launch metadata, lifecycle trace) is stored under `data/locus-desktop/`.
 
-- **Supervisor log mirror (`data/locus-desktop-supervisor.log`)**
+- **Supervisor log mirror (`data/chimera-supervisor/locus-desktop-supervisor.log`)**
   - When desktop starts supervisor, child stdout/stderr are tee'd to this append-only file (see `locus/locus-desktop/internal/launcher/launcher.go`).
   - Each line is **normalized JSON** (`_chimera_norm: 1`) produced by per-service `*line` normalizers and a **lossless reorder** on supervisor ingest ([`log-supervisor-normalization-fidelity.md`](log-supervisor-normalization-fidelity.md)).
   - Structured fields (`progress_detail`, `method`, `path`, `collection`, indexer `rel`, `queue_depth`, etc.) must survive the wrapper → supervisor double-normalize path; bare `msg`-only rows indicate a regression.
@@ -194,8 +194,8 @@ This section is the implementation contract for Phase 2+ work. Changes to these 
 - Define canonical bundle/runtime layout for:
   - desktop binary output path under `porcelain/locus/bin`.
   - when launched by double-click, desktop resolves runtime root as the parent directory of the binary directory.
-  - `config`, `data`, `logs`, and `run` paths are resolved from that runtime root.
-  - PID/lock state is stored under runtime-root `run`.
+  - `config` and `data` paths are resolved from that runtime root.
+  - Desktop launcher lock/metadata is stored under `data/locus-desktop/`.
 - Update packaging scripts and install docs to reflect the launcher contract and path resolution behavior.
 - Define platform-specific path and permission constraints (Windows/macOS/Linux) for launching supervisor from desktop bundle locations.
 - Define integrity checks for missing or incompatible supervisor artifact at launch time.
@@ -206,7 +206,7 @@ This section is the implementation contract for Phase 2+ work. Changes to these 
 - Packaged desktop artifacts include or reliably resolve the supervisor binary per contract.
 - Installer and runbook docs match actual runtime behavior.
 - Missing/incompatible artifacts fail fast with clear remediation guidance.
-- Double-click launch path uses runtime-root-relative config/data/log/run directories predictably.
+- Double-click launch path uses runtime-root-relative config and data directories predictably.
 
 **Status:** `done`
 
@@ -248,7 +248,7 @@ This section is the implementation contract for Phase 2+ work. Changes to these 
 3. Version policy: strict version gating, but compatibility checks should not churn on commit SHA-only build differences.
 4. Launch surface: supervisor startup flags/env are pass-through from desktop in v1.
 5. Attach-mode ownership: read-only lifecycle control (no stop/restart of externally-owned supervisor).
-6. Runtime directory contract: desktop binary writes to `porcelain/locus/bin`; on double-click launch, runtime paths resolve from the parent directory (`config`, `data`, `logs`, `run`).
+6. Runtime directory contract: desktop binary writes to `porcelain/locus/bin`; on double-click launch, runtime paths resolve from the parent directory (`config`, `data`; desktop launcher state under `data/locus-desktop/`).
 7. Unreachable UX: desktop must open and show a "cannot connect to supervisor" page when connect/start fails.
 8. Scope boundary: remote supervisor targets are out of scope for v1 (local-only).
 

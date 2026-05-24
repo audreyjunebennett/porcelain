@@ -67,6 +67,15 @@ func LogPayloadSample(log *slog.Logger, emit bool, maxRunes int, kind string, pa
 	)
 }
 
+// RequestMessageCount returns the number of chat messages in the body (for operator turn-start lines).
+func RequestMessageCount(body map[string]json.RawMessage) int {
+	msgCount, _, _, _, ok := requestWitnessStats(body)
+	if !ok {
+		return 0
+	}
+	return msgCount
+}
+
 // LogRequestWitness logs conversation.request.witness from the chat completion JSON body map.
 func LogRequestWitness(log *slog.Logger, body map[string]json.RawMessage) {
 	if log == nil || body == nil {

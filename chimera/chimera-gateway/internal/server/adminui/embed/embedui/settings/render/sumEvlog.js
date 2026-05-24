@@ -192,7 +192,9 @@ globalThis.ChimeraSettings.Render.mountSumEvlog = function (ctx) {
         escapeHtml(tl.replace(/_/g, " ")) +
         "</span>";
     }
-    var msg = escapeHtml(primaryLogMessage(parsed, ev.text, { forEventLog: true }));
+    var msgOpts = { forEventLog: true };
+    if (opts.convEvlogMeta) msgOpts.convEvlogMeta = opts.convEvlogMeta;
+    var msg = escapeHtml(primaryLogMessage(parsed, ev.text, msgOpts));
     return badgeHtml + tierHtml + msg;
   }
 
@@ -306,6 +308,7 @@ globalThis.ChimeraSettings.Render.mountSumEvlog = function (ctx) {
       tbodyInner +
       "</tbody></table></div>" +
       '<div class="sum-evlog__footer-row">' +
+      '<div class="sum-evlog__resize-handle" data-sum-evlog-resize-handle role="separator" aria-orientation="horizontal" aria-label="Drag to resize table height" tabindex="-1"></div>' +
       '<div class="sum-evlog__footer-left">' +
       '<p class="sum-evlog__footer" data-sum-evlog-oldest></p></div>' +
       '<div class="sum-evlog__footer-right">' +
@@ -319,7 +322,8 @@ globalThis.ChimeraSettings.Render.mountSumEvlog = function (ctx) {
   function sumEvlogBuildTbodyFromConvEvents(evs, turnGroups, cardScope) {
     var parts = [];
     var rowIdx = 0;
-    function pushEvent(evT) {
+    function pushEvent(evT, summaryExtra) {
+      summaryExtra = summaryExtra || {};
       var evLine = {
         parsed: evT.parsed,
         text: evT.text != null && evT.text !== undefined ? evT.text : "",
@@ -328,30 +332,43 @@ globalThis.ChimeraSettings.Render.mountSumEvlog = function (ctx) {
         seq: evT.seq
       };
       var bd = inferServiceBadge(evLine);
-      parts.push(
-        sumEvlogRowTrHtml(evLine, cardScope, rowIdx, bd, {
-          convJoinTier: evT.convJoinTier,
-          vectorstoreSpanID: evT.vectorstoreSpanID,
-          vectorstoreTurnIndex: evT.vectorstoreTurnIndex
-        })
-      );
+      var rowOpts = {
+        convJoinTier: evT.convJoinTier,
+        vectorstoreSpanID: evT.vectorstoreSpanID,
+        vectorstoreTurnIndex: evT.vectorstoreTurnIndex
+      };
+      if (evT.convEvlogMeta) rowOpts.convEvlogMeta = evT.convEvlogMeta;
+      if (summaryExtra.convEvlogMeta) rowOpts.convEvlogMeta = summaryExtra.convEvlogMeta;
+      parts.push(sumEvlogRowTrHtml(evLine, cardScope, rowIdx, bd, rowOpts));
       rowIdx++;
+    }
+    function prepareTurnEvents(turnEvents) {
+      if (
+        globalThis.ChimeraSettings &&
+        ChimeraSettings.Derive &&
+        typeof ChimeraSettings.Derive.convEvlogPrepareTurnEvents === "function"
+      ) {
+        return ChimeraSettings.Derive.convEvlogPrepareTurnEvents(turnEvents, getFlat);
+      }
+      return turnEvents;
     }
     if (turnGroups && turnGroups.length > 1) {
       for (var tgi = 0; tgi < turnGroups.length; tgi++) {
         var tg = turnGroups[tgi];
+        var preparedTurn = prepareTurnEvents(tg.events);
         parts.push(
           '<tr class="sum-evlog__section"><td colspan="3" class="sum-evlog__section-cell">' +
-          escapeHtml(tg.label) +
-          "</td></tr>"
+            escapeHtml(tg.label) +
+            "</td></tr>"
         );
-        for (var ti2 = tg.events.length - 1; ti2 >= 0; ti2--) {
-          pushEvent(tg.events[ti2]);
+        for (var ti2 = preparedTurn.length - 1; ti2 >= 0; ti2--) {
+          pushEvent(preparedTurn[ti2]);
         }
       }
     } else {
-      for (var u = evs.length - 1; u >= 0; u--) {
-        pushEvent(evs[u]);
+      var preparedAll = prepareTurnEvents(evs);
+      for (var u = preparedAll.length - 1; u >= 0; u--) {
+        pushEvent(preparedAll[u]);
       }
     }
     return parts.join("");

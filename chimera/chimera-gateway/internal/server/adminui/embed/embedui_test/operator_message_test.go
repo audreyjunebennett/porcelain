@@ -80,27 +80,35 @@ func TestOperatorMessage_gatewaySlugs(t *testing.T) {
 	cases := []struct {
 		name string
 		flat map[string]any
+		opts map[string]any
 		want string
 	}{
 		{
 			name: "conversation_received",
-			flat: map[string]any{"msg": "conversation.received"},
-			want: "Inbound chat message recorded for this conversation.",
+			flat: map[string]any{"msg": "conversation.received", "turn_index": 1, "clientModel": "Claudia-0.2.0", "message_count": 2},
+			want: "Turn 1 started · new conversation · client asked for Claudia-0.2.0 · 2 messages in prompt.",
 		},
 		{
 			name: "conversation_delivered",
-			flat: map[string]any{"msg": "conversation.delivered", "statusCode": 200, "total_ms": 142},
-			want: "Completion delivered to the client (this turn finished successfully). · HTTP 200 · 142 ms",
+			flat: map[string]any{"msg": "conversation.delivered", "statusCode": 200, "total_ms": 2200},
+			opts: map[string]any{"forEventLog": true},
+			want: "Turn completed · 2.2 s · response delivered to client.",
 		},
 		{
-			name: "routing_alias",
+			name: "conversation_delivered_non_evlog",
+			flat: map[string]any{"msg": "conversation.delivered", "statusCode": 200, "total_ms": 142},
+			want: "Completion delivered to the client (this turn finished successfully). · 142 ms",
+		},
+		{
+			name: "routing_virtual",
 			flat: map[string]any{
 				"msg":           "conversation.routing.resolve",
-				"upstreamModel": "gpt-4o",
-				"attempt":       2,
-				"chainLen":      3,
+				"clientModel":   "Chimera-0.2.0",
+				"upstreamModel": "groq/meta-llama/llama-4-scout-17b-16e-instruct",
+				"attempt":       4,
+				"chainLen":      24,
 			},
-			want: "Routing resolved: upstream model chosen for this completion. · Model gpt-4o · attempt 2/3",
+			want: "Routed virtual model Chimera-0.2.0 → llama-4-scout-17b-16e-instruct · attempt 4 of 24.",
 		},
 		{
 			name: "gateway_auth_reloaded",
@@ -132,7 +140,7 @@ func TestOperatorMessage_gatewaySlugs(t *testing.T) {
 			if !ok {
 				t.Fatal("missing operatorMessage")
 			}
-			v, err := fn(goja.Undefined(), vm.ToValue(tc.flat))
+			v, err := fn(goja.Undefined(), vm.ToValue(tc.flat), vm.ToValue(tc.opts))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -224,7 +232,7 @@ func TestOperatorMessage_indexer_job_failed_shortErr(t *testing.T) {
 	if contains(got, "/v1/ingest/session") {
 		t.Fatalf("raw path leaked: %q", got)
 	}
-	if !contains(got, "chunked upload session missing") {
+	if !contains(got, "chunked upload session lost") {
 		t.Fatalf("got %q", got)
 	}
 }

@@ -35,4 +35,3 @@ const (
 	LogMsgPrefixIngest      = "ingest."
 	LogMsgPrefixIndexer     = "indexer."
 )
-
