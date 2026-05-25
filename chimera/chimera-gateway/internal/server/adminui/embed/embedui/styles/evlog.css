@@ -193,8 +193,8 @@
   border-radius: 0;
   overflow: visible;
   table-layout: fixed;
-  --sum-evlog-status-col-w: 10.75rem;
-  --sum-evlog-source-col-w: 4.25rem;
+  --sum-evlog-status-col-w: 4.75rem;
+  --sum-evlog-source-col-w: 4.75rem;
 }
 .sum-metrics-table.sum-evlog__table thead,
 .sum-metrics-table.sum-evlog__table tbody {
@@ -266,13 +266,17 @@
   min-width: 0;
 }
 .sum-metrics-table.sum-evlog__table th.sum-evlog__th-status,
-.sum-metrics-table.sum-evlog__table td.sum-evlog__cell--status {
+.sum-metrics-table.sum-evlog__table td.sum-evlog__cell--status,
+.sum-metrics-table.sum-evlog__table th.sum-evlog__th-source,
+.sum-metrics-table.sum-evlog__table td.sum-evlog__cell--source {
   text-align: right;
 }
-.sum-metrics-table.sum-evlog__table thead th.sum-evlog__th-status {
+.sum-metrics-table.sum-evlog__table thead th.sum-evlog__th-status,
+.sum-metrics-table.sum-evlog__table thead th.sum-evlog__th-source {
   vertical-align: middle;
 }
-.sum-metrics-table.sum-evlog__table td.sum-evlog__cell--status {
+.sum-metrics-table.sum-evlog__table td.sum-evlog__cell--status,
+.sum-metrics-table.sum-evlog__table td.sum-evlog__cell--source {
   vertical-align: top;
 }
 .sum-metrics-table.sum-evlog__table .sum-evlog__cell--time,
@@ -294,9 +298,6 @@
   width: var(--sum-evlog-source-col-w);
   max-width: var(--sum-evlog-source-col-w);
   box-sizing: border-box;
-}
-.sum-metrics-table.sum-evlog__table td.sum-evlog__cell--source {
-  vertical-align: top;
 }
 /* Status rail: fixed width; body badges may wrap */
 .sum-metrics-table.sum-evlog__table thead th.sum-evlog__th-status,
@@ -337,9 +338,35 @@
   line-height: 1.42;
   color: var(--embed-text-heading);
 }
-/* Service tag in dedicated source column (multi-source conversation logs) */
-.sum-metrics-table.sum-evlog__table .sum-evlog__cell--source .sum-svc-badge {
-  vertical-align: 0.06em;
+/* Source rail: same flex alignment as status column */
+.sum-metrics-table.sum-evlog__table .sum-evlog-source {
+  display: inline-flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.28rem;
+  max-width: 100%;
+  box-sizing: border-box;
+  min-height: 1.45rem;
+}
+/* Service badges in source column — match status pill size/position */
+.sum-metrics-table.sum-evlog__table .sum-evlog-source .sum-svc-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 0;
+  margin: 0;
+  padding: 0.12rem 0.45rem;
+  border-radius: 4px;
+  font-family: ui-monospace, monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.25;
+  text-align: center;
+  white-space: nowrap;
+  vertical-align: baseline;
 }
 /* Leading service tag before message body (legacy 3-column tables) */
 .sum-metrics-table.sum-evlog__table .sum-evlog__cell--msg > .sum-svc-badge:first-child {

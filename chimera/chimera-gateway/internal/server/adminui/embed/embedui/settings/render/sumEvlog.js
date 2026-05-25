@@ -85,6 +85,12 @@ globalThis.ChimeraSettings.Render.mountSumEvlog = function (ctx) {
     if (!flat) return null;
     var msgRaw = flat.msg != null ? flat.msg : flat.message != null ? flat.message : "";
     var msgL = String(msgRaw).toLowerCase();
+    if (msgL === "gateway.http.access" || msgL === "http response") {
+      var gwSc = sumEvlogHttpStatusNumber(
+        flat.statusCode != null ? flat.statusCode : flat.status_code != null ? flat.status_code : flat.status
+      );
+      if (gwSc != null) return gwSc;
+    }
     if (
       msgL === "chimera-broker.http.access" ||
       msgL === "chimera-broker.rate_limit" ||
@@ -235,7 +241,7 @@ globalThis.ChimeraSettings.Render.mountSumEvlog = function (ctx) {
     var msgInner = sumEvlogMsgCellInnerHtml(entLike, badgeOpt, summaryOpts);
     var statusInner = sumEvlogStatusInnerHtml(parsed);
     var sourceTd = summaryOpts.showSourceColumn
-      ? '<td class="sum-evlog__cell--source">' + sourceInner + "</td>"
+      ? '<td class="sum-evlog__cell--source"><div class="sum-evlog-source">' + sourceInner + "</div></td>"
       : "";
     return (
       '<tr class="sum-evlog__row" data-evlog-id="' +
@@ -372,6 +378,11 @@ globalThis.ChimeraSettings.Render.mountSumEvlog = function (ctx) {
       ? '<colgroup><col class="sum-evlog__col-time" /><col class="sum-evlog__col-msg" /><col class="sum-evlog__col-source" /><col class="sum-evlog__col-status" /></colgroup>'
       : '<colgroup><col class="sum-evlog__col-time" /><col class="sum-evlog__col-msg" /><col class="sum-evlog__col-status" /></colgroup>';
     var sourceTh = showSource ? '<th class="sum-evlog__th-source" scope="col">Source</th>' : "";
+    var statusTh =
+      '<th class="sum-evlog__th-status" scope="col">' +
+      '<div class="sum-evlog__th-status-head" role="group" aria-label="Status">' +
+      '<span class="sum-evlog__th-status-label">Status</span>' +
+      "</div></th>";
     var rootAttrs =
       ' data-sum-evlog-root data-sum-evlog-cols="' + escapeHtml(String(cols)) + '"' + (showSource ? ' data-sum-evlog-source' : "");
     return (
@@ -386,7 +397,8 @@ globalThis.ChimeraSettings.Render.mountSumEvlog = function (ctx) {
       '<thead><tr><th class="sum-evlog__cell--time" scope="col">Time</th>' +
       '<th class="sum-evlog__th-msg" scope="col">Message</th>' +
       sourceTh +
-      '<th class="sum-evlog__th-status" scope="col">Status</th></tr></thead>' +
+      statusTh +
+      "</tr></thead>" +
       '<tbody id="' +
       escapeHtml(scrollTbodyId) +
       '" data-sum-evlog-tbody>' +

@@ -1103,8 +1103,9 @@ html[data-theme="design-01"] #panel-summarized .sum-card--indexer-operator-works
   border: 1px solid color-mix(in srgb, var(--embed-semantic-error-fg) 18%, transparent);
 }
 
-/* Message service tags + row status pills → same capsule geometry as summary chips */
+/* Message service tags + source/status row pills → same capsule geometry as summary chips */
 .sum-metrics-table.sum-evlog__table .sum-evlog__cell--msg > .sum-svc-badge,
+.sum-metrics-table.sum-evlog__table .sum-evlog-source .sum-svc-badge,
 .sum-metrics-table.sum-evlog__table .sum-evlog-status .pill-2xx,
 .sum-metrics-table.sum-evlog__table .sum-evlog-status .pill-4xx,
 .sum-metrics-table.sum-evlog__table .sum-evlog-status .pill-5xx,

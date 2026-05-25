@@ -1228,7 +1228,7 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     return (
       '<div class="gw-svc-card-intro" id="gw-svc-card-intro">' +
       '<p class="gw-svc-card-intro-lead">' +
-      "An at-a-glance snapshot of this gateway instance—how it listens, where it connects, which supervised helpers started, and light traffic counts from gateway lines in the current view. For richer token rollups and upstream trails, open Gateway usage (Stats); figures here only cover lines loaded in this window." +
+      "An at-a-glance snapshot of this gateway instance—how it listens, where it connects, and which supervised helpers started. HTTP ok/fail counts in the card header reflect gateway lines in the current view; per-line level and HTTP status appear in the event log. For richer token rollups and upstream trails, open Gateway usage (Stats)." +
       "</p>" +
       "</div>"
     );
@@ -3125,6 +3125,22 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     };
   }
 
+  function gatewayHttpOkFailTooltip(counters) {
+    var c = counters || {};
+    var detail =
+      (c.http429 || 0) > 0
+        ? formatInt(c.http2xx) +
+          " ok · " +
+          formatInt(c.httpNot2xx) +
+          " fail · " +
+          formatInt(c.http429) +
+          " rate-limited (429)"
+        : formatInt(c.http2xx) + " ok · " + formatInt(c.httpNot2xx) + " fail";
+    return (
+      "HTTP responses in the current log view: 2xx successes (check) vs non-2xx failures (error). " + detail + "."
+    );
+  }
+
   function gatewayServicePanelMiniHtml(arr) {
     var M = {
       kv: {
@@ -3135,42 +3151,16 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
         apiKeysTint: "none",
         routingRules: "—",
         supervised: "—"
-      },
-      counters: {
-        http2xx: 0,
-        httpNot2xx: 0,
-        http429: 0,
-        chatReq: 0,
-        chatResp: 0,
-        chatErr: 0,
-        ragQuery: 0,
-        ragHit: 0,
-        ragRetrieveErr: "",
-        ingestOk: 0,
-        ingestFail: 0
       }
     };
     if (globalThis.ChimeraSettings && ChimeraSettings.Derive && typeof ChimeraSettings.Derive.gatewayCardModel === "function") {
       M = ChimeraSettings.Derive.gatewayCardModel(arr, getFlat);
     }
     var kv = M.kv || {};
-    var c = M.counters || {};
     var apiKeysOpen =
       kv.apiKeysTint === "error"
         ? '<dd class="gateway-kv-dd gateway-kv-dd--error">'
         : "<dd>";
-    var ragSub = c.ragRetrieveErr
-      ? c.ragRetrieveErr
-      : "search lines vs per-hit vectors";
-    var httpSub =
-      c.http429 > 0
-        ? formatInt(c.http2xx) +
-          " ok · " +
-          formatInt(c.httpNot2xx) +
-          " fail · " +
-          formatInt(c.http429) +
-          "×429"
-        : formatInt(c.http2xx) + " ok · " + formatInt(c.httpNot2xx) + " fail";
     return (
       '<dl class="indexer-run-kv indexer-run-kv--gateway-summary">' +
       "<dt>listening</dt><dd>" +
@@ -3186,32 +3176,7 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       escapeHtml(kv.routingRules || "—") +
       '</dd><dt>supervised</dt><dd>' +
       escapeHtml(kv.supervised || "—") +
-      "</dd></dl>" +
-      '<div class="gw-panel-timeline">' +
-      '<div class="sum-section-label">Request timeline</div>' +
-      '<p class="sum-timeline-caption muted">Segment width is the share of lines in this view for each kind.</p>' +
-      timelineBarHtml(arr) +
-      timelineLegendHtml() +
-      "</div>" +
-      '<div class="sum-mini-row">' +
-      '<div class="sum-mini-card">HTTP (ok / fail)<strong>' +
-      escapeHtml(formatInt(c.http2xx) + " / " + formatInt(c.httpNot2xx)) +
-      '</strong><span class="sum-mini-sub">' +
-      escapeHtml(httpSub) +
-      '</span></div>' +
-      '<div class="sum-mini-card">Chat (req → resp)<strong>' +
-      escapeHtml(formatInt(c.chatReq) + " → " + formatInt(c.chatResp)) +
-      '</strong><span class="sum-mini-sub">' +
-      escapeHtml(formatInt(c.chatErr) + " relay errors") +
-      '</span></div>' +
-      '<div class="sum-mini-card">RAG (queries · hits)<strong>' +
-      escapeHtml(formatInt(c.ragQuery) + " · " + formatInt(c.ragHit)) +
-      '</strong><span class="sum-mini-sub">' +
-      escapeHtml(ragSub) +
-      '</span></div>' +
-      '<div class="sum-mini-card">Ingest (ok / fail)<strong>' +
-      escapeHtml(formatInt(c.ingestOk) + " / " + formatInt(c.ingestFail)) +
-      '</strong><span class="sum-mini-sub">complete vs failed + chunked errors</span></div></div>'
+      "</dd></dl>"
     );
   }
 
@@ -4530,14 +4495,18 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     var cardScope = strHash("svc:" + name);
     var visEnt = sumEvlogVisibleEntriesForService(name, arr, name === "chimera-gateway");
     var mc = sumEvlogCountWarnFailFromEntries(visEnt);
-    var tbodyInner = sumEvlogBuildTbodyFromServiceEntries(name, arr, {
+    var showSourceColumn = name === "chimera-gateway";
+    var evlogBuildOpts = {
       cardScope: cardScope,
       filterGatewayProbe: name === "chimera-gateway"
-    });
+    };
+    if (showSourceColumn) evlogBuildOpts.showSourceColumn = true;
+    var tbodyInner = sumEvlogBuildTbodyFromServiceEntries(name, arr, evlogBuildOpts);
     var full =
       '<div class="' + fullLogClass + '">' +
       sumEvlogPanelHtml({
         scrollTbodyId: scrollTbodyId,
+        showSourceColumn: showSourceColumn,
         warnN: mc.warn,
         failN: mc.fail,
         tbodyInnerHtml: tbodyInner,
@@ -4559,8 +4528,14 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
   function sgOpInsetWellOkFailHtml(okN, failN, prefix, opts) {
     opts = opts || {};
     var lead = prefix ? escapeHtml(String(prefix)) + " " : "";
+    var titleAttr =
+      opts.title != null && String(opts.title).trim() !== ""
+        ? ' title="' + escapeHtml(String(opts.title)) + '"'
+        : "";
     var out =
-      '<span class="sg-op-inset-well">' +
+      '<span class="sg-op-inset-well"' +
+      titleAttr +
+      ">" +
       lead +
       escapeHtml(formatInt(okN)) +
       ' <span class="material-symbols-outlined material-symbols-outlined--sm" aria-hidden="true">check_circle</span> ' +
@@ -4701,7 +4676,9 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
         var gc = gwCardModel.counters || {};
         metrics =
           '<span class="sum-metrics">' +
-          sgOpInsetWellOkFailHtml(gc.http2xx || 0, gc.httpNot2xx || 0) +
+          sgOpInsetWellOkFailHtml(gc.http2xx || 0, gc.httpNot2xx || 0, "", {
+            title: gatewayHttpOkFailTooltip(gc)
+          }) +
           "</span>";
       } else {
         metrics = "";
