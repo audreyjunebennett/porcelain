@@ -1622,6 +1622,7 @@ func TestLogsDerive_gatewayCardModel_kvCountersHideRow(t *testing.T) {
 		{"/api/ui/tokens", true},
 		{"/api/ui/state", true},
 		{"/api/ui/chimera-broker/providers", true},
+		{"/api/ui/providers/catalog", true},
 		{"/api/ui/indexer/config", true},
 		{"/api/ui/indexer/workspaces", true},
 		{"/v1/indexer/storage/stats", true},

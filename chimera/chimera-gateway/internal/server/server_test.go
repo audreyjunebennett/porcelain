@@ -163,9 +163,8 @@ func TestUILoginAndState(t *testing.T) {
 	if len(gk) != 1 {
 		t.Fatalf("groq.keys: %+v", groq)
 	}
-	gem, _ := prov["gemini"].(map[string]any)
-	if gem["ok"] != true || gem["key_configured"] != false {
-		t.Fatalf("gemini: %+v", gem)
+	if _, ok := prov["gemini"]; ok {
+		t.Fatalf("gemini should be omitted when not in broker config: %+v", prov)
 	}
 	oll, _ := prov["ollama"].(map[string]any)
 	if oll["ollama_base_url"] != "http://localhost:11434" {

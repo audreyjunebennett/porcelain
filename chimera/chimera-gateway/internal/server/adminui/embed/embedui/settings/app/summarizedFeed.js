@@ -34,12 +34,132 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
   var METRICS_POLL_MS = 12000;
   var uiStatePollTimer = null;
   var UI_STATE_POLL_MS = 60000;
-  /** Provider cards patched on admin poll (must match adminWorkflows feed section). */
-  var ADMIN_PROVIDER_PATCH_SPECS = [
-    { id: "groq", title: "Groq", avatar: "Gq", subtitle: "LPU inference provider with key management." },
-    { id: "gemini", title: "Gemini", avatar: "Gm", subtitle: "Google Gemini provider with key management." },
-    { id: "ollama", title: "Ollama", avatar: "Ol", subtitle: "Local/remote Ollama endpoint for chat and embeddings." }
-  ];
+  function providerCatalogApi() {
+    return globalThis.ChimeraSettings &&
+      ChimeraSettings.Providers &&
+      ChimeraSettings.Providers.Catalog
+      ? ChimeraSettings.Providers.Catalog
+      : null;
+  }
+
+  /** Ordered provider ids for summarized admin-provider-* cards (see settings/providers/catalog.js). */
+  function adminVisibleProviderIds() {
+    return Array.isArray(ctx.adminVisibleProviderIds) ? ctx.adminVisibleProviderIds : [];
+  }
+
+  function adminProviderSpecsFromVisible() {
+    var api = providerCatalogApi();
+    if (!api) return [];
+    return api.buildSpecsFromVisibleIds(adminVisibleProviderIds());
+  }
+
+  function lookupAdminProviderSpec(providerId) {
+    var api = providerCatalogApi();
+    return api ? api.lookupProviderSpec(providerId) : null;
+  }
+
+  function ensureAdminProviderCatalog() {
+    var api = providerCatalogApi();
+    if (!api) return Promise.resolve(null);
+    return api.fetchProviderCatalog(ctx).then(function (data) {
+      if (data && getViewMode() === "summarized") scheduleStoryRebuild();
+      return data;
+    }).catch(function () {
+      return null;
+    });
+  }
+
+  var ADMIN_PROVIDERS_INTRO_HTML =
+    '<div class="sum-workspaces-intro"><p class="sum-workspaces-intro-lead">Providers drive upstream inference through chimera-broker; each card shows configuration, usage, and scoped log activity.</p></div>';
+
+  function buildAdminProviderPickerHtml() {
+    var api = providerCatalogApi();
+    var addable = api && typeof api.addableProviderEntries === "function" ? api.addableProviderEntries(ctx) : [];
+    var listHtml = "";
+    if (!addable.length) {
+      listHtml = '<p class="sg-op-provider-picker__empty muted">All catalog providers are already on this page.</p>';
+    } else {
+      listHtml = '<ul class="sg-op-provider-picker__list" role="listbox" aria-label="Add provider">';
+      for (var pi = 0; pi < addable.length; pi++) {
+        var ent = addable[pi];
+        listHtml +=
+          '<li class="sg-op-provider-picker__item" role="presentation">' +
+          '<button type="button" class="sg-op-provider-picker__option" role="option" data-admin-action="provider-picker-select" data-provider-id="' +
+          escapeHtml(ent.id) +
+          '">' +
+          '<span class="sg-op-provider-picker__avatar" aria-hidden="true">' +
+          escapeHtml(ent.avatar || ent.id.slice(0, 2).toUpperCase()) +
+          "</span>" +
+          '<span class="sg-op-provider-picker__meta">' +
+          '<span class="sg-op-provider-picker__title">' +
+          escapeHtml(ent.title || ent.id) +
+          "</span>" +
+          '<span class="sg-op-provider-picker__sub">' +
+          escapeHtml(ent.subtitle || "") +
+          "</span></span></button></li>";
+      }
+      listHtml += "</ul>";
+    }
+    return (
+      '<div id="sg-op-provider-picker" class="sg-op-provider-picker" hidden>' +
+      '<div class="sg-op-provider-picker__panel">' +
+      listHtml +
+      '<div class="sg-op-provider-picker__foot">' +
+      '<button type="button" class="sg-op-btn sg-op-btn--ghost" data-admin-action="provider-picker-cancel">Cancel</button>' +
+      "</div></div></div>"
+    );
+  }
+
+  function buildAdminProvidersSectionBreakHtml() {
+    if (typeof ctx.operatorSectionHeadHtml !== "function") {
+      return (
+        '<div class="sum-section-label sum-feed-section-title">Providers</div>' +
+        ADMIN_PROVIDERS_INTRO_HTML
+      );
+    }
+    var api = providerCatalogApi();
+    var canAdd = api && typeof api.hasAddableProviders === "function" ? api.hasAddableProviders(ctx) : false;
+    var actionHtml = "";
+    if (typeof ctx.operatorSectionAddBtn === "function") {
+      actionHtml = ctx.operatorSectionAddBtn(
+        {
+          "data-admin-action": "provider-picker-open",
+          id: "sg-op-provider-picker-trigger",
+          "aria-expanded": "false",
+          "aria-controls": "sg-op-provider-picker",
+          "aria-haspopup": "listbox"
+        },
+        "Add provider",
+        canAdd
+          ? { title: "Add a provider card" }
+          : { disabled: true, title: "All catalog providers are already visible" }
+      );
+    }
+    return (
+      '<div class="sg-op-providers-section" id="sg-op-providers-section">' +
+      '<div class="sg-op-providers-section__anchor">' +
+      ctx.operatorSectionHeadHtml("Providers", "hub", { actionHtml: actionHtml }) +
+      buildAdminProviderPickerHtml() +
+      "</div>" +
+      ADMIN_PROVIDERS_INTRO_HTML +
+      "</div>"
+    );
+  }
+
+  function closeAdminProviderPicker() {
+    var picker = document.getElementById("sg-op-provider-picker");
+    var trigger = document.getElementById("sg-op-provider-picker-trigger");
+    if (picker) picker.hidden = true;
+    if (trigger) trigger.setAttribute("aria-expanded", "false");
+  }
+
+  function setAdminProviderPickerOpen(open) {
+    var picker = document.getElementById("sg-op-provider-picker");
+    var trigger = document.getElementById("sg-op-provider-picker-trigger");
+    if (!picker || !trigger || trigger.disabled || trigger.getAttribute("aria-disabled") === "true") return;
+    picker.hidden = !open;
+    trigger.setAttribute("aria-expanded", open ? "true" : "false");
+  }
   var ADMIN_CARD_TABLE_SCROLL_SEL =
     ".sum-metrics-table-wrap, .sg-op-routing-table-scroll, .sg-op-fallback-table-scroll, .sg-op-router-table-scroll";
   /** Per-card patch + full rebuild: admin tables and evlog table wrappers (tbody scroll is in evlog state). */
@@ -692,7 +812,8 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       getFlat: getFlat,
       strHash: strHash,
       normalizeServiceBucketKey: normalizeServiceBucketKey,
-      indexerGroupIdForFlat: indexerGroupIdForFlat
+      indexerGroupIdForFlat: indexerGroupIdForFlat,
+      getAdminProviderIds: adminVisibleProviderIds
     };
   }
 
@@ -857,13 +978,9 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     if (!agg) return null;
     if (cardId.indexOf("admin-provider-") === 0) {
       var providerId = cardId.slice("admin-provider-".length);
-      for (var pi = 0; pi < ADMIN_PROVIDER_PATCH_SPECS.length; pi++) {
-        if (ADMIN_PROVIDER_PATCH_SPECS[pi].id === providerId) {
-          var spec = ADMIN_PROVIDER_PATCH_SPECS[pi];
-          return buildAdminProviderCardHtml(spec.id, spec.title, spec.avatar, spec.subtitle);
-        }
-      }
-      return null;
+      var specPatch = lookupAdminProviderSpec(providerId);
+      if (!specPatch) return null;
+      return buildAdminProviderCardHtml(specPatch.id, specPatch.title, specPatch.avatar, specPatch.subtitle);
     }
     var svcOrder =
       globalThis.ChimeraSettings &&
@@ -1104,10 +1221,26 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       });
   }
 
+  function resyncVisibleProvidersFromCatalog() {
+    if (adminVisibleProviderIds().length > 0) return Promise.resolve();
+    var api = providerCatalogApi();
+    if (!api) return Promise.resolve();
+    return api.fetchProviderCatalog(ctx, { force: true }).then(function (data) {
+      if (!data || getViewMode() !== "summarized") return;
+      if (adminVisibleProviderIds().length > 0) scheduleStoryRebuild();
+    }).catch(function () {
+      return null;
+    });
+  }
+
   function runUiStatePoll(opts) {
     if (ctx.uiUnauthorized) return Promise.resolve();
     var showErr = opts && opts.showErr;
     return Promise.all([fetchUiState(), fetchAdminTokens()])
+      .then(function () {
+        if (ctx.uiUnauthorized || getViewMode() !== "summarized") return;
+        return resyncVisibleProvidersFromCatalog();
+      })
       .then(function () {
         if (ctx.uiUnauthorized || getViewMode() !== "summarized") return;
         patchGatewayOverviewCard();
@@ -1201,8 +1334,9 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     patchChimeraBrokerProviderHealthStrip();
     patchChimeraBrokerAvailableModelsCount();
     var needRebuild = false;
-    for (var pi = 0; pi < ADMIN_PROVIDER_PATCH_SPECS.length; pi++) {
-      if (!patchAdminProviderCard(ADMIN_PROVIDER_PATCH_SPECS[pi].id)) needRebuild = true;
+    var visibleForBroker = adminVisibleProviderIds();
+    for (var pi = 0; pi < visibleForBroker.length; pi++) {
+      if (!patchAdminProviderCard(visibleForBroker[pi])) needRebuild = true;
     }
     if (needRebuild) refreshSummarizedPanel();
   }
@@ -1582,13 +1716,7 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
   }
 
   function patchAdminProviderCard(providerId) {
-    var spec = null;
-    for (var pi = 0; pi < ADMIN_PROVIDER_PATCH_SPECS.length; pi++) {
-      if (ADMIN_PROVIDER_PATCH_SPECS[pi].id === providerId) {
-        spec = ADMIN_PROVIDER_PATCH_SPECS[pi];
-        break;
-      }
-    }
+    var spec = lookupAdminProviderSpec(providerId);
     if (!spec) return false;
     return replaceCardById(
       "admin-provider-" + providerId,
@@ -1633,8 +1761,9 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     if (prevModel && summarizedPatchAvailable()) {
       var onlyCardIds = Object.create(null);
       onlyCardIds["admin-users"] = true;
-      for (var ai = 0; ai < ADMIN_PROVIDER_PATCH_SPECS.length; ai++) {
-        onlyCardIds["admin-provider-" + ADMIN_PROVIDER_PATCH_SPECS[ai].id] = true;
+      var visiblePoll = adminVisibleProviderIds();
+      for (var ai = 0; ai < visiblePoll.length; ai++) {
+        onlyCardIds["admin-provider-" + visiblePoll[ai]] = true;
       }
       if (!ctx.adminRoutingEditing) onlyCardIds["admin-routing-rules"] = true;
       if (!ctx.adminFallbackEditing) onlyCardIds["admin-fallback-chain"] = true;
@@ -1662,8 +1791,9 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
 
     var needRebuild = false;
     if (!patchAdminUsersCard()) needRebuild = true;
-    for (var aj = 0; aj < ADMIN_PROVIDER_PATCH_SPECS.length; aj++) {
-      if (!patchAdminProviderCard(ADMIN_PROVIDER_PATCH_SPECS[aj].id)) needRebuild = true;
+    var visibleAdmin = adminVisibleProviderIds();
+    for (var aj = 0; aj < visibleAdmin.length; aj++) {
+      if (!patchAdminProviderCard(visibleAdmin[aj])) needRebuild = true;
     }
     if (!ctx.adminRoutingEditing) {
       if (!patchAdminRoutingCard()) needRebuild = true;
@@ -6827,7 +6957,7 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       adminStateCache: ctx.adminStateCache,
       tokenListCache: ctx.tokenListCache,
       workspaceDrafts: ctx.workspaceDrafts,
-      adminProviderSpecs: ADMIN_PROVIDER_PATCH_SPECS,
+      adminProviderSpecs: adminProviderSpecsFromVisible(),
       adminRoutingEditing: ctx.adminRoutingEditing,
       adminFallbackEditing: ctx.adminFallbackEditing,
       adminRouterEditing: ctx.adminRouterEditing,
@@ -6912,9 +7042,7 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
         }
         return true;
       },
-      adminProvidersSectionBreakHtml: function () {
-        return "";
-      },
+      adminProvidersSectionBreakHtml: buildAdminProvidersSectionBreakHtml,
       adminRoutingSectionBreakHtml: function () {
         if (typeof ctx.operatorSectionHeadHtml !== "function") {
           return (
@@ -6975,18 +7103,7 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       return null;
     }
     var deps = summarizedModelDeps();
-    deps.adminProvidersSectionBreakHtml = function () {
-      if (typeof ctx.operatorSectionHeadHtml !== "function") {
-        return (
-          '<div class="sum-section-label sum-feed-section-title">Providers</div>' +
-          '<div class="sum-workspaces-intro"><p class="sum-workspaces-intro-lead">Providers drive upstream inference through chimera-broker; each card shows configuration, usage, and scoped log activity.</p></div>'
-        );
-      }
-      return (
-        ctx.operatorSectionHeadHtml("Providers", "hub") +
-        '<div class="sum-workspaces-intro"><p class="sum-workspaces-intro-lead">Providers drive upstream inference through chimera-broker; each card shows configuration, usage, and scoped log activity.</p></div>'
-      );
-    };
+    deps.adminProvidersSectionBreakHtml = buildAdminProvidersSectionBreakHtml;
     return ChimeraSettings.Summarized.Model.buildSummarizedModel(deps, summarizedModelState(agg));
   }
 
@@ -7203,5 +7320,10 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       normalizeFlavor: normalizeFlavorMatch
     });
   }
+
+  ctx.ensureAdminProviderCatalog = ensureAdminProviderCatalog;
+  ctx.closeAdminProviderPicker = closeAdminProviderPicker;
+  ctx.setAdminProviderPickerOpen = setAdminProviderPickerOpen;
+  ensureAdminProviderCatalog();
 };
 

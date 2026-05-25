@@ -33,6 +33,22 @@ type ProviderKeyEntry struct {
 	KeyConfigured bool   `json:"key_configured"`
 }
 
+// ProviderCatalogEntry is one row in GET /api/ui/providers/catalog.
+type ProviderCatalogEntry struct {
+	ID             string `json:"id"`
+	Title          string `json:"title"`
+	Avatar         string `json:"avatar"`
+	Subtitle       string `json:"subtitle"`
+	Kind           string `json:"kind"` // "keyed" or "ollama"
+	KeyPlaceholder string `json:"key_placeholder,omitempty"`
+}
+
+// ProviderCatalogResponse is GET /api/ui/providers/catalog.
+type ProviderCatalogResponse struct {
+	Providers     []ProviderCatalogEntry `json:"providers"`
+	ConfiguredIDs []string               `json:"configured_ids"`
+}
+
 // StateProviderEntry is one provider block inside GET /api/ui/state (keyed by provider name).
 type StateProviderEntry struct {
 	Provider      string             `json:"provider"`

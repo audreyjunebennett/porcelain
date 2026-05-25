@@ -83,6 +83,95 @@ func TestLogsCards_adminProvider_keyDraftInHtml(t *testing.T) {
 	}
 }
 
+func TestLogsCards_adminProvider_emptyCredentialsOmitsUsageAndScopedLog(t *testing.T) {
+	vm := goja.New()
+	loadCardTestCtx(t, vm)
+
+	_, err := vm.RunString(`
+		ctx.adminStateCache = {
+			providers: {
+				groq: { keys: [], ok: true, key_configured: false },
+				gemini: { keys: [{ name: "k1", key_configured: true }], ok: true, key_configured: true }
+			}
+		};
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	emptyGroq, err := vm.RunString(`ctx.buildAdminProviderCardHtml("groq", "Groq", "Gq", "subtitle")`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	emptyHTML := emptyGroq.String()
+	for _, mustNot := range []string{"Model usage (24h)", "Scoped log —"} {
+		if strings.Contains(emptyHTML, mustNot) {
+			t.Fatalf("empty groq card must not contain %q: %q", mustNot, emptyHTML)
+		}
+	}
+	if !strings.Contains(emptyHTML, "API KEYS") || !strings.Contains(emptyHTML, `id="admin-groq-key"`) {
+		t.Fatalf("empty groq card should still show key editor: %q", emptyHTML)
+	}
+
+	configured, err := vm.RunString(`ctx.buildAdminProviderCardHtml("gemini", "Gemini", "Gm", "subtitle")`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfgHTML := configured.String()
+	for _, want := range []string{"Model usage (24h)", "Scoped log —"} {
+		if !strings.Contains(cfgHTML, want) {
+			t.Fatalf("configured gemini card missing %q: %q", want, cfgHTML)
+		}
+	}
+}
+
+func TestLogsCards_adminProvider_ollamaDraftShowsUsageAndScopedLog(t *testing.T) {
+	vm := goja.New()
+	loadCardTestCtx(t, vm)
+
+	_, err := vm.RunString(`
+		ctx.adminStateCache = { providers: { ollama: { keys: [], ok: true, ollama_base_url: "" } } };
+		ctx.adminOllamaUrlDraft = "http://draft.local:11434";
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	v, err := vm.RunString(`ctx.buildAdminProviderCardHtml("ollama", "Ollama", "Ol", "local")`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := v.String()
+	for _, want := range []string{"Model usage (24h)", "Scoped log —", `id="admin-ollama-url"`} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("missing %q in %q", want, html)
+		}
+	}
+}
+
+func TestLogsCards_providerHasCredentials_afterKeyPresent(t *testing.T) {
+	vm := goja.New()
+	loadCardTestCtx(t, vm)
+
+	v, err := vm.RunString(`
+		(function () {
+			var empty = ctx.providerHasCredentials("groq", { keys: [], key_configured: false });
+			var withKey = ctx.providerHasCredentials("groq", { keys: [{ name: "k1", key_configured: true }] });
+			return { empty: empty, withKey: withKey };
+		})()
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	obj := v.ToObject(vm)
+	if obj.Get("empty").ToBoolean() {
+		t.Fatal("expected no credentials when keys empty")
+	}
+	if !obj.Get("withKey").ToBoolean() {
+		t.Fatal("expected credentials when key row present")
+	}
+}
+
 func TestLogsCards_adminProvider_keyChipReflectsState(t *testing.T) {
 	vm := goja.New()
 	loadCardTestCtx(t, vm)

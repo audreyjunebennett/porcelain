@@ -158,6 +158,100 @@
   margin: 0 0 0.65rem;
   font-size: 0.8rem;
 }
+.sg-op-providers-section__anchor {
+  position: relative;
+  width: 100%;
+  max-width: var(--embed-container-max, 80rem);
+}
+.sg-op-provider-picker {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 0.35rem);
+  z-index: 24;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--embed-container-max, 80rem);
+}
+.sg-op-provider-picker[hidden] {
+  display: none !important;
+}
+.sg-op-provider-picker__panel {
+  border: 1px solid var(--embed-border-medium, #c8c6c4);
+  border-radius: 10px;
+  background: var(--embed-surface-elevated, #fff);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+}
+.sg-op-provider-picker__list {
+  list-style: none;
+  margin: 0;
+  padding: 0.35rem 0;
+  max-height: min(14rem, 42vh);
+  overflow-y: auto;
+}
+.sg-op-provider-picker__item {
+  margin: 0;
+}
+.sg-op-provider-picker__option {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  width: 100%;
+  padding: 0.55rem 0.85rem;
+  border: none;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  color: var(--embed-text-primary, #1a1a1a);
+  cursor: pointer;
+}
+.sg-op-provider-picker__option:hover,
+.sg-op-provider-picker__option:focus-visible {
+  background: var(--embed-surface-muted, #f3f2f1);
+  outline: none;
+}
+.sg-op-provider-picker__avatar {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 8px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: var(--embed-surface-shape-badge, #e3e2e0);
+}
+.sg-op-provider-picker__meta {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.sg-op-provider-picker__title {
+  display: block;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.sg-op-provider-picker__sub {
+  display: block;
+  font-size: 0.76rem;
+  color: var(--embed-text-secondary, #5c5c5c);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sg-op-provider-picker__empty {
+  margin: 0;
+  padding: 0.75rem 0.85rem;
+  font-size: 0.8rem;
+  color: var(--embed-text-secondary, #5c5c5c);
+}
+.sg-op-provider-picker__foot {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.4rem 0.55rem 0.5rem;
+  border-top: 1px solid var(--embed-border-medium, #c8c6c4);
+}
 .sg-op-provider-edit-row {
   display: flex;
   align-items: flex-end;

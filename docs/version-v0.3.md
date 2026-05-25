@@ -37,7 +37,7 @@ Make the gateway easier to set up, friendlier to share between operators, and cl
 | [plans/embedui-operator-settings-routes.md](plans/embedui-operator-settings-routes.md)         | App shell at `/ui`, settings page rename, single gallery; drop legacy routes and deep links                                          | `done`        |
 | [plans/context-window-admission.md](plans/context-window-admission.md)                     | Context window admission on chat path. Capture provider model context limits to enabled proper model router fallbacks                    | `done`        |
 | [plans/supervisor-info-log-trim.md](plans/supervisor-info-log-trim.md)                     | Refine the logs even further to reduce service start up and vectorstore erroring. Lowering heartbeat logs to DEBUG                       | `done`        |
-| [plans/embedui-dynamic-provider-cards.md](plans/embedui-dynamic-provider-cards.md)           | Settings provider cards: catalog, Add provider picker, hide usage/log until configured                                                 | `draft`       |
+| [plans/embedui-dynamic-provider-cards.md](plans/embedui-dynamic-provider-cards.md)           | Settings provider cards: catalog, Add provider picker, hide usage/log until configured                                                 | `done`        |
 | [Internal embedding provider (exploration)](#internal-embedding-provider-exploration)      | Optional in-repo or first-install embedding runtime to reduce reliance on Ollama for `/embeddings`                                       | `exploration` |
 | [Logs UI page data refreshing](#logs-ui-page-data-refreshing)                              | Interaction-safe summarized feed; per-card patches and view model (phased)                                                               | `done`        |
 | [Operator-managed virtual models](#operator-managed-virtual-models)                        | Create virtual models from `/ui/settings`; per-model fallback, routing rules, and tool-router; operator SQLite + scoped routing logs     | `todo`        |
@@ -340,14 +340,14 @@ Aim for **~4–6 GB RAM** total, **quantized** execution, **sub‑300 ms** per h
 **Acceptance (Phase 1)**
 
 - First click expands a collapsed card under live SSE traffic (manual smoke).
-- Typing in `admin-groq-key` / `admin-gemini-key` / `admin-ollama-url` for 30+ seconds (spanning an admin poll) does not clear the field or drop focus.
+- Typing in provider key inputs (`admin-{providerId}-key`, e.g. `admin-groq-key`) or `admin-ollama-url` for 30+ seconds (spanning an admin poll) does not clear the field or drop focus.
 - Existing evlog search/filter/YAML deferral unchanged.
 
 ### Phase 2 — Poll-path card patching (shipped)
 
 - `replaceCardById()` shared helper (open state + table scroll preservation).
 - `syncAdminStatePolling` calls `patchAdminCardsFromPoll()` instead of `refreshSummarizedPanel()`.
-- Patches users, provider (groq/gemini/ollama), routing, fallback, and router cards; skips routing trio while Configure/YAML edit mode is active.
+- Patches users, visible provider cards (`admin-provider-{id}` from session/catalog), routing, fallback, and router cards; skips routing trio while Configure/YAML edit mode is active.
 - Missing card id → `scheduleStoryRebuild()` (debounced), not synchronous full rebuild.
 
 **Status:** `done` (see execution plan).

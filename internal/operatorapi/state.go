@@ -2,8 +2,9 @@ package operatorapi
 
 // StateResponse is GET /api/ui/state.
 type StateResponse struct {
-	Gateway   GatewayState                  `json:"gateway"`
-	Providers map[string]StateProviderEntry `json:"providers"`
+	Gateway               GatewayState                  `json:"gateway"`
+	Providers             map[string]StateProviderEntry `json:"providers"`
+	ConfiguredProviderIDs []string                      `json:"configured_provider_ids,omitempty"`
 }
 
 // GatewayState is the gateway section of GET /api/ui/state.

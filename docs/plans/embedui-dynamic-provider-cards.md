@@ -4,7 +4,7 @@
 |-------|-------|
 | **Doc kind** | `feature-plan` |
 | **Owners / areas** | Gateway admin UI (`adminui/embed`), admin BFF (`api/ui/state`, `api/ui/provider/*`) |
-| **Status** | `draft` |
+| **Status** | `done` |
 | **Targets** | Gateway / operator UI v0.3 |
 | **Last updated** | See git history |
 | **Supersedes / superseded by** | None |
@@ -15,11 +15,11 @@ The settings summarized feed always shows three provider cards (Groq, Gemini, Ol
 
 | Phase | Outcome | Status |
 |-------|---------|--------|
-| [Phase 1 — Catalog and visible provider state](#phase-1--catalog-and-visible-provider-state) | Single catalog module; feed cards driven by visible ids, not a fixed trio | `todo` |
-| [Phase 2 — Add provider picker UI](#phase-2--add-provider-picker-ui) | Section-head **Add provider** opens a scrollable overlay picker with cancel | `todo` |
-| [Phase 3 — Empty provider card UX](#phase-3--empty-provider-card-ux) | Hide Model usage (24h) and scoped provider log until credentials exist | `todo` |
-| [Phase 4 — Backend and route alignment](#phase-4--backend-and-route-alignment) | State/health probes and save routes follow catalog + configured providers | `todo` |
-| [Phase 5 — Tests and gallery parity](#phase-5--tests-and-gallery-parity) | Goja/summarized tests and static gallery fixtures updated | `todo` |
+| [Phase 1 — Catalog and visible provider state](#phase-1--catalog-and-visible-provider-state) | Single catalog module; feed cards driven by visible ids, not a fixed trio | `done` |
+| [Phase 2 — Add provider picker UI](#phase-2--add-provider-picker-ui) | Section-head **Add provider** opens a scrollable overlay picker with cancel | `done` |
+| [Phase 3 — Empty provider card UX](#phase-3--empty-provider-card-ux) | Hide Model usage (24h) and scoped provider log until credentials exist | `done` |
+| [Phase 4 — Backend and route alignment](#phase-4--backend-and-route-alignment) | State/health probes and save routes follow catalog + configured providers | `done` |
+| [Phase 5 — Tests and gallery parity](#phase-5--tests-and-gallery-parity) | Goja/summarized tests and static gallery fixtures updated | `done` |
 
 ---
 
@@ -118,7 +118,7 @@ Use this table when replacing the fixed trio. **Roster** = code that defines whi
 - Summarized model with zero visible ids emits no `admin-provider-*` cards; adding an id via state produces exactly one card.
 - Admin poll patch loop iterates visible ids only (no hidden groq/gemini cards).
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 
@@ -139,7 +139,7 @@ Use this table when replacing the fixed trio. **Roster** = code that defines whi
 - Open picker → list appears above intro/cards; cancel closes without new card.
 - Select Groq → one new `admin-provider-groq` card; Add provider disabled or entry hidden for ids already visible.
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 
@@ -158,7 +158,7 @@ Use this table when replacing the fixed trio. **Roster** = code that defines whi
 - Goja or unit test: HTML for groq with `keys: []` contains no `Model usage (24h)` and no `Scoped log —`.
 - After saving a key (or Ollama URL), rebuild shows usage + scoped log sections.
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 
@@ -178,7 +178,7 @@ Use this table when replacing the fixed trio. **Roster** = code that defines whi
 - With only `ollama` in broker config, `GET /api/ui/state` does not require groq/gemini entries unless UI/catalog asks for them.
 - `POST /api/ui/provider/{catalog-id}/keys` works for any catalog keyed provider after normalize-merge on missing provider.
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 
@@ -198,7 +198,7 @@ Use this table when replacing the fixed trio. **Roster** = code that defines whi
 - `go test ./chimera/chimera-gateway/internal/server/adminui/embed/...` passes.
 - Manual smoke: add/remove visible provider, picker cancel, key save restores usage section.
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 
@@ -206,7 +206,7 @@ Use this table when replacing the fixed trio. **Roster** = code that defines whi
 
 1. **Initial visible providers:** seed from broker `governance/providers`.
 2. **Catalog source of truth:** Use `GET /api/ui/providers/catalog` so Go BFF and UI stay aligned. Remove the embed JS.
-3. **Removing a card:** When a provider card is removed it should also DELETE provider from broker config. Currently there is no provider card removal path only managment of the API keys. But when the card is removed when there are API keye it would remove the provider from the broker config.
+3. **Removing a card:** When a provider card is removed it should also DELETE provider from broker config. Currently there is no provider card removal path only managment of the API keys. But when the card is removed when there are API keys it would remove the keys and provider from the broker config.
 4. **Health strip on service cards:** show only configured providers.
 
 ---

@@ -214,9 +214,7 @@ func handleChimeraBrokerProviderHealth(h *handler.Handler, w http.ResponseWriter
 	client := apirut.BrokerAdminClient(h.RT)
 	liveSnapshot := catalogSnapshotForProviderHealth(ctx, h.RT, h.Log)
 	configured, listOK := brokeradmin.ListConfiguredProviders(ctx, client)
-	// Full UI roster so provider cards can distinguish configured vs not_configured; the health
-	// strip filters out not_configured entries client-side.
-	names := append([]string(nil), apirut.BrokerProviderNames...)
+	names := apirut.BrokerProviderNamesForHealth(ctx, client)
 	resp := fetchChimeraBrokerProviderHealthWithList(ctx, client, names, configured, listOK, liveSnapshot)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)

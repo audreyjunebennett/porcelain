@@ -302,14 +302,14 @@ globalThis.ChimeraSettings.Handlers.Admin.wire = function (ctx) {
       else if (t.id === "admin-router-threshold") {
         ctx.routerThresholdTouched = true;
         ctx.routerThresholdDraft = t.value != null ? String(t.value) : "";
-      } else if (t.id === "admin-groq-key") {
-        if (!ctx.adminProviderKeyDraft) ctx.adminProviderKeyDraft = { groq: null, gemini: null };
-        ctx.adminProviderKeyDraft.groq = t.value != null ? String(t.value) : "";
-      } else if (t.id === "admin-gemini-key") {
-        if (!ctx.adminProviderKeyDraft) ctx.adminProviderKeyDraft = { groq: null, gemini: null };
-        ctx.adminProviderKeyDraft.gemini = t.value != null ? String(t.value) : "";
       } else if (t.id === "admin-ollama-url") {
         ctx.adminOllamaUrlDraft = t.value != null ? String(t.value) : "";
+      } else if (t.id && t.id.indexOf("admin-") === 0 && t.id.slice(-4) === "-key") {
+        var provKey = t.id.slice("admin-".length, -"-key".length);
+        if (provKey) {
+          if (!ctx.adminProviderKeyDraft) ctx.adminProviderKeyDraft = {};
+          ctx.adminProviderKeyDraft[provKey] = t.value != null ? String(t.value) : "";
+        }
       }
     });
     document.body.addEventListener("input", function (ev) {
@@ -348,6 +348,40 @@ globalThis.ChimeraSettings.Handlers.Admin.wire = function (ctx) {
           if (typeof ctx.patchAdminCardsFromPoll === "function" && ctx.patchAdminCardsFromPoll()) return;
           refreshSummarizedPanel();
         });
+      }
+
+      function closeProviderPicker() {
+        if (typeof ctx.closeAdminProviderPicker === "function") ctx.closeAdminProviderPicker();
+      }
+
+      if (act === "provider-picker-open") {
+        if (typeof ctx.setAdminProviderPickerOpen === "function") {
+          var pickerEl = document.getElementById("sg-op-provider-picker");
+          var willOpen = !!(pickerEl && pickerEl.hidden);
+          ctx.setAdminProviderPickerOpen(willOpen);
+        }
+        return;
+      }
+
+      if (act === "provider-picker-cancel") {
+        closeProviderPicker();
+        return;
+      }
+
+      if (act === "provider-picker-select") {
+        var pickId = String(t.getAttribute("data-provider-id") || "")
+          .trim()
+          .toLowerCase();
+        if (!pickId) return;
+        var cat =
+          globalThis.ChimeraSettings &&
+          ChimeraSettings.Providers &&
+          ChimeraSettings.Providers.Catalog;
+        if (cat && typeof cat.addVisibleProviderId === "function" && cat.addVisibleProviderId(ctx, pickId)) {
+          closeProviderPicker();
+          scheduleStoryRebuild();
+        }
+        return;
       }
 
       if (act === "user-add") {
@@ -562,8 +596,8 @@ globalThis.ChimeraSettings.Handlers.Admin.wire = function (ctx) {
       }
 
       if (act === "provider-key-add") {
-        var prov = String(t.getAttribute("data-provider") || "");
-        var inputId = prov === "groq" ? "admin-groq-key" : prov === "gemini" ? "admin-gemini-key" : "";
+        var prov = String(t.getAttribute("data-provider") || "").trim().toLowerCase();
+        var inputId = prov ? "admin-" + prov + "-key" : "";
         var val = inputId ? ((document.getElementById(inputId) || {}).value || "") : "";
         if (!val.trim()) {
           adminSetMessage("err", "Enter a key.");
@@ -574,10 +608,7 @@ globalThis.ChimeraSettings.Handlers.Admin.wire = function (ctx) {
           .then(function () {
             var inp = document.getElementById(inputId);
             if (inp) inp.value = "";
-            if (ctx.adminProviderKeyDraft) {
-              if (prov === "groq") ctx.adminProviderKeyDraft.groq = null;
-              if (prov === "gemini") ctx.adminProviderKeyDraft.gemini = null;
-            }
+            if (ctx.adminProviderKeyDraft && prov) delete ctx.adminProviderKeyDraft[prov];
             adminSetMessage("", "Provider key added.");
             reloadAdmin();
           })

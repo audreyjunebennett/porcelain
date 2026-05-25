@@ -217,8 +217,7 @@ indexer)
 	fi
 	if want run; then
 		rm_paths \
-			"data/gateway/indexer.supervised.yaml" \
-			"data/gateway/indexer.sync-state.json"
+			"data/indexer.sync-state.json" 
 	fi
 	;;
 desktop)

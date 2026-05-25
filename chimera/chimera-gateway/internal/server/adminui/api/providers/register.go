@@ -14,4 +14,7 @@ func Register(mux *http.ServeMux, h *handler.Handler) {
 	mux.HandleFunc("GET /api/ui/chimera-broker/providers", h.RequireAuthJSON(func(w http.ResponseWriter, r *http.Request) {
 		handleChimeraBrokerProviderHealth(h, w, r)
 	}))
+	mux.HandleFunc("GET /api/ui/providers/catalog", h.RequireAuthJSON(func(w http.ResponseWriter, r *http.Request) {
+		handleProviderCatalog(h, w, r)
+	}))
 }

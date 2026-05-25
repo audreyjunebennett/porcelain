@@ -20,8 +20,10 @@ import (
 // BuildResponse assembles GET /api/ui/state from runtime config and live probes.
 func BuildResponse(ctx context.Context, r *http.Request, res *config.Resolved, rt *gruntime.Runtime, log *slog.Logger) operatorapi.StateResponse {
 	client := apirut.BrokerAdminClient(rt)
-	provOut := make(map[string]operatorapi.StateProviderEntry, len(apirut.BrokerProviderNames))
-	for _, name := range apirut.BrokerProviderNames {
+	configured, listOK := brokeradmin.ListConfiguredProviders(ctx, client)
+	probeNames := apirut.ConfiguredProviderIDsResolved(ctx, client, configured, listOK)
+	provOut := make(map[string]operatorapi.StateProviderEntry, len(probeNames))
+	for _, name := range probeNames {
 		provOut[name] = probeStateProvider(ctx, client, name)
 	}
 
@@ -137,7 +139,8 @@ func BuildResponse(ctx context.Context, r *http.Request, res *config.Resolved, r
 			OperatorSQLitePath:          res.OperatorSQLitePath,
 			OperatorStoreOpen:           rt.OperatorStore() != nil,
 		},
-		Providers: provOut,
+		Providers:             provOut,
+		ConfiguredProviderIDs: append([]string(nil), probeNames...),
 	}
 }
 

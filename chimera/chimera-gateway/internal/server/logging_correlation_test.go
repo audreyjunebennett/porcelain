@@ -33,6 +33,7 @@ func TestHTTPAccessLogLevel_probesAndErrors(t *testing.T) {
 		{"/api/ui/tokens", 503, slog.LevelInfo},
 		{"/api/ui/state", 200, slog.LevelDebug},
 		{"/api/ui/chimera-broker/providers", 200, slog.LevelDebug},
+		{"/api/ui/providers/catalog", 200, slog.LevelDebug},
 		{"/api/ui/indexer/config", 200, slog.LevelDebug},
 		{"/v1/indexer/storage/stats", 200, slog.LevelDebug},
 		{"/v1/indexer/storage/stats", 502, slog.LevelInfo},
@@ -77,6 +78,7 @@ func TestLoggingMiddleware_uiPollingSuccessAtDebug(t *testing.T) {
 		"/api/ui/tokens",
 		"/api/ui/state",
 		"/api/ui/chimera-broker/providers",
+		"/api/ui/providers/catalog",
 		"/api/ui/indexer/config",
 		"/v1/indexer/storage/stats",
 	}

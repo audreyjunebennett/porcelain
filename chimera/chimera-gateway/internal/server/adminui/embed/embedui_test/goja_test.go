@@ -123,12 +123,12 @@ func loadCardTestCtx(t *testing.T, vm *goja.Runtime) {
 			},
 			tokenListCache: [{ tenant_id: "tenant-a", label: "Alice", index: 0 }],
 			adminUserDrafts: [],
-			adminProviderKeyDraft: { groq: null, gemini: null },
+			adminProviderKeyDraft: {},
+			adminVisibleProviderIds: ["groq", "ollama"],
 			adminOllamaUrlDraft: null,
 			adminStateCache: {
 				providers: {
 					groq: { keys: [], ok: true },
-					gemini: { keys: [], ok: true },
 					ollama: { keys: [], ok: true, ollama_base_url: "http://127.0.0.1:11434" }
 				}
 			},

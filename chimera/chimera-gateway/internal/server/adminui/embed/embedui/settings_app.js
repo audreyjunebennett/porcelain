@@ -40,8 +40,13 @@ globalThis.ChimeraSettings.Main = function () {
   var routerEnabledDraft = null;
   var adminUserDrafts = [];
   var nextAdminUserDraftId = 1;
-  /** In-flight provider API key inputs (groq/gemini); survives summarized panel rebuild. */
-  var adminProviderKeyDraft = { groq: null, gemini: null };
+  /** In-flight provider API key inputs keyed by provider id; survives summarized panel rebuild. */
+  var adminProviderKeyDraft = {};
+  /** Provider ids shown as summarized admin-provider-* cards (seeded from catalog configured_ids). */
+  var adminVisibleProviderIds = [];
+  var adminProviderCatalog = [];
+  var adminProviderCatalogReady = false;
+  var adminVisibleProviderIdsSeeded = false;
   /** In-flight Ollama base URL; null = use adminStateCache value on render. */
   var adminOllamaUrlDraft = null;
   var adminRoutingEditing = false;
@@ -876,6 +881,10 @@ globalThis.ChimeraSettings.Main = function () {
     adminUserDrafts: adminUserDrafts,
     nextAdminUserDraftId: nextAdminUserDraftId,
     adminProviderKeyDraft: adminProviderKeyDraft,
+    adminVisibleProviderIds: adminVisibleProviderIds,
+    adminProviderCatalog: adminProviderCatalog,
+    adminProviderCatalogReady: adminProviderCatalogReady,
+    adminVisibleProviderIdsSeeded: adminVisibleProviderIdsSeeded,
     adminOllamaUrlDraft: adminOllamaUrlDraft,
     adminCreatedTokenByTenant: adminCreatedTokenByTenant,
     routingPolicyTouched: routingPolicyTouched,

@@ -91,6 +91,7 @@ function gatewayPanelHideRow(ent, getFlat) {
     case "/api/ui/tokens":
     case "/api/ui/state":
     case "/api/ui/chimera-broker/providers":
+    case "/api/ui/providers/catalog":
     case "/api/ui/indexer/config":
     case "/api/ui/indexer/workspaces":
     case "/v1/indexer/storage/stats":
