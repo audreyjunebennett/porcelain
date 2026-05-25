@@ -10,15 +10,19 @@ type State struct {
 	mu                  sync.RWMutex
 	brokerRequired      bool
 	vectorstoreRequired bool
+	embedRequired       bool
 	brokerReady         bool
 	vectorstoreReady    bool
+	embedReady          bool
 	brokerRestarts      int
 	vectorstoreRestarts int
+	embedRestarts       int
 	lastError           string
 	wrapperVersion      string
 	buildCommit         string
 	brokerEndpoint      string
 	vectorstoreEndpoint string
+	embedEndpoint       string
 	operatorUIBaseURL   string
 	bootstrap           bool
 }
@@ -35,6 +39,12 @@ func (s *State) SetRequired(brokerRequired, vectorstoreRequired bool) {
 	s.vectorstoreRequired = vectorstoreRequired
 }
 
+func (s *State) SetEmbedRequired(v bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.embedRequired = v
+}
+
 func (s *State) SetVersions(wrapperVersion, buildCommit string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -49,6 +59,12 @@ func (s *State) SetEndpoints(brokerEndpoint, vectorstoreEndpoint string) {
 	s.vectorstoreEndpoint = strings.TrimSpace(vectorstoreEndpoint)
 }
 
+func (s *State) SetEmbedEndpoint(v string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.embedEndpoint = strings.TrimSpace(v)
+}
+
 func (s *State) SetBrokerReady(v bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -59,6 +75,12 @@ func (s *State) SetVectorstoreReady(v bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.vectorstoreReady = v
+}
+
+func (s *State) SetEmbedReady(v bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.embedReady = v
 }
 
 func (s *State) IncBrokerRestarts() {
@@ -90,15 +112,19 @@ func (s *State) SetOperatorUI(baseURL string, bootstrap bool) {
 type Snapshot struct {
 	BrokerRequired      bool
 	VectorstoreRequired bool
+	EmbedRequired       bool
 	BrokerReady         bool
 	VectorstoreReady    bool
+	EmbedReady          bool
 	BrokerRestarts      int
 	VectorstoreRestarts int
+	EmbedRestarts       int
 	LastError           string
 	WrapperVersion      string
 	BuildCommit         string
 	BrokerEndpoint      string
 	VectorstoreEndpoint string
+	EmbedEndpoint       string
 	OperatorUIBaseURL   string
 	Bootstrap           bool
 }
@@ -109,15 +135,19 @@ func (s *State) Snapshot() Snapshot {
 	return Snapshot{
 		BrokerRequired:      s.brokerRequired,
 		VectorstoreRequired: s.vectorstoreRequired,
+		EmbedRequired:       s.embedRequired,
 		BrokerReady:         s.brokerReady,
 		VectorstoreReady:    s.vectorstoreReady,
+		EmbedReady:          s.embedReady,
 		BrokerRestarts:      s.brokerRestarts,
 		VectorstoreRestarts: s.vectorstoreRestarts,
+		EmbedRestarts:       s.embedRestarts,
 		LastError:           s.lastError,
 		WrapperVersion:      s.wrapperVersion,
 		BuildCommit:         s.buildCommit,
 		BrokerEndpoint:      s.brokerEndpoint,
 		VectorstoreEndpoint: s.vectorstoreEndpoint,
+		EmbedEndpoint:       s.embedEndpoint,
 		OperatorUIBaseURL:   s.operatorUIBaseURL,
 		Bootstrap:           s.bootstrap,
 	}
@@ -129,6 +159,9 @@ func ContractStatus(s Snapshot) string {
 		return "degraded"
 	}
 	if s.VectorstoreRequired && !s.VectorstoreReady {
+		return "degraded"
+	}
+	if s.EmbedRequired && !s.EmbedReady {
 		return "degraded"
 	}
 	return "ok"

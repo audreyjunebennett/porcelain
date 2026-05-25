@@ -56,9 +56,14 @@ func Run(ctx context.Context, cfg svconfig.Config, version, commit string) error
 		bootstrap = tokens.IsBootstrapMode(res.TokensPath)
 	}
 	vectorstoreWrapperBin := strings.TrimSpace(cfg.VectorstoreBin)
+	embedWrapperBin := strings.TrimSpace(cfg.EmbedBin)
 	controlState := control.NewState()
 	controlState.SetVersions(version, commit)
 	controlState.SetRequired(true, vectorstoreWrapperBin != "")
+	if res.InternalEmbedding.Enabled {
+		controlState.SetEmbedRequired(embedWrapperBin != "")
+		controlState.SetEmbedEndpoint(strings.TrimSpace(cfg.EmbedEndpoint))
+	}
 	controlState.SetEndpoints(strings.TrimSpace(cfg.BrokerEndpoint), strings.TrimSpace(cfg.VectorstoreEndpoint))
 	controlState.SetOperatorUI(gatewayPublicURLFromResolved(res), bootstrap)
 	controlListen := strings.TrimSpace(cfg.Listen)
@@ -86,6 +91,10 @@ func Run(ctx context.Context, cfg svconfig.Config, version, commit string) error
 	if vectorstoreWrapperBin != "" {
 		vectorstoreReadyzURL = fmt.Sprintf("http://%s/readyz", strings.TrimSpace(cfg.VectorstoreListen))
 	}
+	embedReadyzURL := ""
+	if res.InternalEmbedding.Enabled && embedWrapperBin != "" {
+		embedReadyzURL = fmt.Sprintf("http://%s/readyz", strings.TrimSpace(cfg.EmbedListen))
+	}
 	gatewayReadyzURL := fmt.Sprintf("http://%s/readyz", strings.TrimSpace(cfg.GatewayListen))
 	brokerReadyzURL := fmt.Sprintf("http://%s/readyz", strings.TrimSpace(cfg.BrokerListen))
 
@@ -94,6 +103,8 @@ func Run(ctx context.Context, cfg svconfig.Config, version, commit string) error
 		gatewayWaitErr  chan error
 		vectorstoreProc *exec.Cmd
 		vectorstoreWait chan error
+		embedProc       *exec.Cmd
+		embedWait       chan error
 		brokerProc      *exec.Cmd
 		brokerWaitErr   chan error
 		indexerProc     *exec.Cmd
@@ -112,6 +123,7 @@ func Run(ctx context.Context, cfg svconfig.Config, version, commit string) error
 			ShutdownChildren(log, shutdownGrace,
 				Child{Name: "gateway", Cmd: gatewayProc, WaitCh: gatewayWaitErr},
 				Child{Name: "vectorstore", Cmd: vectorstoreProc, WaitCh: vectorstoreWait},
+				Child{Name: "embed", Cmd: embedProc, WaitCh: embedWait},
 				Child{Name: "broker", Cmd: brokerProc, WaitCh: brokerWaitErr},
 				Child{Name: "indexer", Cmd: indexerProc, WaitCh: indexerWait},
 			)
@@ -121,7 +133,7 @@ func Run(ctx context.Context, cfg svconfig.Config, version, commit string) error
 	stopChildrenFast := func() {
 		supervisedShutdownOnce.Do(func() {
 			stopIndexer()
-			KillWrapperFamilies(gatewayProc, brokerProc, vectorstoreProc)
+			KillWrapperFamilies(gatewayProc, brokerProc, vectorstoreProc, embedProc)
 		})
 	}
 
@@ -133,6 +145,13 @@ func Run(ctx context.Context, cfg svconfig.Config, version, commit string) error
 			if err := startVectorstoreChild(cfg, res, controlBaseURL, logStore, logLevel, log, controlState, vectorstoreWrapperBin, &vectorstoreProc, &vectorstoreWait, vectorstoreReadyzURL, stopChildrenFast); err != nil {
 				return err
 			}
+		}
+		if res.InternalEmbedding.Enabled && embedWrapperBin != "" {
+			if err := startEmbedChild(cfg, res, controlBaseURL, logStore, logLevel, log, controlState, embedWrapperBin, &embedProc, &embedWait, embedReadyzURL, stopChildrenFast); err != nil {
+				return err
+			}
+		} else if res.InternalEmbedding.Enabled && embedWrapperBin == "" {
+			return svconfig.Exitf(1, "internal_embedding.enabled in gateway.yaml but no chimera-embed wrapper found (build with make chimera-embed-build or pass -embed-bin)")
 		}
 		if err := startBrokerChild(cfg, res, controlBaseURL, logStore, logLevel, log, controlState, &brokerProc, &brokerWaitErr, brokerReadyzURL, vectorstoreWait, stopChildrenFast); err != nil {
 			return err
@@ -153,6 +172,9 @@ func Run(ctx context.Context, cfg svconfig.Config, version, commit string) error
 	brokerclient.RunSupervisedChildHealthMonitor(rootCtx, log, "broker", brokerReadyzURL, 15*time.Second, 30*time.Second, !cfg.NoWaitBroker)
 	if vectorstoreReadyzURL != "" {
 		brokerclient.RunSupervisedChildHealthMonitor(rootCtx, log, "vectorstore", vectorstoreReadyzURL, 15*time.Second, 30*time.Second, !cfg.NoWaitVectorstore)
+	}
+	if embedReadyzURL != "" {
+		brokerclient.RunSupervisedChildHealthMonitor(rootCtx, log, "embed", embedReadyzURL, 15*time.Second, 30*time.Second, !cfg.NoWaitEmbed)
 	}
 	<-rootCtx.Done()
 	stopChildrenGraceful()

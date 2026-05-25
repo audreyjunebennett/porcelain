@@ -33,6 +33,28 @@ func DefaultBrokerBin() string {
 	return naming.ProductBrokerName
 }
 
+// DefaultEmbedBin resolves chimera-embed next to this executable or on PATH.
+func DefaultEmbedBin() string {
+	dir := executableDir()
+	return binfind.FirstInExeDirs(dir, binfind.SearchNames(naming.ProductEmbedName))
+}
+
+// DefaultLlamaServerBin resolves the llama-server backend binary for chimera-embed -bin.
+func DefaultLlamaServerBin() string {
+	dir := executableDir()
+	names := []string{naming.ProductLlamaServerBinName}
+	if runtime.GOOS == "windows" {
+		names = []string{naming.ProductLlamaServerBinName + ".exe", naming.ProductLlamaServerBinName}
+	}
+	if p := binfind.FirstInExeDirs(dir, names); p != "" {
+		return p
+	}
+	if runtime.GOOS == "windows" {
+		return naming.ProductLlamaServerBinName + ".exe"
+	}
+	return naming.ProductLlamaServerBinName
+}
+
 // DefaultVectorstoreBin resolves chimera-vectorstore next to this executable or on PATH.
 func DefaultVectorstoreBin() string {
 	dir := executableDir()

@@ -32,6 +32,13 @@ type Config struct {
 	BrokerDataDir       string
 	WaitBroker          time.Duration
 	NoWaitBroker        bool
+	EmbedBin            string
+	EmbedListen         string
+	EmbedEndpoint       string
+	EmbedModelPath      string
+	EmbedCacheDir       string
+	WaitEmbed           time.Duration
+	NoWaitEmbed         bool
 	VectorstoreBin      string
 	VectorstoreListen   string
 	VectorstoreEndpoint string
@@ -88,6 +95,13 @@ func bindFlags(fs *flag.FlagSet, cfg *Config) {
 	fs.DurationVar(&cfg.WaitGateway, "wait-gateway", 60*time.Second, "Max time to poll chimera-gateway /readyz before exit")
 	fs.BoolVar(&cfg.NoWaitGateway, "no-wait-gateway", false, "Skip chimera-gateway readiness poll")
 	fs.StringVar(&cfg.BrokerBin, "broker-bin", DefaultBrokerBin(), "chimera-broker wrapper binary")
+	fs.StringVar(&cfg.EmbedBin, "embed-bin", DefaultEmbedBin(), "chimera-embed wrapper binary (empty disables)")
+	fs.StringVar(&cfg.EmbedListen, "embed-listen", naming.DefaultEmbedListen, "chimera-embed wrapper listen host:port")
+	fs.StringVar(&cfg.EmbedEndpoint, "embed-endpoint", naming.DefaultEmbedEndpoint, "embed backend endpoint host:port for chimera-embed --endpoint")
+	fs.StringVar(&cfg.EmbedModelPath, "embed-model-path", "", "GGUF model path override for chimera-embed --model-path")
+	fs.StringVar(&cfg.EmbedCacheDir, "embed-cache-dir", "", "model cache dir override for chimera-embed --cache-dir")
+	fs.DurationVar(&cfg.WaitEmbed, "wait-embed", 120*time.Second, "Max time to poll chimera-embed /readyz before exit")
+	fs.BoolVar(&cfg.NoWaitEmbed, "no-wait-embed", false, "Skip chimera-embed readiness poll")
 	fs.StringVar(&cfg.BrokerListen, "broker-listen", naming.DefaultBrokerListen, "chimera-broker wrapper listen host:port")
 	fs.StringVar(&cfg.BrokerEndpoint, "broker-endpoint", naming.DefaultBrokerEndpoint, "broker backend endpoint host:port for chimera-broker --endpoint")
 	fs.StringVar(&cfg.BrokerDataDir, "broker-data-dir", "data/broker", "broker data path for chimera-broker --data-path")

@@ -7,10 +7,12 @@ import (
 	"time"
 
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/brokeradmin"
+	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/rag/embedprobe"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/adminui/api/providers"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/adminui/apirut"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/catalog"
 	gruntime "github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/runtime"
+	gwconfig "github.com/lynn/porcelain/chimera/internal/config"
 	"github.com/lynn/porcelain/internal/naming"
 )
 
@@ -104,6 +106,11 @@ func buildEmbeddingCheck(ctx context.Context, rt *gruntime.Runtime, log *slog.Lo
 		return out, false
 	}
 
+	res, _, _ := rt.Snapshot()
+	if res != nil && gwconfig.UsesInternalProvider(modelID, res.InternalEmbedding) {
+		return buildInternalEmbeddingCheck(ctx, rt, modelID, res, out)
+	}
+
 	snap := catalogSnapshotForIndexerHealth(ctx, rt, log)
 	now := time.Now()
 	fresh := snap != nil && snap.IsFresh(now, catalog.CatalogSnapshotFreshness)
@@ -171,6 +178,24 @@ func buildEmbeddingCheck(ctx context.Context, rt *gruntime.Runtime, log *slog.Lo
 	default:
 		return out, true
 	}
+}
+
+func buildInternalEmbeddingCheck(ctx context.Context, rt *gruntime.Runtime, modelID string, res *gwconfig.Resolved, out map[string]any) (map[string]any, bool) {
+	provider := res.InternalEmbedding.Provider
+	out["provider"] = provider
+	out["provider_state"] = "up"
+	out["model_in_catalog"] = true
+
+	embURL := res.RAG.EmbeddingURL(res.UpstreamBaseURL)
+	if err := embedprobe.Probe(ctx, embURL, modelID, res.RAG.EmbeddingDim); err != nil {
+		out["ok"] = false
+		out["status"] = "unavailable"
+		out["reason_code"] = ReasonEmbedProviderDown
+		out["provider_state"] = "down"
+		out["detail"] = err.Error()
+		return out, false
+	}
+	return out, true
 }
 
 func catalogSnapshotForIndexerHealth(ctx context.Context, rt *gruntime.Runtime, log *slog.Logger) *catalog.CatalogSnapshot {

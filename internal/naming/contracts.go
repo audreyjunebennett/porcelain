@@ -13,6 +13,8 @@ const (
 	ProductBrokerHTTPBinName     = "chimera-broker-http" // supervised BiFrost HTTP upstream
 	ProductBifrostHTTPBinName    = "bifrost-http"        // BiFrost build artifact basename (install scripts)
 	ProductVectorstoreName       = "chimera-vectorstore"
+	ProductEmbedName             = "chimera-embed"
+	ProductLlamaServerBinName    = "llama-server"
 	ProductQdrantBinName         = "qdrant"
 	ProductGatewayBinName        = "chimera-gateway"
 	ProductGatewayBackendBinName = "chimera-gateway-backend"
@@ -67,6 +69,35 @@ const (
 	DefaultVectorstoreDataPath = "data/vectorstore"
 	DefaultVectorstoreLogLevel = "info"
 	DefaultVectorstoreGRPCPort = 6334
+
+	// chimera-embed wrapper environment (EMBED__*).
+	EnvEmbedListen           = "EMBED__LISTEN"
+	EnvEmbedBin              = "EMBED__BIN"
+	EnvEmbedBackend          = "EMBED__BACKEND"
+	EnvEmbedEndpoint         = "EMBED__ENDPOINT"
+	EnvEmbedModelPath        = "EMBED__MODEL_PATH"
+	EnvEmbedCacheDir         = "EMBED__CACHE_DIR"
+	EnvEmbedLogLevel         = "EMBED__LOG_LEVEL"
+	EnvEmbedTimeoutsStartup  = "EMBED__TIMEOUTS__STARTUP"
+	EnvEmbedTimeoutsShutdown = "EMBED__TIMEOUTS__SHUTDOWN"
+	EnvEmbedCtxSize          = "EMBED__CTX_SIZE"
+	EnvEmbedNGPULayers       = "EMBED__N_GPU_LAYERS"
+	EnvEmbedPooling          = "EMBED__POOLING"
+
+	// chimera-embed wrapper defaults.
+	DefaultEmbedListen     = "127.0.0.1:7750"
+	DefaultEmbedEndpoint   = "127.0.0.1:8090"
+	DefaultEmbedLogLevel   = "info"
+	DefaultEmbedModelPath  = "data/embedding/models/nomic-embed-text.gguf"
+	DefaultEmbedCacheDir   = "data/embedding/cache"
+	DefaultEmbedCtxSize    = 2048
+	DefaultEmbedNGPULayers = 0
+	DefaultEmbedPooling    = "mean"
+
+	// Internal embedding provider id prefix (gateway.yaml internal_embedding.provider).
+	InternalEmbeddingProvider = "internal"
+	DefaultInternalEmbedModel = InternalEmbeddingProvider + "/nomic-embed-text"
+	DefaultInternalEmbedDim   = 768
 
 	// Locus desktop environment variables.
 	EnvDesktopTrace  = "LOCUS_DESKTOP_TRACE"

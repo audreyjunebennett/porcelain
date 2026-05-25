@@ -75,6 +75,9 @@ type Resolved struct {
 	// and RAG scope using embeddings + similarity (requires metrics SQLite + embeddings API).
 	ConversationMerge ConversationMerge
 
+	// InternalEmbedding configures supervised chimera-embed (local llama-server embeddings).
+	InternalEmbedding InternalEmbedding
+
 	// WitnessSampleMaxChars caps head/tail runes for conversation.payload.sample (Phase 8).
 	// When zero, defaults to 256 in WitnessSampleMaxRunes().
 	WitnessSampleMaxChars int
@@ -164,6 +167,8 @@ type gatewayDoc struct {
 	} `yaml:"operator"`
 	Vectorstore vectorstoreDoc `yaml:"vectorstore"`
 	RAG         ragDoc         `yaml:"rag"`
+
+	InternalEmbedding internalEmbeddingDoc `yaml:"internal_embedding"`
 
 	Indexer struct {
 		Supervised struct {
@@ -396,6 +401,14 @@ func LoadGatewayYAML(filePath string, log *slog.Logger) (*Resolved, error) {
 	}
 
 	rag := doc.RAG.effective(doc.Vectorstore)
+	internalEmbed := doc.InternalEmbedding.effective()
+	if err := internalEmbed.Validate(); err != nil {
+		if log != nil {
+			log.Error("internal embedding config invalid; disabling internal embedding", "msg", "internal_embedding.config.invalid", "err", err)
+		}
+		internalEmbed.Enabled = false
+	}
+	applyInternalEmbeddingToRAG(&rag, internalEmbed, upBase)
 	if err := rag.Validate(); err != nil {
 		if log != nil {
 			log.Error("rag config invalid; disabling RAG", "msg", "rag.config.invalid", "err", err)
@@ -463,6 +476,7 @@ func LoadGatewayYAML(filePath string, log *slog.Logger) (*Resolved, error) {
 		ToolRouterEnabled:                     toolRouterOn,
 		ToolRouterConfidenceThreshold:         toolThresh,
 		RAG:                                   rag,
+		InternalEmbedding:                     internalEmbed,
 		ConversationMerge:                     mergeCfg,
 		WitnessSampleMaxChars:                 witnessMax,
 		WitnessSampleForceAtDebug:             witnessForceDebug,
