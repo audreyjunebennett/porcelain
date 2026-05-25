@@ -50,8 +50,8 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminUsers = function (ctx) {
     if (typeof sgOpHealthPillHtml === "function") {
       metricsHtml =
         '<span class="sum-metrics">' +
-        sgOpHealthPillHtml(formatInt(convN) + " conv", "metric") +
-        sgOpHealthPillHtml(formatInt(wsN) + " ws", "metric") +
+        sgOpHealthPillHtml(formatInt(convN), "metric", { icon: "forum", title: "Conversations" }) +
+        sgOpHealthPillHtml(formatInt(wsN), "metric", { icon: "database", title: "Workspaces" }) +
         "</span>";
     }
     return (
@@ -85,7 +85,7 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminUsers = function (ctx) {
       "</code>" +
       createdTokenCopyBtn +
       "</div>" +
-      adminScopedEvlogPanelFromEvents("Scoped log — user", "user-" + principalId, scoped) +
+      adminScopedEvlogPanelFromEvents("Scoped log — user", "user-" + principalId, scoped, { showSourceColumn: true }) +
       "</div></article>"
     );
   }

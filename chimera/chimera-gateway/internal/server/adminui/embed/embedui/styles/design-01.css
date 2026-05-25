@@ -361,62 +361,66 @@ html[data-theme="design-01"] #panel-summarized .sum-avatar {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 }
 
-/* Service avatars — distinct fills with contrast on card / rail backgrounds */
+/* Card avatars — same fill as open card body; accent fg for initials legibility */
 html[data-theme="design-01"] #panel-summarized .sum-avatar.sum-av-svc-chimera-gateway,
 html[data-theme="design-01"] .sg-op-rail .sum-avatar.sum-av-svc-chimera-gateway {
-  background: var(--embed-color-primary-fixed-dim, #abcae5);
-  color: var(--embed-semantic-info-fg, #2b4a60);
+  background: var(--embed-body-tint-svc-gw);
+  color: var(--embed-chev-hover-svc-gw);
 }
 
 html[data-theme="design-01"] #panel-summarized .sum-avatar.sum-av-svc-chimera-broker,
 html[data-theme="design-01"] .sg-op-rail .sum-avatar.sum-av-svc-chimera-broker {
-  background: var(--embed-color-primary-container, #5a7890);
-  color: var(--embed-text-on-primary, #ffffff);
-  box-shadow: 0 1px 4px rgba(26, 28, 26, 0.14);
+  background: var(--embed-body-tint-svc-bf);
+  color: var(--embed-chev-hover-svc-bf);
+  box-shadow: none;
 }
 
 html[data-theme="design-01"] #panel-summarized .sum-avatar.sum-av-svc-chimera-vectorstore,
 html[data-theme="design-01"] .sg-op-rail .sum-avatar.sum-av-svc-chimera-vectorstore {
-  background: var(--embed-color-secondary-container, #c9e8cb);
-  color: var(--embed-semantic-success-fg, #1b5e20);
+  background: var(--embed-body-tint-svc-qd);
+  color: var(--embed-chev-hover-svc-qd);
 }
 
 html[data-theme="design-01"] #panel-summarized .sum-avatar.sum-av-svc-chimera-indexer,
 html[data-theme="design-01"] .sg-op-rail .sum-avatar.sum-av-svc-chimera-indexer {
-  background: var(--embed-color-tertiary-fixed-dim, #f7b7a9);
-  color: var(--embed-text-on-tertiary-fixed, #673b31);
+  background: var(--embed-body-tint-svc-ix);
+  color: var(--embed-chev-hover-svc-ix);
 }
 
 html[data-theme="design-01"] #panel-summarized .sum-avatar.sum-av-a,
 html[data-theme="design-01"] .sg-op-rail .sum-avatar.sum-av-a {
-  background: var(--embed-color-primary-fixed-dim, #abcae5);
-  color: var(--embed-semantic-info-fg, #2b4a60);
+  background: var(--embed-body-tint-a);
+  color: var(--embed-chev-hover-a);
 }
 
 html[data-theme="design-01"] #panel-summarized .sum-avatar.sum-av-b,
 html[data-theme="design-01"] .sg-op-rail .sum-avatar.sum-av-b {
-  background: var(--embed-color-secondary-container, #c9e8cb);
-  color: var(--embed-semantic-success-fg, #1b5e20);
+  background: var(--embed-body-tint-b);
+  color: var(--embed-chev-hover-b);
 }
 
 html[data-theme="design-01"] #panel-summarized .sum-avatar.sum-av-c,
 html[data-theme="design-01"] .sg-op-rail .sum-avatar.sum-av-c {
-  background: var(--embed-color-tertiary-fixed-dim, #f7b7a9);
-  color: var(--embed-text-on-tertiary-fixed, #673b31);
+  background: var(--embed-body-tint-c);
+  color: var(--embed-chev-hover-c);
 }
 
 html[data-theme="design-01"] #panel-summarized .sum-avatar.sum-av-d,
 html[data-theme="design-01"] .sg-op-rail .sum-avatar.sum-av-d {
-  background: var(--embed-color-primary-fixed, #cae6ff);
-  color: var(--embed-semantic-info-fg, #2b4a60);
+  background: var(--embed-body-tint-d);
+  color: var(--embed-chev-hover-d);
 }
 
 html[data-theme="design-01"] #panel-summarized .sum-avatar.sum-av-e,
+html[data-theme="design-01"] .sg-op-rail .sum-avatar.sum-av-e {
+  background: var(--embed-chip-strip-bg);
+  color: var(--embed-text-bluegrey-455);
+}
+
 html[data-theme="design-01"] #panel-summarized .sum-avatar.sum-av-f,
-html[data-theme="design-01"] .sg-op-rail .sum-avatar.sum-av-e,
 html[data-theme="design-01"] .sg-op-rail .sum-avatar.sum-av-f {
-  background: var(--embed-surface-container-high, #e9e8e5);
-  color: var(--embed-text-secondary, #42474c);
+  background: var(--embed-body-tint-f);
+  color: var(--embed-chev-hover-f);
 }
 
 html[data-theme="design-01"] .sg-op-rail .sum-title,
@@ -557,6 +561,11 @@ html[data-theme="design-01"] #panel-summarized .sum-card.sum-card--collapsible:n
   background: var(--embed-surface-container-low, #f4f3f0);
   border-color: var(--embed-border-medium, #e3e2e0);
   letter-spacing: 0.03em;
+}
+
+.sg-op-health-pill--metric .sg-op-health-pill__icon {
+  font-size: 0.95rem;
+  line-height: 1;
 }
 
 /* Summary row: metrics cluster + large operator pills (gallery panel + rails) */

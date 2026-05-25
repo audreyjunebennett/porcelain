@@ -142,7 +142,7 @@
                 <dt>Workspaces</dt><dd>3</dd>
               </dl>
               <div class="sum-section-label">Scoped log — user</div>
-              <div class="sum-evlog sum-evlog--in-card" data-gallery-evlog-root>
+              <div class="sum-evlog sum-evlog--in-card" data-gallery-evlog-root data-sum-evlog-root data-sum-evlog-cols="4" data-sum-evlog-source>
                 <div class="sum-evlog__toolbar">
                   <input class="sum-evlog__search" type="search" placeholder="Search message or time…" aria-label="Search log entries" autocomplete="off" />
                   <label class="sum-evlog__lvl-label" style="margin-left:auto">
@@ -157,8 +157,8 @@
                 </div>
                 <div class="sum-metrics-table-wrap sum-evlog__table-scroll">
                   <table class="sum-metrics-table sum-evlog__table">
-                    <colgroup><col class="sum-evlog__col-time" /><col class="sum-evlog__col-msg" /><col class="sum-evlog__col-status" /></colgroup>
-                    <thead><tr><th class="sum-evlog__cell--time" scope="col">Time</th><th scope="col">Message</th><th class="sum-evlog__th-status" scope="col">
+                    <colgroup><col class="sum-evlog__col-time" /><col class="sum-evlog__col-msg" /><col class="sum-evlog__col-source" /><col class="sum-evlog__col-status" /></colgroup>
+                    <thead><tr><th class="sum-evlog__cell--time" scope="col">Time</th><th class="sum-evlog__th-msg" scope="col">Message</th><th class="sum-evlog__th-source" scope="col">Source</th><th class="sum-evlog__th-status" scope="col">
                       <div class="sum-evlog__th-status-head" role="group" aria-label="Status counts">
                         <span class="sum-evlog__th-status-label">Status</span>
                         <span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN sum-evlog-metric-num" data-sum-evlog-metric-warn>—</span>
@@ -170,17 +170,20 @@
                     <tbody data-gallery-evlog-tbody>
                       <tr class="sum-evlog__row" data-evlog-id="demo-usr1-1" data-evlog-level="INFO" data-evlog-http="200">
                         <td class="sum-evlog__cell--time"><time datetime="2026-05-11T10:01:02.100Z"></time></td>
-                        <td class="sum-evlog__cell--msg"><span class="sum-svc-badge sum-svc-gateway">gateway</span>Token minted for <code class="sum-mono-id">usr_7a21f0c4</code> · ops@acme.example</td>
+                        <td class="sum-evlog__cell--msg">Token minted for <code class="sum-mono-id">usr_7a21f0c4</code> · ops@acme.example</td>
+                        <td class="sum-evlog__cell--source"><span class="sum-svc-badge sum-svc-gateway">gateway</span></td>
                         <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="pill-2xx">200</span></div></td>
                       </tr>
                       <tr class="sum-evlog__row" data-evlog-id="demo-usr1-2" data-evlog-level="INFO">
                         <td class="sum-evlog__cell--time"><time datetime="2026-05-11T10:04:18.040Z"></time></td>
                         <td class="sum-evlog__cell--msg">Conversation <code class="sum-mono-id">conv_8a2</code> attributed to principal <code class="sum-mono-id">usr_7a21f0c4</code>.</td>
+                        <td class="sum-evlog__cell--source"><span class="sum-svc-badge sum-svc-gateway">gateway</span></td>
                         <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="sum-evlog-status__empty" aria-hidden="true"></span></div></td>
                       </tr>
                       <tr class="sum-evlog__row" data-evlog-id="demo-usr1-3" data-evlog-level="WARN">
                         <td class="sum-evlog__cell--time"><time datetime="2026-05-11T10:08:55.881Z"></time></td>
                         <td class="sum-evlog__cell--msg">Indexer workspace write by <code class="sum-mono-id">usr_7a21f0c4</code> — path policy advisory.</td>
+                        <td class="sum-evlog__cell--source"><span class="sum-svc-badge sum-svc-indexer">indexer</span></td>
                         <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN">WARN</span></div></td>
                       </tr>
                     </tbody>
@@ -212,7 +215,7 @@
                 <dt>Workspaces</dt><dd>1</dd>
               </dl>
               <div class="sum-section-label">Scoped log — user</div>
-              <div class="sum-evlog sum-evlog--in-card" data-gallery-evlog-root>
+              <div class="sum-evlog sum-evlog--in-card" data-gallery-evlog-root data-sum-evlog-root data-sum-evlog-cols="4" data-sum-evlog-source>
                 <div class="sum-evlog__toolbar">
                   <input class="sum-evlog__search" type="search" placeholder="Search message or time…" aria-label="Search log entries" autocomplete="off" />
                   <label class="sum-evlog__lvl-label" style="margin-left:auto">
@@ -227,8 +230,8 @@
                 </div>
                 <div class="sum-metrics-table-wrap sum-evlog__table-scroll">
                   <table class="sum-metrics-table sum-evlog__table">
-                    <colgroup><col class="sum-evlog__col-time" /><col class="sum-evlog__col-msg" /><col class="sum-evlog__col-status" /></colgroup>
-                    <thead><tr><th class="sum-evlog__cell--time" scope="col">Time</th><th scope="col">Message</th><th class="sum-evlog__th-status" scope="col">
+                    <colgroup><col class="sum-evlog__col-time" /><col class="sum-evlog__col-msg" /><col class="sum-evlog__col-source" /><col class="sum-evlog__col-status" /></colgroup>
+                    <thead><tr><th class="sum-evlog__cell--time" scope="col">Time</th><th class="sum-evlog__th-msg" scope="col">Message</th><th class="sum-evlog__th-source" scope="col">Source</th><th class="sum-evlog__th-status" scope="col">
                       <div class="sum-evlog__th-status-head" role="group" aria-label="Status counts">
                         <span class="sum-evlog__th-status-label">Status</span>
                         <span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN sum-evlog-metric-num" data-sum-evlog-metric-warn>—</span>
@@ -240,12 +243,14 @@
                     <tbody data-gallery-evlog-tbody>
                       <tr class="sum-evlog__row" data-evlog-id="demo-usr2-1" data-evlog-level="INFO" data-evlog-http="200">
                         <td class="sum-evlog__cell--time"><time datetime="2026-05-11T11:02:10.200Z"></time></td>
-                        <td class="sum-evlog__cell--msg"><span class="sum-svc-badge sum-svc-web">web</span>Panel login · principal <code class="sum-mono-id">usr_9bee110a</code> (contractor-east).</td>
+                        <td class="sum-evlog__cell--msg">Panel login · principal <code class="sum-mono-id">usr_9bee110a</code> (contractor-east).</td>
+                        <td class="sum-evlog__cell--source"><span class="sum-svc-badge sum-svc-web">web</span></td>
                         <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="pill-2xx">200</span></div></td>
                       </tr>
                       <tr class="sum-evlog__row" data-evlog-id="demo-usr2-2" data-evlog-level="INFO">
                         <td class="sum-evlog__cell--time"><time datetime="2026-05-11T11:05:33.040Z"></time></td>
                         <td class="sum-evlog__cell--msg">Workspace <code class="sum-mono-id">ws_contractor</code> touched by <code class="sum-mono-id">usr_9bee110a</code>.</td>
+                        <td class="sum-evlog__cell--source"><span class="sum-svc-badge sum-svc-indexer">indexer</span></td>
                         <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="sum-evlog-status__empty" aria-hidden="true"></span></div></td>
                       </tr>
                     </tbody>
@@ -332,7 +337,7 @@
               <div class="sum-metrics-table-wrap sum-evlog__table-scroll">
                 <table class="sum-metrics-table sum-evlog__table">
                   <colgroup><col class="sum-evlog__col-time" /><col class="sum-evlog__col-msg" /><col class="sum-evlog__col-status" /></colgroup>
-                  <thead><tr><th class="sum-evlog__cell--time" scope="col">Time</th><th scope="col">Message</th><th class="sum-evlog__th-status" scope="col">
+                  <thead><tr><th class="sum-evlog__cell--time" scope="col">Time</th><th class="sum-evlog__th-msg" scope="col">Message</th><th class="sum-evlog__th-status" scope="col">
                     <div class="sum-evlog__th-status-head" role="group" aria-label="Status counts">
                       <span class="sum-evlog__th-status-label">Status</span>
                       <span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN sum-evlog-metric-num" data-sum-evlog-metric-warn>—</span>
@@ -499,7 +504,7 @@ rules:
               <div class="sum-metrics-table-wrap sum-evlog__table-scroll">
                 <table class="sum-metrics-table sum-evlog__table">
                   <colgroup><col class="sum-evlog__col-time" /><col class="sum-evlog__col-msg" /><col class="sum-evlog__col-status" /></colgroup>
-                  <thead><tr><th class="sum-evlog__cell--time" scope="col">Time</th><th scope="col">Message</th><th class="sum-evlog__th-status" scope="col">
+                  <thead><tr><th class="sum-evlog__cell--time" scope="col">Time</th><th class="sum-evlog__th-msg" scope="col">Message</th><th class="sum-evlog__th-status" scope="col">
                     <div class="sum-evlog__th-status-head" role="group" aria-label="Status counts">
                       <span class="sum-evlog__th-status-label">Status</span>
                       <span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN sum-evlog-metric-num" data-sum-evlog-metric-warn>—</span>
@@ -702,7 +707,7 @@ rules:
               <button type="button" class="sg-op-btn sg-op-btn--ghost" disabled>Dry-run evaluate</button>
             </div>
             <div class="sum-section-label">Scoped log — user</div>
-            <div class="sum-evlog sum-evlog--in-card" data-gallery-evlog-root>
+            <div class="sum-evlog sum-evlog--in-card" data-gallery-evlog-root data-sum-evlog-root data-sum-evlog-cols="4" data-sum-evlog-source>
               <div class="sum-evlog__toolbar">
                 <input class="sum-evlog__search" type="search" placeholder="Search message or time…" aria-label="Search log entries" autocomplete="off" />
                 <label class="sum-evlog__lvl-label" style="margin-left:auto">
@@ -717,8 +722,8 @@ rules:
               </div>
               <div class="sum-metrics-table-wrap sum-evlog__table-scroll">
                 <table class="sum-metrics-table sum-evlog__table">
-                  <colgroup><col class="sum-evlog__col-time" /><col class="sum-evlog__col-msg" /><col class="sum-evlog__col-status" /></colgroup>
-                  <thead><tr><th class="sum-evlog__cell--time" scope="col">Time</th><th scope="col">Message</th><th class="sum-evlog__th-status" scope="col">
+                  <colgroup><col class="sum-evlog__col-time" /><col class="sum-evlog__col-msg" /><col class="sum-evlog__col-source" /><col class="sum-evlog__col-status" /></colgroup>
+                  <thead><tr><th class="sum-evlog__cell--time" scope="col">Time</th><th class="sum-evlog__th-msg" scope="col">Message</th><th class="sum-evlog__th-source" scope="col">Source</th><th class="sum-evlog__th-status" scope="col">
                     <div class="sum-evlog__th-status-head" role="group" aria-label="Status counts">
                       <span class="sum-evlog__th-status-label">Status</span>
                       <span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN sum-evlog-metric-num" data-sum-evlog-metric-warn>—</span>
@@ -730,12 +735,14 @@ rules:
                   <tbody data-gallery-evlog-tbody>
                     <tr class="sum-evlog__row" data-evlog-id="demo-usr2-1" data-evlog-level="INFO" data-evlog-http="200">
                       <td class="sum-evlog__cell--time"><time datetime="2026-05-11T11:02:10.200Z"></time></td>
-                      <td class="sum-evlog__cell--msg"><span class="sum-svc-badge sum-svc-web">web</span>Panel login · principal <code class="sum-mono-id">usr_9bee110a</code> (contractor-east).</td>
+                      <td class="sum-evlog__cell--msg">Panel login · principal <code class="sum-mono-id">usr_9bee110a</code> (contractor-east).</td>
+                      <td class="sum-evlog__cell--source"><span class="sum-svc-badge sum-svc-web">web</span></td>
                       <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="pill-2xx">200</span></div></td>
                     </tr>
                     <tr class="sum-evlog__row" data-evlog-id="demo-usr2-2" data-evlog-level="INFO">
                       <td class="sum-evlog__cell--time"><time datetime="2026-05-11T11:05:33.040Z"></time></td>
                       <td class="sum-evlog__cell--msg">Workspace <code class="sum-mono-id">ws_contractor</code> touched by <code class="sum-mono-id">usr_9bee110a</code>.</td>
+                      <td class="sum-evlog__cell--source"><span class="sum-svc-badge sum-svc-indexer">indexer</span></td>
                       <td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="sum-evlog-status__empty" aria-hidden="true"></span></div></td>
                     </tr>
                   </tbody>

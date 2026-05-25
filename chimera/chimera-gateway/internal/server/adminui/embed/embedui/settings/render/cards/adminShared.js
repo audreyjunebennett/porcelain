@@ -215,7 +215,20 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminShared = function (ctx) {
     else if (variant === "not_configured") cls += " sg-op-health-pill--not_configured";
     else if (variant === "warn") cls += " sg-op-health-pill--warn";
     if (opts.pulse) cls += " sg-op-health-pill--pulse";
-    return '<span class="' + cls + '">' + escapeHtml(label != null ? String(label) : "") + "</span>";
+    var labelStr = label != null ? String(label) : "";
+    var inner = escapeHtml(labelStr);
+    if (opts.icon) {
+      inner +=
+        ' <span class="material-symbols-outlined material-symbols-outlined--sm sg-op-health-pill__icon" aria-hidden="true">' +
+        escapeHtml(String(opts.icon)) +
+        "</span>";
+    }
+    var attrs = "";
+    if (opts.title) attrs += ' title="' + escapeHtml(String(opts.title)) + '"';
+    if (opts.icon && opts.title) {
+      attrs += ' aria-label="' + escapeHtml(String(opts.title) + ": " + labelStr) + '"';
+    }
+    return "<span class=\"" + cls + "\"" + attrs + ">" + inner + "</span>";
   }
 
   function adminProviderIsConfigured(providerId) {
@@ -597,7 +610,11 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminShared = function (ctx) {
     return out;
   }
 
-  function adminScopedEvlogPanelFromEvents(title, scopeId, evs) {
+  function adminScopedEvlogPanelFromEvents(title, scopeId, evs, opts) {
+    opts = opts || {};
+    var showSource = opts.showSourceColumn === true;
+    var rowOpts = {};
+    if (showSource) rowOpts.showSourceColumn = true;
     var parts = [];
     var warnN = 0;
     var failN = 0;
@@ -608,13 +625,14 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminShared = function (ctx) {
       var lvl = String(ev.parsed.levelCanon || ev.parsed.levelLabel || "").trim();
       if (sumEvlogIsWarnish(lvl, http)) warnN++;
       if (sumEvlogIsFailish(lvl, http)) failN++;
-      parts.push(sumEvlogRowTrHtml(ev, scopeId, i, inferServiceBadge(ev), {}));
+      parts.push(sumEvlogRowTrHtml(ev, scopeId, i, inferServiceBadge(ev), rowOpts));
     }
     return sumEvlogPanelHtml({
       title: title,
       scrollTbodyId: "sum-evlog-" + escapeHtml(scopeId),
       warnN: warnN,
       failN: failN,
+      showSourceColumn: showSource,
       tbodyInnerHtml: parts.join("")
     });
   }

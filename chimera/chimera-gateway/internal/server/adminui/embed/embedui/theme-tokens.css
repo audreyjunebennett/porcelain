@@ -161,8 +161,11 @@
   --embed-avatar-svc-gw-bg: #64b5f6;
   --embed-avatar-svc-gw-fg: #0d1e2e;
   --embed-avatar-svc-bf-bg: #7e57c2;
+  --embed-avatar-svc-bf-fg: #fff;
   --embed-avatar-svc-qd-bg: #26a69a;
+  --embed-avatar-svc-qd-fg: #fff;
   --embed-avatar-svc-ix-bg: #f57c00;
+  --embed-avatar-svc-ix-fg: #fff;
   --embed-chev-hover-a: #0277bd;
   --embed-chev-hover-b: #c2185b;
   --embed-chev-hover-c: #e65100;
@@ -183,6 +186,14 @@
   --embed-body-tint-svc-bf: #ede7f6;
   --embed-body-tint-svc-qd: #e0f2f1;
   --embed-body-tint-svc-ix: #fff0e0;
+  --embed-card-intro-svc-gw-bg: #f1f8fe;
+  --embed-card-intro-svc-gw-border: rgba(100, 181, 246, 0.22);
+  --embed-card-intro-svc-bf-bg: #f8f4fc;
+  --embed-card-intro-svc-bf-border: rgba(126, 87, 194, 0.22);
+  --embed-card-intro-svc-qd-bg: #f0faf8;
+  --embed-card-intro-svc-qd-border: rgba(38, 166, 154, 0.22);
+  --embed-card-intro-svc-ix-bg: #fff7ed;
+  --embed-card-intro-svc-ix-border: rgba(245, 124, 0, 0.22);
   --embed-toolbar-input-accent: #42a5f5;
 }
 
@@ -358,16 +369,27 @@ html[data-theme="design-01"] {
   --embed-link-accent: #415f76;
 
   --embed-avatar-svc-gw-bg: #abcae5;
-  --embed-avatar-svc-gw-fg: #001e2f;
+  --embed-avatar-svc-gw-fg: #2b4a60;
   --embed-avatar-svc-bf-bg: #5a7890;
-  --embed-avatar-svc-qd-bg: #cceace;
+  --embed-avatar-svc-bf-fg: #ffffff;
+  --embed-avatar-svc-qd-bg: #c9e8cb;
+  --embed-avatar-svc-qd-fg: #1b5e20;
   --embed-avatar-svc-ix-bg: #f7b7a9;
+  --embed-avatar-svc-ix-fg: #673b31;
   --embed-svc-upstream-filled-bg: #5a7890;
   --embed-svc-upstream-filled-fg: #ffffff;
-  --embed-body-tint-svc-gw: #faf9f6;
+  --embed-body-tint-svc-gw: #cae6ff;
   --embed-body-tint-svc-bf: #e8f0f6;
   --embed-body-tint-svc-qd: #cceace;
   --embed-body-tint-svc-ix: #ffdad2;
+  --embed-card-intro-svc-gw-bg: #eef6ff;
+  --embed-card-intro-svc-gw-border: rgba(65, 95, 118, 0.14);
+  --embed-card-intro-svc-bf-bg: #f3f7fa;
+  --embed-card-intro-svc-bf-border: rgba(90, 120, 144, 0.16);
+  --embed-card-intro-svc-qd-bg: #e3f2e4;
+  --embed-card-intro-svc-qd-border: rgba(74, 101, 78, 0.16);
+  --embed-card-intro-svc-ix-bg: #fff0eb;
+  --embed-card-intro-svc-ix-border: rgba(128, 79, 68, 0.16);
   --embed-chev-hover-svc-gw: #415f76;
   --embed-strip-up: #1b5e20;
   --embed-strip-down: #ba1a1a;
