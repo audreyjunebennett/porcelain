@@ -208,6 +208,10 @@
     getFlat = typeof getFlat === "function" ? getFlat : function (p) { return (p && p.rawFlat) || {}; };
     var sorted = sortEventsAsc(events);
     var hasRagAttached = turnHasMsg(sorted, getFlat, "conversation.rag.attached");
+    var ragCoords = null;
+    if (ChimeraSettings.Derive.extractRagCoordsFromEvents) {
+      ragCoords = ChimeraSettings.Derive.extractRagCoordsFromEvents(sorted, getFlat);
+    }
     var turnCtx = { hasRagAttached: hasRagAttached };
     var routingSummary = routingSummaryFromTurnEvents(sorted, getFlat);
     var merged = turnHasMerged(sorted, getFlat);
@@ -224,7 +228,8 @@
       routingSummary: routingSummary,
       turnIndex: turnIndex,
       isNewConversation: isNewConversation,
-      isPassthrough: isPassthrough
+      isPassthrough: isPassthrough,
+      ragCoords: ragCoords
     };
     var out = [];
     for (var i = 0; i < sorted.length; i++) {

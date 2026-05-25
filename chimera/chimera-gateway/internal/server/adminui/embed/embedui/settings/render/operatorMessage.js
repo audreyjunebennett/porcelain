@@ -13,18 +13,12 @@
     return String(raw).trim();
   }
 
-  function ragCollectionSuffix(flat) {
+  function ragCollectionSuffix(flat, resolveColl) {
     var collRaw = flat.collection != null ? String(flat.collection).trim() : "";
     if (!collRaw) return "";
-    if (typeof ragCollectionLabelForUi === "function") {
-      var collLab = ragCollectionLabelForUi(collRaw);
-      if (collLab) return " Reading collection " + collLab + ".";
-    }
-    if (globalThis.ChimeraSettings && ChimeraSettings.Derive && typeof ChimeraSettings.Derive.vectorstoreCollectionDisplay === "function") {
-      var lab2 = ChimeraSettings.Derive.vectorstoreCollectionDisplay(collRaw);
-      if (lab2 != null && String(lab2).trim() !== "") return " Reading collection " + String(lab2).trim() + ".";
-    }
-    return " Reading collection " + collRaw + ".";
+    var collLab = ragCollectionLabelFromFlat(flat, resolveColl);
+    if (collLab) return " Reading workspace " + collLab + ".";
+    return "";
   }
 
   function brokerShortModel(model) {
@@ -47,20 +41,25 @@
     return m.length > 48 ? m.slice(0, 46) + "…" : m;
   }
 
-  function ragCollectionLabelFromFlat(flat) {
+  function ragCollectionLabelFromFlat(flat, resolveColl) {
     if (!flat || typeof flat !== "object") return "";
     var collRaw = flat.collection != null ? String(flat.collection).trim() : "";
     if (!collRaw) return "";
+    if (typeof resolveColl === "function") {
+      var viaResolve = resolveColl(collRaw);
+      if (viaResolve != null && String(viaResolve).trim() !== "" && viaResolve !== collRaw) {
+        return String(viaResolve).trim();
+      }
+    }
     if (typeof ragCollectionLabelForUi === "function") {
       var collLab = ragCollectionLabelForUi(collRaw);
-      if (collLab) return collLab;
+      if (collLab && collLab !== collRaw) return collLab;
     }
     if (globalThis.ChimeraSettings && ChimeraSettings.Derive && typeof ChimeraSettings.Derive.vectorstoreCollectionDisplay === "function") {
-      var lab2 = ChimeraSettings.Derive.vectorstoreCollectionDisplay(collRaw);
-      if (lab2 != null && String(lab2).trim() !== "") return String(lab2).trim();
+      var lab2 = ChimeraSettings.Derive.vectorstoreCollectionDisplay(collRaw, resolveColl);
+      if (lab2 != null && String(lab2).trim() !== "" && lab2 !== collRaw) return String(lab2).trim();
     }
-    var dash = collRaw.indexOf("-_-");
-    return dash >= 0 ? collRaw.slice(0, dash) : collRaw;
+    return "";
   }
 
   function sanitizeProviderErrorForOperator(rawErr, opts) {
@@ -170,6 +169,21 @@
     return opts.convEvlogMeta && typeof opts.convEvlogMeta === "object" ? opts.convEvlogMeta : null;
   }
 
+  function ragWorkspaceResolved(flat, opts) {
+    opts = opts || {};
+    var Derive = globalThis.ChimeraSettings && ChimeraSettings.Derive;
+    if (!Derive || typeof Derive.resolveRagWorkspaceLabel !== "function") {
+      return { label: "", known: false };
+    }
+    var coords = Derive.extractRagCoordsFromFlat ? Derive.extractRagCoordsFromFlat(flat) : null;
+    if (!coords || !coords.projectId) {
+      var meta = convEvlogMetaFromOpts(opts);
+      if (meta && meta.ragCoords && meta.ragCoords.projectId) coords = meta.ragCoords;
+    }
+    if (!coords || !coords.projectId) return { label: "", known: false };
+    return Derive.resolveRagWorkspaceLabel(coords.tenantId, coords.projectId, coords.flavorId);
+  }
+
   function virtualModelIdFromMetaOrFlat(flat, meta) {
     if (flat.virtualModelId != null && String(flat.virtualModelId).trim() !== "") {
       return String(flat.virtualModelId).trim();
@@ -263,11 +277,11 @@
 
   formatters.rag_attached = function (flat, entry, opts) {
       opts = opts || {};
-      var collLab = ragCollectionLabelFromFlat(flat);
       var hits = flat.hits != null ? Number(flat.hits) : NaN;
       if (opts.forEventLog === true) {
+        var ws = ragWorkspaceResolved(flat, opts);
         var bitsRa = ["Retrieved context"];
-        if (collLab) bitsRa.push("from " + collLab);
+        if (ws.label) bitsRa.push("from " + ws.label);
         if (!isNaN(hits) && hits >= 0) {
           bitsRa.push(hits + " chunk" + (hits === 1 ? "" : "s") + " injected into the request");
         } else {
@@ -277,16 +291,18 @@
       }
       return entry.summary || "Retrieved chunks were injected into the chat request as context.";
   };
-  formatters.rag_collection = function (flat, entry) {
+  formatters.rag_collection = function (flat, entry, opts) {
+      opts = opts || {};
+      var resolveColl = opts.resolveColl;
       var slug = entry.slug || "";
       if (slug === "conversation.rag.span") {
-        var collLab = ragCollectionLabelFromFlat(flat);
-        return collLab
-          ? "Searched collection " + collLab + " · context attached for this turn."
-          : "Searched collection · context attached for this turn.";
+        if (opts.forEventLog !== true) return entry.summary || "";
+        var wsSpan = ragWorkspaceResolved(flat, opts);
+        if (!wsSpan.label) return "RAG search started.";
+        return "RAG search for workspace " + wsSpan.label + ".";
       }
       var base = entry.summary || "";
-      return base + ragCollectionSuffix(flat);
+      return base + ragCollectionSuffix(flat, resolveColl);
   };
   formatters.conversation_fallback_model_not_found = function (flat, entry, opts) {
       opts = opts || {};

@@ -22,37 +22,6 @@ details.summary-details summary { cursor: pointer; color: var(--embed-text-link)
 .principal-block[open] > summary::before { content: "▾ "; }
 .principal-inner { margin-top: 0.5rem; padding-left: 0.25rem; }
 .service-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.35rem 0; }
-/* Conversation card: "Full event log" label + service chips on one row */
-.sum-conv-full-log-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-  margin: 0.5rem 0 0.35rem 0;
-}
-.sum-conv-full-log-head .sum-section-label {
-  margin: 0;
-  flex: 1 1 auto;
-  min-width: 8rem;
-}
-.sum-conv-services-after-log-hdr {
-  flex: 0 1 auto;
-  display: flex;
-  justify-content: flex-end;
-  margin: 0;
-  min-width: 0;
-}
-.sum-conv-services-after-log-hdr .service-chips {
-  margin: 0;
-  justify-content: flex-end;
-}
-/* Conversation expanded: service strip chips — neutral surface like the card, darker text for contrast */
-.sum-card.sum-card--conversation .sum-conv-services-after-log-hdr .service-chips .chip {
-  background: var(--embed-chip-strip-bg);
-  color: var(--embed-chip-strip-fg);
-  border-color: var(--embed-chip-strip-border);
-}
 .chip {
   font-size: var(--sum-pill-fs, 0.68rem);
   padding: var(--sum-pill-py, 0.14rem) var(--sum-pill-px, 0.42rem);

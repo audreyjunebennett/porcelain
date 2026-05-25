@@ -87,7 +87,7 @@ scope_status_poll_ms: -1
 # scope_status_edge_min_interval_ms: 2000
 
 # Local sync-state file path (default: next to this YAML under data/gateway/indexer.sync-state.json when supervised).
-# sync_state_path: "data/gateway/indexer.sync-state.json"
+sync_state_path: "data/indexer.sync-state.json"
 # Max body size for single POST /v1/ingest; larger files use chunked ingest when the gateway advertises it.
 max_whole_file_bytes: 512000
 
@@ -100,6 +100,9 @@ job_skip_log: debug
 job_ingest_log: debug
 # Batched skip rollup at INFO (indexer.job.skipped.summary); default 5000 ms; negative disables.
 # skip_summary_min_interval_ms: 5000
+# Unchanged idle indexer.queue.snapshot INFO heartbeat while workers drain (default 300000 ms = 5 min).
+# Negative disables idle INFO heartbeats (DEBUG only when queue idle and counters unchanged).
+# queue_snapshot_idle_info_interval_ms: 300000
 
 # Deprecated: use job_skip_log instead (true → info, false → debug when job_skip_log unset).
 # verbose_job_logs: true

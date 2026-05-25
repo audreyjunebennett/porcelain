@@ -191,7 +191,9 @@ func TestNormalizePayloadIdempotent(t *testing.T) {
 }
 
 func TestNormalizePayloadPlainBanner(t *testing.T) {
-	b := NormalizePayload("   ____  Qdrant banner line")
+	resetVectorstoreStartupChatterForTest()
+	b := postProcessNormalizedLine(NormalizePayload("   ____  Qdrant banner line"))
+	assertNormalizedFieldOrder(t, b)
 	var m map[string]any
 	if err := json.Unmarshal(b, &m); err != nil {
 		t.Fatal(err)
@@ -199,11 +201,62 @@ func TestNormalizePayloadPlainBanner(t *testing.T) {
 	if m["msg"] != "vectorstore.startup.banner" {
 		t.Fatalf("msg=%v", m["msg"])
 	}
-	if m["progress_detail"] != "____  Qdrant banner line" {
-		t.Fatalf("progress_detail=%q", m["progress_detail"])
+	if m["level"] != "INFO" {
+		t.Fatalf("first banner level=%v want INFO", m["level"])
+	}
+	if pd, ok := m["progress_detail"]; ok && pd != nil && pd != "" {
+		t.Fatalf("first banner should omit decorative detail: %v", m)
 	}
 	if _, ok := m["timestamp"]; !ok {
 		t.Fatalf("missing timestamp: %v", m)
+	}
+
+	b2 := postProcessNormalizedLine(NormalizePayload("   ║ more qdrant art ║"))
+	var m2 map[string]any
+	if err := json.Unmarshal(b2, &m2); err != nil {
+		t.Fatal(err)
+	}
+	if m2["level"] != "DEBUG" {
+		t.Fatalf("second banner level=%v want DEBUG", m2["level"])
+	}
+}
+
+func TestNormalizePayloadStartupChatterDemotesRoutine(t *testing.T) {
+	resetVectorstoreStartupChatterForTest()
+	raw := `{"timestamp":"t","level":"INFO","fields":{"message":"Actix runtime found; 8 workers"},"target":"actix_server::builder"}`
+	b := postProcessNormalizedLine(NormalizePayload(raw))
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatal(err)
+	}
+	if m["msg"] != "vectorstore.actix.workers" {
+		t.Fatalf("msg=%v", m["msg"])
+	}
+	if m["level"] != "DEBUG" {
+		t.Fatalf("level=%v want DEBUG", m["level"])
+	}
+
+	rawRecover := `{"timestamp":"t","level":"INFO","fields":{"message":"Recovering shard ./storage/collections/foo/0: 0/1 (0%)"},"target":"collection::shards::local_shard"}`
+	bRecover := postProcessNormalizedLine(NormalizePayload(rawRecover))
+	var mRecover map[string]any
+	if err := json.Unmarshal(bRecover, &mRecover); err != nil {
+		t.Fatal(err)
+	}
+	if mRecover["level"] != "DEBUG" {
+		t.Fatalf("zero progress recover level=%v want DEBUG", mRecover["level"])
+	}
+
+	rawDone := `{"timestamp":"t","level":"INFO","fields":{"message":"Recovered collection foo: 1/1 (100%)"},"target":"collection::shards::local_shard"}`
+	bDone := postProcessNormalizedLine(NormalizePayload(rawDone))
+	var mDone map[string]any
+	if err := json.Unmarshal(bDone, &mDone); err != nil {
+		t.Fatal(err)
+	}
+	if mDone["msg"] != "vectorstore.shard.recovered" {
+		t.Fatalf("msg=%v", mDone["msg"])
+	}
+	if mDone["level"] != "INFO" {
+		t.Fatalf("recovered level=%v want INFO", mDone["level"])
 	}
 }
 

@@ -24,6 +24,9 @@ type Qdrant struct {
 }
 
 func (a *Qdrant) Start(ctx context.Context, capture io.Writer, log *slog.Logger) (*exec.Cmd, error) {
+	if capture != nil {
+		vectorstoreline.RegisterHTTPSummaryDestination(capture)
+	}
 	return qdrant.Start(ctx, qdrant.Config{
 		Bin:        a.Cfg.Bin,
 		StorageDir: a.Cfg.DataPath,
@@ -50,6 +53,9 @@ func (a *Qdrant) BackendName() string {
 
 // ChildLogWriter normalizes supervised chimera-vectorstore stdout for the operator log buffer.
 func ChildLogWriter(dst io.Writer) io.Writer {
+	if dst != nil {
+		vectorstoreline.RegisterHTTPSummaryDestination(dst)
+	}
 	return vectorstoreline.NewWriter(dst)
 }
 

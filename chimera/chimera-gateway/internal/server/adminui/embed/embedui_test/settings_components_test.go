@@ -106,6 +106,59 @@ func TestLogsDerive_scrapeConversationMetrics_totalTokensAndVec(t *testing.T) {
 	}
 }
 
+func TestLogsDerive_conversationRagRetrievalSummary_workspaceAndHits(t *testing.T) {
+	vm := goja.New()
+	evalJS(t, vm, settingsUIPath(t, "testing", "loader.js"))
+	evalJS(t, vm, settingsUIPath(t, "derive", "ragWorkspaceLabel.js"))
+	evalJS(t, vm, settingsUIPath(t, "derive", "conversationMetrics.js"))
+	mountTestRagWorkspaceLabel(t, vm)
+
+	summaryFn, ok := goja.AssertFunction(vm.Get("ChimeraSettings").ToObject(vm).Get("Derive").ToObject(vm).Get("conversationRagRetrievalSummary"))
+	if !ok {
+		t.Fatal("missing conversationRagRetrievalSummary")
+	}
+
+	events := []map[string]any{
+		{"parsed": map[string]any{"rawFlat": map[string]any{
+			"msg": "conversation.rag.attached", "tenant": "tenant-1", "project": "workspacename", "hits": 8,
+		}}},
+	}
+	v, err := summaryFn(goja.Undefined(), vm.ToValue(events), goja.Undefined())
+	if err != nil {
+		t.Fatal(err)
+	}
+	obj := v.ToObject(vm)
+	if obj.Get("hits").Export() != int64(8) {
+		t.Fatalf("hits=%v", obj.Get("hits").Export())
+	}
+	if got := obj.Get("workspaceTitle").String(); got != "lynn:workspacename" {
+		t.Fatalf("workspaceTitle=%q", got)
+	}
+	if obj.Get("workspaceKnown").Export().(bool) {
+		t.Fatal("expected unknown workspace")
+	}
+	if !obj.Get("hasWorkspace").Export().(bool) {
+		t.Fatal("expected hasWorkspace")
+	}
+
+	knownEvents := []map[string]any{
+		{"parsed": map[string]any{"rawFlat": map[string]any{
+			"msg": "conversation.rag.attached", "tenant": "tenant-1", "project": "task-orchestrator", "hits": 3,
+		}}},
+	}
+	v2, err := summaryFn(goja.Undefined(), vm.ToValue(knownEvents), goja.Undefined())
+	if err != nil {
+		t.Fatal(err)
+	}
+	obj2 := v2.ToObject(vm)
+	if got := obj2.Get("workspaceTitle").String(); got != "lynn:task-orchestrator" {
+		t.Fatalf("known workspaceTitle=%q", got)
+	}
+	if !obj2.Get("workspaceKnown").Export().(bool) {
+		t.Fatal("expected known workspace")
+	}
+}
+
 func TestLogsDerive_conversationBrokerRelayCount_andFlat(t *testing.T) {
 	vm := goja.New()
 	evalJS(t, vm, settingsUIPath(t, "testing", "loader.js"))
@@ -1566,6 +1619,12 @@ func TestLogsDerive_gatewayCardModel_kvCountersHideRow(t *testing.T) {
 		{"/readyz", true},
 		{"/api/ui/logs", true},
 		{"/ui/settings", true},
+		{"/api/ui/tokens", true},
+		{"/api/ui/state", true},
+		{"/api/ui/chimera-broker/providers", true},
+		{"/api/ui/indexer/config", true},
+		{"/api/ui/indexer/workspaces", true},
+		{"/v1/indexer/storage/stats", true},
 		{"/ui/logs", false},
 	} {
 		ent := map[string]any{
@@ -1737,7 +1796,7 @@ func TestLogsDerive_indexerPresent_proseStateAndStats(t *testing.T) {
 	}
 	ps2Str := ps2.String()
 	if !strings.Contains(ps2Str, "12") || !strings.Contains(ps2Str, "waiting to be examined") ||
-		!strings.Contains(ps2Str, "waiting to be embedded") || strings.Contains(ps2Str, "Pipeline") {
+		!strings.Contains(ps2Str, "waiting to be indexed") || strings.Contains(ps2Str, "Pipeline") {
 		t.Fatalf("scope status prose: %q", ps2Str)
 	}
 	skipFlat := map[string]any{
@@ -1764,8 +1823,8 @@ func TestLogsDerive_indexerPresent_proseStateAndStats(t *testing.T) {
 		t.Fatal(err)
 	}
 	psSkipNewStr := psSkipNew.String()
-	if !strings.Contains(psSkipNewStr, "embedded 9 new file") || strings.Contains(psSkipNewStr, "0 unchanged") {
-		t.Fatalf("skipped summary new embed prose: %q", psSkipNewStr)
+	if !strings.Contains(psSkipNewStr, "indexed 9 new file") || strings.Contains(psSkipNewStr, "0 unchanged") {
+		t.Fatalf("skipped summary new index prose: %q", psSkipNewStr)
 	}
 	hotFlat := map[string]any{"service": "indexer", "msg": "indexer.supervised.hot_reload", "n": 2}
 	psHot, err := proseFn(goja.Undefined(), vm.ToValue(hotFlat))
@@ -1785,7 +1844,7 @@ func TestLogsDerive_indexerPresent_proseStateAndStats(t *testing.T) {
 		t.Fatal(err)
 	}
 	pqStr := pq.String()
-	if !strings.Contains(pqStr, "Ingest workers idle") || !strings.Contains(pqStr, "embed queue") {
+	if !strings.Contains(pqStr, "Ingest workers idle") || !strings.Contains(pqStr, "index queue") {
 		t.Fatalf("queue snapshot prose: %q", pqStr)
 	}
 	scanFlat := map[string]any{
@@ -2514,6 +2573,73 @@ func TestLogsRender_sumEvlog_workspaceScopedLogOmitsIndexerBadge(t *testing.T) {
 	}
 }
 
+func TestLogsRender_sumEvlog_workspaceScopedLogOmitsVectorstoreBadge(t *testing.T) {
+	vm := goja.New()
+	evalJS(t, vm, settingsUIPath(t, "testing", "loader.js"))
+	evalJS(t, vm, settingsUIPath(t, "util", "escape.js"))
+	evalJS(t, vm, settingsUIPath(t, "operator_copy.js"))
+	evalJS(t, vm, settingsUIPath(t, "render", "operatorMessage.js"))
+	evalJS(t, vm, settingsUIPath(t, "render", "operatorMessageServices.js"))
+	evalJS(t, vm, settingsUIPath(t, "render", "sumEvlog.js"))
+	_, err := vm.RunString(`
+		var ctx = {
+			getFlat: function (p) { return (p && p.rawFlat) || {}; },
+			escapeHtml: ChimeraSettings.escapeHtml,
+			primaryLogMessage: function (parsed, text, opts) {
+				return ChimeraSettings.Render.operatorMessage((parsed && parsed.rawFlat) || {}, opts);
+			},
+			formatLogDateTimeLocal: function () { return "12:00:00"; },
+			formatLogRelativeAgo: function () { return "just now"; },
+			toIsoDatetimeAttr: function () { return "2026-05-22T12:00:00"; },
+			strHash: function (s) { return String(s); },
+			badgeForIndexerRunLine: function (ent) {
+				var src = (ent.source || "").toLowerCase();
+				if (src === "chimera-vectorstore") {
+					return { cls: "sum-svc-chimera-vectorstore", lab: "chimera-vectorstore" };
+				}
+				return { cls: "sum-svc-chimera-indexer", lab: "chimera-indexer" };
+			}
+		};
+		ChimeraSettings.Render.mountSumEvlog(ctx);
+		globalThis.__sumEvlogBuild = ctx.sumEvlogBuildTbodyFromServiceEntries;
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fn, ok := goja.AssertFunction(vm.Get("__sumEvlogBuild"))
+	if !ok {
+		t.Fatal("missing sumEvlogBuildTbodyFromServiceEntries")
+	}
+	entries := []any{
+		map[string]any{
+			"parsed": map[string]any{"rawFlat": map[string]any{
+				"msg": "vectorstore.http.upsert.summary", "upserts_ok": 63, "window_ms": 6000,
+			}},
+			"text":   "",
+			"ts":     "2026-05-22T12:00:00Z",
+			"source": "chimera-vectorstore",
+		},
+	}
+	v, err := fn(
+		goja.Undefined(),
+		vm.ToValue("indexer"),
+		vm.ToValue(entries),
+		vm.ToValue(map[string]any{
+			"indexerRunLine": true, "suppressIndexerBadge": true, "suppressVectorstoreBadge": true, "cardScope": "ws-test",
+		}),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := v.String()
+	if strings.Contains(html, "chimera-vectorstore") {
+		t.Fatalf("workspace scoped log should omit chimera-vectorstore badge, got %q", html)
+	}
+	if !strings.Contains(html, "Updated the indexes of 63 files") {
+		t.Fatalf("expected vectorstore summary prose, got %q", html)
+	}
+}
+
 func TestLogsRender_sumEvlog_convSourceColumnSeparatesBadgeFromMessage(t *testing.T) {
 	vm := goja.New()
 	evalJS(t, vm, settingsUIPath(t, "testing", "loader.js"))
@@ -2660,69 +2786,7 @@ func TestLogsRender_sumEvlog_indexerStorageStatsUnavailableShowsStatus(t *testin
 	}
 }
 
-func TestLogsRender_sumEvlog_titleRightHtmlRejectsFunctionFragment(t *testing.T) {
-	vm := goja.New()
-	evalJS(t, vm, settingsUIPath(t, "testing", "loader.js"))
-	evalJS(t, vm, settingsUIPath(t, "util", "escape.js"))
-	evalJS(t, vm, settingsUIPath(t, "render", "sumEvlog.js"))
-	_, err := vm.RunString(`
-		var ctx = {
-			getFlat: function (p) { return (p && p.rawFlat) || {}; },
-			escapeHtml: ChimeraSettings.escapeHtml,
-			primaryLogMessage: function () { return "msg"; },
-			formatLogDateTimeLocal: function () { return "12:00:00"; },
-			formatLogRelativeAgo: function () { return "just now"; },
-			toIsoDatetimeAttr: function () { return "2026-05-22T12:00:00"; },
-			strHash: function (s) { return String(s); }
-		};
-		ChimeraSettings.Render.mountSumEvlog(ctx);
-		globalThis.__sumEvlogPanel = ctx.sumEvlogPanelHtml;
-		globalThis.__esc = ChimeraSettings.escapeHtml;
-	`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fn, ok := goja.AssertFunction(vm.Get("__sumEvlogPanel"))
-	if !ok {
-		t.Fatal("missing sumEvlogPanelHtml")
-	}
-	escFnObj := vm.Get("ChimeraSettings").ToObject(vm).Get("escapeHtml")
-	escFn, ok := goja.AssertFunction(escFnObj)
-	if !ok {
-		t.Fatal("missing escapeHtml")
-	}
-	escapedLeak, err := escFn(escFnObj, escFnObj)
-	if err != nil {
-		t.Fatal(err)
-	}
-	cases := []map[string]any{
-		{
-			"title":            "Scoped log — test",
-			"titleRightHtml":   escFnObj,
-			"showSourceColumn": true,
-		},
-		{
-			"title":            "Scoped log — test",
-			"titleRightHtml":   escapedLeak,
-			"showSourceColumn": true,
-		},
-	}
-	for i, opts := range cases {
-		v, err := fn(goja.Undefined(), vm.ToValue(opts))
-		if err != nil {
-			t.Fatalf("case %d: %v", i, err)
-		}
-		html := v.String()
-		if strings.Contains(html, "function escapeHtml") {
-			t.Fatalf("case %d: function fragment leaked into panel html: %q", i, html)
-		}
-		if strings.Contains(html, "sum-conv-services-after-log-hdr") {
-			t.Fatalf("case %d: expected no service strip wrapper for rejected fragment, got %q", i, html)
-		}
-	}
-}
-
-func TestLogsRender_sumEvlog_titleRightPartsRendersServiceChips(t *testing.T) {
+func TestLogsRender_sumEvlog_panelTitleOnly(t *testing.T) {
 	vm := goja.New()
 	evalJS(t, vm, settingsUIPath(t, "testing", "loader.js"))
 	evalJS(t, vm, uiEmbedPath(t, "util", "escape.js"))
@@ -2753,7 +2817,6 @@ func TestLogsRender_sumEvlog_titleRightPartsRendersServiceChips(t *testing.T) {
 		goja.Undefined(),
 		vm.ToValue(map[string]any{
 			"title":            "Scoped log — conv",
-			"titleRightParts":  []any{"RAG · 2", "broker · 1"},
 			"showSourceColumn": true,
 		}),
 	)
@@ -2761,13 +2824,10 @@ func TestLogsRender_sumEvlog_titleRightPartsRendersServiceChips(t *testing.T) {
 		t.Fatal(err)
 	}
 	html := v.String()
-	if strings.Contains(html, "function escapeHtml") {
-		t.Fatalf("unexpected leak: %q", html)
+	if !strings.Contains(html, "Scoped log — conv") {
+		t.Fatalf("expected title in html, got %q", html)
 	}
-	if !strings.Contains(html, "sum-conv-services-after-log-hdr") {
-		t.Fatalf("expected service strip wrapper, got %q", html)
-	}
-	if !strings.Contains(html, "RAG · 2") || !strings.Contains(html, "broker · 1") {
-		t.Fatalf("expected chip labels in html, got %q", html)
+	if strings.Contains(html, "sum-conv-services-after-log-hdr") {
+		t.Fatalf("expected no service strip wrapper, got %q", html)
 	}
 }

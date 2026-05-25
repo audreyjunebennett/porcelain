@@ -28,8 +28,6 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
   var sumEvlogVisibleEntriesForService = ctx.sumEvlogVisibleEntriesForService;
   var sumEvlogCountWarnFailFromEntries = ctx.sumEvlogCountWarnFailFromEntries;
   var scopedEvlogTitle = ctx.scopedEvlogTitle;
-  var serviceStripHtml = ctx.serviceStripHtml;
-  var serviceStripParts = ctx.serviceStripParts;
   var contextGrowthStripHtml = ctx.contextGrowthStripHtml;
   var SHOW_CONV_EXPANDED_CONTEXT_STRIP = !!ctx.SHOW_CONV_EXPANDED_CONTEXT_STRIP;
   var metricsPollTimer = null;
@@ -1861,24 +1859,92 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
   }
 
   function conversationCardModelForGroup(events) {
+    events = Array.isArray(events) ? events : [];
+    var model;
     if (globalThis.ChimeraSettings && ChimeraSettings.Derive && typeof ChimeraSettings.Derive.buildConversationCardModel === "function") {
-      return ChimeraSettings.Derive.buildConversationCardModel(events, getFlat);
+      model = ChimeraSettings.Derive.buildConversationCardModel(events, getFlat);
+    } else {
+      model = {
+        stateLabel: "—",
+        stateKind: "complete",
+        progress: {
+          received: "pending",
+          routed: "pending",
+          rag: "pending",
+          broker: "pending",
+          delivered: "pending"
+        },
+        kv: { stream: "", ragCollection: "" },
+        turnCount: 0,
+        chips: { tools: 0, fallback: 0 },
+        ingestRunIds: [],
+        witness: { request: false, response: false }
+      };
     }
-    return {
-      stateLabel: "—",
-      stateKind: "complete",
-      progress: {
-        received: "pending",
-        routed: "pending",
-        rag: "pending",
-        broker: "pending",
-        delivered: "pending"
-      },
-      kv: { turnIndex: "", clientModel: "", upstreamModel: "", stream: "", ragCollection: "", mergeHint: "" },
-      chips: { tools: 0, fallback: 0 },
-      ingestRunIds: [],
-      witness: { request: false, response: false }
-    };
+    return model;
+  }
+
+  function conversationRagRetrievalSummary(events) {
+    if (
+      globalThis.ChimeraSettings &&
+      ChimeraSettings.Derive &&
+      typeof ChimeraSettings.Derive.conversationRagRetrievalSummary === "function"
+    ) {
+      return ChimeraSettings.Derive.conversationRagRetrievalSummary(events, getFlat);
+    }
+    var met = scrapeConversationMetrics(events);
+    return { hits: met.vec, hasWorkspace: false, workspaceTitle: "", workspaceKnown: false };
+  }
+
+  function materialIconHtml(name) {
+    return (
+      '<span class="material-symbols-outlined material-symbols-outlined--sm" aria-hidden="true">' +
+      escapeHtml(String(name || "")) +
+      "</span>"
+    );
+  }
+
+  function conversationVectorsRetrievedMiniCardHtml(rag) {
+    rag = rag || {};
+    var cardCls = "sum-mini-card sum-mini-card--rag-retrieval";
+    if (rag.hasWorkspace && !rag.workspaceKnown) cardCls += " sum-mini-card--error";
+    var parts = ['<div class="' + cardCls + '">'];
+    if (!rag.hasWorkspace && rag.hits == null) {
+      parts.push(
+        '<span class="sum-mini-sub sum-mini-rag-error">' +
+          materialIconHtml("error") +
+          " unknown workspace provided</span>"
+      );
+    }
+    if (rag.hasWorkspace && rag.workspaceTitle) {
+      parts.push(
+        '<span class="sum-mini-rag-line">' +
+          materialIconHtml("database") +
+          '<span class="sum-mini-rag-line-text">' +
+          escapeHtml(rag.workspaceTitle) + 
+          "</span></span>"
+      );
+    }
+    if (rag.hits != null) {
+      parts.push(
+        '<strong class="sum-mini-rag-hits">' +
+        materialIconHtml("text_snippet") +  
+        " " +
+        escapeHtml(String(rag.hits)) +
+        " attached</strong>"
+      );
+    } else if (rag.hasWorkspace) {
+      parts.push('<strong class="sum-mini-rag-hits">—</strong>');
+    }
+    if (rag.hasWorkspace && !rag.workspaceKnown) {
+      parts.push(
+        '<span class="sum-mini-sub sum-mini-rag-error">' +
+          materialIconHtml("error") +
+          " missing or undefined</span>"
+      );
+    }
+    parts.push("</div>");
+    return parts.join("");
   }
 
   function conversationLifecycleStepDefs() {
@@ -1954,38 +2020,6 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     }
     h += "</div>";
     return h;
-  }
-
-  function conversationCardKvHtml(model) {
-    model = model || {};
-    var kv = model.kv || {};
-    function row(k, v) {
-      if (!v || String(v).trim() === "" || String(v) === "—") return "";
-      return (
-        '<div class="sum-conv-kv-row"><dt>' +
-        escapeHtml(k) +
-        "</dt><dd>" +
-        escapeHtml(String(v)) +
-        "</dd></div>"
-      );
-    }
-    var body =
-      row("Turn", kv.turnIndex) +
-      row("Client model", kv.clientModel) +
-      row("Upstream model", kv.upstreamModel) +
-      row(
-        "RAG collection",
-        kv.ragCollection && typeof ragCollectionLabelForUi === "function"
-          ? ragCollectionLabelForUi(kv.ragCollection)
-          : kv.ragCollection
-      ) +
-      row("Merge", kv.mergeHint);
-    if (!body) return "";
-    return (
-      '<div class="sum-conv-kv"><div class="sum-section-label">Conversation</div><dl class="sum-conv-kv-grid">' +
-      body +
-      "</dl></div>"
-    );
   }
 
   function convEventDedupeKey(ent) {
@@ -2920,8 +2954,8 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       var reason =
         meta.lastRecoveryPollFlat.embed_reason_code ||
         meta.lastRecoveryPollFlat.embed_detail ||
-        "embedding unavailable";
-      return "Waiting for embedding — " + String(reason).replace(/_/g, " ");
+        "indexing unavailable";
+      return "Waiting for indexing — " + String(reason).replace(/_/g, " ");
     }
     if (meta && meta.scopeStatusEdgeFlat) {
       var renderGate = globalThis.ChimeraSettings && ChimeraSettings.Render;
@@ -3157,7 +3191,7 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
           ? Number(lp.total_chunks)
           : null;
     if (cur != null && tot != null && !isNaN(cur) && !isNaN(tot))
-      return "Indexer uploading batch — " + cur + " of " + tot + " chunks embedded";
+      return "Indexer uploading batch — " + cur + " of " + tot + " chunks indexed";
     if (candStr && candStr !== "—")
       return "Indexer uploading batch — latest counters: " + candStr + " candidates / chunks";
     return doneSeen ? "Indexer run completed" : "Indexer uploading batch — in progress";
@@ -3779,19 +3813,6 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     };
   }
 
-  function convWindowMs(g) {
-    var t0 = null;
-    var t1 = null;
-    for (var ti = 0; ti < g.events.length; ti++) {
-      var ins = entryInstant({ ts: g.events[ti].ts });
-      if (ins) {
-        if (!t0 || ins.getTime() < t0.getTime()) t0 = ins;
-        if (!t1 || ins.getTime() > t1.getTime()) t1 = ins;
-      }
-    }
-    return t0 && t1 ? t1.getTime() - t0.getTime() : 0;
-  }
-
   function renderExpandedConv(g) {
     var evs = g.events;
     var cardModel = conversationCardModelForGroup(evs);
@@ -3801,21 +3822,21 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       if (evs[ig].convJoinTier === "ingest") ingestCount++;
     }
     var bar = timelineBarHtml(evs);
-    var spanMs = convWindowMs({ events: evs });
     var met = scrapeConversationMetrics(evs);
-    var tokLine = met.tok != null ? formatInt(met.tok) + " tok" : "—";
+    var tokLine = met.tok != null ? formatInt(met.tok) : "—";
+    var turnsLine = (cardModel.turnCount || 0) > 0 ? String(cardModel.turnCount) : "—";
+    var ragSummary = conversationRagRetrievalSummary(evs);
     var mini =
       '<div class="sum-mini-row">' +
-      '<div class="sum-mini-card">Token count<strong>' +
+      '<div class="sum-mini-card">Turns<strong>' +
+      escapeHtml(turnsLine) +
+      '</strong></div><div class="sum-mini-card">Token Count<strong>' +
       escapeHtml(tokLine) +
-      '</strong></div><div class="sum-mini-card">Duration<strong>' +
-      escapeHtml(humanDurationMs(spanMs)) +
-      '</strong></div><div class="sum-mini-card">Vectors retrieved<strong>' +
-      (met.vec != null ? escapeHtml(String(met.vec)) : "—") +
-      "</strong></div></div>";
+      "</strong></div>" +
+      conversationVectorsRetrievedMiniCardHtml(ragSummary) +
+      "</div>";
     var life = conversationLifecycleBarHtml(cardModel.progress, {});
     var chips = conversationCardChipsSummaryHtml(cardModel);
-    var kvBlock = conversationCardKvHtml(cardModel);
     var ingestBlock = "";
     if (ingestCount > 0 && cardModel.ingestRunIds && cardModel.ingestRunIds.length) {
       ingestBlock =
@@ -3846,8 +3867,6 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     var scrollTbodyId = "conv-log-" + convScope;
     var tbodyInner = sumEvlogBuildTbodyFromConvEvents(evs, turnGroups, convScope, { showSourceColumn: true });
     var mc = sumEvlogCountWarnFailFromEntries(evs);
-    var stripParts = typeof serviceStripParts === "function" ? serviceStripParts(evs) : [];
-    if (!Array.isArray(stripParts)) stripParts = [];
     var full =
       '<div class="sum-full-log sum-full-log--evlog">' +
       sumEvlogPanelHtml({
@@ -3859,8 +3878,7 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
         title:
           typeof scopedEvlogTitle === "function"
             ? scopedEvlogTitle(conversationScopedLogSubject(g.pid, g.cid))
-            : "Scoped log",
-        titleRightParts: stripParts
+            : "Scoped log"
       }) +
       "</div>";
     var contextStrip =
@@ -3872,7 +3890,6 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       '<div class="sum-section-label">Lifecycle</div>' +
       life +
       chips +
-      kvBlock +
       mini +
       (contextStrip ? '<div class="sum-section-label">Context</div>' + contextStrip : "") +
       ingestBlock +
@@ -3896,7 +3913,6 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       escapeHtml(primaryLogMessage(lastEv.parsed, lastEv.text)) +
       "</span>";
     var cardModel = conversationCardModelForGroup(g.events);
-    var dur = humanDurationMs(convWindowMs(g));
     var st = conversationCardStatus(g, t1, cardModel);
     var cardKey =
       Array.isArray(g.cids) && g.cids.length > 1
@@ -3906,11 +3922,6 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     var ini = avatarInitials(ctx.tokenLabelByTenant[g.pid] || g.pid);
     var av = avatarHueClass(cardKey);
     var sumChips = conversationCardChipsSummaryHtml(cardModel);
-    var metrics =
-      '<span class="sum-metrics">' +
-      '<span class="sum-metric">' +
-      escapeHtml(dur) +
-      "</span></span>";
     var lifeCompact = conversationLifecycleBarHtml(cardModel.progress, { compact: true });
     return (
       '<details class="sum-card sum-card--conversation" id="' +
@@ -3927,7 +3938,6 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       sub +
       (sumChips ? sumChips : "") +
       "</span>" +
-      metrics +
       lifeCompact +
       serviceSummaryStatusPillHtml(st) +
       operatorCardChevronHtml() +
@@ -4917,7 +4927,8 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
         cardScope: ixScope,
         filterGatewayProbe: false,
         indexerRunLine: true,
-        suppressIndexerBadge: true
+        suppressIndexerBadge: true,
+        suppressVectorstoreBadge: true
       });
       mc = sumEvlogCountWarnFailFromEntries(evsFull);
     }
@@ -5070,70 +5081,132 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       : userLine + ":" + prLine;
   }
 
+  function operatorTenantIdsForCollectionMap() {
+    var seen = Object.create(null);
+    var out = [];
+    var byTenant = ctx.tokenLabelByTenant || {};
+    var tk;
+    for (tk in byTenant) {
+      if (!Object.prototype.hasOwnProperty.call(byTenant, tk)) continue;
+      var tid = String(tk).trim();
+      if (tid && !seen[tid]) {
+        seen[tid] = true;
+        out.push(tid);
+      }
+    }
+    var list = ctx.tokenListCache || [];
+    var li;
+    for (li = 0; li < list.length; li++) {
+      var row = list[li] || {};
+      var tid2 =
+        row.tenant_id != null
+          ? String(row.tenant_id).trim()
+          : row.tenantId != null
+            ? String(row.tenantId).trim()
+            : row.tenant != null
+              ? String(row.tenant).trim()
+              : "";
+      if (tid2 && !seen[tid2]) {
+        seen[tid2] = true;
+        out.push(tid2);
+      }
+    }
+    return out;
+  }
+
+  function vectorstoreScopeLabelMapTokenFingerprint() {
+    var keys = ctx.tokenLabelByTenant ? Object.keys(ctx.tokenLabelByTenant).sort() : [];
+    return keys.join("\n") + "\n" + String((ctx.tokenListCache || []).length);
+  }
+
   var vectorstoreScopeLabelMapCacheRun = null;
   var vectorstoreScopeLabelMapCachePreg = null;
+  var vectorstoreScopeLabelMapCacheWsFp = null;
+  var vectorstoreScopeLabelMapCacheTokenFp = null;
   var vectorstoreScopeLabelMapCache = null;
+
+  function registerVectorstoreCollectionScopeLabel(map, collName, label) {
+    var cn = String(collName != null ? collName : "").trim();
+    var lab = String(label != null ? label : "").trim();
+    if (!cn || !lab || lab === "—" || lab === "—:—" || lab.indexOf("—:") === 0) return;
+    map[cn] = lab;
+  }
 
   function buildVectorstoreCollectionScopeLabelMap() {
     var map = {};
+    if (
+      !globalThis.ChimeraSettings ||
+      !ChimeraSettings.Derive ||
+      typeof ChimeraSettings.Derive.vectorstoreCollectionNameFromIndexerMeta !== "function"
+    ) {
+      return map;
+    }
     var byRun = ctx.lastIndexerSummarizeByRun;
-    if (!byRun || typeof byRun !== "object") return map;
     var preg = ctx.lastIndexerSummarizePartitionRegistry;
-    var keys = Object.keys(byRun);
-    for (var i = 0; i < keys.length; i++) {
-      var run = byRun[keys[i]];
-      if (!run || !run.events || !run.events.length) continue;
-      var pmeta = null;
-      if (
-        preg &&
-        globalThis.ChimeraSettings &&
-        ChimeraSettings.Derive &&
-        typeof ChimeraSettings.Derive.indexerPartitionMetaForRun === "function"
-      ) {
-        pmeta = ChimeraSettings.Derive.indexerPartitionMetaForRun(preg, run.id, run.events, getFlat);
+    if (byRun && typeof byRun === "object") {
+      var keys = Object.keys(byRun);
+      for (var i = 0; i < keys.length; i++) {
+        var run = byRun[keys[i]];
+        if (!run || !run.events || !run.events.length) continue;
+        var pmeta = null;
+        if (
+          preg &&
+          typeof ChimeraSettings.Derive.indexerPartitionMetaForRun === "function"
+        ) {
+          pmeta = ChimeraSettings.Derive.indexerPartitionMetaForRun(preg, run.id, run.events, getFlat);
+        }
+        var meta = collectIndexerRunMeta(run.id, run.events, pmeta);
+        meta = mergePersistedIndexerWatchRoots(meta, run.events, run.id);
+        var cn = ChimeraSettings.Derive.vectorstoreCollectionNameFromIndexerMeta(meta);
+        registerVectorstoreCollectionScopeLabel(map, cn, indexerCardTitleSortLabel(meta));
       }
-      var meta = collectIndexerRunMeta(run.id, run.events, pmeta);
-      meta = mergePersistedIndexerWatchRoots(meta, run.events, run.id);
-      if (
-        !globalThis.ChimeraSettings ||
-        !ChimeraSettings.Derive ||
-        typeof ChimeraSettings.Derive.vectorstoreCollectionNameFromIndexerMeta !== "function"
-      )
-        continue;
-      var cn = ChimeraSettings.Derive.vectorstoreCollectionNameFromIndexerMeta(meta);
-      if (!cn) continue;
-      map[cn] = indexerCardTitleSortLabel(meta);
+    }
+    var nested = ctx.lastIndexerOperatorWorkspacesNested || [];
+    var tenantIds = operatorTenantIdsForCollectionMap();
+    var wi;
+    for (wi = 0; wi < nested.length; wi++) {
+      var ws = nested[wi];
+      var wsLabel = operatorManagedWorkspaceTitleText(ws);
+      var ti;
+      for (ti = 0; ti < tenantIds.length; ti++) {
+        var wsCn = ChimeraSettings.Derive.vectorstoreCollectionNameFromIndexerMeta({
+          tenantId: tenantIds[ti],
+          projectId: ws.project_id != null ? String(ws.project_id).trim() : "",
+          flavorId: ws.flavor_id != null ? String(ws.flavor_id).trim() : ""
+        });
+        registerVectorstoreCollectionScopeLabel(map, wsCn, wsLabel);
+      }
     }
     return map;
   }
 
   function vectorstoreCollectionScopeLabelForLogs(collRaw) {
+    var wsFp = ctx.lastIndexerOperatorWorkspacesFingerprint || "";
+    var tokenFp = vectorstoreScopeLabelMapTokenFingerprint();
     if (
       ctx.lastIndexerSummarizeByRun !== vectorstoreScopeLabelMapCacheRun ||
-      ctx.lastIndexerSummarizePartitionRegistry !== vectorstoreScopeLabelMapCachePreg
+      ctx.lastIndexerSummarizePartitionRegistry !== vectorstoreScopeLabelMapCachePreg ||
+      vectorstoreScopeLabelMapCacheWsFp !== wsFp ||
+      vectorstoreScopeLabelMapCacheTokenFp !== tokenFp
     ) {
       vectorstoreScopeLabelMapCacheRun = ctx.lastIndexerSummarizeByRun;
       vectorstoreScopeLabelMapCachePreg = ctx.lastIndexerSummarizePartitionRegistry;
+      vectorstoreScopeLabelMapCacheWsFp = wsFp;
+      vectorstoreScopeLabelMapCacheTokenFp = tokenFp;
       vectorstoreScopeLabelMapCache = buildVectorstoreCollectionScopeLabelMap();
     }
     var c = String(collRaw != null ? collRaw : "").trim();
     if (!c) return c;
     var hit = vectorstoreScopeLabelMapCache && vectorstoreScopeLabelMapCache[c];
-    return hit != null && String(hit).trim() !== "" ? String(hit).trim() : c;
+    if (hit != null && String(hit).trim() !== "" && hit !== c) return String(hit).trim();
+    return c;
   }
 
   function ragCollectionLabelForUi(collRaw) {
     var r = collRaw != null ? String(collRaw).trim() : "";
     if (!r) return "";
-    if (
-      globalThis.ChimeraSettings &&
-      ChimeraSettings.Derive &&
-      typeof ChimeraSettings.Derive.vectorstoreCollectionDisplay === "function"
-    ) {
-      var lab = ChimeraSettings.Derive.vectorstoreCollectionDisplay(r, vectorstoreCollectionScopeLabelForLogs);
-      if (lab != null && String(lab).trim() !== "") return String(lab).trim();
-    }
-    return r;
+    var lab = vectorstoreCollectionScopeLabelForLogs(r);
+    return lab && lab !== r ? lab : r;
   }
 
   function persistIndexerWatchRoots(paths, indexRunId, scopeKey, bucketId) {
@@ -5869,12 +5942,17 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       backlogLine !== ""
         ? '<span class="indexer-scope-caption">' + escapeHtml(backlogLine) + "</span>"
         : "";
-    var progressStack = indexerCollapsedIdle
-      ? ""
-      : '<div class="indexer-scope-progress" title="Scoped: ingest queue + fan-out file rows pending vs workspace files (from indexer.scope.status)">' +
-      progressBarHtml +
-      captionSpan +
-      "</div>";
+    var indexerScopeProgressReady =
+      doneSeen ||
+      !!(meta.scopeStatusFlat || meta.scopeStatusEdgeFlat) ||
+      (pRem !== null && qTot !== null);
+    var progressStack =
+      indexerCollapsedIdle || !indexerScopeProgressReady
+        ? ""
+        : '<div class="indexer-scope-progress" title="Scoped: ingest queue + fan-out file rows pending vs workspace files (from indexer.scope.status)">' +
+          progressBarHtml +
+          captionSpan +
+          "</div>";
     var avatarIndexer = indexerCollapsedIdle
       ? '<span class="sum-avatar sum-av-c sum-av-indexer-idle" aria-hidden="true">\u2713</span>'
       : '<span class="sum-avatar sum-av-c">IX</span>';
@@ -7091,5 +7169,39 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
   ctx.buildIndexerManagedWorkspaceSummaryRowsFromOperatorStore =
     buildIndexerManagedWorkspaceSummaryRowsFromOperatorStore;
   ctx.indexerServiceSummaryWorkspacesHtml = indexerServiceSummaryWorkspacesHtml;
+  ctx.ragCollectionLabelForUi = ragCollectionLabelForUi;
+  ctx.vectorstoreCollectionScopeLabelForLogs = vectorstoreCollectionScopeLabelForLogs;
+  globalThis.ragCollectionLabelForUi = ragCollectionLabelForUi;
+  globalThis.chimeraVectorstoreCollectionScopeLabelForLogs = vectorstoreCollectionScopeLabelForLogs;
+
+  if (
+    globalThis.ChimeraSettings &&
+    ChimeraSettings.Derive &&
+    typeof ChimeraSettings.Derive.mountRagWorkspaceLabel === "function"
+  ) {
+    ChimeraSettings.Derive.mountRagWorkspaceLabel({
+      getOperatorWorkspaces: function () {
+        return ctx.lastIndexerOperatorWorkspacesNested || [];
+      },
+      tenantUserLabel: function (tenantId) {
+        var tid = String(tenantId || "").trim();
+        if (tid && ctx.tokenLabelByTenant[tid]) return String(ctx.tokenLabelByTenant[tid]).trim();
+        return resolveLogsOperatorUserLabel();
+      },
+      operatorWorkspaceTitle: function (ws) {
+        return operatorManagedWorkspaceTitleText(ws);
+      },
+      workspaceTitleFromParts: function (userLabel, projectId, flavorId) {
+        var flav =
+          flavorId != null && String(flavorId).trim() !== "" ? String(flavorId).trim() : "—";
+        return workspaceCardTitleFromIndexerMeta({
+          userLabel: userLabel,
+          projectId: projectId,
+          flavorId: flav
+        });
+      },
+      normalizeFlavor: normalizeFlavorMatch
+    });
+  }
 };
 

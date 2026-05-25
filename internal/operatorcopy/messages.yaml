@@ -809,7 +809,7 @@ messages:
     formatter: vectorstore_http_upsert_summary
     aliases:
       - qdrant.http.upsert.summary
-    gallery_preview: chimera-lynn-porcelain · 42 upsert(s) · last 5s
+    gallery_preview: Updated the indexes of 42 files in the last 5 seconds
   - slug: vectorstore.http.points_upsert_ok
     formatter: vectorstore_collection_http
     aliases:
@@ -905,7 +905,7 @@ messages:
     aliases:
       - indexer storage stats
       - indexer storage stats sync
-    gallery_preview: Stored indexes look healthy — 1204 embedded text chunk(s) are ready for retrieval
+    gallery_preview: Stored indexes look healthy — 1204 indexed text chunk(s) are ready for retrieval
   - slug: gateway.indexer.config
     formatter: indexer_gateway_config
     aliases:
@@ -948,7 +948,7 @@ messages:
     formatter: indexer_queue_snapshot
     aliases:
       - indexer queue snapshot
-    gallery_preview: Ingest workers idle · embed queue empty · 0 files embedded this run
+    gallery_preview: Ingest workers idle · index queue empty · 0 files indexed this run
   - slug: indexer.run.progress
     formatter: indexer_run_progress
     aliases:
@@ -978,19 +978,19 @@ messages:
     formatter: indexer_job_skipped_summary
     aliases:
       - indexer job skipped summary
-    gallery_preview: Checked 1476 files in the last 5 seconds — everything was already indexed, so nothing new was embedded
+    gallery_preview: Checked 1476 files in the last 5 seconds — everything was already indexed, so nothing new was indexed
   - slug: indexer.retry.scheduled
     formatter: indexer_retry_recovery
     gallery_preview: Retry scheduled · src/main.go · attempt 2 · backoff 500 ms
   - slug: indexer.recovery.poll
     formatter: indexer_retry_recovery
-    gallery_preview: 'Recovery poll #3 · storage OK · embed OK'
+    gallery_preview: 'Recovery poll #3 · storage OK · indexing OK'
   - slug: indexer.recovery.resumed
     summary: Ingest ready — resuming workers
     gallery_preview: Ingest ready — resuming workers
   - slug: indexer.ingest.gate.closed
     formatter: indexer_ingest_gate
-    gallery_preview: Ingest paused — embed provider down · queue 42
+    gallery_preview: Ingest paused — indexing provider down · queue 42
   - slug: indexer.ingest.gate.open
     formatter: indexer_ingest_gate
     gallery_preview: Ingest resumed · queue 42 · ollama/nomic-embed-text

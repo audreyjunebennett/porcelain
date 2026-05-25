@@ -582,4 +582,31 @@
   border-color: var(--embed-mini-card-error-border);
   background: var(--embed-semantic-error-bg);
 }
+.sum-mini-card--rag-retrieval {
+  flex: 1 1 10rem;
+  min-width: 11rem;
+}
+.sum-mini-card--rag-retrieval .sum-mini-rag-line {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-top: 0.15rem;
+  font-size: 0.72rem;
+  color: var(--embed-text-primary);
+  line-height: 1.35;
+}
+.sum-mini-card--rag-retrieval .sum-mini-rag-hits {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  flex-wrap: wrap;
+  margin-top: 0.12rem;
+  font-size: 0.8rem;
+}
+.sum-mini-card--rag-retrieval .sum-mini-rag-error {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  color: var(--embed-semantic-error-fg);
+}
 

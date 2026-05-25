@@ -190,7 +190,7 @@ func marshalHTTPSummaryLine(w *httpSummaryWindow, windowMs int64, now time.Time)
 		out["collection"] = colls[0]
 	}
 	b, _ := json.Marshal(out)
-	return b
+	return wline.ReorderNormalizedJSONBytes(b)
 }
 
 func postProcessNormalizedLine(b []byte) []byte {
@@ -214,16 +214,16 @@ func postProcessNormalizedLine(b []byte) []byte {
 		"vectorstore.http.vector_search":
 		if status == 200 {
 			globalHTTPSummary().note(coll, slug, status)
-			return demoteLineLevel(b, fields, "DEBUG")
+			return postProcessErrorStormLine(postProcessStartupChatterLine(demoteLineLevel(b, fields, "DEBUG")))
 		}
 	case "vectorstore.http.collection_meta":
 		// Gateway probes collection existence before every ingest; per-file meta lines
 		// are trace-only — upsert.summary and collection_create cover operator visibility.
 		if status == 200 || status == 404 {
-			return demoteLineLevel(b, fields, "DEBUG")
+			return postProcessErrorStormLine(postProcessStartupChatterLine(demoteLineLevel(b, fields, "DEBUG")))
 		}
 	}
-	return b
+	return postProcessErrorStormLine(postProcessStartupChatterLine(b))
 }
 
 func demoteLineLevel(b []byte, fields map[string]json.RawMessage, level string) []byte {
@@ -237,7 +237,7 @@ func demoteLineLevel(b []byte, fields map[string]json.RawMessage, level string) 
 		if err != nil {
 			return b
 		}
-		return out
+		return wline.ReorderNormalizedJSONBytes(out)
 	}
 	var m map[string]any
 	if json.Unmarshal(b, &m) != nil {
@@ -248,5 +248,5 @@ func demoteLineLevel(b []byte, fields map[string]json.RawMessage, level string) 
 	if err != nil {
 		return b
 	}
-	return out
+	return wline.ReorderNormalizedJSONBytes(out)
 }

@@ -10,9 +10,11 @@ func loadOperatorMessageCtx(t *testing.T, vm *goja.Runtime) {
 	t.Helper()
 	evalJS(t, vm, settingsUIPath(t, "testing", "loader.js"))
 	evalJS(t, vm, settingsUIPath(t, "operator_copy.js"))
+	evalJS(t, vm, settingsUIPath(t, "derive", "ragWorkspaceLabel.js"))
 	evalJS(t, vm, settingsUIPath(t, "render", "operatorMessage.js"))
 	evalJS(t, vm, settingsUIPath(t, "render", "operatorMessageServices.js"))
 	evalJS(t, vm, settingsUIPath(t, "render", "operatorMessageIndexer.js"))
+	mountTestRagWorkspaceLabel(t, vm)
 }
 
 func TestOperatorCopy_inferShapeForFlat_registry(t *testing.T) {
@@ -115,10 +117,42 @@ func TestOperatorMessage_gatewaySlugs(t *testing.T) {
 			flat: map[string]any{
 				"msg":        "conversation.rag.attached",
 				"collection": "chimera-lynn-task-orchestrator-_-abc",
+				"tenant":     "tenant-1",
+				"project":    "task-orchestrator",
 				"hits":       8,
 			},
 			opts: map[string]any{"forEventLog": true},
-			want: "Retrieved context · from chimera-lynn-task-orchestrator · 8 chunks injected into the request.",
+			want: "Retrieved context · from lynn:task-orchestrator · 8 chunks injected into the request.",
+		},
+		{
+			name: "rag_span_unknown_workspace_evlog",
+			flat: map[string]any{
+				"msg":        "conversation.rag.span",
+				"collection": "chimera-lynn-workspacename-_-79692145",
+			},
+			opts: map[string]any{
+				"forEventLog": true,
+				"convEvlogMeta": map[string]any{
+					"ragCoords": map[string]any{
+						"tenantId":  "tenant-1",
+						"projectId": "workspacename",
+						"flavorId":  "",
+					},
+				},
+			},
+			want: "RAG search for workspace lynn:workspacename - missing or undefined.",
+		},
+		{
+			name: "rag_attached_unknown_workspace_evlog",
+			flat: map[string]any{
+				"msg":        "conversation.rag.attached",
+				"tenant":     "tenant-1",
+				"project":    "workspacename",
+				"collection": "chimera-lynn-workspacename-_-79692145",
+				"hits":       2,
+			},
+			opts: map[string]any{"forEventLog": true},
+			want: "Retrieved context · from lynn:workspacename - missing or undefined · 2 chunks injected into the request.",
 		},
 		{
 			name: "model_not_found_will_retry",

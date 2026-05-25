@@ -454,73 +454,6 @@ globalThis.ChimeraSettings.Main = function () {
     return { count: count, sumMs: sumMs, worst: maxStatus };
   }
 
-  function serviceStripParts(events) {
-    var ragN = 0,
-      vectorstoreEvt = 0,
-      ingestN = 0;
-    var ragMs = 0;
-    var chimeraBrokerN = 0;
-    if (
-      globalThis.ChimeraSettings &&
-      ChimeraSettings.Derive &&
-      typeof ChimeraSettings.Derive.conversationBrokerRelayCount === "function"
-    ) {
-      chimeraBrokerN = ChimeraSettings.Derive.conversationBrokerRelayCount(events, function (p) {
-        return getFlat(p);
-      });
-    }
-    for (var i = 0; i < events.length; i++) {
-      var sh = events[i].parsed.shape || "";
-      var f = getFlat(events[i].parsed);
-      if (sh === "rag" || (sh.indexOf("rag.") === 0 && sh !== "rag")) {
-        ragN++;
-        var lm = Number(f.latencyMs != null ? f.latencyMs : f.latency_ms != null ? f.latency_ms : f.elapsedMs);
-        if (!isNaN(lm)) ragMs += lm;
-      } else if (
-        sh === "service.vectorstore" ||
-        sh === "service.chimera-vectorstore" ||
-        f.service === "chimera-vectorstore"
-      ) {
-        vectorstoreEvt++;
-      } else if (sh === "ingest") {
-        ingestN++;
-      }
-    }
-    var parts = [];
-    if (ragN) parts.push("RAG · " + ragN + (ragMs ? " · ~" + Math.round(ragMs) + " ms" : ""));
-    if (vectorstoreEvt) parts.push("vectorstore · " + vectorstoreEvt);
-    if (ingestN) parts.push("ingest · " + ingestN);
-    if (chimeraBrokerN) parts.push("broker · " + chimeraBrokerN);
-    return parts;
-  }
-
-  function serviceStripHtml(events) {
-    var parts = serviceStripParts(events);
-    if (!parts.length) return "";
-    if (
-      globalThis.ChimeraSettings &&
-      ChimeraSettings.Render &&
-      typeof ChimeraSettings.Render.sumEvlogServiceChipsHtml === "function"
-    ) {
-      return ChimeraSettings.Render.sumEvlogServiceChipsHtml(parts);
-    }
-    var html = "";
-    if (globalThis.ChimeraUI && globalThis.ChimeraUI.Chip && typeof globalThis.ChimeraUI.Chip.renderRow === "function") {
-      html = globalThis.ChimeraUI.Chip.renderRow(parts);
-    } else {
-      html =
-        '<div class="service-chips">' +
-        parts
-          .map(function (p) {
-            if (p == null || typeof p === "function") return "";
-            return '<span class="chip">' + escapeHtml(String(p)) + "</span>";
-          })
-          .join("") +
-        "</div>";
-    }
-    return typeof html === "string" && !/function\s+escapeHtml\s*\(/i.test(html) ? html : "";
-  }
-
   function contextGrowthStripHtml(events) {
     var keys = [
       "turn_index",
@@ -905,8 +838,6 @@ globalThis.ChimeraSettings.Main = function () {
     formatLogRelativeAgo: formatLogRelativeAgo,
     toIsoDatetimeAttr: toIsoDatetimeAttr,
     operatorFriendlyGatewayMsg: operatorFriendlyGatewayMsg,
-    serviceStripParts: serviceStripParts,
-    serviceStripHtml: serviceStripHtml,
     contextGrowthStripHtml: contextGrowthStripHtml,
     SHOW_CONV_EXPANDED_CONTEXT_STRIP: SHOW_CONV_EXPANDED_CONTEXT_STRIP,
     buildHeadlineHtml: buildHeadlineHtml,

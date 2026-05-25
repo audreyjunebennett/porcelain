@@ -959,7 +959,10 @@ func httpAccessLogLevel(path string, status int) slog.Level {
 	}
 	switch path {
 	case "/health", "/healthz", "/readyz", "/status", "/api/ui/logs", "/api/ui/logs/stream",
-		"/ui/settings", "/api/ui/metrics":
+		"/ui/settings", "/api/ui/metrics",
+		"/api/ui/tokens", "/api/ui/state", "/api/ui/chimera-broker/providers",
+		"/api/ui/indexer/config", "/api/ui/indexer/workspaces",
+		"/v1/indexer/storage/stats":
 		return slog.LevelDebug
 	case "/v1/ingest":
 		return slog.LevelDebug

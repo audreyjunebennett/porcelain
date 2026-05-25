@@ -243,13 +243,13 @@
       }
       var pts = numOrDash(flat.qdrant_points);
       if (pts === 0) {
-        return "Search index is empty — no embedded file content is stored for this workspace yet";
+        return "Search index is empty — no indexed file content is stored for this workspace yet";
       }
       if (pts != null) {
         return (
           "Stored search index looks healthy — " +
           pts +
-          " embedded text chunk(s) from your indexed files are saved and ready for retrieval"
+          " indexed text chunk(s) from your files are saved and ready for retrieval"
         );
       }
       return "Verified the stored search index is reachable";
@@ -258,7 +258,7 @@
       return (
         "Gateway indexer settings loaded (chunk " +
         (flat.chunk_size != null ? flat.chunk_size : "?") +
-        ", model " +
+        ", indexing model " +
         (flat.embedding_model ? String(flat.embedding_model).split("/").pop() : "?") +
         ")"
       );
@@ -343,10 +343,10 @@
         return "Indexing is paused because " + gateReason;
       }
       if (flat.in_recovery === true) {
-        return "Waiting to resume — embedding or storage is still recovering";
+        return "Waiting to resume — indexing or storage is still recovering";
       }
       if (flat.current_rel) {
-        return "Now embedding " + String(flat.current_rel);
+        return "Now indexing " + String(flat.current_rel);
       }
       var wst = numOrDash(flat.workspace_files_total);
       var qIn = numOrDash(flat.queue_ingest_pending);
@@ -378,11 +378,11 @@
       }
       if (qIn > 0 && qFan === 0) {
         return (
-          "Embedding in progress — " +
+          "Indexing in progress — " +
           inStr +
           " of " +
           wStr +
-          " tracked files are waiting to be embedded"
+          " tracked files are waiting to be indexed"
         );
       }
       return (
@@ -392,7 +392,7 @@
         fanStr +
         " waiting to be examined, and " +
         inStr +
-        " waiting to be embedded"
+        " waiting to be indexed"
       );
     },
     indexer_scope_active_file: function (flat) {
@@ -418,14 +418,14 @@
       var dStr = dep != null ? String(dep) : "?";
       var cStr = comp != null ? String(comp) : "?";
       if (dep === 0 && (comp === 0 || comp == null)) {
-        return "Ingest workers idle · embed queue empty · 0 files embedded this run";
+        return "Ingest workers idle · index queue empty · 0 files indexed this run";
       }
       return (
         "Ingest queue · " +
         dStr +
         " file(s) waiting for workers · " +
         cStr +
-        " embedded this run"
+        " indexed this run"
       );
     },
     indexer_run_progress: function (flat, entry) {
@@ -495,7 +495,7 @@
           evalN +
           " files in the last " +
           win +
-          " — everything was already indexed, so nothing new was embedded"
+          " — everything was already indexed, so nothing new was indexed"
         );
       }
       if (evaluated != null && skip === 0 && ing > 0 && fail === 0) {
@@ -504,7 +504,7 @@
           evalN +
           " files in the last " +
           win +
-          " — embedded " +
+          " — indexed " +
           ing +
           " new file(s)"
         );
@@ -517,8 +517,8 @@
         " — " +
         skip +
         " unchanged";
-      if (ing > 0) line += ", " + ing + " newly embedded";
-      else line += ", nothing newly embedded";
+      if (ing > 0) line += ", " + ing + " newly indexed";
+      else line += ", nothing newly indexed";
       if (fail > 0) line += ", and " + fail + " failed";
       return line;
     },
@@ -537,15 +537,15 @@
       if (slug === "indexer.recovery.poll") {
         var storage =
           flat.storage_ok === true ? "OK" : flat.storage_ok === false ? "not OK" : "?";
-        var embed =
+        var indexSvc =
           flat.embed_ok === true ? "OK" : flat.embed_ok === false ? "not OK" : "?";
         var line =
           "Recovery poll #" +
           (flat.poll_n != null ? flat.poll_n : "?") +
           " · storage " +
           storage +
-          " · embed " +
-          embed;
+          " · indexing " +
+          indexSvc;
         if (flat.embed_ok === false && flat.embed_reason_code) {
           line += " · " + String(flat.embed_reason_code).replace(/_/g, " ");
         }
@@ -574,7 +574,7 @@
       return (
         "Run finished · mode " +
         (flat.mode || "?") +
-        " · ingested " +
+        " · indexed " +
         (flat.ingest_completed != null ? flat.ingest_completed : "?") +
         " · failures " +
         (flat.ingest_failed_dropped != null ? flat.ingest_failed_dropped : "?")

@@ -112,9 +112,6 @@ body.styleguide-body {
   background: transparent;
   border: none;
 }
-.styleguide-evlog-card > .sum-conv-full-log-head {
-  margin-bottom: 0.2rem;
-}
 .styleguide-evlog-card > .sum-full-log.sum-full-log--evlog {
   margin: 0;
 }

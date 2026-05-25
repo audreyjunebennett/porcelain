@@ -3,11 +3,23 @@ package vectorstoreline
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 )
+
+func assertNormalizedFieldOrder(t *testing.T, b []byte) {
+	t.Helper()
+	s := string(b)
+	if !strings.HasPrefix(s, `{"timestamp":`) {
+		t.Fatalf("expected timestamp-first JSON, got %s", s)
+	}
+	if strings.HasPrefix(s, `{"_chimera_norm":`) {
+		t.Fatalf("expected _chimera_norm last, got %s", s)
+	}
+}
 
 func TestPostProcessDemotesSuccessfulUpsert(t *testing.T) {
 	raw := `{"timestamp":"t","level":"INFO","fields":{"message":"127.0.0.1 \"PUT /collections/coll-a/points?wait=true HTTP/1.1\" 200 92 \"-\" \"Go-http-client/1.1\" 0.001"},"target":"actix_web::middleware::logger"}`
@@ -72,6 +84,7 @@ func TestHTTPSummaryEmitsAfterWindow(t *testing.T) {
 	if !strings.Contains(out, "vectorstore.http.upsert.summary") {
 		t.Fatalf("missing summary line: %q", out)
 	}
+	assertNormalizedFieldOrder(t, []byte(strings.TrimSpace(out)))
 	var m map[string]any
 	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &m); err != nil {
 		t.Fatal(err)
@@ -87,11 +100,42 @@ func TestHTTPSummaryEmitsAfterWindow(t *testing.T) {
 	}
 }
 
+func TestDualWriterSameCaptureEmitsOneSummary(t *testing.T) {
+	httpSummaryOnce = sync.Once{}
+	httpSummary = nil
+
+	var capture bytes.Buffer
+	RegisterHTTPSummaryDestination(&capture)
+	stdoutW := NewWriter(io.MultiWriter(&capture, io.Discard))
+	stderrW := NewWriter(io.MultiWriter(&capture, io.Discard))
+
+	upsert := `{"timestamp":"t","level":"INFO","fields":{"message":"127.0.0.1 \"PUT /collections/coll-a/points?wait=true HTTP/1.1\" 200 92 \"-\" \"Go-http-client/1.1\" 0.001"},"target":"actix_web::middleware::logger"}` + "\n"
+	if _, err := stdoutW.Write([]byte(upsert)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := stderrW.Write([]byte(upsert)); err != nil {
+		t.Fatal(err)
+	}
+	globalHTTPSummary().emitDue(true)
+
+	lines := strings.Split(strings.TrimSpace(capture.String()), "\n")
+	var summaries int
+	for _, line := range lines {
+		if strings.Contains(line, "vectorstore.http.upsert.summary") {
+			summaries++
+		}
+	}
+	if summaries != 1 {
+		t.Fatalf("want 1 summary line in capture, got %d: %q", summaries, capture.String())
+	}
+}
+
 func TestWriterEmitsSummaryLine(t *testing.T) {
 	httpSummaryOnce = sync.Once{}
 	httpSummary = nil
 
 	var buf bytes.Buffer
+	RegisterHTTPSummaryDestination(&buf)
 	w := NewWriter(&buf)
 
 	upsert := `{"timestamp":"t","level":"INFO","fields":{"message":"127.0.0.1 \"PUT /collections/coll-a/points?wait=true HTTP/1.1\" 200 92 \"-\" \"Go-http-client/1.1\" 0.001"},"target":"actix_web::middleware::logger"}` + "\n"

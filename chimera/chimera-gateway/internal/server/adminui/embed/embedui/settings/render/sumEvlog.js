@@ -348,48 +348,9 @@ globalThis.ChimeraSettings.Render.mountSumEvlog = function (ctx) {
     '<svg class="sum-evlog__copy-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>' +
     '<span class="sr-only"></span></button>';
 
-  function sumEvlogRejectLeakedSource(v) {
-    if (v == null || v === false) return "";
-    if (typeof v === "function") return "";
-    var str = typeof v === "string" ? v : String(v);
-    if (/function\s+escapeHtml\s*\(/i.test(str)) return "";
-    return str;
-  }
-
   function sumEvlogCoerceTitle(v) {
     if (v == null || typeof v === "function") return "Scoped log";
     return String(v);
-  }
-
-  function sumEvlogServiceChipsHtml(parts) {
-    if (!Array.isArray(parts) || !parts.length) return "";
-    var clean = [];
-    for (var i = 0; i < parts.length; i++) {
-      var part = parts[i];
-      if (part == null || typeof part === "function") continue;
-      var lab = sumEvlogRejectLeakedSource(String(part).trim());
-      if (!lab) continue;
-      clean.push(lab);
-    }
-    if (!clean.length) return "";
-    if (globalThis.ChimeraUI && globalThis.ChimeraUI.Chip && typeof globalThis.ChimeraUI.Chip.renderRow === "function") {
-      var rowHtml = globalThis.ChimeraUI.Chip.renderRow(clean);
-      if (typeof rowHtml === "string" && rowHtml && !/function\s+escapeHtml\s*\(/i.test(rowHtml)) {
-        return rowHtml;
-      }
-    }
-    var inner = "";
-    for (var j = 0; j < clean.length; j++) {
-      inner += '<span class="chip">' + escapeHtml(clean[j]) + "</span>";
-    }
-    return '<div class="service-chips">' + inner + "</div>";
-  }
-
-  function sumEvlogTitleRightHtml(o) {
-    if (Array.isArray(o.titleRightParts)) {
-      return sumEvlogServiceChipsHtml(o.titleRightParts);
-    }
-    return sumEvlogRejectLeakedSource(o.titleRightHtml);
   }
 
   function sumEvlogPanelHtml(o) {
@@ -404,13 +365,7 @@ globalThis.ChimeraSettings.Render.mountSumEvlog = function (ctx) {
       tbodyInner = sumEvlogDataEmptyRowHtml(cols);
     }
     var title = sumEvlogCoerceTitle(o.title != null ? o.title : "Scoped log");
-    var titleRightHtml = sumEvlogTitleRightHtml(o);
-    var titleBlock = titleRightHtml
-      ? '<div class="sum-conv-full-log-head sum-evlog__title-row">' +
-          '<div class="sum-section-label">' + escapeHtml(title) + "</div>" +
-          '<div class="sum-conv-services-after-log-hdr">' + titleRightHtml + "</div>" +
-        "</div>"
-      : '<div class="sum-section-label">' + escapeHtml(title) + "</div>";
+    var titleBlock = '<div class="sum-section-label">' + escapeHtml(title) + "</div>";
     var footerMetricsHtml =
       globalThis.ChimeraUI &&
       globalThis.ChimeraUI.StatusIndicator &&
@@ -613,6 +568,4 @@ globalThis.ChimeraSettings.Render.mountSumEvlog = function (ctx) {
   ctx.sumEvlogIsWarnish = sumEvlogIsWarnish;
   ctx.sumEvlogIsFailish = sumEvlogIsFailish;
   ctx.sumEvlogColCount = sumEvlogColCount;
-  ctx.sumEvlogServiceChipsHtml = sumEvlogServiceChipsHtml;
-  globalThis.ChimeraSettings.Render.sumEvlogServiceChipsHtml = sumEvlogServiceChipsHtml;
 };

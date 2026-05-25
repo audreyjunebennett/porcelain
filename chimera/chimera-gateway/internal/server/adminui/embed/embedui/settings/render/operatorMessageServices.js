@@ -418,21 +418,46 @@
       return base;
     },
     vectorstore_http_upsert_summary: function (flat) {
-      var cols = flat.collections != null ? String(flat.collections).trim() : "";
-      if (!cols && flat.collection != null) cols = String(flat.collection).trim();
       var u = Number(flat.upserts_ok != null ? flat.upserts_ok : 0) || 0;
       var d = Number(flat.deletes_ok != null ? flat.deletes_ok : 0) || 0;
       var s = Number(flat.searches_ok != null ? flat.searches_ok : 0) || 0;
-      var win =
+      var winSec =
         flat.window_ms != null && !isNaN(Number(flat.window_ms))
-          ? Math.round(Number(flat.window_ms) / 1000) + "s"
-          : "?";
-      var bits = [];
-      if (cols) bits.push(cols);
-      if (u > 0) bits.push(u + " upsert(s)");
-      if (d > 0) bits.push(d + " delete(s)");
-      if (s > 0) bits.push(s + " search(es)");
-      return (bits.length ? bits.join(" · ") : "Vectorstore HTTP activity") + " · last " + win;
+          ? Math.round(Number(flat.window_ms) / 1000)
+          : null;
+      var win =
+        winSec === 1 ? "1 second" : winSec != null && !isNaN(winSec) ? winSec + " seconds" : "?";
+      if (u > 0) {
+        return (
+          "Updated the indexes of " +
+          u +
+          " file" +
+          (u === 1 ? "" : "s") +
+          " in the last " +
+          win
+        );
+      }
+      if (d > 0) {
+        return (
+          "Removed index entries for " +
+          d +
+          " file" +
+          (d === 1 ? "" : "s") +
+          " in the last " +
+          win
+        );
+      }
+      if (s > 0) {
+        return (
+          "Ran " +
+          s +
+          " search" +
+          (s === 1 ? "" : "es") +
+          " against the index in the last " +
+          win
+        );
+      }
+      return "No vector index updates in the last " + win;
     }
   };
 

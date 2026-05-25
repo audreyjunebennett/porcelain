@@ -2,6 +2,8 @@ package indexer
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 )
@@ -59,6 +61,7 @@ func (ix *Indexer) EmitStorageStatsAndState(ctx context.Context, watchMode bool)
 				continue
 			}
 			total += stats.Points
+			fp := storageStatsFingerprint(stats.Available, stats.Points, stats.VectorDim, stats.Detail, stats.Collection)
 			if !stats.Available {
 				ix.log.Warn("indexer storage stats unavailable",
 					"msg", "indexer.storage.stats",
@@ -71,9 +74,16 @@ func (ix *Indexer) EmitStorageStatsAndState(ctx context.Context, watchMode bool)
 					"available", false,
 					"detail", stats.Detail,
 				)
+				ix.obsMu.Lock()
+				if ix.lastStorageStatsFP == nil {
+					ix.lastStorageStatsFP = map[string]string{}
+				}
+				ix.lastStorageStatsFP[itk] = fp
+				ix.obsMu.Unlock()
 				continue
 			}
-			ix.log.Info("indexer storage stats sync",
+			level := ix.storageStatsObsLevel(itk, fp)
+			ix.log.Log(context.Background(), level, "indexer storage stats sync",
 				"msg", "indexer.storage.stats",
 				"indexer_target_key", itk,
 				"ingest_project", proj,
@@ -89,7 +99,17 @@ func (ix *Indexer) EmitStorageStatsAndState(ctx context.Context, watchMode bool)
 	}
 
 	state := ix.computeDeclarativeState(watchMode)
-	ix.log.Info("indexer state",
+	stateFP := stateObservationFingerprint(
+		state,
+		ix.queue.Len(),
+		ix.ingestInflight.Load(),
+		ix.initialScanCompleted.Load(),
+		watchMode,
+		ix.inRecovery.Load(),
+		ix.qdrantPoints.Load(),
+	)
+	stateLevel := ix.stateObsLevel(stateFP)
+	ix.log.Log(context.Background(), stateLevel, "indexer state",
 		"msg", "indexer.state",
 		"state", state,
 		"queue_depth", ix.queue.Len(),
@@ -99,6 +119,38 @@ func (ix *Indexer) EmitStorageStatsAndState(ctx context.Context, watchMode bool)
 		"recovery", ix.inRecovery.Load(),
 		"qdrant_points_reported", ix.qdrantPoints.Load(),
 	)
+}
+
+func storageStatsFingerprint(available bool, points int64, vectorDim int, detail, collection string) string {
+	return fmt.Sprintf("%t/%d/%d/%s/%s", available, points, vectorDim, detail, collection)
+}
+
+func stateObservationFingerprint(state string, queueDepth int, ingestInflight int32, initialScanComplete, watchMode, recovery bool, qdrantPoints int64) string {
+	return fmt.Sprintf("%s/%d/%d/%t/%t/%t/%d", state, queueDepth, ingestInflight, initialScanComplete, watchMode, recovery, qdrantPoints)
+}
+
+func (ix *Indexer) storageStatsObsLevel(scopeKey, fp string) slog.Level {
+	ix.obsMu.Lock()
+	defer ix.obsMu.Unlock()
+	if ix.lastStorageStatsFP == nil {
+		ix.lastStorageStatsFP = map[string]string{}
+	}
+	prev, seen := ix.lastStorageStatsFP[scopeKey]
+	if seen && prev == fp {
+		return slog.LevelDebug
+	}
+	ix.lastStorageStatsFP[scopeKey] = fp
+	return slog.LevelInfo
+}
+
+func (ix *Indexer) stateObsLevel(fp string) slog.Level {
+	ix.obsMu.Lock()
+	defer ix.obsMu.Unlock()
+	if ix.lastStateFP == fp {
+		return slog.LevelDebug
+	}
+	ix.lastStateFP = fp
+	return slog.LevelInfo
 }
 
 func (ix *Indexer) computeDeclarativeState(watchMode bool) string {

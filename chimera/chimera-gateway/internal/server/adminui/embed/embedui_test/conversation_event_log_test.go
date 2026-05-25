@@ -9,6 +9,7 @@ import (
 func TestConvEvlogPrepareTurnEvents_hidesRagSpanWhenAttached(t *testing.T) {
 	vm := goja.New()
 	evalJS(t, vm, settingsUIPath(t, "testing", "loader.js"))
+	evalJS(t, vm, settingsUIPath(t, "derive", "ragWorkspaceLabel.js"))
 	evalJS(t, vm, settingsUIPath(t, "derive", "conversationEventLog.js"))
 
 	fn, ok := goja.AssertFunction(vm.Get("ChimeraSettings").ToObject(vm).Get("Derive").ToObject(vm).Get("convEvlogPrepareTurnEvents"))
@@ -44,9 +45,55 @@ func TestConvEvlogPrepareTurnEvents_hidesRagSpanWhenAttached(t *testing.T) {
 	}
 }
 
+func TestConvEvlogPrepareTurnEvents_attachesRagCoords(t *testing.T) {
+	vm := goja.New()
+	evalJS(t, vm, settingsUIPath(t, "testing", "loader.js"))
+	evalJS(t, vm, settingsUIPath(t, "derive", "ragWorkspaceLabel.js"))
+	evalJS(t, vm, settingsUIPath(t, "derive", "conversationEventLog.js"))
+
+	fn, ok := goja.AssertFunction(vm.Get("ChimeraSettings").ToObject(vm).Get("Derive").ToObject(vm).Get("convEvlogPrepareTurnEvents"))
+	if !ok {
+		t.Fatal("missing convEvlogPrepareTurnEvents")
+	}
+
+	events := []map[string]any{
+		{"seq": 1, "parsed": map[string]any{"rawFlat": map[string]any{"msg": "conversation.received", "turn_index": 1}}},
+		{"seq": 2, "parsed": map[string]any{"rawFlat": map[string]any{
+			"msg": "conversation.rag.span", "collection": "coll-a",
+		}}},
+		{"seq": 3, "parsed": map[string]any{"rawFlat": map[string]any{
+			"msg": "rag.query", "tenant": "t1", "project": "workspacename", "collection": "coll-a",
+		}}},
+	}
+	v, err := fn(goja.Undefined(), vm.ToValue(events), goja.Undefined())
+	if err != nil {
+		t.Fatal(err)
+	}
+	arr := v.Export().([]any)
+	var meta map[string]any
+	for _, item := range arr {
+		ev := item.(map[string]any)
+		if m, ok := ev["convEvlogMeta"].(map[string]any); ok {
+			meta = m
+			break
+		}
+	}
+	if meta == nil {
+		t.Fatal("missing convEvlogMeta on prepared events")
+	}
+	coords, ok := meta["ragCoords"].(map[string]any)
+	if !ok {
+		t.Fatalf("ragCoords missing from meta: %v", meta)
+	}
+	if coords["projectId"] != "workspacename" {
+		t.Fatalf("projectId: got %v", coords["projectId"])
+	}
+}
+
 func TestConvEvlogPrepareTurnEvents_storyOrderAndRoutingReposition(t *testing.T) {
 	vm := goja.New()
 	evalJS(t, vm, settingsUIPath(t, "testing", "loader.js"))
+	evalJS(t, vm, settingsUIPath(t, "derive", "ragWorkspaceLabel.js"))
 	evalJS(t, vm, settingsUIPath(t, "derive", "conversationEventLog.js"))
 
 	fn, ok := goja.AssertFunction(vm.Get("ChimeraSettings").ToObject(vm).Get("Derive").ToObject(vm).Get("convEvlogPrepareTurnEvents"))

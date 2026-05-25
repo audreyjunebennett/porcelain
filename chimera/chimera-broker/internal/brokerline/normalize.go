@@ -59,7 +59,7 @@ type normalized struct {
 
 // NormalizePayload converts one raw line (no trailing \n) into a single JSON log line.
 func NormalizePayload(raw string) []byte {
-	return wline.NormalizePerLine(raw, alreadyNormalized, normalizePlain, normalizeJSON)
+	return postProcessNormalizedLine(wline.NormalizePerLine(raw, alreadyNormalized, normalizePlain, normalizeJSON))
 }
 
 func normalizeJSON(raw string) []byte {

@@ -276,13 +276,10 @@ function buildConversationCardModel(events, getFlat) {
     delivered: "pending"
   };
   var kv = {
-    turnIndex: "",
-    clientModel: "",
-    upstreamModel: "",
     stream: "",
-    ragCollection: "",
-    mergeHint: ""
+    ragCollection: ""
   };
+  var turnCount = 0;
   var lastLifecycleMsg = "";
   var dedupShort = false;
   var witnessReq = false;
@@ -293,6 +290,14 @@ function buildConversationCardModel(events, getFlat) {
   var brokerLast = null;
 
   var i;
+  for (i = 0; i < sorted.length; i++) {
+    var fAll = getFlat(sorted[i].parsed);
+    if (fAll.turn_index != null && !isNaN(Number(fAll.turn_index))) {
+      var tiAll = Math.round(Number(fAll.turn_index));
+      if (tiAll > turnCount) turnCount = tiAll;
+    }
+  }
+
   for (i = 0; i < sorted.length; i++) {
     var f = getFlat(sorted[i].parsed);
     var m = convNormMsg(f);
@@ -310,25 +315,19 @@ function buildConversationCardModel(events, getFlat) {
     if (m.indexOf("conversation.") !== 0) continue;
     lastLifecycleMsg = m;
 
-    if (f.turn_index != null && !isNaN(Number(f.turn_index))) kv.turnIndex = String(Math.round(Number(f.turn_index)));
-
     if (m === "conversation.received") {
       progress.received = "done";
-      if (f.clientModel != null && String(f.clientModel).trim() !== "") kv.clientModel = String(f.clientModel).trim();
       if (f.stream !== undefined && f.stream !== null) kv.stream = f.stream ? "stream" : "batch";
     }
     if (m === "conversation.merged") {
       progress.received = "done";
-      kv.mergeHint = "merged";
     }
     if (m === "conversation.dedup_hit") {
       progress.received = "done";
       dedupShort = true;
-      kv.mergeHint = "dedup";
     }
     if (m === "conversation.routing.resolved") {
       progress.routed = "done";
-      if (f.upstreamModel != null && String(f.upstreamModel).trim() !== "") kv.upstreamModel = String(f.upstreamModel).trim();
     }
     if (m === "conversation.rag.span") {
       if (f.collection != null && String(f.collection).trim() !== "") kv.ragCollection = String(f.collection).trim();
@@ -343,15 +342,12 @@ function buildConversationCardModel(events, getFlat) {
     }
     if (m === "conversation.broker.started") {
       brokerLast = "pending";
-      if (f.upstreamModel != null && String(f.upstreamModel).trim() !== "") kv.upstreamModel = String(f.upstreamModel).trim();
     }
     if (m === "conversation.broker.completed") {
       brokerLast = "done";
-      if (f.upstreamModel != null && String(f.upstreamModel).trim() !== "") kv.upstreamModel = String(f.upstreamModel).trim();
     }
     if (m === "conversation.broker.failed") {
       brokerLast = "failed";
-      if (f.upstreamModel != null && String(f.upstreamModel).trim() !== "") kv.upstreamModel = String(f.upstreamModel).trim();
     }
     if (m === "conversation.delivered") progress.delivered = "done";
     if (m === "conversation.errored") progress.delivered = "failed";
@@ -410,6 +406,7 @@ function buildConversationCardModel(events, getFlat) {
     stateKind: stateKind,
     progress: progress,
     kv: kv,
+    turnCount: turnCount,
     chips: {
       tools: toolsN,
       fallback: fbN
