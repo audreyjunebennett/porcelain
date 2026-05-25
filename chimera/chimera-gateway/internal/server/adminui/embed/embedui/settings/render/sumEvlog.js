@@ -362,6 +362,12 @@ globalThis.ChimeraSettings.Render.mountSumEvlog = function (ctx) {
           '<div class="sum-conv-services-after-log-hdr">' + titleRightHtml + "</div>" +
         "</div>"
       : '<div class="sum-section-label">' + escapeHtml(title) + "</div>";
+    var footerMetricsHtml =
+      globalThis.ChimeraUI &&
+      globalThis.ChimeraUI.StatusIndicator &&
+      typeof globalThis.ChimeraUI.StatusIndicator.evlogFooterMetrics === "function"
+        ? globalThis.ChimeraUI.StatusIndicator.evlogFooterMetrics({ warn: warnN, fail: failN })
+        : "";
     var colgroup = showSource
       ? '<colgroup><col class="sum-evlog__col-time" /><col class="sum-evlog__col-msg" /><col class="sum-evlog__col-source" /><col class="sum-evlog__col-status" /></colgroup>'
       : '<colgroup><col class="sum-evlog__col-time" /><col class="sum-evlog__col-msg" /><col class="sum-evlog__col-status" /></colgroup>';
@@ -380,13 +386,7 @@ globalThis.ChimeraSettings.Render.mountSumEvlog = function (ctx) {
       '<thead><tr><th class="sum-evlog__cell--time" scope="col">Time</th>' +
       '<th class="sum-evlog__th-msg" scope="col">Message</th>' +
       sourceTh +
-      '<th class="sum-evlog__th-status" scope="col">' +
-      '<div class="sum-evlog__th-status-head" role="group" aria-label="Status counts">' +
-      '<span class="sum-evlog__th-status-label">Status</span>' +
-      (globalThis.ChimeraUI && globalThis.ChimeraUI.StatusIndicator && typeof globalThis.ChimeraUI.StatusIndicator.evlogHeaderMetrics === "function"
-        ? globalThis.ChimeraUI.StatusIndicator.evlogHeaderMetrics({ warn: warnN, fail: failN })
-        : "") +
-      "</div></th></tr></thead>" +
+      '<th class="sum-evlog__th-status" scope="col">Status</th></tr></thead>' +
       '<tbody id="' +
       escapeHtml(scrollTbodyId) +
       '" data-sum-evlog-tbody>' +
@@ -398,6 +398,9 @@ globalThis.ChimeraSettings.Render.mountSumEvlog = function (ctx) {
       '<p class="sum-evlog__footer" data-sum-evlog-oldest></p></div>' +
       '<div class="sum-evlog__footer-right">' +
       '<p class="sum-evlog__toast sum-gallery-evlog__toast-align" data-sum-evlog-toast role="status" aria-live="polite"></p>' +
+      (footerMetricsHtml
+        ? '<div class="sum-evlog__footer-metrics" role="group" aria-label="Status counts">' + footerMetricsHtml + "</div>"
+        : "") +
       SUM_EVLOG_COPY_BTN +
       "</div></div>" +
       "</div>"

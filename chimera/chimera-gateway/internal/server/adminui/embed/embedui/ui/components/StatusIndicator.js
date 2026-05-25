@@ -64,25 +64,40 @@ function evlogRow(model) {
 }
 
 /**
- * Header metric pills for warn/fail counts in event-log table.
+ * Footer metric pills for warn/fail counts in event-log table (click toggles status filter).
  * @param {{warn: number, fail: number}} counts
  * @returns {string}
  */
-function evlogHeaderMetrics(counts) {
+function evlogFooterMetrics(counts) {
   counts = counts || {};
   var warnN = counts.warn != null ? counts.warn : 0;
   var failN = counts.fail != null ? counts.fail : 0;
+  var warnDisabled = warnN <= 0;
+  var failDisabled = failN <= 0;
   var e = esc();
   return (
-    '<span class="sum-evlog-metric-group sum-evlog-status__lvl--WARN" data-sum-evlog-metric-warn title="Warnings in this view">' +
+    '<button type="button" class="sum-evlog-metric-group sum-evlog-status__lvl--WARN"' +
+    (warnDisabled ? " disabled" : "") +
+    ' data-sum-evlog-metric-warn aria-pressed="false" title="' +
+    escA()(warnDisabled ? "No warnings" : "Show warnings (click again for all)") +
+    '">' +
     '<span class="sum-evlog-metric-num">' +
     e(String(warnN)) +
-    '</span><span class="material-symbols-outlined sum-evlog-metric-icon" aria-hidden="true">warning</span></span>' +
-    '<span class="sum-evlog-metric-group sum-evlog-status__lvl--ERROR" data-sum-evlog-metric-fail title="Errors in this view">' +
+    '</span><span class="material-symbols-outlined sum-evlog-metric-icon" aria-hidden="true">warning</span></button>' +
+    '<button type="button" class="sum-evlog-metric-group sum-evlog-status__lvl--ERROR"' +
+    (failDisabled ? " disabled" : "") +
+    ' data-sum-evlog-metric-fail aria-pressed="false" title="' +
+    escA()(failDisabled ? "No errors" : "Show errors (click again for all)") +
+    '">' +
     '<span class="sum-evlog-metric-num">' +
     e(String(failN)) +
-    '</span><span class="material-symbols-outlined sum-evlog-metric-icon" aria-hidden="true">error</span></span>'
+    '</span><span class="material-symbols-outlined sum-evlog-metric-icon" aria-hidden="true">error</span></button>'
   );
+}
+
+/** @deprecated Use evlogFooterMetrics — kept for gallery markup compatibility */
+function evlogHeaderMetrics(counts) {
+  return evlogFooterMetrics(counts);
 }
 
 /**
@@ -106,6 +121,7 @@ globalThis.ChimeraUI = globalThis.ChimeraUI || {};
 globalThis.ChimeraUI.StatusIndicator = {
   render: render,
   evlogRow: evlogRow,
+  evlogFooterMetrics: evlogFooterMetrics,
   evlogHeaderMetrics: evlogHeaderMetrics,
   serviceBadge: serviceBadge
 };

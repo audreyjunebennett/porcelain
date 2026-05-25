@@ -301,6 +301,48 @@ globalThis.ChimeraSettings.Handlers.Evlog.wire = function (ctx) {
       tbody.appendChild(tr);
       return tr;
     }
+    function sumEvlogMetricCount(btn) {
+      if (!btn) return 0;
+      var numEl = btn.querySelector(".sum-evlog-metric-num");
+      if (!numEl) return 0;
+      var n = parseInt(String(numEl.textContent || "").trim(), 10);
+      return isNaN(n) ? 0 : n;
+    }
+    function sumEvlogSyncMetricFilterState(root) {
+      var select = root.querySelector("[data-evlog-filter-status]");
+      var mode = select && select.value ? select.value : "all";
+      var wBtn = root.querySelector("[data-sum-evlog-metric-warn]");
+      var fBtn = root.querySelector("[data-sum-evlog-metric-fail]");
+      if (wBtn) {
+        var wCount = sumEvlogMetricCount(wBtn);
+        var wDisabled = wCount <= 0;
+        wBtn.disabled = wDisabled;
+        wBtn.title = wDisabled ? "No warnings" : "Show warnings (click again for all)";
+        var wOn = !wDisabled && mode === "warnings";
+        wBtn.classList.toggle("sum-evlog-metric-group--active", wOn);
+        wBtn.setAttribute("aria-pressed", wOn ? "true" : "false");
+      }
+      if (fBtn) {
+        var fCount = sumEvlogMetricCount(fBtn);
+        var fDisabled = fCount <= 0;
+        fBtn.disabled = fDisabled;
+        fBtn.title = fDisabled ? "No errors" : "Show errors (click again for all)";
+        var fOn = !fDisabled && mode === "errors";
+        fBtn.classList.toggle("sum-evlog-metric-group--active", fOn);
+        fBtn.setAttribute("aria-pressed", fOn ? "true" : "false");
+      }
+    }
+    function sumEvlogToggleStatusFilter(root, wantMode) {
+      var select = root.querySelector("[data-evlog-filter-status]");
+      if (!select) return;
+      var btn = root.querySelector(
+        wantMode === "warnings" ? "[data-sum-evlog-metric-warn]" : "[data-sum-evlog-metric-fail]"
+      );
+      if (sumEvlogMetricCount(btn) <= 0) return;
+      var cur = select.value ? select.value : "all";
+      select.value = cur === wantMode ? "all" : wantMode;
+      sumEvlogRebuildRoot(root);
+    }
     function sumEvlogSyncFooter(root) {
       var foot = root.querySelector("[data-sum-evlog-oldest]");
       var footLeft = root.querySelector(".sum-evlog__footer-left");
@@ -382,6 +424,7 @@ globalThis.ChimeraSettings.Handlers.Evlog.wire = function (ctx) {
       }
       root._sumEvlogOldestVisible = oldest === Infinity ? NaN : oldest;
       sumEvlogSyncFooter(root);
+      sumEvlogSyncMetricFilterState(root);
     }
     function sumEvlogCopyFromRoot(root) {
       var tbody = root.querySelector("[data-sum-evlog-tbody]");
@@ -503,6 +546,16 @@ globalThis.ChimeraSettings.Handlers.Evlog.wire = function (ctx) {
         if (t.closest(".sum-evlog__copy-btn")) {
           ev.preventDefault();
           sumEvlogCopyFromRoot(root);
+          return;
+        }
+        if (t.closest("[data-sum-evlog-metric-warn]")) {
+          ev.preventDefault();
+          sumEvlogToggleStatusFilter(root, "warnings");
+          return;
+        }
+        if (t.closest("[data-sum-evlog-metric-fail]")) {
+          ev.preventDefault();
+          sumEvlogToggleStatusFilter(root, "errors");
           return;
         }
         var clr = t.closest("[data-sum-evlog-clear-search]");

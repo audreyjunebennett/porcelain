@@ -992,6 +992,78 @@ html[data-theme="design-01"] #panel-summarized .sum-card--indexer-operator-works
   gap: 0.35rem;
 }
 
+.sum-evlog__footer-metrics {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  flex: 0 0 auto;
+}
+
+.sum-evlog__footer-row .sum-evlog-metric-group {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.12rem;
+  box-sizing: border-box;
+  min-height: 0;
+  margin: 0;
+  padding: 0.06rem 0.32rem;
+  border-radius: 9999px;
+  font-family: inherit;
+  font-size: 0.62rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.sum-evlog__footer-row .sum-evlog-metric-group .sum-evlog-metric-num {
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.sum-evlog__footer-row .sum-evlog-metric-group .sum-evlog-metric-icon {
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
+.sum-evlog__footer-row .sum-evlog-metric-group.sum-evlog-status__lvl--WARN {
+  color: var(--embed-semantic-warn-fg);
+  background: var(--embed-semantic-warn-bg);
+  border: 1px solid color-mix(in srgb, var(--embed-semantic-warn-fg) 18%, transparent);
+}
+
+.sum-evlog__footer-row .sum-evlog-metric-group.sum-evlog-status__lvl--ERROR {
+  color: var(--embed-semantic-error-fg);
+  background: var(--embed-semantic-error-bg);
+  border: 1px solid color-mix(in srgb, var(--embed-semantic-error-fg) 18%, transparent);
+}
+
+.sum-evlog__footer-row .sum-evlog-metric-group:hover {
+  filter: brightness(0.97);
+}
+
+.sum-evlog__footer-row .sum-evlog-metric-group:disabled {
+  opacity: 0.42;
+  cursor: default;
+  filter: none;
+}
+
+.sum-evlog__footer-row .sum-evlog-metric-group:disabled:hover {
+  filter: none;
+}
+
+.sum-evlog__footer-row .sum-evlog-metric-group:focus-visible {
+  outline: 2px solid var(--embed-focus-ring);
+  outline-offset: 1px;
+}
+
+.sum-evlog__footer-row .sum-evlog-metric-group.sum-evlog-metric-group--active {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 28%, transparent);
+}
+
 .sum-metrics-table.sum-evlog__table .sum-evlog-metric-group {
   display: inline-flex;
   align-items: center;
