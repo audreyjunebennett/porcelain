@@ -52,10 +52,7 @@ func TestUIRoutingGenerate_writesFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rt, err := NewRuntime(gwPath, testLog())
-	if err != nil {
-		t.Fatal(err)
-	}
+	rt := mustRuntime(t, gwPath)
 	front := httptest.NewServer(NewMux(rt, testLog(), nil, NewUIOptions()))
 	t.Cleanup(front.Close)
 
@@ -153,10 +150,7 @@ func TestUIRoutingPolicySave_writesRoutingPolicyOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rt, err := NewRuntime(gwPath, testLog())
-	if err != nil {
-		t.Fatal(err)
-	}
+	rt := mustRuntime(t, gwPath)
 	front := httptest.NewServer(NewMux(rt, testLog(), nil, NewUIOptions()))
 	t.Cleanup(front.Close)
 

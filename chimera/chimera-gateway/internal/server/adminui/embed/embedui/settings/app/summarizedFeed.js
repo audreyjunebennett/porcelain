@@ -7044,17 +7044,26 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       },
       adminProvidersSectionBreakHtml: buildAdminProvidersSectionBreakHtml,
       adminRoutingSectionBreakHtml: function () {
-        if (typeof ctx.operatorSectionHeadHtml !== "function") {
+        return (
+          '<div class="sum-feed-section-head sum-feed-section-head--routing">' +
+          '<span class="sum-feed-section-title sum-section-label">Legacy global routing</span>' +
+          '<span class="muted sum-feed-section-hint">Deprecated — configure per virtual model above</span></div>'
+        );
+      },
+      virtualModelsSectionBreakHtml: function (count) {
+        if (typeof ctx.buildVirtualModelsSectionIntroHtml === "function") {
           return (
-            '<div class="sum-section-label sum-feed-section-title">Routing</div>' +
-            '<div class="sum-workspaces-intro"><p class="sum-workspaces-intro-lead">Routing controls are fully editable here: policy YAML, fallback chain, and tool-router settings.</p></div>'
+            '<div class="sum-feed-section-head">' +
+            '<span class="material-symbols-outlined sum-feed-section-icon" aria-hidden="true">hub</span>' +
+            '<span class="sum-feed-section-title sum-section-label">Virtual models</span></div>' +
+            ctx.buildVirtualModelsSectionIntroHtml(count)
           );
         }
         return (
-          ctx.operatorSectionHeadHtml("Routing", "route") +
-          '<div class="sum-workspaces-intro"><p class="sum-workspaces-intro-lead">Routing controls are fully editable here: policy YAML, fallback chain, and tool-router settings.</p></div>'
+          '<div class="sum-feed-section-head">' +
+          '<span class="sum-feed-section-title sum-section-label">Virtual models</span></div>'
         );
-      }
+      },
     };
   }
 
@@ -7070,6 +7079,8 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
         return buildAdminUsersCardHtml();
       case "admin-provider":
         return buildAdminProviderCardHtml(src.spec.id, src.spec.title, src.spec.avatar, src.spec.subtitle);
+      case "virtual-model":
+        return typeof buildVirtualModelCardHtml === "function" ? buildVirtualModelCardHtml(src.vm) : null;
       case "admin-routing":
         return buildAdminRoutingRulesCardHtml();
       case "admin-fallback":
@@ -7222,6 +7233,7 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
   var buildAdminRoutingRulesCardHtml = ctx.buildAdminRoutingRulesCardHtml;
   var buildAdminFallbackCardHtml = ctx.buildAdminFallbackCardHtml;
   var buildAdminRouterModelCardHtml = ctx.buildAdminRouterModelCardHtml;
+  var buildVirtualModelCardHtml = ctx.buildVirtualModelCardHtml;
   var buildWorkspaceDraftCardHtml = ctx.buildWorkspaceDraftCardHtml;
   var fallbackChainToYAML = ctx.fallbackChainToYAML;
   var parseFallbackChainInput = ctx.parseFallbackChainInput;

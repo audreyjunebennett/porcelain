@@ -115,16 +115,40 @@ globalThis.ChimeraSettings.Summarized.Model = globalThis.ChimeraSettings.Summari
         )
       );
     }
-    if (deps.adminRoutingSectionBreakHtml) {
-      pushSectionBreak(cards, deps.adminRoutingSectionBreakHtml(), "05-routing-label");
-    }
     var gw = (state.adminStateCache && state.adminStateCache.gateway) || {};
+    var vms = gw.virtual_models && Array.isArray(gw.virtual_models) ? gw.virtual_models : [];
+    if (vms.length > 0 && deps.virtualModelsSectionBreakHtml) {
+      pushSectionBreak(cards, deps.virtualModelsSectionBreakHtml(vms.length), "05-virtual-models-label");
+    }
+    for (var vi = 0; vi < vms.length; vi++) {
+      var vm = vms[vi];
+      cards.push(
+        makeCard(
+          "virtual-model-" + String(vm.id),
+          "virtual-model",
+          SECTION_OVERVIEW,
+          "05-vm-" + String(vm.id),
+          {
+            modelId: vm.model_id,
+            enabled: !!vm.enabled,
+            fallbackDepth: vm.fallback_depth,
+            routing: !!vm.routing_policy_enabled,
+            toolRouter: !!vm.tool_router_enabled
+          },
+          { vm: vm },
+          { vm: vm }
+        )
+      );
+    }
+    if (deps.adminRoutingSectionBreakHtml) {
+      pushSectionBreak(cards, deps.adminRoutingSectionBreakHtml(), "06-routing-label");
+    }
     cards.push(
       makeCard(
         "admin-routing-rules",
         "admin-routing",
         SECTION_OVERVIEW,
-        "06-admin-routing",
+        "07-admin-routing",
         { editing: !!state.adminRoutingEditing, yamlLen: gw.routing_policy_yaml ? String(gw.routing_policy_yaml).length : 0 },
         { gateway: gw },
         { gateway: gw }
@@ -135,7 +159,7 @@ globalThis.ChimeraSettings.Summarized.Model = globalThis.ChimeraSettings.Summari
         "admin-fallback-chain",
         "admin-fallback",
         SECTION_OVERVIEW,
-        "07-admin-fallback",
+        "08-admin-fallback",
         { editing: !!state.adminFallbackEditing, chainLen: gw.fallback_chain ? gw.fallback_chain.length : 0 },
         { gateway: gw },
         { gateway: gw }
@@ -146,7 +170,7 @@ globalThis.ChimeraSettings.Summarized.Model = globalThis.ChimeraSettings.Summari
         "admin-router-model",
         "admin-router-model",
         SECTION_OVERVIEW,
-        "08-admin-router",
+        "09-admin-router",
         {
           editing: !!state.adminRouterEditing,
           modelCount: gw.router_models ? gw.router_models.length : 0,

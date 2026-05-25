@@ -54,10 +54,7 @@ func TestUIBrokerProviderHealth_endToEnd(t *testing.T) {
 	if err := os.WriteFile(routePath, []byte("rules: []\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	rt, err := NewRuntime(gwPath, testLog())
-	if err != nil {
-		t.Fatal(err)
-	}
+	rt := mustRuntime(t, gwPath)
 	front := httptest.NewServer(NewMux(rt, testLog(), nil, NewUIOptions()))
 	t.Cleanup(front.Close)
 
@@ -130,10 +127,7 @@ func TestUIChimeraBrokerProviderHealth_chimeraBrokerDown(t *testing.T) {
 	if err := os.WriteFile(routePath, []byte("rules: []\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	rt, err := NewRuntime(gwPath, testLog())
-	if err != nil {
-		t.Fatal(err)
-	}
+	rt := mustRuntime(t, gwPath)
 	front := httptest.NewServer(NewMux(rt, testLog(), nil, NewUIOptions()))
 	t.Cleanup(front.Close)
 
@@ -210,10 +204,7 @@ func TestUIBrokerProviderHealth_onlyOllamaConfigured_catalogFail(t *testing.T) {
 	if err := os.WriteFile(routePath, []byte("rules: []\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	rt, err := NewRuntime(gwPath, testLog())
-	if err != nil {
-		t.Fatal(err)
-	}
+	rt := mustRuntime(t, gwPath)
 	front := httptest.NewServer(NewMux(rt, testLog(), nil, NewUIOptions()))
 	t.Cleanup(front.Close)
 
@@ -289,10 +280,7 @@ func TestUIBrokerProviderHealth_requiresAuth(t *testing.T) {
 	if err := os.WriteFile(routePath, []byte("rules: []\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	rt, err := NewRuntime(gwPath, testLog())
-	if err != nil {
-		t.Fatal(err)
-	}
+	rt := mustRuntime(t, gwPath)
 	front := httptest.NewServer(NewMux(rt, testLog(), nil, NewUIOptions()))
 	t.Cleanup(front.Close)
 

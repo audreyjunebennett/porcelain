@@ -385,10 +385,7 @@ func TestHealth_NoRAGProbeWhenDisabled(t *testing.T) {
 	writeTokens(t, tokPath, "tok", "ten")
 	routePath := filepath.Join(dir, "routing-policy.yaml")
 	_ = os.WriteFile(routePath, []byte("rules: []\n"), 0o644)
-	rt, err := NewRuntime(gwPath, testLog())
-	if err != nil {
-		t.Fatal(err)
-	}
+	rt := mustRuntime(t, gwPath)
 	srv := httptest.NewServer(NewMux(rt, testLog(), nil, nil))
 	t.Cleanup(srv.Close)
 

@@ -171,25 +171,13 @@ func setupRAGServerWithLog(t *testing.T, lg *slog.Logger) (*Runtime, *inMemorySt
 	}
 	gwPath := filepath.Join(cfgDir, naming.GatewayConfigFileTarget)
 	writeGateway(t, gwPath, upstream.URL, []string{"m"}, "http://127.0.0.1:1")
-	opMig := testRepoOperatorMigrationsDir(t)
-	opAppend := "\noperator:\n  migrations_dir: \"" + strings.ReplaceAll(filepath.ToSlash(opMig), `\`, `/`) + "\"\n"
-	gwBytes, err := os.ReadFile(gwPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(gwPath, append(gwBytes, []byte(opAppend)...), 0o644); err != nil {
-		t.Fatal(err)
-	}
 	tokPath := filepath.Join(cfgDir, "api-keys.yaml")
 	writeTokens(t, tokPath, "ingest-tok", "tenantA")
 	routePath := filepath.Join(cfgDir, "routing-policy.yaml")
 	if err := os.WriteFile(routePath, []byte("rules: []\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	rt, err := NewRuntime(gwPath, lg)
-	if err != nil {
-		t.Fatal(err)
-	}
+	rt := mustRuntimeLog(t, gwPath, lg)
 	store := newMemStore()
 	svc, err := rag.New(rag.Options{
 		Store:        store,
@@ -330,10 +318,7 @@ func TestIngest_RAGDisabled_503(t *testing.T) {
 	writeTokens(t, tokPath, "tok", "ten")
 	routePath := filepath.Join(dir, "routing-policy.yaml")
 	_ = os.WriteFile(routePath, []byte("rules: []\n"), 0o644)
-	rt, err := NewRuntime(gwPath, testLog())
-	if err != nil {
-		t.Fatal(err)
-	}
+	rt := mustRuntime(t, gwPath)
 	srv := httptest.NewServer(NewMux(rt, testLog(), nil, nil))
 	t.Cleanup(srv.Close)
 

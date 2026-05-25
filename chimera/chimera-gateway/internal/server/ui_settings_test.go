@@ -44,10 +44,7 @@ func runtimeForUILogs(t *testing.T, chimeraBrokerURL string) *Runtime {
 	if err := os.WriteFile(routePath, []byte("rules: []\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	rt, err := NewRuntime(gwPath, testLog())
-	if err != nil {
-		t.Fatal(err)
-	}
+	rt := mustRuntime(t, gwPath)
 	return rt
 }
 

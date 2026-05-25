@@ -34,10 +34,7 @@ func TestBootstrapMode_missingTokensFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rt, err := NewRuntime(gwPath, testLog())
-	if err != nil {
-		t.Fatal(err)
-	}
+	rt := mustRuntime(t, gwPath)
 	if !BootstrapMode(rt) {
 		t.Fatal("expected bootstrap with no api-keys.yaml")
 	}
@@ -62,10 +59,7 @@ func TestNewBootstrapMux_setupTokenThenNotBootstrap(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rt, err := NewRuntime(gwPath, testLog())
-	if err != nil {
-		t.Fatal(err)
-	}
+	rt := mustRuntime(t, gwPath)
 	h := NewBootstrapMux(rt, testLog(), &StatusOverlay{EffectiveListen: "127.0.0.1:9"})
 	ts := httptest.NewServer(h)
 	t.Cleanup(ts.Close)

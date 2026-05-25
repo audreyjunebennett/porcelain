@@ -92,7 +92,7 @@ func loadCardTestCtx(t *testing.T, vm *goja.Runtime) {
 	for _, f := range []string{
 		"sharedFormat.js", "convCard.js", "serviceCard.js", "gatewayOverview.js", "gatewayUsage.js",
 		"adminShared.js", "adminUsers.js", "adminProvider.js", "adminRouting.js", "adminFallback.js",
-		"adminRouterModels.js", "adminWorkflows.js", "workspaceDraft.js", "mount.js",
+		"adminRouterModels.js", "adminVirtualModels.js", "adminWorkflows.js", "workspaceDraft.js", "mount.js",
 	} {
 		evalJS(t, vm, cardsUIPath(t, f))
 	}

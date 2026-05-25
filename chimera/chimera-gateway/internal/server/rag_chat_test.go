@@ -51,10 +51,7 @@ func setupRAGChatServer(t *testing.T) (string, *capturedReqs, *Runtime) {
 	if err := os.WriteFile(routePath, []byte("rules: []\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	rt, err := NewRuntime(gwPath, testLog())
-	if err != nil {
-		t.Fatal(err)
-	}
+	rt := mustRuntime(t, gwPath)
 	store := newMemStore()
 	svc, err := rag.New(rag.Options{
 		Store:        store,
@@ -201,10 +198,7 @@ func TestVirtualModelChat_NoContextWhenRAGDisabled(t *testing.T) {
 	writeTokens(t, tokPath, "tok", "ten")
 	routePath := filepath.Join(dir, "routing-policy.yaml")
 	_ = os.WriteFile(routePath, []byte("rules: []\n"), 0o644)
-	rt, err := NewRuntime(gwPath, testLog())
-	if err != nil {
-		t.Fatal(err)
-	}
+	rt := mustRuntime(t, gwPath)
 	srv := httptest.NewServer(NewMux(rt, testLog(), nil, nil))
 	t.Cleanup(srv.Close)
 
