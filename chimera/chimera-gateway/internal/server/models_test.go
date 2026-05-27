@@ -38,10 +38,7 @@ func TestModelsList_VirtualModelFirst(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rt, err := NewRuntime(gwPath, testLog())
-	if err != nil {
-		t.Fatal(err)
-	}
+	rt := mustRuntime(t, gwPath)
 	front := httptest.NewServer(NewMux(rt, testLog(), nil, nil))
 	t.Cleanup(front.Close)
 
@@ -103,10 +100,7 @@ func TestModelsList_NormalizesMissingOpenAIFields(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rt, err := NewRuntime(gwPath, testLog())
-	if err != nil {
-		t.Fatal(err)
-	}
+	rt := mustRuntime(t, gwPath)
 	front := httptest.NewServer(NewMux(rt, testLog(), nil, nil))
 	t.Cleanup(front.Close)
 
@@ -165,10 +159,7 @@ func TestUIModels_NoGatewayToken(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rt, err := NewRuntime(gwPath, testLog())
-	if err != nil {
-		t.Fatal(err)
-	}
+	rt := mustRuntime(t, gwPath)
 	front := httptest.NewServer(NewMux(rt, testLog(), nil, nil))
 	t.Cleanup(front.Close)
 
@@ -244,10 +235,7 @@ func TestModelsList_FreeTierFilter(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rt, err := NewRuntime(gwPath, testLog())
-	if err != nil {
-		t.Fatal(err)
-	}
+	rt := mustRuntime(t, gwPath)
 	front := httptest.NewServer(NewMux(rt, testLog(), nil, nil))
 	t.Cleanup(front.Close)
 

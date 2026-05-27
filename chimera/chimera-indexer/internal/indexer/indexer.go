@@ -66,6 +66,14 @@ type Indexer struct {
 	lastGlobalScopeStatus  scopeStatusGlobals
 	embedReasonMu          sync.Mutex
 	lastEmbedReasonCode    string
+
+	queueSnapMu         sync.Mutex
+	lastQueueSnapFP     string
+	lastQueueSnapInfoAt time.Time
+
+	obsMu              sync.Mutex
+	lastStorageStatsFP map[string]string
+	lastStateFP        string
 }
 
 // Hooks is an optional set of callbacks tests can install to observe and

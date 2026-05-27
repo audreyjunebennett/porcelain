@@ -5,15 +5,38 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
 	"log/slog"
 
+	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/testsupport"
 	"github.com/lynn/porcelain/internal/naming"
 )
 
 func testLog() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError + 1}))
+}
+
+// mustRuntime opens a gateway runtime and closes SQLite stores on test cleanup (Windows file locks).
+func mustRuntime(t *testing.T, gwPath string) *Runtime {
+	return mustRuntimeLog(t, gwPath, testLog())
+}
+
+func mustRuntimeLog(t *testing.T, gwPath string, log *slog.Logger) *Runtime {
+	t.Helper()
+	if log == nil {
+		log = testLog()
+	}
+	rt, err := NewRuntime(gwPath, log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		rt.CloseOperator()
+		rt.CloseMetrics()
+	})
+	return rt
 }
 
 // writeGateway writes a minimal gateway.yaml for tests. When qdrantURL is non-empty, RAG is enabled.
@@ -40,6 +63,9 @@ func writeGateway(t *testing.T, path, upstream string, chain []string, qdrantURL
 			"  ingest:\n    max_bytes: 10485760\n" +
 			"  defaults:\n    project_id: \"default\"\n"
 	}
+	opMig := testsupport.GatewayOperatorMigrationsDir(t)
+	opMigSlash := strings.ReplaceAll(filepath.ToSlash(opMig), `\`, `/`)
+	raw += "operator:\n  sqlite_path: \"./operator.sqlite\"\n  migrations_dir: \"" + opMigSlash + "\"\n"
 	if err := os.WriteFile(path, []byte(raw), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -74,9 +100,5 @@ func runtimeForCatalogTest(t *testing.T, upstreamURL string) *Runtime {
 	if err := os.WriteFile(routePath, []byte("rules: []\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	rt, err := NewRuntime(gwPath, testLog())
-	if err != nil {
-		t.Fatal(err)
-	}
-	return rt
+	return mustRuntime(t, gwPath)
 }

@@ -25,7 +25,7 @@ Move Chimera onto a Go gateway with BiFrost as the upstream LLM proxy, give it o
 
 ---
 
-This document is a **phased migration plan**. Each phase has a **deliverable**, **verification (tests)**, and **TODO** items. Work proceeds **one phase at a time**: the **user asks the agent to implement the next phase**. When an agent finishes a phase, it **updates this file** (checkboxes, completion notes, and links to PRs/commits as appropriate).
+This document is a **phased migration plan**. Each phase has a **deliverable**, **verification (tests)**, and *** items. Work proceeds **one phase at a time**: the **user asks the agent to implement the next phase**. When an agent finishes a phase, it **updates this file** (checkboxes, completion notes, and links to PRs/commits as appropriate).
 
 **Product goals (end state)**
 
@@ -43,7 +43,7 @@ This document is a **phased migration plan**. Each phase has a **deliverable**, 
 
 After completing work for a phase:
 
-1. Mark that phase’s **TODO** checkboxes as done (`[x]`).
+1. Mark that phase’s *** checkboxes as done (`[x]`).
 2. Under **Phase completion log**, add a dated entry: phase name, summary, PR or commit SHA, and any **follow-ups** or **deferred items**.
 3. If scope changed, edit the phase text in place and note **why** in the log.
 
@@ -86,7 +86,7 @@ After completing work for a phase:
 - [x] `GET /health` on Chimera reflects upstream reachability in a way that matches current semantics **or** documented delta.
 - [x] Discovery doc includes a **short “definition of done” checklist** the next phase can rely on.
 
-**TODO (Phase 0)**
+**(Phase 0)**
 
 - [x] Install and run BiFrost per official docs; record version and command lines.
 - [x] Configure at least one provider **only in BiFrost**; confirm completions work **directly** against BiFrost.
@@ -113,7 +113,7 @@ After completing work for a phase:
 - [x] **Integration or handler tests** (e.g. `httptest` + fake upstream) verify: request forwarding, required headers, streaming pass-through behavior at the HTTP level for a **minimal** SSE fixture.
 - [x] **Manual or scripted smoke**: binary against a fake upstream confirms listen address and timeout behavior.
 
-**TODO (Phase 1)**
+**Phase 1**
 
 - [x] Add Go module and `README` section for building the Go binary.
 - [x] Implement minimal reverse proxy or typed client for chat + models + health upstream probe.
@@ -139,7 +139,7 @@ After completing work for a phase:
 - [x] **Golden or snapshot tests** for virtual model id and models list ordering where stable.
 - [ ] **Optional**: black-box test script in `scripts/` that runs Go binary against BiFrost in CI (may be `workflow_dispatch` only if secrets/network heavy) — deferred.
 
-**TODO (Phase 2)**
+**(Phase 2)**
 
 - [x] Port token loading and mtime reload (or chosen alternative).
 - [x] Port routing policy and virtual model + fallback logic.
@@ -165,7 +165,7 @@ After completing work for a phase:
 - [ ] **Integration test** (optional in CI): job that downloads or uses a **pinned BiFrost binary** / Docker to verify end-to-end **one command** startup (may be nightly or manual job—document which) — deferred; see [supervisor.md](../supervisor.md).
 - [x] Manual checklist: SIGINT stops both children without zombie processes — documented in [supervisor.md](../supervisor.md) (operator-run).
 
-**TODO (Phase 3)**
+**(Phase 3)**
 
 - [x] Implement subprocess management (start order, env, working directory).
 - [x] Embed or document **how BiFrost binary is obtained** (bundled path, `PATH`, or download helper—align with licensing).
@@ -190,7 +190,7 @@ After completing work for a phase:
 - [x] **Smoke test** job: unpack artifact, run `--version` or `--help`, and optionally start with **mock** upstream (fast path).
 - [x] **Documentation**: install steps per OS, antivirus/first-run notes for Windows if relevant.
 
-**TODO (Phase 4)**
+**(Phase 4)**
 
 - [x] Select tooling (GoReleaser, etc.) and pin BiFrost versions per release.
 - [x] Define artifact layout (binary names, `LICENSE` files, third-party notices).
@@ -214,7 +214,7 @@ After completing work for a phase:
 - [x] **Automated UI test** where feasible (e.g. Wails/Fyne test hooks or screenshot/E2E in CI for one platform); if not feasible, **manual test script** with signed checklist in `docs/gui-testing.md`.
 - [x] **Build verification**: CI builds GUI flavor for at least **linux-amd64** (headless-friendly checks as appropriate).
 
-**TODO (Phase 5)**
+**(Phase 5)**
 
 - [x] Choose GUI framework; spike hello-world in repo.
 - [x] Implement required message string and window sizing/accessibility basics.
@@ -240,7 +240,7 @@ After completing work for a phase:
 - [x] **End-to-end script** (documented): `scripts/e2e-first-chat-curl.sh` at repo root (CLI; GUI does not host the API). The older `docs/e2e-operator-path.md` walkthrough was removed from the tree—use the script.
 - [x] **Regression suite** from Phase 2 still green (`go test ./...`).
 
-**TODO (Phase 6)**
+**(Phase 6)**
 
 - [x] Audit secrets in logs and config reload paths (documented in **SECURITY.md**; code review: `redactAuth`, token store logs count-only).
 - [x] Finalize docs and archive TS server — **done:** `src/`, Compose, and LiteLLM config removed; Go-only tree.

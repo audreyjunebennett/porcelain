@@ -11,30 +11,20 @@ import (
 	gruntime "github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/runtime"
 )
 
-// BrokerProviderNames is the fixed roster the operator UI surfaces (state + provider health).
-var BrokerProviderNames = []string{"groq", "gemini", "ollama"}
+// BrokerProviderNames is the operator UI provider catalog roster (display order).
+var BrokerProviderNames = ProviderCatalogIDs()
 
-// BrokerProviderNamesForHealth returns the subset of BrokerProviderNames registered in the
-// live chimera-broker config store. When the governance list is unavailable, the full roster
-// is returned so callers can fall back to per-provider GET probes.
-func BrokerProviderNamesForHealth(ctx context.Context, client *brokeradmin.Client) []string {
+// BrokerProviderNamesForProbes returns provider ids registered in chimera-broker for state and
+// health BFF endpoints. Uses governance when available, otherwise per-provider GET discovery.
+func BrokerProviderNamesForProbes(ctx context.Context, client *brokeradmin.Client) []string {
 	configured, listOK := brokeradmin.ListConfiguredProviders(ctx, client)
-	return BrokerProviderNamesFromGovernance(configured, listOK)
+	return ConfiguredProviderIDsResolved(ctx, client, configured, listOK)
 }
 
-// BrokerProviderNamesFromGovernance maps a governance provider set to the UI roster without
-// issuing another HTTP call.
-func BrokerProviderNamesFromGovernance(configured map[string]struct{}, listOK bool) []string {
-	if !listOK || len(configured) == 0 {
-		return append([]string(nil), BrokerProviderNames...)
-	}
-	out := make([]string, 0, len(BrokerProviderNames))
-	for _, name := range BrokerProviderNames {
-		if _, ok := configured[strings.ToLower(strings.TrimSpace(name))]; ok {
-			out = append(out, name)
-		}
-	}
-	return out
+// BrokerProviderNamesForHealth is an alias for BrokerProviderNamesForProbes (health strip shows
+// configured providers only).
+func BrokerProviderNamesForHealth(ctx context.Context, client *brokeradmin.Client) []string {
+	return BrokerProviderNamesForProbes(ctx, client)
 }
 
 // BrokerAdminClient returns a chimera-broker management API client from runtime config.

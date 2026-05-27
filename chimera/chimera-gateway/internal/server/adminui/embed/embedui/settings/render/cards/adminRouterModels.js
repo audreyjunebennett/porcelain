@@ -52,14 +52,17 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminRouterModels = function (ctx) 
     }
     if (!routerTableRows) routerTableRows = '<tr><td colspan="4" class="muted">No router models configured.</td></tr>';
     return (
-      '<details class="sum-card" id="admin-router-model">' +
-      '<summary><span class="sum-avatar sum-av-svc-chimera-gateway">Tr</span><span class="sum-main"><span class="sum-title">Router model</span>' +
+      '<article class="sum-card sum-card--collapsible" id="admin-router-model">' +
+      '<header class="sum-card__hdr">' +
+      '<span class="sum-avatar sum-av-svc-chimera-gateway">Tr</span>' +
+      '<span class="sum-main"><span class="sum-title">Router model</span>' +
       '<span class="sum-sub sum-sub--clamp">Tool-router controls and ordered router model list.</span></span>' +
+      '<span class="sum-metrics sum-metrics--router-toggle">' +
       '<button class="sum-router-toggle" type="button" id="admin-router-enabled" data-admin-action="router-enabled-toggle" aria-label="Toggle tool router" aria-pressed="' + (routerEnabled ? "true" : "false") + '">' +
       '<span class="sum-router-toggle__track"><span class="sum-router-toggle__thumb"></span></span>' +
-      "</button>" +
+      "</button></span>" +
       operatorCardChevronHtml() +
-      "</summary>" +
+      "</header>" +
       '<div class="sum-body">' +
       '<div class="sg-op-head-row">' +
       '<div class="sg-op-card-note sg-op-card-note--tight">Manage tool-router model order, enabled state, and confidence threshold from one panel.</div>' +
@@ -89,7 +92,7 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminRouterModels = function (ctx) 
       '<button type="button" class="sg-op-yaml-ov-btn sg-op-yaml-ov-btn--save" data-admin-action="router-save">Save</button>' +
       "</div></div>" +
       adminScopedEvlogPanelFromEvents("Scoped log — tool-router", "routing-router", adminScopedEventsForRouting("router")) +
-      "</div></details>"
+      "</div></article>"
     );
   }
 

@@ -109,6 +109,133 @@ func TestSummarizedModel_buildsConversationServiceGatewayCards(t *testing.T) {
 	}
 }
 
+func TestSummarizedModel_noProviderCardsWhenSpecsEmpty(t *testing.T) {
+	vm := goja.New()
+	loadSummarizedModelCtx(t, vm)
+
+	_, err := vm.RunString(`
+		var deps = {
+			strHash: ChimeraSettings.strHash,
+			conversationDomIdForGroup: function (g) { return ChimeraSettings.strHash(g.pid + "\0" + g.cid); },
+			convLastTs: function () { return 1; },
+			primaryLogMessage: function () { return "m"; },
+			conversationCardModelForGroup: function () { return {}; },
+			conversationCardStatus: function () { return { st: "active" }; },
+			indexerPartitionMetaForRun: function () { return null; },
+			collectIndexerRunMeta: function () { return {}; },
+			mergePersistedIndexerWatchRoots: function (m) { return m; },
+			indexerRunTimelineDedupeKey: function (_m, id) { return id; },
+			pickCanonicalIndexerRun: function (r) { return r[0]; },
+			workspaceCardTitleFromIndexerMeta: function () { return ""; },
+			indexerCardTitleSortLabel: function () { return ""; },
+			indexerCardDomIdFromMeta: function (_m, id) { return "ix-" + id; },
+			indexerCardIdentityKey: function () { return ""; },
+			indexerCardIdentityKeyFromSnap: function () { return ""; },
+			loadIndexerWatchRootsStore: function () { return { snapshots: {} }; },
+			dedupeOperatorWorkspacesNested: function (x) { return x; },
+			canonicalWorkspaceRowIdKey: function (id) { return String(id); },
+			workspaceDraftComparableManagedTitle: function () { return ""; },
+			operatorManagedWorkspaceTitleText: function () { return ""; },
+			operatorWorkspaceCoveredByIndexerRuns: function () { return false; },
+			adminProvidersSectionBreakHtml: function () { return ""; },
+			adminRoutingSectionBreakHtml: function () { return ""; }
+		};
+		var state = {
+			agg: { mergedConv: [], buckets: {}, byRun: {}, partitionRegistry: {} },
+			gatewayOverviewCache: {}, metricsCache: {}, adminStateCache: { providers: {}, gateway: {} },
+			tokenListCache: [], workspaceDrafts: [], adminProviderSpecs: [], lastIndexerOperatorWorkspacesNested: []
+		};
+		var model = ChimeraSettings.Summarized.Model.buildSummarizedModel(deps, state);
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	v, err := vm.RunString(`
+		model.cards.filter(function (c) { return c.kind === "admin-provider"; }).map(function (c) { return c.id; })
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := v.Export().([]any)
+	if len(ids) != 0 {
+		t.Fatalf("expected no admin-provider cards, got %v", ids)
+	}
+}
+
+func TestSummarizedModel_visibleProviderSpecsOnly(t *testing.T) {
+	vm := goja.New()
+	loadSummarizedModelCtx(t, vm)
+
+	_, err := vm.RunString(`
+		var deps = {
+			strHash: ChimeraSettings.strHash,
+			conversationDomIdForGroup: function (g) { return ChimeraSettings.strHash(g.pid + "\0" + g.cid); },
+			convLastTs: function () { return 1; },
+			primaryLogMessage: function () { return "m"; },
+			conversationCardModelForGroup: function () { return {}; },
+			conversationCardStatus: function () { return { st: "active" }; },
+			indexerPartitionMetaForRun: function () { return null; },
+			collectIndexerRunMeta: function () { return {}; },
+			mergePersistedIndexerWatchRoots: function (m) { return m; },
+			indexerRunTimelineDedupeKey: function (_m, id) { return id; },
+			pickCanonicalIndexerRun: function (r) { return r[0]; },
+			workspaceCardTitleFromIndexerMeta: function () { return ""; },
+			indexerCardTitleSortLabel: function () { return ""; },
+			indexerCardDomIdFromMeta: function (_m, id) { return "ix-" + id; },
+			indexerCardIdentityKey: function () { return ""; },
+			indexerCardIdentityKeyFromSnap: function () { return ""; },
+			loadIndexerWatchRootsStore: function () { return { snapshots: {} }; },
+			dedupeOperatorWorkspacesNested: function (x) { return x; },
+			canonicalWorkspaceRowIdKey: function (id) { return String(id); },
+			workspaceDraftComparableManagedTitle: function () { return ""; },
+			operatorManagedWorkspaceTitleText: function () { return ""; },
+			operatorWorkspaceCoveredByIndexerRuns: function () { return false; },
+			adminProvidersSectionBreakHtml: function () { return ""; },
+			adminRoutingSectionBreakHtml: function () { return ""; }
+		};
+		var state = {
+			agg: { mergedConv: [], buckets: {}, byRun: {}, partitionRegistry: {} },
+			gatewayOverviewCache: {}, metricsCache: {}, adminStateCache: { providers: { ollama: { ok: true }, groq: { ok: true } }, gateway: {} },
+			tokenListCache: [], workspaceDrafts: [],
+			adminProviderSpecs: [
+				{ id: "ollama", title: "Ollama", avatar: "Ol", subtitle: "local" },
+				{ id: "groq", title: "Groq", avatar: "Gq", subtitle: "fast" }
+			],
+			lastIndexerOperatorWorkspacesNested: []
+		};
+		var model = ChimeraSettings.Summarized.Model.buildSummarizedModel(deps, state);
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	v, err := vm.RunString(`
+		(function () {
+			var ids = model.cards.filter(function (c) { return c.kind === "admin-provider"; }).map(function (c) { return c.id; });
+			return {
+				ids: ids,
+				hasOllama: ids.indexOf("admin-provider-ollama") >= 0,
+				hasGroq: ids.indexOf("admin-provider-groq") >= 0,
+				hasGemini: ids.indexOf("admin-provider-gemini") >= 0
+			};
+		})()
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	obj := v.ToObject(vm)
+	if !obj.Get("hasOllama").ToBoolean() || !obj.Get("hasGroq").ToBoolean() {
+		t.Fatalf("expected ollama+groq cards: %+v", obj.Export())
+	}
+	if obj.Get("hasGemini").ToBoolean() {
+		t.Fatal("gemini card should not appear when not in adminProviderSpecs")
+	}
+	if n := len(obj.Get("ids").Export().([]any)); n != 2 {
+		t.Fatalf("provider card count=%d want 2", n)
+	}
+}
+
 func TestSummarizedModel_hashChangesWhenEventAppended(t *testing.T) {
 	vm := goja.New()
 	loadSummarizedModelCtx(t, vm)

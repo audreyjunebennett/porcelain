@@ -69,6 +69,40 @@ func TestBuildCatalogSnapshot_collectsProvidersAndModels(t *testing.T) {
 	}
 }
 
+func TestBuildCatalogSnapshot_capturesContextLength(t *testing.T) {
+	t.Parallel()
+	chimeraBroker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/models" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"object": "list",
+			"data": [
+				{"id": "groq/groq/compound-mini", "context_length": 131072, "max_input_tokens": 120000},
+				{"id": "ollama/llama3.2:3b", "object": "model"}
+			]
+		}`))
+	}))
+	t.Cleanup(chimeraBroker.Close)
+
+	res := newTestResolved(chimeraBroker.URL)
+	snap := BuildCatalogSnapshot(context.Background(), res, "ukey", 2*time.Second, nil)
+	if snap == nil || !snap.OK {
+		t.Fatalf("snapshot: %+v", snap)
+	}
+	if n, ok := snap.ContextLength("groq/groq/compound-mini"); !ok || n != 131072 {
+		t.Fatalf("context_length=%d ok=%v", n, ok)
+	}
+	if n, ok := snap.MaxInputTokens("groq/groq/compound-mini"); !ok || n != 120000 {
+		t.Fatalf("max_input_tokens=%d ok=%v", n, ok)
+	}
+	if _, ok := snap.ContextLength("ollama/llama3.2:3b"); ok {
+		t.Fatal("expected missing context_length for ollama entry")
+	}
+}
+
 func TestBuildCatalogSnapshot_ollamaOfflineDropsProvider(t *testing.T) {
 	t.Parallel()
 	// BiFrost dynamically prunes providers from /v1/models when their upstream is unreachable.

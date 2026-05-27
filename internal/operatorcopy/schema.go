@@ -24,17 +24,17 @@ type Formatter struct {
 
 // Message is one canonical slug and how the logs UI presents it to operators.
 type Message struct {
-	Slug           string        `yaml:"slug"`
-	Summary        string        `yaml:"summary,omitempty"`
-	Formatter      string        `yaml:"formatter,omitempty"`
-	Append         []Append        `yaml:"append,omitempty"`
-	Aliases        []string        `yaml:"aliases,omitempty"`
-	MatchFields    *MatchFields    `yaml:"match_fields,omitempty"`
-	MatchPrefix    bool            `yaml:"match_prefix,omitempty"`
-	Shape           string `yaml:"shape,omitempty"`
-	MetricsCounter  string `yaml:"metrics_counter,omitempty"`
-	TimelineKind    string `yaml:"timeline_kind,omitempty"`
-	GalleryPreview  string `yaml:"gallery_preview"`
+	Slug           string       `yaml:"slug"`
+	Summary        string       `yaml:"summary,omitempty"`
+	Formatter      string       `yaml:"formatter,omitempty"`
+	Append         []Append     `yaml:"append,omitempty"`
+	Aliases        []string     `yaml:"aliases,omitempty"`
+	MatchFields    *MatchFields `yaml:"match_fields,omitempty"`
+	MatchPrefix    bool         `yaml:"match_prefix,omitempty"`
+	Shape          string       `yaml:"shape,omitempty"`
+	MetricsCounter string       `yaml:"metrics_counter,omitempty"`
+	TimelineKind   string       `yaml:"timeline_kind,omitempty"`
+	GalleryPreview string       `yaml:"gallery_preview"`
 }
 
 // Gateway card counter keys (metrics_counter in messages.yaml must be one of these or empty).
@@ -47,16 +47,16 @@ var allowedMetricsCounters = map[string]struct{}{
 // MatchFields gates alias resolution when slog JSON carries duplicate "msg" keys (human title vs slug).
 // All lists are ANDed; require_any and require_any_bool are OR branches inside the any-group.
 type MatchFields struct {
-	RequireAll    []string `yaml:"require_all,omitempty"`
-	RequireAny    []string `yaml:"require_any,omitempty"`
+	RequireAll     []string `yaml:"require_all,omitempty"`
+	RequireAny     []string `yaml:"require_any,omitempty"`
 	RequireAnyBool []string `yaml:"require_any_bool,omitempty"`
 }
 
 // Append adds a dynamic tail from a log field (rendered in Phase 2+).
 type Append struct {
-	Field    string `yaml:"field"`
-	Fmt      string `yaml:"fmt"`
-	OmitIn   string `yaml:"omit_in,omitempty"`
+	Field  string `yaml:"field"`
+	Fmt    string `yaml:"fmt"`
+	OmitIn string `yaml:"omit_in,omitempty"`
 }
 
 // Validate checks registry invariants for Phase 1+.

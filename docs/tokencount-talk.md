@@ -26,7 +26,7 @@ This document summarizes a multi-turn discussion about how **chimera-gateway** e
 
 - `internal/chat` builds the outbound body with `json.Marshal` (after setting `model` and `stream`), then `internal/tokencount.Count` runs **tiktoken `cl100k_base`** `EncodeOrdinary` on the **entire UTF-8 string** of that JSON.  
 - There is **no** concatenation of only `messages[].content`; **no** per-message template tax, **no** `max_tokens` reserve, **no** tool multiplier in that path.  
-- **Provider limits** (`internal/providerlimits`) compare YAML TPM/RPM/etc. to metrics using that **same** estimate; a **TPM block** surfaces as **429** `gateway_provider_limits`, not Groq’s **413**.
+- **Provider limits** (`internal/providerlimits`) compare YAML TPM/RPM/etc. to metrics using that **same** estimate; a **TPM block** surfaces as **429** `gateway_provider_limits` with `reason=tpm`, not Groq’s **413**. **Context admission** (same estimate + client `max_tokens` reserve) runs before upstream HTTP; a **context block** logs `chat.provider_limits.blocked` with `reason=context_window` and skips to the next fallback model. See [`context-window-admission.md`](plans/context-window-admission.md) and [`configuration.md`](configuration.md) § provider-model-limits.
 
 **413 vs local estimate**  
 
@@ -48,8 +48,8 @@ This document summarizes a multi-turn discussion about how **chimera-gateway** e
 
 **Implementation ordering (suggested earlier in thread)**  
 
-1. Outbound **JSON byte cap** + clear gateway error where useful.  
-2. **`max_tokens` + context window** reserve (when context per model is known).  
+1. Outbound **JSON byte cap** + clear gateway error where useful. **Done** — `max_body_bytes` in `provider-model-limits.yaml` (`request_body_bytes` deny).
+2. **`max_tokens` + context window** reserve (when context per model is known). **Done** — context admission on chat path; see [`context-window-admission.md`](plans/context-window-admission.md).
 3. Per-message / tool **overhead** (YAML-tunable).  
 4. **Groq:** Llama-aligned tokenizer when maintainable.  
 5. **Gemini:** `countTokens` on the Gemini path.  

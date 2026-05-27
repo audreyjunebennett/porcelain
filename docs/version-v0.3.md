@@ -1,10 +1,10 @@
-# Version 0.3 - Chimera branding, RAG scope, onboarding, peer backends
+# Version 0.3 - Chimera branding and onboarding
 
 
 | Field                          | Value                                                |
 | ------------------------------ | ---------------------------------------------------- |
 | **Doc kind**                   | `version-roadmap`                                    |
-| **Owners / areas**             | Gateway desktop, onboarding, peer backends, branding |
+| **Owners / areas**             | Gateway desktop, onboarding, branding |
 | **Status**                     | `active`                                             |
 | **Targets**                    | Gateway/desktop v0.3                                 |
 | **Last updated**               | See git history                                      |
@@ -13,7 +13,7 @@
 
 ## At a glance
 
-Make the gateway easier to set up, friendlier to share between operators, and clearer about what it is. This plan’s **sections follow a single narrative**: **rename** (Porcelain · Chimera · Locus), **credential file naming** (`api-keys` / `secret`), **internal embedding** exploration, **operator-managed virtual models** (per-model routing from `/ui/settings`), **workspace embedding scope** (**user + project + flavor**, base corpus + unions), then **first-run token handoff** and the **setup wizard** (including **VS Code Cline** integration instead of Continue-oriented samples), and finally **peer backends** for cross-host upstream routing. Multiple operators can call each other's models.
+Make the gateway easier to set up and clearer about what it is. This plan’s **sections follow a single narrative**: **rename** (Porcelain · Chimera · Locus), **credential file naming** (`api-keys` / `secret`), **internal embedding** exploration, **operator-managed virtual models** (per-model routing from `/ui/settings`), then **first-run token handoff** and the **setup wizard**.
 
 
 | Theme                                                                                      | Outcome                                                                                                                                  | Status        |
@@ -29,28 +29,26 @@ Make the gateway easier to set up, friendlier to share between operators, and cl
 | [plans/embedui-event-log-panel.md](plans/embedui-event-log-panel.md)                       | Per-card event log layout and interaction                                                                                                | `done`        |
 | [plans/embedui-logs-workspaces-merge.md](plans/embedui-logs-workspaces-merge.md)           | Unify logs and workspace indexers in embed UI                                                                                            | `done`        |
 | [plans/embedui-theme-styleguide.md](plans/embedui-theme-styleguide.md)                     | Theme tokens and static styleguide                                                                                                       | `done`        |
-| [plans/env-precedence-contract.md](plans/env-precedence-contract.md)                       | Unified env/config precedence across binaries                                                                                            | `draft`       |
 | [plans/locus-desktop-supervisor-contract.md](plans/locus-desktop-supervisor-contract.md)   | Desktop ↔ supervisor process and readiness contract                                                                                      | `done`        |
 | [plans/vectorstore-broker-wrapper-hard-cut.md](plans/vectorstore-broker-wrapper-hard-cut.md) | **chimera-vectorstore** / **chimera-broker** wrapper binaries and supervisor cutover                                                   | `done`        |
 | [plans/v0-3-naming-migration.md](plans/v0-3-naming-migration.md)                             | Product naming hard-cut execution                                                                                                      | `done`        |
 | [plans/logs-ui-page-data-refreshing.md](plans/logs-ui-page-data-refreshing.md)               | Summarized logs feed: interaction-safe rebuilds, card patches, view model                                                              | `done`        |
-| [plans/embedui-operator-settings-routes.md](plans/embedui-operator-settings-routes.md)         | App shell at `/ui`, settings page rename, single gallery; drop legacy routes and deep links                                            | `done`        |
-| [plans/embedui-dynamic-provider-cards.md](plans/embedui-dynamic-provider-cards.md)           | Settings provider cards: catalog, Add provider picker, hide usage/log until configured                                                 | `draft`       |
+| [plans/embedui-operator-settings-routes.md](plans/embedui-operator-settings-routes.md)         | App shell at `/ui`, settings page rename, single gallery; drop legacy routes and deep links                                          | `done`        |
+| [plans/context-window-admission.md](plans/context-window-admission.md)                     | Context window admission on chat path. Capture provider model context limits to enabled proper model router fallbacks                    | `done`        |
+| [plans/supervisor-info-log-trim.md](plans/supervisor-info-log-trim.md)                     | Refine the logs even further to reduce service start up and vectorstore erroring. Lowering heartbeat logs to DEBUG                       | `done`        |
+| [plans/embedui-dynamic-provider-cards.md](plans/embedui-dynamic-provider-cards.md)           | Settings provider cards: catalog, Add provider picker, hide usage/log until configured                                                 | `done`        |
 | [Internal embedding provider (exploration)](#internal-embedding-provider-exploration)      | Optional in-repo or first-install embedding runtime to reduce reliance on Ollama for `/embeddings`                                       | `exploration` |
 | [Logs UI page data refreshing](#logs-ui-page-data-refreshing)                              | Interaction-safe summarized feed; per-card patches and view model (phased)                                                               | `done`        |
-| [Operator-managed virtual models](#operator-managed-virtual-models)                        | Create virtual models from `/ui/settings`; per-model fallback, routing rules, and tool-router; operator SQLite + scoped routing logs         | `todo`        |
-| [Workspace embedding scope (project + flavor)](#workspace-embedding-scope-project--flavor) | Ingestion keys `(user, project, flavor)`; project-only = base corpus; flavored queries union base + flavor; multi-workspace request pool | `todo`        |
+| [Operator-managed virtual models](#operator-managed-virtual-models)                        | Create virtual models from `/ui/settings`; per-model fallback, routing rules, and tool-router; operator SQLite + scoped routing logs     | `done`        |
 | [First-run token handoff](#first-run-token-handoff)                                        | Show, copy, and optionally save the gateway token; restart-friendly                                                                      | `todo`        |
-| [Setup wizard](#setup-wizard)                                                              | Guided keys -> local server -> test chat -> indexing -> integration                                                                      | `todo`        |
-| [IDE integration (VS Code Cline)](#ide-integration-vs-code-cline)                          | Replace Continue-focused snippets and examples with **Cline**-oriented samples and wizard copy                                           | `todo`        |
-| [Peer backends](#peer-backends)                                                            | Call another operator's OpenAI-compatible upstream (typically BiFrost) with credentials they issue over a host-routable URL              | `todo`        |
+| [Setup wizard](#setup-wizard)                                                              | Guided keys -> local server -> test chat -> indexing                                                                                     | `todo`        |
 
 
 ---
 
 ## What this version is
 
-This document is the **working plan for v0.3** for this repository (**Chimera**: intelligent routing and memory layer; see [Product naming](#product-naming)). Body **sections are ordered** for delivery narrative: [Product naming](#product-naming) and [Credential file naming](#credential-file-naming) first; then [Internal embedding provider (exploration)](#internal-embedding-provider-exploration), [Operator-managed virtual models](#operator-managed-virtual-models), and [Workspace embedding scope (project + flavor)](#workspace-embedding-scope-project--flavor); then [First-run token handoff](#first-run-token-handoff) and [Setup wizard](#setup-wizard); then [IDE integration (VS Code Cline)](#ide-integration-vs-code-cline) (operator samples and wizard step 7 target **Cline** instead of **Continue**); then [Peer backends](#peer-backends) from the master product plan (`[porcelain.plan.md](porcelain.plan.md)`). **v0.3** targets **layered product naming** (**Porcelain**, **Chimera**, **Locus**), **api-keys** language, optional **in-repo / first-install** embedding weights **within license**, **multi-model routing** (virtual models with per-model policy), and **RAG** rules for **project + flavor** unions and **multi-workspace** pools. Naming and README wording in line with branch `origin/feat/chimera-branding` should be folded into this release unless superseded by a written decision.
+This document is the **working plan for v0.3** for this repository (**Chimera**: intelligent routing and memory layer; see [Product naming](#product-naming)). Body **sections are ordered** for delivery narrative: [Product naming](#product-naming) and [Credential file naming](#credential-file-naming) first; then [Internal embedding provider (exploration)](#internal-embedding-provider-exploration) and [Operator-managed virtual models](#operator-managed-virtual-models); then [First-run token handoff](#first-run-token-handoff) and [Setup wizard](#setup-wizard). **v0.3** targets **layered product naming** (**Porcelain**, **Chimera**, **Locus**), **api-keys** language, optional **in-repo / first-install** embedding weights **within license**, and **multi-model routing** (virtual models with per-model policy). **Workspace embedding scope (project + flavor)** and **peer backends** are scoped in [`version-v0.4.md`](version-v0.4.md). Naming and README wording in line with branch `origin/feat/chimera-branding` should be folded into this release unless superseded by a written decision.
 
 **Companion docs:** `[porcelain.plan.md](porcelain.plan.md)`, `[configuration.md](configuration.md)`, `[plans/indexer.md](plans/indexer.md)`, `[plans/v0-3-naming-migration.md](plans/v0-3-naming-migration.md)` (product naming execution), `[plans/virtual-models-operator.md](plans/virtual-models-operator.md)` (virtual models execution), plus implementation plans in [Related plans](#related-plans) (gateway/embed UI refactor, supervisor contract, wrapper hard cut).
 
@@ -222,7 +220,7 @@ In `gateway.yaml`, the path that points at this file should use `paths.api_keys`
 
 The material below was **carried from `[version-v0.2.md](version-v0.2.md)`** when that doc was trimmed to the **shipped** RAG baseline. It **only** informs this exploration (internal ONNX/sidecar embedding, indexer experiments, and retrieval quality ideas); it is **not** a parallel locked contract. Today’s ingest path remains gateway-mediated (`POST /v1/ingest`, indexer REST) unless an implementation explicitly adds an alternative populator.
 
-**Map to v0.3 identity:** Older sketches derived collections from **user + project**. Chimera v0.3 targets **tenant + project + optional flavor** and **base + flavor union** at retrieval time ([Workspace embedding scope (project + flavor)](#workspace-embedding-scope-project--flavor)). Any **manager + vectordb-cli** or pure-local indexer design must reconcile **collection naming** and **path** conventions with that model (and with **relative `source`** in HTTP ingest — see `[plans/indexer.md](plans/indexer.md)`) if both stacks coexist.
+**Map to Chimera identity:** Older sketches derived collections from **user + project**. The target model is **tenant + project + optional flavor** and **base + flavor union** at retrieval time ([Workspace embedding scope (project + flavor)](version-v0.4.md#workspace-embedding-scope-project--flavor) in [`version-v0.4.md`](version-v0.4.md)). Any **manager + vectordb-cli** or pure-local indexer design must reconcile **collection naming** and **path** conventions with that model (and with **relative `source`** in HTTP ingest — see `[plans/indexer.md](plans/indexer.md)`) if both stacks coexist.
 
 #### 1. Connection information, ports, paths, and configuration
 
@@ -239,7 +237,7 @@ The material below was **carried from `[version-v0.2.md](version-v0.2.md)`** whe
   - **ONNX embedding model + tokenizer:** fixed **read-only** paths to the `.onnx` file and tokenizer assets; **must match exactly** between indexer (**vectordb-cli** or equivalent) and gateway at query time.
   - **vectordb-cli config:** prefer **environment variables + CLI flags** over `~/.config/vectordb-cli/config.toml` to reduce file-locking and stale state.
 - **Collection naming** (deterministic; **shared** manager + router code):
-  - Derive stable names from the **same logical keys** as production retrieval (for v0.3: **tenant + project + flavor** semantics, not an ad-hoc alternate scheme unless documented).
+  - Derive stable names from the **same logical keys** as production retrieval (for v0.4: **tenant + project + flavor** semantics, not an ad-hoc alternate scheme unless documented).
   - Sanitize for Qdrant (no slashes, respect length limits).
   - **Per-scope collections** — isolation without relying on payload filters alone where that matches the deployed adapter (same *shape* as one collection per `(tenant, project, flavor)` in the gateway plan).
 
@@ -305,7 +303,7 @@ Aim for **~4–6 GB RAM** total, **quantized** execution, **sub‑300 ms** per h
 
 ### Relationship to the setup wizard
 
-- **Document order:** This section appears **after** [Product naming](#product-naming) and [Credential file naming](#credential-file-naming) and **immediately before** [Operator-managed virtual models](#operator-managed-virtual-models); together with [Workspace embedding scope (project + flavor)](#workspace-embedding-scope-project--flavor) they precede [First-run token handoff](#first-run-token-handoff) and [Setup wizard](#setup-wizard) so wizard copy and combobox sources can include an **internal** embedding entry once the contract is clear—see [Setup wizard](#setup-wizard) step 5 below.
+- **Document order:** This section appears **after** [Product naming](#product-naming) and [Credential file naming](#credential-file-naming) and **immediately before** [Operator-managed virtual models](#operator-managed-virtual-models); it precedes [First-run token handoff](#first-run-token-handoff) and [Setup wizard](#setup-wizard) so wizard copy and combobox sources can include an **internal** embedding entry once the contract is clear—see [Setup wizard](#setup-wizard) step 5 below.
 - If exploration is still open when wizard ships, the wizard keeps today’s behavior (Ollama / provider-derived lists) and this section’s **config sketch** becomes the **forward-looking** contract.
 
 **Deliverables checklist**
@@ -338,14 +336,14 @@ Aim for **~4–6 GB RAM** total, **quantized** execution, **sub‑300 ms** per h
 **Acceptance (Phase 1)**
 
 - First click expands a collapsed card under live SSE traffic (manual smoke).
-- Typing in `admin-groq-key` / `admin-gemini-key` / `admin-ollama-url` for 30+ seconds (spanning an admin poll) does not clear the field or drop focus.
+- Typing in provider key inputs (`admin-{providerId}-key`, e.g. `admin-groq-key`) or `admin-ollama-url` for 30+ seconds (spanning an admin poll) does not clear the field or drop focus.
 - Existing evlog search/filter/YAML deferral unchanged.
 
 ### Phase 2 — Poll-path card patching (shipped)
 
 - `replaceCardById()` shared helper (open state + table scroll preservation).
 - `syncAdminStatePolling` calls `patchAdminCardsFromPoll()` instead of `refreshSummarizedPanel()`.
-- Patches users, provider (groq/gemini/ollama), routing, fallback, and router cards; skips routing trio while Configure/YAML edit mode is active.
+- Patches users, visible provider cards (`admin-provider-{id}` from session/catalog), routing, fallback, and router cards; skips routing trio while Configure/YAML edit mode is active.
 - Missing card id → `scheduleStoryRebuild()` (debounced), not synchronous full rebuild.
 
 **Status:** `done` (see execution plan).
@@ -426,68 +424,6 @@ v1 may store a monolithic **policy YAML** per virtual model for fastest parity w
 
 ---
 
-## Workspace embedding scope (project + flavor)
-
-**Goal:** When files are embedded, ingest them under a **unique key** derived from **user** (the authenticated operator / tenant identity used for isolation today) **+ project + flavor**. Operators can start with a **broad corpus** (e.g. all journal files) on a **project id** alone, then add **flavors** for private areas or specializations without re-copying that base corpus into every flavor.
-
-**Scope**
-
-### Ingestion identity
-
-- Each indexed chunk (or equivalent vector payload) is associated with a **workspace scope** that includes:
-  - **User** — the same identity that gates auth and multi-tenant separation (exact field name in config/API may follow existing gateway/indexer conventions).
-  - **Project** — required **project id** for the workspace.
-  - **Flavor** — optional **flavor id**; **absent** or **empty** means this workspace is the **base / global** embeddings bucket for that **user + project**.
-
-### Base (project-only) vs flavored workspaces
-
-- A workspace defined with **project id** and **no flavor id** is the **base** embeddings set for that project: its vectors participate in **every** retrieval for that **user + project**, regardless of which **flavor id** (if any) the client sends on a given request.
-- A workspace defined with the **same project id** and a **non-empty flavor id** holds **additional** embeddings scoped to that flavor only (in addition to base, not instead of replacing base unless product explicitly adds a “replace base” mode—**v0.3 default:** additive union as below).
-
-### Retrieval union (flavored request)
-
-**Requirement**
-
-Given a user has defined a workspace with a **project id** but **no flavor id**.  
-And the contents of that workspace have been **indexed**.  
-And the user defines a **new** workspace with the **same project id** and a **flavor id** set.  
-And the contents of that workspace have been **indexed**.  
-When the user performs a **chat** (or RAG) request scoped to that **project id** and the **flavor id**,  
-Then retrieval must query embeddings from **both**:
-
-- the workspace scoped to **project** with **no flavor** (base / global for that project); and  
-- the workspace scoped to **project + flavor**.
-
-**Multi-workspace request pool**
-
-- The client may specify **any number** of workspace selectors **(project + optional flavor)** on a request (exact header or body shape belongs in API design; align with the `X-Chimera-*` header contract in [Product naming](#product-naming)).
-- **All valid** declared workspaces for that authenticated user are included in the **embedding search pool** for that request (union of hits across those scopes, with deduplication by chunk identity where the same file appears under multiple selectors only if product allows—**v0.3 default:** dedupe by stable chunk id / source key so overlapping paths do not double-count unless intentionally indexed twice).
-- **Invalid** or unknown workspace references should fail **loudly** (clear error to the client) or be **ignored** with a warning in logs—pick one behavior in implementation and document it; do not silently drop **all** scopes.
-
-### Operator story
-
-- **Natural flow:** index “everything I want everywhere” under **project only**; add **flavored** folders or repos later for **sensitive** or **topic-specific** material; flavored chats automatically see **shared baseline** plus **flavor overlay**.
-- **Docs:** Update `[plans/indexer.md](plans/indexer.md)` and `[configuration.md](configuration.md)` when fields for project/flavor per index and per-request workspace lists are fixed.
-
-### Relationship to the setup wizard
-
-- [Setup wizard](#setup-wizard) step 5 (indexing setup) should allow defining **project** and optional **flavor** per index in line with this model; step 6 (test indexing) should run retrieval using the **same union rules** as production so operators validate behavior before leaving the wizard.
-
-**Deliverables checklist**
-
-- Indexer / gateway: persist and filter vectors by **(user, project, flavor?)** consistently on ingest and search.
-- Chat (RAG) path: implement **base + flavor** union when a flavor is present; implement **multi-workspace** union when multiple selectors are provided.
-- Operator docs: examples for “journal base + `private` flavor” and multi-selector requests.
-
-**Acceptance**
-
-- The **Given / When / Then** requirement above holds in automated or manual acceptance tests for at least one reference project.
-- Multi-selector requests include every **valid** workspace in the search pool; documented behavior for invalid selectors.
-
-**Status:** `todo`
-
----
-
 ## First-run token handoff
 
 **Goal:** On the **first** run, the user obtains a **gateway API token**, optionally persists it, then **restarts** the app and supplies the token (UI or environment) so the second-run wizard can run authenticated.
@@ -515,22 +451,22 @@ Then retrieval must query embeddings from **both**:
 
 ## Setup wizard
 
-**Goal:** After the token is available on second launch, walk through **configuration and testing** in **seven steps**, with **Skip setup** returning the user to the **normal multi-tab** UI.
+**Goal:** After the token is available on second launch, walk through **configuration and testing** in **six steps**, with **Skip setup** returning the user to the **normal multi-tab** UI.
 
 **Scope**
 
 **Global navigation**
 
 - **Step 1 (welcome):** Bottom-left **Skip** → main tab view. Bottom-right **Continue** → step 2.
-- **Steps 2–6:** Bottom-left **Back** (step 2 back goes to welcome). Bottom-right **Continue** / **Next** advances.
-- **Step 7:** Bottom-left **Back**. Bottom-right **Finish** → main multi-tab view.
+- **Steps 2–5:** Bottom-left **Back** (step 2 back goes to welcome). Bottom-right **Continue** / **Next** advances.
+- **Step 6:** Bottom-left **Back**. Bottom-right **Finish** → main multi-tab view.
 
 ---
 
 ### Step 1 — Welcome / overview
 
 - High-level overview of what will be configured.
-- Show **how many steps** the process has (seven).
+- Show **how many steps** the process has (six).
 - **Skip** (bottom-left) → current main tab view.
 - **Continue** (bottom-right) → step 2.
 
@@ -572,7 +508,7 @@ Then retrieval must query embeddings from **both**:
 ### Step 5 — Indexing setup
 
 - Brief explanation of **why indexing matters** and that users should choose folders they want searchable.
-- **Project and flavor:** each index is configured with a **project id** and an optional **flavor id**, matching [Workspace embedding scope (project + flavor)](#workspace-embedding-scope-project--flavor): **project-only** indexes are **base** context for that project; indexes with a **flavor** add a scoped overlay. Copy should explain the “start broad, add flavors later” flow (e.g. journals vs private notes).
+- **Project and flavor (optional):** each index may be configured with a **project id** and an optional **flavor id**. Full **base + flavor union** retrieval semantics are scoped in [`version-v0.4.md`](version-v0.4.md); the v0.3 wizard collects basic indexer entries.
 - **“Add a Folder”** control: placed **upper-right** (per spec).
 - **Embedding model** panel: **combobox** of **valid embedding models** derived from configured providers + local server (models suitable for `/embeddings` and gateway/Qdrant expectations).
   - **Default selection:** `ollama/nomic-embed-text:latest` or the project’s agreed default that matches **Qdrant**, **chunking**, and **indexer** settings from config.
@@ -594,106 +530,26 @@ Then retrieval must query embeddings from **both**:
   - Explain how **embeddings** are used in practice.
   - **Query panel:** text box; on **Enter** or **Query** button:
     1. **Highlight** the query text (visual feedback).
-    2. Run search **across all workspaces** (same semantics as production search), including **base + flavor** union and any **multi-workspace** rules from [Workspace embedding scope (project + flavor)](#workspace-embedding-scope-project--flavor).
+    2. Run search **across configured indexes** (same semantics as production search for the scopes defined in step 5).
     3. **Zero results:** show that explicitly; add **notes/warnings** based on indexer state (idle, error, no chunks, etc.).
     4. **Multiple results:**
       - First block: **summary** — total hits across workspaces; **number of distinct workspaces** with a match.  
       - Second block: **details** — file paths and **short excerpts**.
   - Below: **indexer run log** view — **same content and live updates** as the dedicated **log** page in the app so users see progress and errors.
-- **Back** → step 5. **Next** → step 7.
-
----
-
-### Step 7 — Integration (VS Code Cline)
-
-- Show the **Cline** integration panel (overview + actions aligned with [IDE integration (VS Code Cline)](#ide-integration-vs-code-cline); **Continue**-specific UI and copy are **replaced** for this release’s default path).
-- Rename **“indexed folders”** to **“setup projects”** in this context.
-- Combo box lists **setup projects** (indexed-folder entries).
-- Snippets and **create** actions generate **VS Code Cline**–appropriate configuration (paths and keys per Cline’s documented OpenAI-compatible / custom-base setup—exact filenames belong in implementation and `[configuration.md](configuration.md)`); include a **global** or **user-default** variant where Cline supports it (analogous to the old global `.continue/config.yaml` flow, but **not** Continue-specific).
-- Entries remain **copyable** and **creatable** like today; user selects an entry and uses **copy** and/or **create** when defined indexes exist as applicable.
-- **Back** → step 6. **Finish** → **main multi-tab** application view.
+- **Back** → step 5. **Finish** → **main multi-tab** application view.
 
 ---
 
 ### Cross-cutting implementation notes
 
 - **Router generator** and **fallback model list** must be **shared** between the wizard and the main settings UI so wizard changes do not use a one-off code path.
-- **RAG / indexer** behavior for **project + flavor** and **multi-workspace** requests must match production (same code path or thin wrapper), not a wizard-only subset—see [Workspace embedding scope (project + flavor)](#workspace-embedding-scope-project--flavor).
 - **Second-run detection** should be robust (e.g. token present + first-time wizard flag in local state), so reinstalls and upgrades behave predictably—exact mechanics belong in implementation with UX review.
-- Peer-to-peer **upstream** configuration might surface in advanced settings in the same release or a follow-up; this plan does not require the **seven-step wizard** to cover peer URLs unless product wants it—default remains **operator docs + config files** from [Peer backends](#peer-backends).
 
 **Acceptance**
 
-- The seven-step wizard can be skipped, navigated with Back/Continue/Next/Finish, and returns to the normal multi-tab UI.
+- The six-step wizard can be skipped, navigated with Back/Continue/Next/Finish, and returns to the normal multi-tab UI.
 - Provider and local-server model count changes trigger the shared router generator and update fallback model lists.
-- Chat, indexing, and **Cline** integration checks use the same logs and operator surfaces as the main application.
-
-**Status:** `todo`
-
----
-
-## IDE integration (VS Code Cline)
-
-**Goal:** Replace **VS Code Continue**–oriented integration **samples, snippets, and in-repo examples** with **VS Code Cline**–equivalent guidance so operators wire Chimera through the extension the product standardizes on for v0.3.
-
-**Scope**
-
-- **Wizard and desktop UI:** [Setup wizard](#setup-wizard) step 7 and any **main-app** “integration” or “IDE setup” surfaces default to **Cline** labels, snippet text, and file targets (deprecate or remove **Continue** as the primary advertised path unless a short **migration** footnote is explicitly desired).
-- **Repository docs and packaged samples:** Update paths such as packaged `**vscode-continue/`** (or successor folder name), README sections, and any **embed UI** / static HTML that still says **Continue** where the intent is “IDE OpenAI-compatible client”—retarget to **Cline** with accurate install links and config shapes.
-- **Parity:** Preserve today’s operator affordances—**copy**, **create**, per–**setup project** variants, and **project / flavor** header behavior where Cline can consume them—mapping from the old Continue contract rather than dropping features silently.
-
-**Deliverables checklist**
-
-- Wizard step 7 + main settings: **Cline** snippets and copy; no dangling **Continue**-only instructions on first-touch paths.
-- In-repo examples and README(s): **Cline** samples; archive or relocate **Continue**-only content if kept for history (label **legacy**).
-- `[configuration.md](configuration.md)` (and Continue/Cline pointer in root **README** if present): document **Cline** base URL, API key / gateway secret, and model routing expectations against Chimera.
-
-**Acceptance**
-
-- A new operator following **only** v0.3 docs and the setup wizard can connect **VS Code Cline** to Chimera without hunting obsolete **Continue** examples.
-- Spot-check: search the repo for prominent **Continue** integration strings on operator-facing paths; remaining hits are intentional (migration notes) or out of scope.
-
-**Status:** `todo`
-
----
-
-## Peer backends
-
-**Goal:** Let one operator route to another operator's published OpenAI-compatible upstream without chaining gateway-to-gateway.
-
-**Scope**
-
-This theme summarizes what `[porcelain.plan.md](porcelain.plan.md)` already assigns to **v0.3** so implementation and docs stay aligned.
-
-### Release-roadmap slice
-
-From the master **Release roadmap** table:
-
-- **Peer-to-peer model backends**: call **another operator’s BiFrost** (or compatible OpenAI proxy) over a **host-routable** URL and **published** port (not Compose-internal DNS from another machine).
-- **Proxy-issued credentials** (e.g. virtual keys where the upstream supports them) for **cross-host** authentication.
-- **Gateway / upstream configuration** and **operator documentation** for peer paths: *Peer topology · 1–3*, *Model selection and routing policy · 3* (peer as `base_url` / `api_base`), and *Deployment · 3* (cross-host publishing vs intra-stack DNS)—see `[porcelain.plan.md](porcelain.plan.md)`.
-- **Per-key / usage observability** (*Resilience · 1*): track which key/backend was used and exposure to RPM/TPM-style limits where upstream headers exist.
-
-### Product rules
-
-- **Peer = their upstream (BiFrost / compatible proxy), not their Gateway** (*Peer topology · 2*): configure OpenAI-compatible `api_base` / `base_url` to the **peer’s published upstream** (e.g. Tailscale/LAN IP + **published** proxy port + `/v1`). Use credentials **they** issue (virtual keys or equivalent when supported). Do **not** chain **Gateway → peer Gateway** as the default integration (same bullet).
-- **Independent stacks** (*Peer topology · 1*): each operator has their own Chimera instance, client-auth secrets (`api-keys.yaml`), and policy; no assumption that one gateway “owns” another’s RAG.
-- **Document ports per host** (*Peer topology · 3*): distinguish **Chimera** (IDE-facing OpenAI-compatible entry) vs **peer upstream** (`api_base` / `base_url` target); firewall/VPN expectations; TLS/mTLS deferred to **v0.7** unless operators add their own terminator.
-- **Cloud vs local policy** (*Model selection and routing policy · 3*): **Peer upstream** appears as a **remote-runner** entry in routing policy.
-- **Graceful degradation** (*Resilience · 2*): same fail-over / fail-fast behavior when a peer upstream is in the chain; **no** gateway queue until **v0.8**.
-- **Containers / networking**: from **v0.3**, compose/docs consider **LAN peer access** to published upstreams where enabled; TLS posture for peer URLs ships with **v0.7** (*Security · 2–5*).
-
-### Deliverables checklist
-
-- Configuration surfaces (and/or files) to add **peer upstream** backends with proxy-issued credentials where applicable and host-reachable base URLs.
-- Operator docs: cross-host topology, **published** ports, virtual keys, anti-patterns (Compose hostname of peer stack, gateway-on-gateway).
-- **Observability (*Resilience · 1*)**: per-key / per-backend usage signals where APIs expose limits or identifiers.
-
-**Acceptance**
-
-- Peer upstream configuration can target a host-routable OpenAI-compatible proxy URL with credentials issued by the peer operator.
-- Operator docs explain ports, network expectations, credential handoff, and the gateway-on-gateway anti-pattern.
-- Per-key or per-backend usage signals are visible where upstream APIs expose enough data.
+- Chat and indexing checks use the same logs and operator surfaces as the main application.
 
 **Status:** `todo`
 
@@ -701,9 +557,6 @@ From the master **Release roadmap** table:
 
 ## Explicitly not this version
 
-- Do not route Gateway -> peer Gateway as the default peer integration; peer routes target a host-routable upstream proxy.
-- Do not make TLS/mTLS or untrusted-network hardening a v0.3 requirement; that remains a later hardening release.
-- Do not add a gateway queue or priority scheduler; graceful degradation remains the v0.3 behavior.
 - Do not reintroduce legacy `chimera`, `CHIMERA_*`, or `X-Chimera-*` identifiers in current operator-facing behavior.
 
 ---
@@ -717,14 +570,11 @@ From the master **Release roadmap** table:
 | Credential naming                | `api-keys.yaml`, `api_keys`, `secret`, and `paths.api_keys` are implemented or migration behavior is documented.                                                   |
 | Internal embedding (exploration) | Spike or design note, per-model legal/distribution checklist, and ship / pilot / defer decision; config sketch matches indexer-style opt-in start.                 |
 | Operator-managed virtual models  | Bootstrap import; multi-model chat + catalog; per-model fallback/policy/tool-router from SQLite; `/ui/settings` CRUD cards; scoped routing logs with `virtual_model_id`. |
-| Workspace embedding scope        | Ingestion keys `(user, project, flavor?)`; flavored chat unions base + flavor; multi-workspace requests pool all valid scopes; wizard step 5–6 matches production. |
 | First-run token handoff          | First launch shows a copyable gateway API key and optional safe dotenv save.                                                                                       |
-| Setup wizard                     | Seven steps navigate correctly, support skip/finish, and use shared router regeneration; embedding combobox reflects internal provider when implemented.           |
-| IDE integration (Cline)          | Step 7 and in-repo samples target Cline; Continue-only operator paths removed or marked legacy.                                                                    |
-| Peer backends                    | Peer upstream + credentials + docs meet the peer scope checklist.                                                                                                  |
+| Setup wizard                     | Six steps navigate correctly, support skip/finish, and use shared router regeneration; embedding combobox reflects internal provider when implemented.               |
 
 
-When this plan is implemented, update `[porcelain.plan.md](porcelain.plan.md)` **Release roadmap** row for v0.3 if the shipped scope differs (e.g. split peer backends vs onboarding into separate releases).
+When this plan is implemented, update `[porcelain.plan.md](porcelain.plan.md)` **Release roadmap** row for v0.3 if the shipped scope differs (e.g. split onboarding vs RAG scope into separate releases).
 
 ---
 
@@ -740,6 +590,7 @@ When this plan is implemented, update `[porcelain.plan.md](porcelain.plan.md)` *
 ## See also
 
 - `[version-v0.2.md](version-v0.2.md)` - previous version
+- `[version-v0.4.md](version-v0.4.md)` - next version (workspace embedding scope, peer backends)
 - `[porcelain.plan.md](porcelain.plan.md)` - product roadmap and requirements
 - `[configuration.md](configuration.md)` - configuration reference
 

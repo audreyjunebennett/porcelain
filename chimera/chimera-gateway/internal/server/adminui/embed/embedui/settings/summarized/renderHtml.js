@@ -63,10 +63,13 @@ globalThis.ChimeraSettings.Summarized.Render = globalThis.ChimeraSettings.Summar
 
     var convCards = sortCards(cardsInSection(model, SECTION_CONVERSATIONS), true);
     if (convCards.length) {
-      body +=
-        '<div class="sum-feed-section"><div class="sum-section-label sum-feed-section-title">Conversations</div>' +
-        renderCardList(convCards, renderers) +
-        "</div>";
+      body += '<div class="sum-feed-section sum-feed-section--conversations">';
+      if (renderers.conversationsSectionHead) {
+        body += renderers.conversationsSectionHead();
+      } else {
+        body += '<div class="sum-section-label sum-feed-section-title">Conversations</div>';
+      }
+      body += renderCardList(convCards, renderers) + "</div>";
     }
 
     var wsCards = sortCards(cardsInSection(model, SECTION_WORKSPACES), false);
@@ -74,10 +77,15 @@ globalThis.ChimeraSettings.Summarized.Render = globalThis.ChimeraSettings.Summar
     if (renderers.workspacesSectionHead) {
       body += renderers.workspacesSectionHead();
     } else {
+      var createBtnHtml =
+        renderers.buildWorkspacesCreateBtnHtml &&
+        typeof renderers.buildWorkspacesCreateBtnHtml === "function"
+          ? renderers.buildWorkspacesCreateBtnHtml("Create")
+          : '<button type="button" class="sum-workspaces-create-btn" data-sum-workspaces-create="1">Create</button>';
       body +=
         '<div class="sum-feed-section-head">' +
         '<span class="sum-feed-section-title sum-section-label">Workspaces</span>' +
-        '<button type="button" class="sum-workspaces-create-btn" data-sum-workspaces-create="1">Create</button>' +
+        createBtnHtml +
         "</div>";
     }
     if (renderers.workspacesSectionIntro) body += renderers.workspacesSectionIntro();

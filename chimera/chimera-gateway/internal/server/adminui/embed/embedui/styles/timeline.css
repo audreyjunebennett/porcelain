@@ -44,8 +44,8 @@
   border-color: var(--embed-lifecycle-pending);
 }
 .sum-conv-lifecycle-seg--done {
-  background: var(--embed-lifecycle-done);
-  border-color: var(--embed-lifecycle-done);
+  background: var(--embed-semantic-success-fg);
+  border-color: var(--embed-semantic-success-fg);
 }
 .sum-conv-lifecycle-seg--skipped {
   background: var(--embed-lifecycle-skipped);

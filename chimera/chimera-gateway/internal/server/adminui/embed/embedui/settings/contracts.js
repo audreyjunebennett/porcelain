@@ -25,10 +25,10 @@
 
     /** Request-timeline bar keys (product display names). */
     TimelineBarKinds: [
-      { key: "chimera-gateway", label: "chimera-gateway" },
-      { key: "chimera-broker", label: "chimera-broker" },
-      { key: "chimera-vectorstore", label: "chimera-vectorstore" },
-      { key: "chimera-indexer", label: "chimera-indexer" },
+      { key: "chimera-gateway", label: "gateway" },
+      { key: "chimera-broker", label: "broker" },
+      { key: "chimera-vectorstore", label: "vectorstore" },
+      { key: "chimera-indexer", label: "indexer" },
       { key: "web", label: "web" },
     ],
 
@@ -40,6 +40,14 @@
       if (k === "chimera-gateway" || k === "gateway") return "sum-svc-gateway";
       if (k === "web") return "sum-svc-web";
       return "sum-svc-gateway";
+    },
+
+    /** UI label: strip chimera- prefix from product/log source keys. */
+    serviceDisplayLabel: function (productKey) {
+      var k = String(productKey || "").trim().toLowerCase();
+      if (!k) return "";
+      if (k.indexOf("chimera-") === 0) return k.slice("chimera-".length);
+      return k;
     }
   };
 })();

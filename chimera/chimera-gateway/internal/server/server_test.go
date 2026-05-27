@@ -34,10 +34,7 @@ func TestStatusEndpoint(t *testing.T) {
 	if err := os.WriteFile(routePath, []byte("rules: []\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	rt, err := NewRuntime(gwPath, testLog())
-	if err != nil {
-		t.Fatal(err)
-	}
+	rt := mustRuntime(t, gwPath)
 	ov := &StatusOverlay{
 		EffectiveListen: "127.0.0.1:3999",
 		Supervisor: &SupervisorInfo{
@@ -100,10 +97,7 @@ func TestUILoginAndState(t *testing.T) {
 	if err := os.WriteFile(routePath, []byte("rules: []\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	rt, err := NewRuntime(gwPath, testLog())
-	if err != nil {
-		t.Fatal(err)
-	}
+	rt := mustRuntime(t, gwPath)
 	front := httptest.NewServer(NewMux(rt, testLog(), nil, NewUIOptions()))
 	t.Cleanup(front.Close)
 
@@ -163,9 +157,8 @@ func TestUILoginAndState(t *testing.T) {
 	if len(gk) != 1 {
 		t.Fatalf("groq.keys: %+v", groq)
 	}
-	gem, _ := prov["gemini"].(map[string]any)
-	if gem["ok"] != true || gem["key_configured"] != false {
-		t.Fatalf("gemini: %+v", gem)
+	if _, ok := prov["gemini"]; ok {
+		t.Fatalf("gemini should be omitted when not in broker config: %+v", prov)
 	}
 	oll, _ := prov["ollama"].(map[string]any)
 	if oll["ollama_base_url"] != "http://localhost:11434" {
@@ -215,10 +208,7 @@ func TestUISaveGroqKey(t *testing.T) {
 	if err := os.WriteFile(routePath, []byte("rules: []\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	rt, err := NewRuntime(gwPath, testLog())
-	if err != nil {
-		t.Fatal(err)
-	}
+	rt := mustRuntime(t, gwPath)
 	front := httptest.NewServer(NewMux(rt, testLog(), nil, NewUIOptions()))
 	t.Cleanup(front.Close)
 
@@ -293,10 +283,7 @@ func TestUISaveGroqKey_providerMissing404(t *testing.T) {
 	if err := os.WriteFile(routePath, []byte("rules: []\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	rt, err := NewRuntime(gwPath, testLog())
-	if err != nil {
-		t.Fatal(err)
-	}
+	rt := mustRuntime(t, gwPath)
 	front := httptest.NewServer(NewMux(rt, testLog(), nil, NewUIOptions()))
 	t.Cleanup(front.Close)
 
@@ -370,10 +357,7 @@ func TestUISaveRemoveGroqKey(t *testing.T) {
 	if err := os.WriteFile(routePath, []byte("rules: []\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	rt, err := NewRuntime(gwPath, testLog())
-	if err != nil {
-		t.Fatal(err)
-	}
+	rt := mustRuntime(t, gwPath)
 	front := httptest.NewServer(NewMux(rt, testLog(), nil, NewUIOptions()))
 	t.Cleanup(front.Close)
 
@@ -442,10 +426,7 @@ func TestUISaveOllamaURL_providerMissingEnvelope(t *testing.T) {
 	if err := os.WriteFile(routePath, []byte("rules: []\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	rt, err := NewRuntime(gwPath, testLog())
-	if err != nil {
-		t.Fatal(err)
-	}
+	rt := mustRuntime(t, gwPath)
 	front := httptest.NewServer(NewMux(rt, testLog(), nil, NewUIOptions()))
 	t.Cleanup(front.Close)
 
@@ -516,10 +497,7 @@ func TestChatVirtualModelFallback429(t *testing.T) {
 	routePath := filepath.Join(dir, "routing-policy.yaml")
 	writeRouting(t, routePath, "groq/a", 999999) // no rule match for short message → ambiguous or chain
 
-	rt, err := NewRuntime(gwPath, testLog())
-	if err != nil {
-		t.Fatal(err)
-	}
+	rt := mustRuntime(t, gwPath)
 	h := NewMux(rt, testLog(), nil, nil)
 	front := httptest.NewServer(h)
 	t.Cleanup(front.Close)

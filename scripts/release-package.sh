@@ -63,7 +63,7 @@ _require_runtime() {
 }
 
 rm -rf "$OUT"
-mkdir -p "$OUT_BIN" "$OUT/locus/config" "$OUT/locus/run"
+mkdir -p "$OUT_BIN" "$OUT/locus/config"
 
 if [[ ! -f "$ROOT/locus/bin/$DESKTOP_BIN" ]]; then
 	echo "release-package: building $DESKTOP_BIN (CGO + -tags desktop)..."
@@ -105,7 +105,7 @@ readme_tmp="$OUT/README.txt.tmp"
 	echo
 	echo "1. Copy locus/env.example to locus/.env and add provider keys."
 	echo "2. First run: locus/bin/${LOCUS_DESKTOP_BIN_BASE}${ext} (double-click or ./locus/bin/${LOCUS_DESKTOP_BIN_BASE}${ext})."
-	echo "3. Runtime root is locus/; config, data, logs, and run/ resolve under that root."
+	echo "3. Runtime root is locus/; config and data/ resolve under that root."
 	echo "4. Binaries: chimera-gateway, chimera-broker, chimera-vectorstore, chimera-supervisor, chimera-indexer, bifrost-http, qdrant."
 	echo
 } >"$readme_tmp"

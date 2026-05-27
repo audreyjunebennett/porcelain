@@ -8,6 +8,7 @@ globalThis.ChimeraSettings.Handlers.Admin = globalThis.ChimeraSettings.Handlers.
 
 globalThis.ChimeraSettings.Handlers.Admin.wire = function (ctx) {
   var refreshSummarizedPanel = ctx.refreshSummarizedPanel;
+  var refreshAdminCardAfterEditToggle = ctx.refreshAdminCardAfterEditToggle;
   var scheduleStoryRebuild = ctx.scheduleStoryRebuild;
   var findWorkspaceDraft = ctx.findWorkspaceDraft;
   var appendWorkspaceDraftPath = ctx.appendWorkspaceDraftPath;
@@ -23,17 +24,41 @@ globalThis.ChimeraSettings.Handlers.Admin.wire = function (ctx) {
   var removeWorkspaceDraft = ctx.removeWorkspaceDraft;
   var beginWorkspaceManagedEdit = ctx.beginWorkspaceManagedEdit;
   var cancelWorkspaceManagedEdit = ctx.cancelWorkspaceManagedEdit;
+  var refreshWorkspaceManagedPaths = ctx.refreshWorkspaceManagedPaths;
   var saveManagedWorkspacePaths = ctx.saveManagedWorkspacePaths;
   var deleteManagedWorkspace = ctx.deleteManagedWorkspace;
 
   if (!globalThis.__ChimeraSettingsWorkspaceDraftUiWired) {
     globalThis.__ChimeraSettingsWorkspaceDraftUiWired = true;
+
+    function syncManagedWorkspacePathActionBtns(cardEl, selEl) {
+      if (!cardEl) return;
+      if (!selEl) selEl = cardEl.querySelector(".ws-managed-paths-select");
+      var rmBt = cardEl.querySelector(".ws-managed-btn-remove");
+      var addBt = cardEl.querySelector(".ws-managed-btn-add");
+      if (rmBt && selEl) {
+        rmBt.disabled =
+          selEl.selectedIndex < 0 || !selEl.options || !selEl.options.length;
+      }
+      if (addBt) addBt.disabled = !!ctx.workspaceManagedFolderPickerOpen;
+    }
+
     document.body.addEventListener(
       "click",
       function (ev) {
         var t = ev.target;
         if (!t || typeof t.closest !== "function") return;
         if (t.closest("[data-sum-workspaces-create]")) {
+          var createBtn = t.closest("[data-sum-workspaces-create]");
+          if (
+            !createBtn ||
+            createBtn.disabled ||
+            createBtn.getAttribute("aria-disabled") === "true" ||
+            (ctx.workspaceDesktopFeaturesAvailable &&
+              !ctx.workspaceDesktopFeaturesAvailable())
+          ) {
+            return;
+          }
           ev.preventDefault();
           ev.stopPropagation();
           ctx.workspaceDrafts.push({
@@ -50,6 +75,16 @@ globalThis.ChimeraSettings.Handlers.Admin.wire = function (ctx) {
           var wsNumM = Number(managedCard.getAttribute("data-workspace-managed-id"));
           if (!wsNumM) return;
           if (t.closest(".ws-managed-btn-configure")) {
+            var cfgBtn = t.closest(".ws-managed-btn-configure");
+            if (
+              !cfgBtn ||
+              cfgBtn.disabled ||
+              cfgBtn.getAttribute("aria-disabled") === "true" ||
+              (ctx.workspaceDesktopFeaturesAvailable &&
+                !ctx.workspaceDesktopFeaturesAvailable())
+            ) {
+              return;
+            }
             ev.preventDefault();
             ev.stopPropagation();
             beginWorkspaceManagedEdit(wsNumM);
@@ -59,6 +94,12 @@ globalThis.ChimeraSettings.Handlers.Admin.wire = function (ctx) {
             ev.preventDefault();
             ev.stopPropagation();
             cancelWorkspaceManagedEdit();
+            return;
+          }
+          if (t.closest(".ws-managed-btn-refresh")) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            refreshWorkspaceManagedPaths();
             return;
           }
           if (t.closest(".ws-managed-btn-save")) {
@@ -83,13 +124,25 @@ globalThis.ChimeraSettings.Handlers.Admin.wire = function (ctx) {
             ) {
               return;
             }
+            if (ctx.workspaceManagedFolderPickerOpen) return;
+            var addBtM = t.closest(".ws-managed-btn-add");
+            ctx.workspaceManagedFolderPickerOpen = true;
+            if (addBtM) addBtM.disabled = true;
             var stA = ctx.workspaceManagedStaging.paths;
             var startDirA = stA && stA.length ? stA[stA.length - 1].path : "";
-            pickFolderForWorkspaceDraft(startDirA).then(function (picked) {
-              if (!picked) return;
-              ctx.workspaceManagedStaging.paths.push({ id: null, path: String(picked).trim() });
-              scheduleStoryRebuild();
-            });
+            pickFolderForWorkspaceDraft(startDirA)
+              .then(function (picked) {
+                if (!picked) return;
+                ctx.workspaceManagedStaging.paths.push({ id: null, path: String(picked).trim() });
+                scheduleStoryRebuild();
+              })
+              .finally(function () {
+                ctx.workspaceManagedFolderPickerOpen = false;
+                var cardNow = document.querySelector(
+                  '[data-workspace-managed-id="' + String(wsNumM) + '"]'
+                );
+                syncManagedWorkspacePathActionBtns(cardNow);
+              });
             return;
           }
           if (t.closest(".ws-managed-btn-remove")) {
@@ -176,10 +229,7 @@ globalThis.ChimeraSettings.Handlers.Admin.wire = function (ctx) {
         if (!el || !el.classList) return;
         var cardManagedCh = el.closest("[data-workspace-managed-id]");
         if (cardManagedCh && el.classList.contains("ws-managed-paths-select")) {
-          var rmBtM = cardManagedCh.querySelector(".ws-managed-btn-remove");
-          if (rmBtM)
-            rmBtM.disabled =
-              el.selectedIndex < 0 || !el.options || !el.options.length;
+          syncManagedWorkspacePathActionBtns(cardManagedCh, el);
           return;
         }
         if (!el.classList.contains("ws-draft-paths-select")) return;
@@ -189,6 +239,19 @@ globalThis.ChimeraSettings.Handlers.Admin.wire = function (ctx) {
         if (rmBt)
           rmBt.disabled =
             el.selectedIndex < 0 || !el.options || !el.options.length;
+      },
+      false
+    );
+    document.body.addEventListener(
+      "click",
+      function (ev) {
+        var sel = ev.target && ev.target.closest && ev.target.closest(".ws-managed-paths-select");
+        if (!sel) return;
+        var cardManagedClick = sel.closest("[data-workspace-managed-id]");
+        if (!cardManagedClick) return;
+        window.setTimeout(function () {
+          syncManagedWorkspacePathActionBtns(cardManagedClick, sel);
+        }, 0);
       },
       false
     );
@@ -246,14 +309,14 @@ globalThis.ChimeraSettings.Handlers.Admin.wire = function (ctx) {
       else if (t.id === "admin-router-threshold") {
         ctx.routerThresholdTouched = true;
         ctx.routerThresholdDraft = t.value != null ? String(t.value) : "";
-      } else if (t.id === "admin-groq-key") {
-        if (!ctx.adminProviderKeyDraft) ctx.adminProviderKeyDraft = { groq: null, gemini: null };
-        ctx.adminProviderKeyDraft.groq = t.value != null ? String(t.value) : "";
-      } else if (t.id === "admin-gemini-key") {
-        if (!ctx.adminProviderKeyDraft) ctx.adminProviderKeyDraft = { groq: null, gemini: null };
-        ctx.adminProviderKeyDraft.gemini = t.value != null ? String(t.value) : "";
       } else if (t.id === "admin-ollama-url") {
         ctx.adminOllamaUrlDraft = t.value != null ? String(t.value) : "";
+      } else if (t.id && t.id.indexOf("admin-") === 0 && t.id.slice(-4) === "-key") {
+        var provKey = t.id.slice("admin-".length, -"-key".length);
+        if (provKey) {
+          if (!ctx.adminProviderKeyDraft) ctx.adminProviderKeyDraft = {};
+          ctx.adminProviderKeyDraft[provKey] = t.value != null ? String(t.value) : "";
+        }
       }
     });
     document.body.addEventListener("input", function (ev) {
@@ -292,6 +355,40 @@ globalThis.ChimeraSettings.Handlers.Admin.wire = function (ctx) {
           if (typeof ctx.patchAdminCardsFromPoll === "function" && ctx.patchAdminCardsFromPoll()) return;
           refreshSummarizedPanel();
         });
+      }
+
+      function closeProviderPicker() {
+        if (typeof ctx.closeAdminProviderPicker === "function") ctx.closeAdminProviderPicker();
+      }
+
+      if (act === "provider-picker-open") {
+        if (typeof ctx.setAdminProviderPickerOpen === "function") {
+          var pickerEl = document.getElementById("sg-op-provider-picker");
+          var willOpen = !!(pickerEl && pickerEl.hidden);
+          ctx.setAdminProviderPickerOpen(willOpen);
+        }
+        return;
+      }
+
+      if (act === "provider-picker-cancel") {
+        closeProviderPicker();
+        return;
+      }
+
+      if (act === "provider-picker-select") {
+        var pickId = String(t.getAttribute("data-provider-id") || "")
+          .trim()
+          .toLowerCase();
+        if (!pickId) return;
+        var cat =
+          globalThis.ChimeraSettings &&
+          ChimeraSettings.Providers &&
+          ChimeraSettings.Providers.Catalog;
+        if (cat && typeof cat.addVisibleProviderId === "function" && cat.addVisibleProviderId(ctx, pickId)) {
+          closeProviderPicker();
+          scheduleStoryRebuild();
+        }
+        return;
       }
 
       if (act === "user-add") {
@@ -356,16 +453,24 @@ globalThis.ChimeraSettings.Handlers.Admin.wire = function (ctx) {
         return;
       }
 
+      function refreshAdminEditCard(patchFn) {
+        if (typeof refreshAdminCardAfterEditToggle === "function") {
+          refreshAdminCardAfterEditToggle(patchFn);
+          return;
+        }
+        refreshSummarizedPanel();
+      }
+
       if (act === "fallback-configure") {
         ctx.adminFallbackEditing = true;
-        refreshSummarizedPanel();
+        refreshAdminEditCard(ctx.patchAdminFallbackCard);
         return;
       }
 
       if (act === "routing-configure") {
         ctx.adminRoutingEditing = true;
         if (ctx.routingPolicyDraft == null) ctx.routingPolicyDraft = String((((ctx.adminStateCache && ctx.adminStateCache.gateway) || {}).routing_policy_yaml) || "");
-        refreshSummarizedPanel();
+        refreshAdminEditCard(ctx.patchAdminRoutingCard);
         return;
       }
 
@@ -373,13 +478,13 @@ globalThis.ChimeraSettings.Handlers.Admin.wire = function (ctx) {
         ctx.adminRoutingEditing = false;
         ctx.routingPolicyTouched = false;
         ctx.routingPolicyDraft = String((((ctx.adminStateCache && ctx.adminStateCache.gateway) || {}).routing_policy_yaml) || "");
-        refreshSummarizedPanel();
+        refreshAdminEditCard(ctx.patchAdminRoutingCard);
         return;
       }
 
       if (act === "router-configure") {
         ctx.adminRouterEditing = true;
-        refreshSummarizedPanel();
+        refreshAdminEditCard(ctx.patchAdminRouterModelsCard);
         return;
       }
 
@@ -391,14 +496,14 @@ globalThis.ChimeraSettings.Handlers.Admin.wire = function (ctx) {
         ctx.routerThresholdDraft = null;
         ctx.routerEnabledTouched = false;
         ctx.routerEnabledDraft = null;
-        refreshSummarizedPanel();
+        refreshAdminEditCard(ctx.patchAdminRouterModelsCard);
         return;
       }
 
       if (act === "fallback-cancel") {
         ctx.adminFallbackEditing = false;
         ctx.fallbackTouched = false;
-        refreshSummarizedPanel();
+        refreshAdminEditCard(ctx.patchAdminFallbackCard);
         return;
       }
 
@@ -498,8 +603,8 @@ globalThis.ChimeraSettings.Handlers.Admin.wire = function (ctx) {
       }
 
       if (act === "provider-key-add") {
-        var prov = String(t.getAttribute("data-provider") || "");
-        var inputId = prov === "groq" ? "admin-groq-key" : prov === "gemini" ? "admin-gemini-key" : "";
+        var prov = String(t.getAttribute("data-provider") || "").trim().toLowerCase();
+        var inputId = prov ? "admin-" + prov + "-key" : "";
         var val = inputId ? ((document.getElementById(inputId) || {}).value || "") : "";
         if (!val.trim()) {
           adminSetMessage("err", "Enter a key.");
@@ -510,10 +615,7 @@ globalThis.ChimeraSettings.Handlers.Admin.wire = function (ctx) {
           .then(function () {
             var inp = document.getElementById(inputId);
             if (inp) inp.value = "";
-            if (ctx.adminProviderKeyDraft) {
-              if (prov === "groq") ctx.adminProviderKeyDraft.groq = null;
-              if (prov === "gemini") ctx.adminProviderKeyDraft.gemini = null;
-            }
+            if (ctx.adminProviderKeyDraft && prov) delete ctx.adminProviderKeyDraft[prov];
             adminSetMessage("", "Provider key added.");
             reloadAdmin();
           })

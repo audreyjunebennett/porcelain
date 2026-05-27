@@ -29,8 +29,8 @@ func TestAcquireLaunchLock_ContentionAndRecovery(t *testing.T) {
 func TestAcquireLaunchLock_ReapsStaleLock(t *testing.T) {
 	root := t.TempDir()
 	lockPath := locus.LaunchLockPath(root)
-	if err := os.MkdirAll(locus.RunDirPath(root), 0o755); err != nil {
-		t.Fatalf("mkdir run dir: %v", err)
+	if err := os.MkdirAll(locus.DesktopStateDirPath(root), 0o755); err != nil {
+		t.Fatalf("mkdir desktop state dir: %v", err)
 	}
 	if err := os.WriteFile(lockPath, []byte("stale"), 0o644); err != nil {
 		t.Fatalf("write stale lock: %v", err)

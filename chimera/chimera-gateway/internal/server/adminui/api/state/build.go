@@ -20,8 +20,10 @@ import (
 // BuildResponse assembles GET /api/ui/state from runtime config and live probes.
 func BuildResponse(ctx context.Context, r *http.Request, res *config.Resolved, rt *gruntime.Runtime, log *slog.Logger) operatorapi.StateResponse {
 	client := apirut.BrokerAdminClient(rt)
-	provOut := make(map[string]operatorapi.StateProviderEntry, len(apirut.BrokerProviderNames))
-	for _, name := range apirut.BrokerProviderNames {
+	configured, listOK := brokeradmin.ListConfiguredProviders(ctx, client)
+	probeNames := apirut.ConfiguredProviderIDsResolved(ctx, client, configured, listOK)
+	provOut := make(map[string]operatorapi.StateProviderEntry, len(probeNames))
+	for _, name := range probeNames {
 		provOut[name] = probeStateProvider(ctx, client, name)
 	}
 
@@ -91,10 +93,38 @@ func BuildResponse(ctx context.Context, r *http.Request, res *config.Resolved, r
 		}
 	}
 
+	vmSummaries := []operatorapi.VirtualModelSummary{}
+	if store := rt.OperatorStore(); store != nil {
+		if vms, err := store.ListVirtualModels(ctx, "", ""); err == nil {
+			vmSummaries = make([]operatorapi.VirtualModelSummary, 0, len(vms))
+			for _, vm := range vms {
+				vmSummaries = append(vmSummaries, operatorapi.VirtualModelSummary{
+					ID:                   vm.ID,
+					ModelID:              vm.ModelID,
+					Name:                 vm.Name,
+					Version:              vm.Version,
+					Description:          vm.Description,
+					Enabled:              vm.Enabled,
+					Visibility:           vm.Visibility,
+					FallbackDepth:        len(vm.FallbackChain),
+					RoutingPolicyEnabled: vm.RoutingPolicyEnabled,
+					ToolRouterEnabled:    vm.ToolRouterEnabled,
+					RouterModels:         vm.RouterModels,
+				})
+			}
+		}
+	}
+	bootstrapVMID := res.VirtualModelID
+	if reg := rt.VirtualModels(); reg != nil {
+		if id := reg.BootstrapModelID(); id != "" {
+			bootstrapVMID = id
+		}
+	}
+
 	return operatorapi.StateResponse{
 		Gateway: operatorapi.GatewayState{
 			Semver:                        res.Semver,
-			VirtualModelID:                res.VirtualModelID,
+			VirtualModelID:                bootstrapVMID,
 			PublicBaseURL:                 apirut.PublicGatewayBase(r),
 			TokenHint:                     "Paste the same gateway token you used to sign in.",
 			FilterFreeTierModels:          res.FilterFreeTierModels,
@@ -136,8 +166,10 @@ func BuildResponse(ctx context.Context, r *http.Request, res *config.Resolved, r
 			IndexerSupervisedEnabled:    res.IndexerSupervisedEnabled,
 			OperatorSQLitePath:          res.OperatorSQLitePath,
 			OperatorStoreOpen:           rt.OperatorStore() != nil,
+			VirtualModels:               vmSummaries,
 		},
-		Providers: provOut,
+		Providers:             provOut,
+		ConfiguredProviderIDs: append([]string(nil), probeNames...),
 	}
 }
 

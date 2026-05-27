@@ -13,22 +13,46 @@ type UsageSource interface {
 }
 
 // Guard composes a limits Config with a live metrics store to answer: can this request proceed?
-// Zero-value Guard (nil Cfg or nil Store) always allows.
+// Zero-value Guard (nil Cfg) always allows. Context checks run without metrics; RPM/TPM need Usage.
 type Guard struct {
 	Cfg   *Config
 	Usage UsageSource
+	// Catalog optionally overlays context_window from the live broker catalog when YAML omits it.
+	Catalog ContextCatalog
 	// Now returns the current instant; injected for tests. Defaults to time.Now when nil.
 	Now func() time.Time
 }
 
-// Allow returns a Decision for "send estTokens of request to upstreamID right now". Any error
-// looking up usage is non-fatal: the guard allows the call and reports the error so callers can
-// log. Rationale: the gateway must degrade to "no enforcement" when metrics are unreadable.
-func (g *Guard) Allow(ctx context.Context, upstreamID string, estTokens int64) (Decision, error) {
-	if g == nil || g.Cfg == nil || g.Usage == nil {
+func (g *Guard) resolveEffective(upstreamID string) Effective {
+	if g == nil || g.Cfg == nil {
+		return Effective{ModelID: upstreamID}
+	}
+	return g.Cfg.ResolveWithCatalog(upstreamID, g.Catalog)
+}
+
+// EffectiveFor returns fully resolved limits for upstreamID, including live catalog context overlay.
+func (g *Guard) EffectiveFor(upstreamID string) Effective {
+	if g == nil {
+		return Effective{ModelID: upstreamID}
+	}
+	return g.resolveEffective(upstreamID)
+}
+
+// Allow returns a Decision for sending req to upstreamID right now. Context/body checks run
+// first without metrics; RPM/TPM/RPD/TPD require a Usage source. Usage lookup errors are
+// non-fatal for quota checks: the guard allows the call and reports the error so callers can
+// log. Rationale: the gateway must degrade to "no quota enforcement" when metrics are unreadable.
+func (g *Guard) Allow(ctx context.Context, upstreamID string, req RequestAdmission) (Decision, error) {
+	if g == nil || g.Cfg == nil {
 		return Decision{Allowed: true}, nil
 	}
-	eff := g.Cfg.Resolve(upstreamID)
+	eff := g.resolveEffective(upstreamID)
+	if cd := DecideContext(eff, req); !cd.Allowed {
+		return cd, nil
+	}
+	if g.Usage == nil {
+		return Decision{Allowed: true}, nil
+	}
 	if !eff.HasAnyMinuteLimit() && !eff.HasAnyDayLimit() {
 		return Decision{Allowed: true}, nil
 	}
@@ -67,5 +91,5 @@ func (g *Guard) Allow(ctx context.Context, upstreamID string, estTokens int64) (
 		usage.DayCalls = calls
 		usage.DayEstTokens = tok
 	}
-	return Decide(eff, usage, estTokens), nil
+	return Decide(eff, usage, req.EstPromptTokens), nil
 }

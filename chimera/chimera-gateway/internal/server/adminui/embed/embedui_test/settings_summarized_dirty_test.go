@@ -15,6 +15,7 @@ func loadSummarizedDirtyRoutingCtx(t *testing.T, vm *goja.Runtime) {
 		var deps = {
 			getFlat: function (p) { return (p && p.rawFlat) || {}; },
 			strHash: ChimeraSettings.strHash,
+			getAdminProviderIds: function () { return ["groq"]; },
 			normalizeServiceBucketKey: function (svc, src) {
 				var s = String(svc || src || "").toLowerCase();
 				if (s.indexOf("broker") >= 0 || s === "bifrost") return "chimera-broker";
@@ -135,6 +136,47 @@ func TestSummarizedDirtyRouting_requestIdCorrelation(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("expected correlated conv id %q in %v", convID.String(), cardIds)
+	}
+}
+
+func TestSummarizedDirtyRouting_skipsProviderNotInVisibleList(t *testing.T) {
+	vm := goja.New()
+	loadSummarizedDirtyRoutingCtx(t, vm)
+
+	_, err := vm.RunString(`
+		deps.getAdminProviderIds = function () { return ["ollama"]; };
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fn, ok := goja.AssertFunction(vm.Get("ChimeraSettings").ToObject(vm).Get("Summarized").ToObject(vm).Get("dirtyTargetsForEntry"))
+	if !ok {
+		t.Fatal("missing dirtyTargetsForEntry")
+	}
+
+	v, err := fn(
+		goja.Undefined(),
+		vm.ToValue(map[string]any{
+			"parsed": map[string]any{
+				"rawFlat": map[string]any{
+					"provider_id": "groq",
+					"msg":         "chat.chimera-broker.request",
+					"model":       "groq/llama",
+				},
+			},
+		}),
+		vm.ToValue(map[string]any{}),
+		vm.Get("deps"),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cardIds := v.ToObject(vm).Get("cardIds").Export().([]any)
+	for _, id := range cardIds {
+		if id == "admin-provider-groq" {
+			t.Fatalf("groq should not dirty-route when not visible: %v", cardIds)
+		}
 	}
 }
 

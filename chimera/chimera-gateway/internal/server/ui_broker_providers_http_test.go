@@ -54,10 +54,7 @@ func TestUIBrokerProviderHealth_endToEnd(t *testing.T) {
 	if err := os.WriteFile(routePath, []byte("rules: []\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	rt, err := NewRuntime(gwPath, testLog())
-	if err != nil {
-		t.Fatal(err)
-	}
+	rt := mustRuntime(t, gwPath)
 	front := httptest.NewServer(NewMux(rt, testLog(), nil, NewUIOptions()))
 	t.Cleanup(front.Close)
 
@@ -130,10 +127,7 @@ func TestUIChimeraBrokerProviderHealth_chimeraBrokerDown(t *testing.T) {
 	if err := os.WriteFile(routePath, []byte("rules: []\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	rt, err := NewRuntime(gwPath, testLog())
-	if err != nil {
-		t.Fatal(err)
-	}
+	rt := mustRuntime(t, gwPath)
 	front := httptest.NewServer(NewMux(rt, testLog(), nil, NewUIOptions()))
 	t.Cleanup(front.Close)
 
@@ -210,10 +204,7 @@ func TestUIBrokerProviderHealth_onlyOllamaConfigured_catalogFail(t *testing.T) {
 	if err := os.WriteFile(routePath, []byte("rules: []\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	rt, err := NewRuntime(gwPath, testLog())
-	if err != nil {
-		t.Fatal(err)
-	}
+	rt := mustRuntime(t, gwPath)
 	front := httptest.NewServer(NewMux(rt, testLog(), nil, NewUIOptions()))
 	t.Cleanup(front.Close)
 
@@ -237,21 +228,38 @@ func TestUIBrokerProviderHealth_onlyOllamaConfigured_catalogFail(t *testing.T) {
 	if err := json.NewDecoder(res.Body).Decode(&doc); err != nil {
 		t.Fatal(err)
 	}
-	if len(doc.Providers) != 3 {
-		t.Fatalf("providers len=%d want 3: %+v", len(doc.Providers), doc.Providers)
+	if len(doc.Providers) != 1 {
+		t.Fatalf("providers len=%d want 1 (configured only): %+v", len(doc.Providers), doc.Providers)
 	}
-	byID := map[string]adminui.ProviderHealthEntry{}
-	for _, p := range doc.Providers {
-		byID[p.ID] = p
+	if doc.Providers[0].ID != "ollama" {
+		t.Fatalf("ollama: %+v", doc.Providers[0])
 	}
-	if got := byID["groq"]; got.State != "not_configured" {
-		t.Fatalf("groq: %+v", got)
+	if doc.Providers[0].State != "down" || doc.Providers[0].OllamaBaseURL != "http://127.0.0.1:11434" {
+		t.Fatalf("ollama: %+v", doc.Providers[0])
 	}
-	if got := byID["gemini"]; got.State != "not_configured" {
-		t.Fatalf("gemini: %+v", got)
+
+	stateRes, err := client.Get(front.URL + "/api/ui/state")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if got := byID["ollama"]; got.State != "down" || got.OllamaBaseURL != "http://127.0.0.1:11434" {
-		t.Fatalf("ollama: %+v", got)
+	defer stateRes.Body.Close()
+	var stateDoc map[string]any
+	if err := json.NewDecoder(stateRes.Body).Decode(&stateDoc); err != nil {
+		t.Fatal(err)
+	}
+	prov, _ := stateDoc["providers"].(map[string]any)
+	if len(prov) != 1 {
+		t.Fatalf("state providers len=%d want 1: %+v", len(prov), prov)
+	}
+	if _, ok := prov["ollama"]; !ok {
+		t.Fatalf("state missing ollama: %+v", prov)
+	}
+	if _, ok := prov["groq"]; ok {
+		t.Fatalf("state must not include groq: %+v", prov)
+	}
+	cfgIDs, _ := stateDoc["configured_provider_ids"].([]any)
+	if len(cfgIDs) != 1 || cfgIDs[0] != "ollama" {
+		t.Fatalf("configured_provider_ids=%v", cfgIDs)
 	}
 }
 
@@ -272,10 +280,7 @@ func TestUIBrokerProviderHealth_requiresAuth(t *testing.T) {
 	if err := os.WriteFile(routePath, []byte("rules: []\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	rt, err := NewRuntime(gwPath, testLog())
-	if err != nil {
-		t.Fatal(err)
-	}
+	rt := mustRuntime(t, gwPath)
 	front := httptest.NewServer(NewMux(rt, testLog(), nil, NewUIOptions()))
 	t.Cleanup(front.Close)
 

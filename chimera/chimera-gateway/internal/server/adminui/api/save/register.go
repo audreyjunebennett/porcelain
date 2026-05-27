@@ -3,6 +3,7 @@ package save
 import (
 	"net/http"
 
+	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/adminui/apirut"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/adminui/handler"
 )
 
@@ -11,10 +12,10 @@ func Register(mux *http.ServeMux, h *handler.Handler) {
 	if h == nil {
 		return
 	}
-	for _, p := range []string{"groq", "gemini"} {
-		prov := p
-		mux.HandleFunc("POST /api/ui/provider/"+prov+"/keys", h.RequireAuthJSON(saveAppendProviderKey(h, prov)))
-		mux.HandleFunc("POST /api/ui/provider/"+prov+"/keys/delete", h.RequireAuthJSON(saveRemoveProviderKey(h, prov)))
+	for _, prov := range apirut.KeyedProviderCatalogIDs() {
+		provider := prov
+		mux.HandleFunc("POST /api/ui/provider/"+provider+"/keys", h.RequireAuthJSON(saveAppendProviderKey(h, provider)))
+		mux.HandleFunc("POST /api/ui/provider/"+provider+"/keys/delete", h.RequireAuthJSON(saveRemoveProviderKey(h, provider)))
 	}
 	mux.HandleFunc("POST /api/ui/provider/ollama/base_url", h.RequireAuthJSON(func(w http.ResponseWriter, r *http.Request) {
 		saveOllamaBaseURL(h, w, r)

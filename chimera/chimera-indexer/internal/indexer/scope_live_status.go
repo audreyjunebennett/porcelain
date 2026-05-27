@@ -125,7 +125,7 @@ func (ix *Indexer) EmitScopeStatus(phase string) {
 		if r.currentRel != "" {
 			args = append(args, "current_rel", r.currentRel)
 		}
-		ix.log.Info("indexer scope status", args...)
+		ix.log.Debug("indexer scope status", args...)
 	}
 	ix.syncScopeStatusSnapshots(watchMode)
 }

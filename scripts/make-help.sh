@@ -70,6 +70,8 @@ echo
 echo "  make tokencount-file                  FILE=path -> cl100k_base/o200k_base counts"
 echo "  make catalog-fetch-free               fetch free tier models from pricing docs on web"
 echo "  make catalog-fetch-available          fetch available models from chimera-broker"
+echo "  make catalog-available                alias for catalog-fetch-available"
+echo "  make catalog-limits                   seed context_window in provider-model-limits.yaml"
 echo "  make catalog-calculate                intersection of free and available models"
 echo "  make contracts-[generate|check]       generate|check data type and log msg contracts"
 echo

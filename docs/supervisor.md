@@ -34,7 +34,7 @@ Use `make install` when you also want `make desktop-install` (desktop WebView/CG
 make up
 ```
 
-Foreground stack: `make chimera-supervisor-run` (gateway + BiFrost + Qdrant). Background: `make chimera-start` (after `make chimera-build`); logs in `logs/chimera-supervisor.log`, PID in `run/chimera-supervisor.pid`; stop with `make chimera-stop`, status with `make chimera-status`. For BiFrost only in the foreground, run `./chimera serve -bifrost-bin ./bin/bifrost-http` (no Qdrant).
+Foreground stack: `make chimera-supervisor-run` (gateway + BiFrost + Qdrant). Background: `make chimera-start` (after `make chimera-build`); PID and log under `data/chimera-supervisor/` (`chimera-supervisor.pid`, `chimera-supervisor.log`); stop with `make chimera-stop`, status with `make chimera-status`. For BiFrost only in the foreground, run `./chimera serve -bifrost-bin ./bin/bifrost-http` (no Qdrant).
 
 Upstream BiFrost `make build` includes the UI (`build-ui`) and needs **Node.js 20+** and a matching **npm** (not only Go). `make chimera-install` checks Node before building.
 

@@ -65,6 +65,23 @@ function chimeraBrokerTrimDetail(flat, maxLen) {
   return t.length > maxLen ? t.slice(0, maxLen - 1) + "…" : t;
 }
 
+function brokerHttpAccessPurpose(flat, path) {
+  path = path != null ? String(path).trim() : "/";
+  if (!path) path = "/";
+  if (path === "/api/governance/providers") {
+    return "Provider roster sync · gateway admin";
+  }
+  var pid = flat.provider_id != null ? String(flat.provider_id).trim() : "";
+  if (!pid && path.indexOf("/api/providers/") === 0) {
+    var rest = path.slice("/api/providers/".length);
+    var slash = rest.indexOf("/");
+    pid = (slash >= 0 ? rest.slice(0, slash) : rest).trim();
+  }
+  if (pid) return "Provider health probe · " + pid;
+  if (path === "/v1/models") return "Model catalog refresh · gateway admin";
+  return "Broker HTTP";
+}
+
 function brokerHttpInboundLine(flat, rateLimit, opts) {
   opts = opts || {};
   var omitStatus = opts.forEventLog === true;
@@ -77,12 +94,7 @@ function brokerHttpInboundLine(flat, rateLimit, opts) {
   var msRaw = flat.http_duration_ms != null ? flat.http_duration_ms : flat.httpDurationMS;
   var ms = Number(msRaw);
   var bits = [];
-  bits.push(rateLimit ? "Rate limited" : "Inbound");
-  var pid = flat.provider_id != null ? String(flat.provider_id).trim() : "";
-  if (pid) bits.push("provider " + pid);
-  else if (flat.progress_detail != null && String(flat.progress_detail).trim()) {
-    bits.push(String(flat.progress_detail).trim());
-  }
+  bits.push(rateLimit ? "Rate limited" : brokerHttpAccessPurpose(flat, path));
   bits.push(meth + " " + path);
   if (!omitStatus) bits.push("→ " + st);
   if (!isNaN(ms) && ms >= 0) bits.push(Math.round(ms) + " ms");
@@ -431,6 +443,36 @@ function chimeraBrokerCardModel(arr, getFlat) {
   return out;
 }
 
+/** Available model count for the service card — live provider snapshot first, then log lines. */
+function chimeraBrokerAvailableModelCount(arr, getFlat, snapshot) {
+  arr = Array.isArray(arr) ? arr : [];
+  getFlat = typeof getFlat === "function" ? getFlat : function (p) { return (p && p.rawFlat) || {}; };
+  snapshot = snapshot && typeof snapshot === "object" ? snapshot : null;
+
+  if (snapshot) {
+    var snapN = Number(
+      snapshot.catalog_model_count != null ? snapshot.catalog_model_count : snapshot.catalogModelCount
+    );
+    if (!isNaN(snapN) && snapN > 0) return Math.round(snapN);
+
+    var providers = Array.isArray(snapshot.providers) ? snapshot.providers : [];
+    var seen = {};
+    var uniq = 0;
+    for (var pi = 0; pi < providers.length; pi++) {
+      var mids = Array.isArray((providers[pi] || {}).model_ids) ? providers[pi].model_ids : [];
+      for (var mj = 0; mj < mids.length; mj++) {
+        var mid = String(mids[mj] || "").trim().toLowerCase();
+        if (!mid || seen[mid]) continue;
+        seen[mid] = true;
+        uniq++;
+      }
+    }
+    if (uniq > 0) return uniq;
+  }
+
+  return chimeraBrokerCardMetrics(arr, getFlat).catalogModelCount || 0;
+}
+
 function chimeraBrokerCardMetrics(arr, getFlat) {
   arr = Array.isArray(arr) ? arr : [];
   getFlat = typeof getFlat === "function" ? getFlat : function (p) { return (p && p.rawFlat) || {}; };
@@ -692,11 +734,13 @@ function chimeraBrokerRelayOutcomeBuckets(arr, getFlat) {
 
 globalThis.ChimeraSettings = globalThis.ChimeraSettings || {};
 globalThis.ChimeraSettings.Derive = globalThis.ChimeraSettings.Derive || {};
+globalThis.ChimeraSettings.Derive.brokerHttpInboundLine = brokerHttpInboundLine;
 globalThis.ChimeraSettings.Derive.chimeraBrokerOperatorLine = chimeraBrokerOperatorLine;
 globalThis.ChimeraSettings.Derive.chimeraBrokerEntryHasRateLimit = chimeraBrokerEntryHasRateLimit;
 globalThis.ChimeraSettings.Derive.chimeraBrokerSliceSinceLastBanner = chimeraBrokerSliceSinceLastBanner;
 globalThis.ChimeraSettings.Derive.chimeraBrokerSliceForRelayMetrics = chimeraBrokerSliceForRelayMetrics;
 globalThis.ChimeraSettings.Derive.chimeraBrokerCardModel = chimeraBrokerCardModel;
+globalThis.ChimeraSettings.Derive.chimeraBrokerAvailableModelCount = chimeraBrokerAvailableModelCount;
 globalThis.ChimeraSettings.Derive.chimeraBrokerCardMetrics = chimeraBrokerCardMetrics;
 globalThis.ChimeraSettings.Derive.chimeraBrokerProviderHealthList = chimeraBrokerProviderHealthList;
 globalThis.ChimeraSettings.Derive.chimeraBrokerCollapsedHealthSubtitle = chimeraBrokerCollapsedHealthSubtitle;

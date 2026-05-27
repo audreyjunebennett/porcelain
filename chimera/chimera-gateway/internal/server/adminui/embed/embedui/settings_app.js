@@ -40,8 +40,15 @@ globalThis.ChimeraSettings.Main = function () {
   var routerEnabledDraft = null;
   var adminUserDrafts = [];
   var nextAdminUserDraftId = 1;
-  /** In-flight provider API key inputs (groq/gemini); survives summarized panel rebuild. */
-  var adminProviderKeyDraft = { groq: null, gemini: null };
+  var virtualModelDrafts = [];
+  var nextVirtualModelDraftId = 1;
+  /** In-flight provider API key inputs keyed by provider id; survives summarized panel rebuild. */
+  var adminProviderKeyDraft = {};
+  /** Provider ids shown as summarized admin-provider-* cards (seeded from catalog configured_ids). */
+  var adminVisibleProviderIds = [];
+  var adminProviderCatalog = [];
+  var adminProviderCatalogReady = false;
+  var adminVisibleProviderIdsSeeded = false;
   /** In-flight Ollama base URL; null = use adminStateCache value on render. */
   var adminOllamaUrlDraft = null;
   var adminRoutingEditing = false;
@@ -71,6 +78,8 @@ globalThis.ChimeraSettings.Main = function () {
   var workspaceManagedEditId = null;
   /** { wsNum: number, paths: { id: number|null, path: string }[] } — only valid while workspaceManagedEditId matches wsNum. */
   var workspaceManagedStaging = null;
+  /** True while native folder picker is open for managed workspace path Add. */
+  var workspaceManagedFolderPickerOpen = false;
   var started = false;
   /** Dedup live + historical loads (seq may overlap SSE vs initial tail fetch). */
   var seenSeq = {};
@@ -452,56 +461,6 @@ globalThis.ChimeraSettings.Main = function () {
     return { count: count, sumMs: sumMs, worst: maxStatus };
   }
 
-  function serviceStripHtml(events) {
-    var ragN = 0,
-      vectorstoreEvt = 0,
-      ingestN = 0;
-    var ragMs = 0;
-    var chimeraBrokerN = 0;
-    if (
-      globalThis.ChimeraSettings &&
-      ChimeraSettings.Derive &&
-      typeof ChimeraSettings.Derive.conversationChimeraBrokerRelayCount === "function"
-    ) {
-      chimeraBrokerN = ChimeraSettings.Derive.conversationChimeraBrokerRelayCount(events, function (p) { return getFlat(p); });
-    }
-    for (var i = 0; i < events.length; i++) {
-      var sh = events[i].parsed.shape || "";
-      var f = getFlat(events[i].parsed);
-      if (sh === "rag" || (sh.indexOf("rag.") === 0 && sh !== "rag")) {
-        ragN++;
-        var lm = Number(f.latencyMs != null ? f.latencyMs : f.latency_ms != null ? f.latency_ms : f.elapsedMs);
-        if (!isNaN(lm)) ragMs += lm;
-      } else if (
-        sh === "service.vectorstore" ||
-        sh === "service.chimera-vectorstore" ||
-        f.service === "chimera-vectorstore"
-      ) {
-        vectorstoreEvt++;
-      } else if (sh === "ingest") {
-        ingestN++;
-      }
-    }
-    var parts = [];
-    if (ragN) parts.push("RAG · " + ragN + (ragMs ? " · ~" + Math.round(ragMs) + " ms" : ""));
-    if (vectorstoreEvt) parts.push("chimera-vectorstore · " + vectorstoreEvt);
-    if (ingestN) parts.push("ingest · " + ingestN);
-    if (chimeraBrokerN) parts.push("chimera-broker · " + chimeraBrokerN);
-    if (!parts.length) return "";
-    if (globalThis.ChimeraUI && globalThis.ChimeraUI.Chip && typeof globalThis.ChimeraUI.Chip.renderRow === "function") {
-      return globalThis.ChimeraUI.Chip.renderRow(parts);
-    }
-    return (
-      '<div class="service-chips">' +
-      parts
-        .map(function (p) {
-          return '<span class="chip">' + escapeHtml(p) + "</span>";
-        })
-        .join("") +
-      "</div>"
-    );
-  }
-
   function contextGrowthStripHtml(events) {
     var keys = [
       "turn_index",
@@ -594,6 +553,7 @@ globalThis.ChimeraSettings.Main = function () {
       return line.length > MAX_PRIMARY_MSG_CHARS ? line.slice(0, MAX_PRIMARY_MSG_CHARS - 1) + "…" : line;
     }
     var opOpts = { forEventLog: forEventLog };
+    if (opts.convEvlogMeta) opOpts.convEvlogMeta = opts.convEvlogMeta;
     if (typeof chimeraVectorstoreCollectionScopeLabelForLogs === "function") {
       opOpts.resolveColl = chimeraVectorstoreCollectionScopeLabelForLogs;
     }
@@ -679,10 +639,15 @@ globalThis.ChimeraSettings.Main = function () {
       : '<span class="log-line-sum__lvl log-line-sum__lvl--none">—</span>';
     var badgeHtml = "";
     var hideIndexerBadge =
-      opts.suppressIndexerBadge && badgeOpt && (badgeOpt.lab === "chimera-indexer" || badgeOpt.lab === "indexer");
-    var hideVectorstoreBadge = opts.suppressVectorstoreBadge && badgeOpt && badgeOpt.lab === "chimera-vectorstore";
+      opts.suppressIndexerBadge && badgeOpt && (badgeOpt.key === "chimera-indexer" || badgeOpt.key === "indexer" || badgeOpt.lab === "indexer");
+    var hideVectorstoreBadge =
+      opts.suppressVectorstoreBadge &&
+      badgeOpt &&
+      (badgeOpt.key === "chimera-vectorstore" || badgeOpt.key === "vectorstore" || badgeOpt.lab === "vectorstore");
     var hideGatewayBadge =
-      opts.suppressGatewayBadge && badgeOpt && (badgeOpt.lab === "chimera-gateway" || badgeOpt.lab === "gateway");
+      opts.suppressGatewayBadge &&
+      badgeOpt &&
+      (badgeOpt.key === "chimera-gateway" || badgeOpt.key === "gateway" || badgeOpt.lab === "gateway");
     if (badgeOpt && badgeOpt.lab && !hideIndexerBadge && !hideVectorstoreBadge && !hideGatewayBadge) {
       badgeHtml =
         '<span class="sum-svc-badge ' +
@@ -880,7 +845,6 @@ globalThis.ChimeraSettings.Main = function () {
     formatLogRelativeAgo: formatLogRelativeAgo,
     toIsoDatetimeAttr: toIsoDatetimeAttr,
     operatorFriendlyGatewayMsg: operatorFriendlyGatewayMsg,
-    serviceStripHtml: serviceStripHtml,
     contextGrowthStripHtml: contextGrowthStripHtml,
     SHOW_CONV_EXPANDED_CONTEXT_STRIP: SHOW_CONV_EXPANDED_CONTEXT_STRIP,
     buildHeadlineHtml: buildHeadlineHtml,
@@ -915,9 +879,16 @@ globalThis.ChimeraSettings.Main = function () {
     nextWorkspaceDraftId: nextWorkspaceDraftId,
     workspaceManagedEditId: workspaceManagedEditId,
     workspaceManagedStaging: workspaceManagedStaging,
+    workspaceManagedFolderPickerOpen: workspaceManagedFolderPickerOpen,
     adminUserDrafts: adminUserDrafts,
     nextAdminUserDraftId: nextAdminUserDraftId,
+    virtualModelDrafts: virtualModelDrafts,
+    nextVirtualModelDraftId: nextVirtualModelDraftId,
     adminProviderKeyDraft: adminProviderKeyDraft,
+    adminVisibleProviderIds: adminVisibleProviderIds,
+    adminProviderCatalog: adminProviderCatalog,
+    adminProviderCatalogReady: adminProviderCatalogReady,
+    adminVisibleProviderIdsSeeded: adminVisibleProviderIdsSeeded,
     adminOllamaUrlDraft: adminOllamaUrlDraft,
     adminCreatedTokenByTenant: adminCreatedTokenByTenant,
     routingPolicyTouched: routingPolicyTouched,
@@ -932,6 +903,8 @@ globalThis.ChimeraSettings.Main = function () {
     adminRoutingEditing: adminRoutingEditing,
     adminFallbackEditing: adminFallbackEditing,
     adminRouterEditing: adminRouterEditing,
+    virtualModelDetails: {},
+    virtualModelUi: {},
     storyRebuildTimer: null,
     sumEvlogUiDeferTimer: null,
     sumEvlogPointerSuppressedUntil: 0

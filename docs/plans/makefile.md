@@ -18,7 +18,7 @@ Make `make` the single, predictable way to install, configure, run, and clean Ch
 | [Core install & run targets](#quick-status) | `up`, `install`, `chimera-install`, `configure`, `clean`, foreground/background `serve` / `start` / `stop` / `logs` / `status` | `done` |
 | [Desktop targets](#quick-status) | `desktop-install`, `desktop-build`, `desktop-run`, `vet-desktop` | `done` |
 | [Quality gate](#quick-status) | `precommit` (`fmt-check`, `vet`, `test`) with optional `SKIP_DESKTOP=1` | `done` |
-| [Catalog & release tooling](#quick-status) | `catalog-free`, `catalog-available`, `config-provider-free-tier`, `release-snapshot`, `release-install`, `package` | `done` |
+| [Catalog & release tooling](#quick-status) | `catalog-free`, `catalog-available`, `catalog-limits`, `config-provider-free-tier`, `release-snapshot`, `release-install`, `package` | `done` |
 | [Optional follow-ups](#optional-follow-ups-low-priority) | Richer `chimera-status`, broader PowerShell parity | `todo` |
 
 ---
@@ -37,7 +37,7 @@ Design notes for the root [Makefile](../Makefile) and bash-driven scripts. **The
 | `UP_STACK=0` (BiFrost only, no Qdrant) | **Done** |
 | Desktop: `desktop-install` / `desktop-build` / `desktop-run`, `vet-desktop` | **Done** |
 | Quality gate `precommit` (`fmt-check`, `vet`, `test`; desktop slice omitted with `SKIP_DESKTOP=1`) | **Done** |
-| Catalog tools `catalog-free` / `catalog-available` / `config-provider-free-tier` | **Done** |
+| Catalog tools `catalog-free` / `catalog-available` / `catalog-limits` / `config-provider-free-tier` | **Done** |
 | Release `release-install` / `release-snapshot` / `package` | **Done** |
 | No `make doctor`; no duplicate meta-targets (`ci`, etc.) | **Done** |
 | PowerShell twin for every `scripts/*.sh` | **Optional / not important** — install uses bash; `install-make.ps1` exists for make only |
@@ -98,6 +98,8 @@ These appeared in older versions of this plan; the product moved to **webview + 
 | `config/gateway.yaml`, `.env`, `tokens.yaml` | `make configure` copies `gateway.example.yaml` → `gateway.yaml` if missing; copy `env.example` → `.env` yourself; `tokens.yaml` via `/ui/setup` or manual copy |
 | Run stack | `chimera-supervisor-run`, `chimera-serve`, `chimera-start` / `stop` / `status`, `logs` |
 | Local gate before commit | `make precommit` |
+
+- `make catalog-limits` — patches `config/provider-model-limits.yaml` with `context_window` from `config/catalog-available.snapshot.yaml` (`context_length`); applies static Ollama defaults when the catalog omits context; preserves RPM/TPM/RPD/TPD. Optional `CATALOG=`, `LIMITS=`, `GATEWAY=` paths; `FORCE=1` overwrites existing `context_window`. Run `make catalog-available` first to refresh the snapshot.
 
 ---
 

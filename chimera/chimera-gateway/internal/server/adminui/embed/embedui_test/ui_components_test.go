@@ -87,6 +87,29 @@ func TestUIComponents_Chip_renderRow(t *testing.T) {
 	}
 }
 
+func TestUIComponents_Chip_render_ignoresFunctionText(t *testing.T) {
+	vm := goja.New()
+	loadChimeraUIBase(t, vm)
+	evalJS(t, vm, uiEmbedPath(t, "components", "Chip.js"))
+
+	chip := vm.Get("ChimeraUI").ToObject(vm).Get("Chip").ToObject(vm)
+	rowFn, ok := goja.AssertFunction(chip.Get("renderRow"))
+	if !ok {
+		t.Fatal("missing renderRow")
+	}
+	v, err := rowFn(chip, vm.ToValue([]any{vm.Get("ChimeraUI").ToObject(vm).Get("escapeHtml")}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := v.String()
+	if strings.Contains(html, "function escapeHtml") {
+		t.Fatalf("function text leaked into chip row html: %q", html)
+	}
+	if html != "" {
+		t.Fatalf("expected empty row for function-only parts, got %q", html)
+	}
+}
+
 func TestUIComponents_KeyValueGrid_oddExtrasUsesColspan(t *testing.T) {
 	vm := goja.New()
 	loadChimeraUIBase(t, vm)

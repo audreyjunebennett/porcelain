@@ -49,7 +49,7 @@ Operator vocabulary is fixed in [`rename-vectorstore-broker-questions-answered.m
 **Deliverables**
 
 - **Rename matrix** — [below](#phase-1-rename-matrix).
-- **[`internal/naming/gateway_logs.go`](../../internal/naming/gateway_logs.go)** — log sources, `timeline_kind` slugs, msg prefixes, logs UI `localStorage` keys (product/env/headers remain in [`contracts.go`](../../internal/naming/contracts.go)).
+- **[`internal/naming/gateway_logs.go`](../../internal/naming/gateway_logs.go)** — log sources, `timeline_kind` slugs, msg prefixes (product/env/headers remain in [`contracts.go`](../../internal/naming/contracts.go)).
 - **Grep inventory** — [`scripts/chimera-gateway-legacy-vocab-inventory.sh`](../../scripts/chimera-gateway-legacy-vocab-inventory.sh); snapshot [below](#phase-1-legacy-vocabulary-inventory-2026-05-18).
 - **Pattern consumer** — [`timeline_kind.go`](../../chimera/chimera-gateway/internal/server/timeline_kind.go) returns `naming.TimelineKind*` for HTTP path classification.
 

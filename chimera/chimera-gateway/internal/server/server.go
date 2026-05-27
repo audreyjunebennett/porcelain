@@ -23,8 +23,6 @@ import (
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/indexerapi"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/ingest"
 	gruntime "github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/runtime"
-	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/transform"
-	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/vectorstore"
 	"github.com/lynn/porcelain/chimera/internal/brokerclient"
 	"github.com/lynn/porcelain/chimera/internal/config"
 	"github.com/lynn/porcelain/chimera/internal/platform/requestid"
@@ -362,7 +360,7 @@ func NewMux(rt *Runtime, log *slog.Logger, overlay *StatusOverlay, ui *UIOptions
 		}
 		rt.Sync()
 		res, _, _ := rt.Snapshot()
-		writeMergedModelsResponse(w, r.Context(), res, rt.UpstreamAPIKey(), healthTimeout(res), log)
+		writeMergedModelsResponse(w, r.Context(), rt, res, "", rt.UpstreamAPIKey(), healthTimeout(res), log)
 	})
 
 	mux.HandleFunc("/v1/models", func(w http.ResponseWriter, r *http.Request) {
@@ -449,7 +447,7 @@ func handleV1Models(w http.ResponseWriter, r *http.Request, rt *Runtime, log *sl
 		})
 		return
 	}
-	writeMergedModelsResponse(w, r.Context(), res, rt.UpstreamAPIKey(), healthTimeout(res), log)
+	writeMergedModelsResponse(w, r.Context(), rt, res, sess.TenantID, rt.UpstreamAPIKey(), healthTimeout(res), log)
 }
 
 // ensureOpenAIModelListItems sets object/created on each upstream model. BiFrost often omits
@@ -470,8 +468,8 @@ func ensureOpenAIModelListItems(data []any) {
 	}
 }
 
-// writeMergedModelsResponse lists upstream GET /v1/models, prepends the virtual Chimera model, and writes OpenAI-style JSON.
-func writeMergedModelsResponse(w http.ResponseWriter, ctx context.Context, res *config.Resolved, apiKey string, timeout time.Duration, log *slog.Logger) {
+// writeMergedModelsResponse lists upstream GET /v1/models, prepends virtual models, and writes OpenAI-style JSON.
+func writeMergedModelsResponse(w http.ResponseWriter, ctx context.Context, rt *Runtime, res *config.Resolved, principalID, apiKey string, timeout time.Duration, log *slog.Logger) {
 	w.Header().Set("Content-Type", "application/json")
 	if apiKey == "" {
 		w.WriteHeader(http.StatusServiceUnavailable)
@@ -512,13 +510,7 @@ func writeMergedModelsResponse(w http.ResponseWriter, ctx context.Context, res *
 	}
 	ensureOpenAIModelListItems(data)
 	data = catalog.FilterOpenAIModelDataByFreeTier(data, res)
-	virtual := map[string]any{
-		"id":       res.VirtualModelID,
-		"object":   "model",
-		"created":  time.Now().Unix(),
-		"owned_by": "chimera",
-	}
-	out := append([]any{virtual}, data...)
+	out := prependVirtualModelsToCatalog(data, rt, principalID, res)
 	_ = json.NewEncoder(w).Encode(map[string]any{"object": "list", "data": out})
 }
 
@@ -695,9 +687,15 @@ func handleV1Chat(w http.ResponseWriter, r *http.Request, rt *Runtime, log *slog
 			dedupLog := chatRouteLogger(log, rid, cid, sess.TenantID, turnIdx)
 			w.Header().Set(headerConversationID, cid)
 			if dedupLog != nil {
-				dedupLog.Info("conversation received", "msg", naming.MsgConversationReceived,
+				dedupRecv := []any{
+					"msg", naming.MsgConversationReceived,
 					"clientModel", clientModel, "stream", stream, "tenant", sess.TenantID,
-					"project", proj, "flavor", flav, "cid_source", "merge", "timeline_kind", naming.TimelineKindBroker)
+					"project", proj, "flavor", flav, "cid_source", "merge", "timeline_kind", naming.TimelineKindBroker,
+				}
+				if mc := conversationwitness.RequestMessageCount(raw); mc > 0 {
+					dedupRecv = append(dedupRecv, "message_count", mc)
+				}
+				dedupLog.Info("conversation received", dedupRecv...)
 				emitConversationRequestWitness(dedupLog, res, raw)
 			}
 			if fp := mergeSvc.RollingFingerprint(ctx, cid); fp != "" {
@@ -733,38 +731,18 @@ func handleV1Chat(w http.ResponseWriter, r *http.Request, rt *Runtime, log *slog
 	routeLog := chatRouteLogger(log, rid, cid, sess.TenantID, turnIdx)
 	w.Header().Set(headerConversationID, cid)
 
-	raw, trSum := transform.ApplyToolRouter(ctx, raw, transform.Config{
-		Enabled:      res.ToolRouterEnabled && !skipToolRouter,
-		RouterModels: res.RouterModels,
-		Threshold:    th,
-		BaseURL:      res.UpstreamBaseURL,
-		APIKey:       apiKey,
-		HTTPTimeout:  rtDur,
-		Log:          routeLog,
-		OnAttempt: func(model string, err error) {
-			rt.NoteToolRouterAttempt(model, err)
-		},
-	})
-
 	if routeLog != nil {
-		routeLog.Info("conversation received", "msg", naming.MsgConversationReceived,
+		msgCount := conversationwitness.RequestMessageCount(raw)
+		recvArgs := []any{
+			"msg", naming.MsgConversationReceived,
 			"clientModel", clientModel, "stream", stream, "tenant", sess.TenantID,
-			"project", proj, "flavor", flav, "cid_source", cidSource, "timeline_kind", naming.TimelineKindBroker)
-		routeLog.Info("chat completion request", "msg", "chat.request", "clientModel", clientModel, "stream", stream, "tenant", sess.TenantID, "timeline_kind", naming.TimelineKindBroker)
-	}
-	if routeLog != nil && trSum.Ran {
-		errStr := ""
-		if trSum.Err != nil {
-			errStr = trSum.Err.Error()
-			if len(errStr) > 300 {
-				errStr = errStr[:300] + "…"
-			}
+			"project", proj, "flavor", flav, "cid_source", cidSource, "timeline_kind", naming.TimelineKindBroker,
 		}
-		routeLog.Debug("conversation tool router", "msg", naming.MsgConversationToolRouter,
-			"tools_before", trSum.ToolsBefore, "tools_after", trSum.ToolsAfter,
-			"router_model", trSum.RouterModel,
-			"err", errStr,
-			"timeline_kind", naming.TimelineKindBroker)
+		if msgCount > 0 {
+			recvArgs = append(recvArgs, "message_count", msgCount)
+		}
+		routeLog.Info("conversation received", recvArgs...)
+		routeLog.Info("chat completion request", "msg", "chat.request", "clientModel", clientModel, "stream", stream, "tenant", sess.TenantID, "timeline_kind", naming.TimelineKindBroker)
 	}
 	LogConversationIncomingToolMessages(routeLog, raw["messages"])
 
@@ -791,86 +769,18 @@ func handleV1Chat(w http.ResponseWriter, r *http.Request, rt *Runtime, log *slog
 	chatOpts.WitnessEmitPayloadSample = res.ShouldEmitPayloadSample()
 	chatOpts.WitnessPayloadSampleMaxRunes = res.WitnessSampleMaxRunes()
 
-	if clientModel == res.VirtualModelID {
-		coords := vectorstore.Coords{
-			TenantID:  sess.TenantID,
-			ProjectID: ingest.ResolveProject(r.Header.Get(ingest.HeaderProject), res.RAG.DefaultProject),
-			FlavorID:  ingest.ResolveFlavor(r.Header.Get(ingest.HeaderFlavor), res.RAG.DefaultFlavor),
-		}
-		collection := vectorstore.CollectionName(coords)
-		if !res.RAG.Enabled || rt.RAG() == nil {
-			if routeLog != nil {
-				routeLog.Debug("conversation RAG skipped", "msg", naming.MsgConversationRagSkipped,
-					"reason", "disabled", "timeline_kind", naming.TimelineKindVectorstore)
-			}
-		} else if q := rag.LastUserText(raw["messages"]); strings.TrimSpace(q) == "" {
-			if routeLog != nil {
-				routeLog.Debug("conversation RAG skipped", "msg", naming.MsgConversationRagSkipped,
-					"reason", "empty_query", "timeline_kind", naming.TimelineKindVectorstore)
-			}
-		} else {
-			hits, rerr := rt.RAG().Retrieve(ctx, rag.RetrieveRequest{
-				Coords:         coords,
-				Query:          q,
-				RequestID:      rid,
-				ConversationID: cid,
-				TurnIndex:      turnIdx,
-				LifecycleLog:   routeLog,
-			})
-			if rerr != nil {
-				if routeLog != nil {
-					routeLog.Warn("rag retrieve failed; proceeding without context", "msg", "rag.retrieve.error", "err", rerr,
-						"tenant", coords.TenantID, "project", coords.ProjectID, "timeline_kind", naming.TimelineKindVectorstore)
-				}
-			} else if ctxBlock := rag.FormatRetrievedContext(hits); ctxBlock != "" {
-				if routeLog != nil {
-					bySrc := rag.HitsBySourceCount(hits)
-					for _, rel := range rag.SortedSources(bySrc) {
-						routeLog.Debug("rag retrieved hits from source",
-							"msg", "rag.retrieve.source",
-							"rel", rel,
-							"source_hits", bySrc[rel],
-							"tenant_id", coords.TenantID,
-							"project_id", coords.ProjectID,
-							"flavor_id", coords.FlavorID,
-							"timeline_kind", naming.TimelineKindVectorstore,
-						)
-					}
-				}
-				rag.InjectSystemMessage(raw, ctxBlock)
-				if routeLog != nil {
-					routeLog.Info("conversation RAG attached", "msg", naming.MsgConversationRagAttached,
-						"tenant", coords.TenantID,
-						"project", coords.ProjectID,
-						"flavor", coords.FlavorID,
-						"hits", len(hits),
-						"collection", collection,
-						"timeline_kind", naming.TimelineKindVectorstore)
-				}
-			} else if routeLog != nil {
-				routeLog.Debug("conversation RAG skipped", "msg", naming.MsgConversationRagSkipped,
-					"reason", "no_hits", "timeline_kind", naming.TimelineKindVectorstore)
-			}
-		}
-		emitConversationRequestWitness(routeLog, res, raw)
-		initial, _ := pol.PickInitialModel(raw, res.FallbackChain, res.VirtualModelID)
-		if initial == "" {
-			if routeLog != nil {
-				routeLog.Warn("conversation errored", "msg", naming.MsgConversationErrored,
-					"statusCode", http.StatusServiceUnavailable, "errorType", "gateway_config", "timeline_kind", naming.TimelineKindBroker)
-			}
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusServiceUnavailable)
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"error": map[string]any{
-					"message": "Could not resolve an initial upstream model for the virtual Chimera model (check routing policy and fallback chain).",
-					"type":    "gateway_config",
-				},
-			})
+	vmCtx, vmStatus, vmErrBody := resolveVirtualModelChat(rt, clientModel, sess.TenantID, res)
+	if vmErrBody != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(vmStatus)
+		_ = json.NewEncoder(w).Encode(vmErrBody)
+		return
+	}
+	if vmCtx != nil {
+		if handleVirtualModelChat(ctx, w, rt, res, pol, vmCtx, raw, stream, skipToolRouter, th, routeLog,
+			cid, turnIdx, rid, sess.TenantID, proj, flav, apiKey, rtDur, chatOpts) {
 			return
 		}
-		chat.WithVirtualModelFallback(ctx, w, initial, res.FallbackChain, res.UpstreamBaseURL, apiKey, stream, raw, chatTimeout(res), routeLog, rt.Metrics(), rt.LimitsGuard(), chatOpts)
-		return
 	}
 
 	emitConversationRequestWitness(routeLog, res, raw)
@@ -946,7 +856,11 @@ func httpAccessLogLevel(path string, status int) slog.Level {
 	}
 	switch path {
 	case "/health", "/healthz", "/readyz", "/status", "/api/ui/logs", "/api/ui/logs/stream",
-		"/ui/settings", "/api/ui/metrics":
+		"/ui/settings", "/api/ui/metrics",
+		"/api/ui/tokens", "/api/ui/state", "/api/ui/chimera-broker/providers",
+		"/api/ui/providers/catalog",
+		"/api/ui/indexer/config", "/api/ui/indexer/workspaces",
+		"/v1/indexer/storage/stats":
 		return slog.LevelDebug
 	case "/v1/ingest":
 		return slog.LevelDebug

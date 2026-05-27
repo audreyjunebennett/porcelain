@@ -37,11 +37,20 @@
   }
 
   function brokerShortTailModel(model) {
+    var fmt = globalThis.ChimeraSettings && ChimeraSettings.Render && ChimeraSettings.Render._operatorFormatters;
+    if (fmt && typeof fmt._brokerShortModel === "function") {
+      return fmt._brokerShortModel(model);
+    }
     var m = model != null ? String(model).trim() : "";
     if (!m) return "";
     var parts = m.split("/");
     var tail = parts[parts.length - 1] || m;
     return tail.length > 48 ? tail.slice(0, 46) + "…" : tail;
+  }
+
+  function operatorFmtHelpers() {
+    var fmt = globalThis.ChimeraSettings && ChimeraSettings.Render && ChimeraSettings.Render._operatorFormatters;
+    return fmt && typeof fmt === "object" ? fmt : null;
   }
 
   function usageTokensFromFlat(f) {
@@ -85,9 +94,16 @@
   var svc = {
     http_broker_inbound: function (flat, entry, opts) {
       opts = opts || {};
-      var omitStatus = opts.forEventLog === true;
       var flatM = String(flat.msg != null ? flat.msg : "").trim();
       var rateLimit = (entry && entry.slug === "broker.rate_limit") || flatM === "chimera-broker.rate_limit";
+      if (
+        globalThis.ChimeraSettings &&
+        ChimeraSettings.Derive &&
+        typeof ChimeraSettings.Derive.brokerHttpInboundLine === "function"
+      ) {
+        return ChimeraSettings.Derive.brokerHttpInboundLine(flat, rateLimit, opts);
+      }
+      var omitStatus = opts.forEventLog === true;
       var meth = flat.http_method != null ? String(flat.http_method).trim() : "?";
       var tgt = flat.http_target != null ? flat.http_target : flat.httpTarget;
       var path = brokerPathFromTarget(tgt);
@@ -97,12 +113,7 @@
       var msRaw = flat.http_duration_ms != null ? flat.http_duration_ms : flat.httpDurationMS;
       var ms = Number(msRaw);
       var bits = [];
-      bits.push(rateLimit ? "Rate limited" : "Inbound");
-      var pid = flat.provider_id != null ? String(flat.provider_id).trim() : "";
-      if (pid) bits.push("provider " + pid);
-      else if (flat.progress_detail != null && String(flat.progress_detail).trim()) {
-        bits.push(String(flat.progress_detail).trim());
-      }
+      bits.push(rateLimit ? "Rate limited" : "Broker HTTP");
       bits.push(meth + " " + path);
       if (!omitStatus) bits.push("→ " + st);
       if (!isNaN(ms) && ms >= 0) bits.push(Math.round(ms) + " ms");
@@ -119,23 +130,76 @@
         return entry.summary || "Model list for routing refreshed";
       }
       if (msg === "chat.chimera-broker.request") {
+        if (opts.forEventLog === true) {
+          var bitsSend = ["Sent prompt to provider"];
+          var modSend = brokerShortTailModel(flat.upstreamModel);
+          if (modSend) bitsSend.push(modSend);
+          var otSend = Number(flat.outgoingTokens != null ? flat.outgoingTokens : flat.outgoing_tokens);
+          var estSend = !isNaN(otSend) && otSend > 0 ? "~" + Math.round(otSend).toLocaleString() + " input tokens (estimated)" : "";
+          if (estSend) bitsSend.push(estSend);
+          return bitsSend.join(" · ") + ".";
+        }
         var bitsRq = ["Relay request"];
         var modRq = brokerShortTailModel(flat.upstreamModel);
         if (modRq) bitsRq.push(modRq);
-        if (flat.stream === true) bitsRq.push("streaming on");
-        else if (flat.stream === false) bitsRq.push("streaming off");
         var ot = Number(flat.outgoingTokens != null ? flat.outgoingTokens : flat.outgoing_tokens);
-        if (!isNaN(ot) && ot > 0) bitsRq.push(ot + " tok out");
+        if (!isNaN(ot) && ot > 0) bitsRq.push(ot + " input tok est");
         return bitsRq.join(" · ");
       }
       if (msg === "chat.chimera-broker.response" || ml === "upstream chat response") {
-        var bitsRes = ["Relay response"];
         var scR = Number(flat.statusCode != null ? flat.statusCode : flat.status_code);
+        var isOk = !isNaN(scR) && scR >= 200 && scR <= 299;
+        if (opts.forEventLog === true) {
+          if (!isOk) {
+            var rawErr =
+              flat.err != null
+                ? String(flat.err)
+                : flat.upstreamErrorExcerpt != null
+                  ? String(flat.upstreamErrorExcerpt)
+                  : flat.responseBodyExcerpt != null
+                    ? String(flat.responseBodyExcerpt)
+                    : "";
+            var helpers = operatorFmtHelpers();
+            var tpm = helpers && typeof helpers._parseTpmRateLimitError === "function" ? helpers._parseTpmRateLimitError(rawErr) : null;
+            if (tpm && helpers && typeof helpers._formatTpmRateLimitLine === "function") {
+              return helpers._formatTpmRateLimitLine(flat.upstreamModel, tpm);
+            }
+            var errMsg = "";
+            if (helpers && typeof helpers._extractOpenAIErrorMessage === "function") {
+              errMsg = helpers._extractOpenAIErrorMessage(rawErr);
+            }
+            if (!errMsg && rawErr) {
+              var msgMatch = rawErr.match(/"message"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+              if (msgMatch && msgMatch[1]) errMsg = msgMatch[1].replace(/\\"/g, '"').trim();
+            }
+            if (!errMsg) errMsg = rawErr.replace(/\s+/g, " ").trim().slice(0, 220);
+            var scErr = Number(flat.statusCode != null ? flat.statusCode : flat.status_code);
+            var is404 = scErr === 404 || errMsg.toLowerCase().indexOf("not found") >= 0;
+            if (helpers && typeof helpers._sanitizeProviderErrorForOperator === "function") {
+              errMsg = helpers._sanitizeProviderErrorForOperator(errMsg, { modelNotFound: is404 });
+            }
+            var modErr = brokerShortTailModel(flat.upstreamModel);
+            if (modErr && errMsg) return "Provider rejected " + modErr + ": " + errMsg;
+            return errMsg ? "Provider rejected request: " + errMsg : "Provider rejected request.";
+          }
+          var bitsOk = ["Provider responded"];
+          var modOk = brokerShortTailModel(flat.upstreamModel);
+          if (modOk) bitsOk.push(modOk);
+          var utOk = usageTokensFromFlat(flat);
+          if (!isNaN(utOk)) bitsOk.push(Math.round(utOk).toLocaleString() + " tokens used (prompt + completion)");
+          var fr =
+            flat.finish_reason != null
+              ? String(flat.finish_reason).trim()
+              : flat.finishReason != null
+                ? String(flat.finishReason).trim()
+                : "";
+          if (fr) bitsOk.push("finish: " + fr);
+          return bitsOk.join(" · ");
+        }
+        var bitsRes = ["Relay response"];
         if (!omitHttpInMsg && !isNaN(scR) && scR > 0) bitsRes.push("HTTP " + scR);
         var ut = usageTokensFromFlat(flat);
         if (!isNaN(ut)) bitsRes.push(ut + " usage tok");
-        var rb = Number(flat.responseBytes != null ? flat.responseBytes : flat.response_bytes);
-        if (!isNaN(rb) && rb >= 0) bitsRes.push(rb + " B");
         return bitsRes.join(" · ");
       }
       if (msg === "chat.chimera-broker.error") {
@@ -185,8 +249,43 @@
     },
     broker_provider_limits: function (flat, entry) {
       var rsn = flat.reason != null ? String(flat.reason).replace(/\s+/g, " ").trim() : "";
-      if (rsn.length > 140) rsn = rsn.slice(0, 139) + "…";
-      return rsn ? "Blocked by provider limits · " + rsn : entry.summary || "Blocked by provider limits";
+      var bits = ["Blocked by provider limits"];
+      var model = brokerShortTailModel(flat.upstreamModel);
+      if (model) bits.push(model);
+      if (rsn === "context_window") {
+        var outTok = Number(flat.outgoingTokens != null ? flat.outgoingTokens : flat.outgoing_tokens);
+        var maxTok = Number(flat.max_tokens != null ? flat.max_tokens : flat.maxTokens);
+        var cap = Number(flat.context_cap != null ? flat.context_cap : flat.contextCap);
+        var needParts = [];
+        if (!isNaN(outTok) && outTok > 0) needParts.push(Math.round(outTok).toLocaleString() + " prompt");
+        if (!isNaN(maxTok) && maxTok > 0) needParts.push(Math.round(maxTok).toLocaleString() + " max_tokens");
+        var need = needParts.join(" + ");
+        if (need && !isNaN(cap) && cap > 0) {
+          bits.push("context window · " + need + " > cap " + Math.round(cap).toLocaleString());
+        } else {
+          bits.push("context window");
+        }
+        return bits.join(" · ");
+      }
+      if (rsn === "request_body_bytes") {
+        var bodyBytes = Number(flat.body_bytes != null ? flat.body_bytes : flat.bodyBytes);
+        var maxBody = Number(flat.max_body_bytes != null ? flat.max_body_bytes : flat.maxBodyBytes);
+        if (!isNaN(bodyBytes) && !isNaN(maxBody) && maxBody > 0) {
+          bits.push("body size · " + Math.round(bodyBytes).toLocaleString() + " bytes > cap " + Math.round(maxBody).toLocaleString());
+        } else {
+          bits.push("request body bytes");
+        }
+        return bits.join(" · ");
+      }
+      if (rsn === "tpm") bits.push("TPM quota");
+      else if (rsn === "rpm") bits.push("RPM quota");
+      else if (rsn === "tpd") bits.push("TPD quota");
+      else if (rsn === "rpd") bits.push("RPD quota");
+      else if (rsn) {
+        if (rsn.length > 140) rsn = rsn.slice(0, 139) + "…";
+        bits.push(rsn);
+      }
+      return bits.join(" · ");
     },
     broker_trim_detail: function (flat, entry, opts) {
       var det = trimDetail(flat, 260);
@@ -319,21 +418,46 @@
       return base;
     },
     vectorstore_http_upsert_summary: function (flat) {
-      var cols = flat.collections != null ? String(flat.collections).trim() : "";
-      if (!cols && flat.collection != null) cols = String(flat.collection).trim();
       var u = Number(flat.upserts_ok != null ? flat.upserts_ok : 0) || 0;
       var d = Number(flat.deletes_ok != null ? flat.deletes_ok : 0) || 0;
       var s = Number(flat.searches_ok != null ? flat.searches_ok : 0) || 0;
-      var win =
+      var winSec =
         flat.window_ms != null && !isNaN(Number(flat.window_ms))
-          ? Math.round(Number(flat.window_ms) / 1000) + "s"
-          : "?";
-      var bits = [];
-      if (cols) bits.push(cols);
-      if (u > 0) bits.push(u + " upsert(s)");
-      if (d > 0) bits.push(d + " delete(s)");
-      if (s > 0) bits.push(s + " search(es)");
-      return (bits.length ? bits.join(" · ") : "Vectorstore HTTP activity") + " · last " + win;
+          ? Math.round(Number(flat.window_ms) / 1000)
+          : null;
+      var win =
+        winSec === 1 ? "1 second" : winSec != null && !isNaN(winSec) ? winSec + " seconds" : "?";
+      if (u > 0) {
+        return (
+          "Updated the indexes of " +
+          u +
+          " file" +
+          (u === 1 ? "" : "s") +
+          " in the last " +
+          win
+        );
+      }
+      if (d > 0) {
+        return (
+          "Removed index entries for " +
+          d +
+          " file" +
+          (d === 1 ? "" : "s") +
+          " in the last " +
+          win
+        );
+      }
+      if (s > 0) {
+        return (
+          "Ran " +
+          s +
+          " search" +
+          (s === 1 ? "" : "es") +
+          " against the index in the last " +
+          win
+        );
+      }
+      return "No vector index updates in the last " + win;
     }
   };
 

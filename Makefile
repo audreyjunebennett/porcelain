@@ -21,7 +21,7 @@ LOCUS_RUNTIME_DIR := locus
 LOCUS_RUNTIME_BIN_DIR := $(LOCUS_RUNTIME_DIR)/bin
 
 BIN_STAGE_DIR := bin
-FMT_DIRS := chimera locus
+FMT_DIRS := chimera locus internal
 
 
 ifeq ($(OS),Windows_NT)
@@ -109,7 +109,7 @@ endef
 	locus-test-unit-if-enabled locus-test-e2e-if-enabled \
 	locus-desktop-install locus-desktop-build locus-desktop-run locus-desktop-dev-ui chimera-supervisor-dev-ui \
 	locus-desktop-test locus-desktop-test-unit locus-desktop-test-e2e \
-	tokencount-file catalog-free catalog-available config-provider-free-tier \
+	tokencount-file catalog-free catalog-available config-provider-free-tier catalog-limits \
 	release-install release-build release-package \
 	fmt fmt-check vet vet-desktop test precommit operator-contracts-generate operator-contracts-check
 
@@ -248,7 +248,7 @@ chimera-test-e2e:
 	@$(MAKE) --no-print-directory chimera-indexer-test-e2e
 
 chimera-vet:
-	go vet ./chimera/...
+	go vet ./chimera/... ./internal/...
 
 chimera-clean: chimera-gateway-clean chimera-supervisor-clean chimera-broker-clean chimera-vectorstore-clean chimera-indexer-clean
 	@$(GITBASH) -lc 'rm -rf dist'
@@ -480,7 +480,7 @@ locus-test:
 	@$(MAKE) --no-print-directory locus-desktop-test
 
 locus-vet:
-	go vet ./locus/...
+	go vet ./locus/... ./internal/...
 
 locus-vet-desktop:
 	go vet $(LOCUS_CMD_DESKTOP)/...
@@ -577,6 +577,18 @@ catalog-fetch-available:
 	go run ./chimera/cmd/catalog-write-available \
 		-out "$(if $(OUT),$(OUT),config/catalog-available.snapshot.yaml)"
 
+catalog-available: catalog-fetch-available
+catalog-free: catalog-fetch-free
+
+# Patch provider-model-limits.yaml with context_window from catalog-available.snapshot.yaml.
+# Optional: CATALOG=, LIMITS=, GATEWAY= paths; FORCE=1 to overwrite existing context_window.
+catalog-limits:
+	go run ./chimera/cmd/catalog-write-limits \
+		-catalog "$(if $(CATALOG),$(CATALOG),config/catalog-available.snapshot.yaml)" \
+		-limits "$(if $(LIMITS),$(LIMITS),config/provider-model-limits.yaml)" \
+		-gateway "$(if $(GATEWAY),$(GATEWAY),config/gateway.yaml)" \
+		$(if $(FORCE),-force,)
+
 # Runs catalog-available first, then catalog-free: provider-free-tier YAML (groq/gemini ∩ catalog + patterns ollama/*).
 # BiFrost must be up for the snapshot step. Network for doc fetches. Optional OUT= for catalog snapshot path (match INTERSECT= if overridden).
 # Default PROVIDER_FT_OUT=config/provider-free-tier.generated.yaml (copy/merge into provider-free-tier.yaml if desired).
@@ -585,6 +597,8 @@ catalog-calculate: catalog-available
 		-intersect "$(if $(INTERSECT),$(INTERSECT),config/catalog-available.snapshot.yaml)" \
 		-out "$(if $(FREE_OUT),$(FREE_OUT),config/catalog-free-tier.snapshot.yaml)" \
 		-provider-free-tier-out "$(if $(PROVIDER_FT_OUT),$(PROVIDER_FT_OUT),config/provider-free-tier.generated.yaml)"
+
+config-provider-free-tier: catalog-calculate
 
 # --- Release (install → build → package) ---
 

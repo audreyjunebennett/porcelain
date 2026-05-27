@@ -22,12 +22,17 @@ const (
 	DimTPD = "tpd"
 )
 
-// limitsBlock mirrors the YAML shape: any of rpm/rpd/tpm/tpd (non-negative ints) plus optional tz.
+// limitsBlock mirrors the YAML shape: rpm/rpd/tpm/tpd quotas plus optional context caps and tz.
 type limitsBlock struct {
 	RPM *int64 `yaml:"rpm"`
 	RPD *int64 `yaml:"rpd"`
 	TPM *int64 `yaml:"tpm"`
 	TPD *int64 `yaml:"tpd"`
+
+	ContextWindow       *int64   `yaml:"context_window"`
+	MaxPromptTokens     *int64   `yaml:"max_prompt_tokens"`
+	MaxBodyBytes        *int64   `yaml:"max_body_bytes"`
+	ContextSafetyFactor *float64 `yaml:"context_safety_factor"`
 
 	UsageDayTimezone *string `yaml:"usage_day_timezone"`
 }
@@ -57,6 +62,12 @@ type Layer struct {
 	RPD *int64
 	TPM *int64
 	TPD *int64
+
+	ContextWindow       *int64
+	MaxPromptTokens     *int64
+	MaxBodyBytes        *int64
+	ContextSafetyFactor *float64
+
 	// UsageDayTimezone is the IANA name (e.g. "UTC", "America/Los_Angeles") or "" when unset.
 	UsageDayTimezone string
 }
@@ -156,7 +167,16 @@ func anyModelDayNeedsTZ(models map[string]Layer) bool {
 }
 
 func toLayer(b limitsBlock) Layer {
-	l := Layer{RPM: b.RPM, RPD: b.RPD, TPM: b.TPM, TPD: b.TPD}
+	l := Layer{
+		RPM:                 b.RPM,
+		RPD:                 b.RPD,
+		TPM:                 b.TPM,
+		TPD:                 b.TPD,
+		ContextWindow:       b.ContextWindow,
+		MaxPromptTokens:     b.MaxPromptTokens,
+		MaxBodyBytes:        b.MaxBodyBytes,
+		ContextSafetyFactor: b.ContextSafetyFactor,
+	}
 	if b.UsageDayTimezone != nil {
 		l.UsageDayTimezone = strings.TrimSpace(*b.UsageDayTimezone)
 	}
@@ -167,12 +187,18 @@ func validateLayer(where string, l Layer) error {
 	for _, p := range []struct {
 		name string
 		v    *int64
-	}{{"rpm", l.RPM}, {"rpd", l.RPD}, {"tpm", l.TPM}, {"tpd", l.TPD}} {
+	}{{"rpm", l.RPM}, {"rpd", l.RPD}, {"tpm", l.TPM}, {"tpd", l.TPD},
+		{"context_window", l.ContextWindow}, {"max_prompt_tokens", l.MaxPromptTokens}, {"max_body_bytes", l.MaxBodyBytes}} {
 		if p.v == nil {
 			continue
 		}
 		if *p.v < 0 {
 			return fmt.Errorf("%s: %s must be >= 0 (got %d)", where, p.name, *p.v)
+		}
+	}
+	if l.ContextSafetyFactor != nil {
+		if *l.ContextSafetyFactor <= 0 {
+			return fmt.Errorf("%s: context_safety_factor must be > 0 (got %g)", where, *l.ContextSafetyFactor)
 		}
 	}
 	if l.UsageDayTimezone != "" {

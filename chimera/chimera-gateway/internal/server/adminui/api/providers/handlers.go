@@ -153,6 +153,9 @@ func fetchChimeraBrokerProviderHealthWithList(ctx context.Context, client *broke
 		out.Providers = append(out.Providers, entry)
 	}
 	out.BrokerUp = anySuccess
+	if liveSnapshot != nil && liveSnapshot.OK && liveSnapshot.IsFresh(time.Now(), catalog.CatalogSnapshotFreshness) {
+		out.CatalogModelCount = liveSnapshot.CatalogModelCount
+	}
 	if !anySuccess {
 		// All live HTTP probes failed — annotate the response so the strip caption can explain
 		// the empty state instead of looking like "no providers".
@@ -211,9 +214,7 @@ func handleChimeraBrokerProviderHealth(h *handler.Handler, w http.ResponseWriter
 	client := apirut.BrokerAdminClient(h.RT)
 	liveSnapshot := catalogSnapshotForProviderHealth(ctx, h.RT, h.Log)
 	configured, listOK := brokeradmin.ListConfiguredProviders(ctx, client)
-	// Full UI roster so provider cards can distinguish configured vs not_configured; the health
-	// strip filters out not_configured entries client-side.
-	names := append([]string(nil), apirut.BrokerProviderNames...)
+	names := apirut.BrokerProviderNamesForHealth(ctx, client)
 	resp := fetchChimeraBrokerProviderHealthWithList(ctx, client, names, configured, listOK, liveSnapshot)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)

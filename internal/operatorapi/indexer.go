@@ -35,8 +35,8 @@ type IndexerWorkspaceCreateRequest struct {
 
 // IndexerWorkspaceCreateResponse is POST /api/ui/indexer/workspaces success JSON.
 type IndexerWorkspaceCreateResponse struct {
-	OK        bool           `json:"ok"`
-	Workspace map[string]any `json:"workspace"`
+	OK        bool             `json:"ok"`
+	Workspace map[string]any   `json:"workspace"`
 	Roots     []map[string]any `json:"roots"`
 }
 

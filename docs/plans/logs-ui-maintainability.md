@@ -68,8 +68,8 @@ This document is a **follow-on** to [`log-view-refactor.plan.md`](./log-view-ref
 
 ## 3. Design principles (for the refactor)
 
-1. **Pure core, impure edges** — JSON parse, derivation, formatting, filtering = pure functions tested with goja. `fetch`, `EventSource`, `localStorage`, `document`, timers = thin adapters behind a small facade.
-2. **Explicit app context** — Replace the implicit mega-`ctx` with a documented object (JSDoc in a loaded file): refs, caches, sequence state, injected `deps: { fetch, EventSource, now, storage }`.
+1. **Pure core, impure edges** — JSON parse, derivation, formatting, filtering = pure functions tested with goja. `fetch`, `EventSource`, `document`, timers = thin adapters behind a small facade.
+2. **Explicit app context** — Replace the implicit mega-`ctx` with a documented object (JSDoc in a loaded file): refs, caches, sequence state, injected `deps: { fetch, EventSource, now }`.
 3. **One feature → one folder** — e.g. `summarized/`, `structuredTable/`, `rawLogs/`, `metricsCards/` under `embedui/logs/`, each with `*.js` + optional `*_test`-via-goja fixtures.
 4. **Stable DOM contract** — `logs.html` uses clear `id` / `data-testid` (where useful) regions documented in README; breaking selectors requires intentional change.
 5. **PR-sized steps** — No big-bang; each PR moves code or adds tests without mixing large behavior changes.
@@ -148,7 +148,7 @@ Goal: reduce duplicate “helper” functions in `logs_main.js`.
 
 Suggested order (dependencies first):
 
-1. **View mode + layout** — `commitViewMode`, `applyViewLayout`, URL/localStorage sync → `logs/viewMode.js`.
+1. **View mode + layout** — `commitViewMode`, `applyViewLayout`, URL sync → `settings/viewMode.js`.
 2. **Entry pipeline** — single function `handleLogEntry(deps, state, rawEntry)` that: parse → filter → dedupe → route to summarized vs table vs textarea. Tests: fixture entries in/out.
 3. **Summarized feed** — rebuild scheduling, card assembly → `render/summarizedFeed.js` + `summarized/cards/*.js` as needed.
 4. **Structured table** — row builders → `render/structuredTable.js`.

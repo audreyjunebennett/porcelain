@@ -29,7 +29,7 @@ const (
 	LaunchFailed         LaunchMode = "launch_failed"
 )
 
-// LaunchMetadata is persisted under run/locus-desktop-launch.json on failure or successful attach/launch.
+// LaunchMetadata is persisted under data/locus-desktop/locus-desktop-launch.json on failure or successful attach/launch.
 type LaunchMetadata struct {
 	TimestampUTC       string     `json:"timestamp_utc"`
 	Mode               LaunchMode `json:"mode"`
@@ -63,7 +63,7 @@ func RecordLifecycle(runtimeRoot, state, detail string, fields map[string]any) {
 		entry[k] = v
 	}
 	path := locus.LifecycleEventsPath(runtimeRoot)
-	if err := os.MkdirAll(locus.RunDirPath(runtimeRoot), 0o755); err != nil {
+	if err := os.MkdirAll(locus.DesktopStateDirPath(runtimeRoot), 0o755); err != nil {
 		return
 	}
 	b, err := json.Marshal(entry)
@@ -78,13 +78,13 @@ func RecordLifecycle(runtimeRoot, state, detail string, fields map[string]any) {
 	_, _ = f.Write(append(b, '\n'))
 }
 
-// WriteLaunchMetadata writes run/locus-desktop-launch.json (typically once per run).
+// WriteLaunchMetadata writes data/locus-desktop/locus-desktop-launch.json (typically once per run).
 func WriteLaunchMetadata(runtimeRoot string, md LaunchMetadata) {
 	if strings.TrimSpace(runtimeRoot) == "" {
 		return
 	}
 	path := locus.LaunchMetadataPath(runtimeRoot)
-	if err := os.MkdirAll(locus.RunDirPath(runtimeRoot), 0o755); err != nil {
+	if err := os.MkdirAll(locus.DesktopStateDirPath(runtimeRoot), 0o755); err != nil {
 		return
 	}
 	if md.TimestampUTC == "" {

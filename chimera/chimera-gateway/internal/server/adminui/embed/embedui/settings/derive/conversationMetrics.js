@@ -3,9 +3,16 @@
  *
  * Exports:
  * - ChimeraSettings.Derive.scrapeConversationMetrics(events, getFlat)
+ * - ChimeraSettings.Derive.conversationRagRetrievalSummary(events, getFlat)
  *
  * `events` is an array of { parsed: any, ... } where getFlat(parsed) returns a flat object.
  */
+
+function flatMsg(f) {
+  if (!f || typeof f !== "object") return "";
+  var m = f.msg != null ? f.msg : f.message;
+  return String(m || "").trim();
+}
 
 function scrapeConversationMetrics(events, getFlat) {
   events = Array.isArray(events) ? events : [];
@@ -18,6 +25,11 @@ function scrapeConversationMetrics(events, getFlat) {
 
   for (var i = 0; i < events.length; i++) {
     var f = getFlat(events[i].parsed);
+    var msg = flatMsg(f);
+    if (msg === "conversation.rag.attached" && f.hits != null) {
+      var attachedHits = Number(f.hits);
+      if (!isNaN(attachedHits)) vec = attachedHits;
+    }
     var ut =
       f.usageTotalTokens != null
         ? Number(f.usageTotalTokens)
@@ -29,7 +41,7 @@ function scrapeConversationMetrics(events, getFlat) {
       tokSumCount++;
     }
     if (vec == null && f.rag_hits != null) vec = Number(f.rag_hits);
-    if (vec == null && f.hits != null) vec = Number(f.hits);
+    if (vec == null && f.hits != null && msg !== "conversation.rag.attached") vec = Number(f.hits);
     if (vec == null && f.chunks != null) vec = Number(f.chunks);
   }
 
@@ -70,7 +82,31 @@ function scrapeConversationMetrics(events, getFlat) {
   return { tok: tok, vec: vec };
 }
 
+function conversationRagRetrievalSummary(events, getFlat) {
+  events = Array.isArray(events) ? events : [];
+  getFlat = typeof getFlat === "function" ? getFlat : function (p) { return (p && p.rawFlat) || {}; };
+  var metrics = scrapeConversationMetrics(events, getFlat);
+  var Derive =
+    globalThis.ChimeraSettings && ChimeraSettings.Derive ? ChimeraSettings.Derive : null;
+  var coords =
+    Derive && typeof Derive.extractRagCoordsFromEvents === "function"
+      ? Derive.extractRagCoordsFromEvents(events, getFlat)
+      : null;
+  var ws = { label: "", known: false, proposed: "" };
+  if (coords && coords.projectId && Derive && typeof Derive.resolveRagWorkspaceLabel === "function") {
+    ws = Derive.resolveRagWorkspaceLabel(coords.tenantId, coords.projectId, coords.flavorId);
+  }
+  var workspaceTitle = ws.known ? ws.label : ws.proposed || "";
+  return {
+    hits: metrics.vec,
+    hasWorkspace: !!(coords && coords.projectId),
+    workspaceTitle: workspaceTitle,
+    workspaceKnown: ws.known
+  };
+}
+
 globalThis.ChimeraSettings = globalThis.ChimeraSettings || {};
 globalThis.ChimeraSettings.Derive = globalThis.ChimeraSettings.Derive || {};
 globalThis.ChimeraSettings.Derive.scrapeConversationMetrics = scrapeConversationMetrics;
+globalThis.ChimeraSettings.Derive.conversationRagRetrievalSummary = conversationRagRetrievalSummary;
 

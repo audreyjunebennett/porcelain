@@ -18,7 +18,7 @@ Give operators a single desktop window that opens straight to the Chimera contro
 | [Phase 1 — Gateway-served operator UI](#phase-1--webview-wrapper--gateway-admin-ui) | Login, control panel with provider rows, Continue snippet | `done` |
 | [Phase 1 — Desktop shell & lifecycle](#desktop-launcher-bundled-release-and-lifecycle) | One binary opens a native window; clean shutdown shared with signals | `done` |
 | [Phase 1 — Repo cleanup & checklist](#implementation-checklist-phase-1) | Old Fyne app removed; Makefile, scripts, and README aligned | `done` |
-| [Phase 2 — Saved settings & polish](#phase-2) | Saved gateway URL, deep links, richer observability UI, PWA | `todo` |
+| [Phase 2 — Saved settings & polish](#phase-2) | Saved gateway URL, deep links, richer observability UI, PWA | `done` |
 
 ---
 

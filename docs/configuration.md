@@ -100,12 +100,14 @@ api_keys:
 
 ## `config/provider-model-limits.yaml`
 
-Operator-maintained ceilings (`rpm`, `rpd`, `tpm`, `tpd`) compared against live metrics by the gateway's admission guard (`internal/providerlimits`). See `docs/plans/version-v0.1.1.md` §3.7 for the full schema; short version:
+Operator-maintained ceilings compared against live metrics and per-request context by the gateway's admission guard (`internal/providerlimits`). See `docs/plans/version-v0.1.1.md` §3.7 for RPM/TPM schema; `docs/plans/context-window-admission.md` for context fields (schema v2). Short version:
 
 ```yaml
-schema_version: 1
+schema_version: 2
 defaults:
   usage_day_timezone: UTC
+  context_safety_factor: 0.9
+  max_body_bytes: 3500000
 providers:
   groq:
     usage_day_timezone: UTC  # IANA tz for rpd/tpd day boundaries (e.g. America/Los_Angeles for Gemini)
@@ -115,12 +117,39 @@ providers:
     models:
       groq/llama-3.3-70b-versatile:
         tpm: 12000
+      groq/groq/compound-mini:
+        context_window: 131072
+        max_prompt_tokens: 8192
 ```
+
+**Quota fields** (`rpm`, `rpd`, `tpm`, `tpd`): compared to live usage in the metrics DB — keep `metrics.enabled: true` (default) or quota limits are not applied even when the YAML is populated. On deny the gateway logs `chat.provider_limits.blocked` with `reason` set to `rpm`, `tpm`, `rpd`, or `tpd`.
+
+**Context fields** (schema v2, no metrics I/O):
+
+| Field | Purpose |
+|-------|---------|
+| `context_window` | Total context tokens (typically from catalog `context_length`) |
+| `max_prompt_tokens` | Stricter prompt-only cap when vendor/catalog overstates the window |
+| `max_body_bytes` | Marshalled JSON byte cap |
+| `context_safety_factor` | Per-layer multiplier on the token cap (global default e.g. `0.9` in `defaults`) |
+
+Effective token cap: `floor(min(context_window, max_prompt_tokens_if_set) × safety_factor)`. Admission compares `est_prompt_tokens + max_tokens` to that cap; body size is checked separately against `max_body_bytes`.
+
+When `context_window` is omitted in YAML, the gateway overlays `context_length` from the live broker catalog poll (`health.available_models_poll_ms`, default ~30s) if the snapshot is fresh; YAML values always win.
+
+**Context vs quota (TPM/RPM):**
+
+| Dimension | Question | Data | On deny |
+|-----------|----------|------|---------|
+| TPM / RPM / RPD / TPD | Would minute/day **quota** be exceeded? | Metrics SQLite + YAML caps | Skip model; log `reason=tpm` (etc.) |
+| Context / body | Does this **single request** fit the model window? | YAML (+ optional live catalog) | Skip model; log `reason=context_window` or `request_body_bytes` with `outgoingTokens`, `max_tokens`, `body_bytes`, `context_cap` |
+
+Seeding: `make catalog-limits` (after `make catalog-available`) copies `context_length` from `catalog-available.snapshot.yaml` into this file without changing RPM/TPM values.
 
 - Merge: **model > provider > defaults**. Unset fields mean **no enforcement** for that dimension at that layer; if every layer leaves a field unset, the gateway does not cap it.
 - When a provider (or any of its models) sets `rpd` or `tpd`, the provider must be able to resolve an `usage_day_timezone` from its own block or `defaults` — otherwise startup rejects the file.
-- Unknown fields are rejected at parse time; negative numbers and invalid IANA names are rejected.
-- Config-only: **reloading requires a restart** today. A copy-paste starter lives at `config/provider-model-limits.example.yaml`.
+- Unknown fields are rejected at parse time; negative numbers, non-positive `context_safety_factor`, and invalid IANA names are rejected.
+- Config-only: **reloading requires a restart** today. A copy-paste starter lives at `config/provider-model-limits.example.yaml`. Run `make catalog-limits` to seed `context_window` from `catalog-available.snapshot.yaml` (after `make catalog-available`).
 
 ## `config/provider-free-tier.yaml`
 

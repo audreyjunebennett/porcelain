@@ -47,10 +47,11 @@ func FilterSupervisorArgs(args []string) []string {
 }
 
 // LogDir resolves the supervisor log directory from env, flags, and runtime root.
+// The log file itself is always <logDir>/locus-desktop-supervisor.log; default logDir is data/.
 func LogDir(args []string, runtimeRoot string) string {
 	dir := strings.TrimSpace(os.Getenv(locus.EnvLogDir))
 	if dir == "" {
-		dir = filepath.Join(runtimeRoot, locus.DirData)
+		dir = locus.DirData
 	}
 	for i := 0; i < len(args); i++ {
 		raw := strings.TrimSpace(args[i])
@@ -68,7 +69,7 @@ func LogDir(args []string, runtimeRoot string) string {
 		}
 	}
 	if strings.TrimSpace(dir) == "" {
-		dir = filepath.Join(runtimeRoot, locus.DirData)
+		dir = locus.DirData
 	}
 	if !isRootedPath(dir) {
 		dir = filepath.Join(runtimeRoot, dir)
@@ -108,7 +109,7 @@ func OpenSupervisorLog(logDir string) (*os.File, error) {
 	if err := os.MkdirAll(logDir, 0o755); err != nil {
 		return nil, fmt.Errorf("mkdir log dir %s: %w", logDir, err)
 	}
-	logPath := locus.SupervisorLogPath(logDir)
+	logPath := filepath.Join(logDir, locus.FileSupervisorLog)
 	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
 		return nil, fmt.Errorf("open %s: %w", logPath, err)
@@ -123,7 +124,7 @@ func AcquireLaunchLock(runtimeRoot string, timeout time.Duration) (func(), error
 		timeout = LaunchLockTimeout
 	}
 	lockPath := telemetry.LaunchLockPath(runtimeRoot)
-	if err := os.MkdirAll(locus.RunDirPath(runtimeRoot), 0o755); err != nil {
+	if err := os.MkdirAll(locus.DesktopStateDirPath(runtimeRoot), 0o755); err != nil {
 		return nil, err
 	}
 	deadline := time.Now().Add(timeout)

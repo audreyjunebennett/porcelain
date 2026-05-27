@@ -133,6 +133,15 @@ func ReorderNormalizedJSON(raw []byte) ([]byte, bool) {
 	return b, true
 }
 
+// ReorderNormalizedJSONBytes re-marshals b into canonical key order when it is a
+// normalized chimera line; otherwise returns b unchanged.
+func ReorderNormalizedJSONBytes(b []byte) []byte {
+	if reordered, ok := ReorderNormalizedJSON(b); ok {
+		return reordered
+	}
+	return b
+}
+
 func marshalLosslessNormalized(rec orderedLog, fields map[string]json.RawMessage) ([]byte, error) {
 	buf := &bytes.Buffer{}
 	buf.WriteByte('{')

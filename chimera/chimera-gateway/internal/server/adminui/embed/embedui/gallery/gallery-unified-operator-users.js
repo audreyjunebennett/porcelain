@@ -79,11 +79,12 @@
       '<td class="sum-evlog__cell--time"><time datetime="' +
       t0 +
       '"></time></td>' +
-      '<td class="sum-evlog__cell--msg"><span class="sum-svc-badge sum-svc-gateway">gateway</span>Auth OK · principal <code class="sum-mono-id">' +
+      '<td class="sum-evlog__cell--msg">Auth OK · principal <code class="sum-mono-id">' +
       esc(uid) +
       "</code> · label <strong>" +
       esc(name) +
       "</strong></td>" +
+      '<td class="sum-evlog__cell--source"><span class="sum-svc-badge sum-svc-gateway">gateway</span></td>' +
       '<td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="pill-2xx">200</span></div></td></tr>' +
       '<tr class="sum-evlog__row" data-evlog-id="' +
       esc(prefix + "-2") +
@@ -94,6 +95,7 @@
       '<td class="sum-evlog__cell--msg">Workspace sync scheduled for tenant slice owned by <code class="sum-mono-id">' +
       esc(uid) +
       "</code>.</td>" +
+      '<td class="sum-evlog__cell--source"><span class="sum-svc-badge sum-svc-indexer">indexer</span></td>' +
       '<td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="sum-evlog-status__empty" aria-hidden="true"></span></div></td></tr>' +
       '<tr class="sum-evlog__row" data-evlog-id="' +
       esc(prefix + "-3") +
@@ -104,13 +106,14 @@
       '<td class="sum-evlog__cell--msg">Rate advisory for <code class="sum-mono-id">' +
       esc(uid) +
       "</code> — soft quota on embeddings.</td>" +
+      '<td class="sum-evlog__cell--source"><span class="sum-svc-badge sum-svc-gateway">gateway</span></td>' +
       '<td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN">WARN</span></div></td></tr>'
     );
   }
 
   function buildEvlogHtml(uid, name, prefix) {
     return (
-      '<div class="sum-evlog sum-evlog--in-card" style="max-height:12rem;margin:0.35rem 0 0;padding:0.5rem 0.55rem 0.35rem" data-gallery-evlog-root>' +
+      '<div class="sum-evlog sum-evlog--in-card" style="max-height:12rem;margin:0.35rem 0 0;padding:0.5rem 0.55rem 0.35rem" data-gallery-evlog-root data-sum-evlog-root data-sum-evlog-cols="4" data-sum-evlog-source>' +
       '<div class="sum-section-label">User activity</div>' +
       '<div class="sum-evlog__toolbar">' +
       '<input class="sum-evlog__search" type="search" placeholder="Search message or time…" aria-label="Search log entries" autocomplete="off" />' +
@@ -124,8 +127,8 @@
       '<span class="sr-only">Copy</span></button></div>' +
       '<div class="sum-metrics-table-wrap sum-evlog__table-scroll">' +
       '<table class="sum-metrics-table sum-evlog__table">' +
-      "<colgroup><col class=\"sum-evlog__col-time\" /><col class=\"sum-evlog__col-msg\" /><col class=\"sum-evlog__col-status\" /></colgroup>" +
-      "<thead><tr><th class=\"sum-evlog__cell--time\" scope=\"col\">Time</th><th scope=\"col\">Message</th><th class=\"sum-evlog__th-status\" scope=\"col\">" +
+      "<colgroup><col class=\"sum-evlog__col-time\" /><col class=\"sum-evlog__col-msg\" /><col class=\"sum-evlog__col-source\" /><col class=\"sum-evlog__col-status\" /></colgroup>" +
+      "<thead><tr><th class=\"sum-evlog__cell--time\" scope=\"col\">Time</th><th class=\"sum-evlog__th-msg\" scope=\"col\">Message</th><th class=\"sum-evlog__th-source\" scope=\"col\">Source</th><th class=\"sum-evlog__th-status\" scope=\"col\">" +
       '<div class="sum-evlog__th-status-head" role="group" aria-label="Status counts">' +
       '<span class="sum-evlog__th-status-label">Status</span>' +
       '<span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN sum-evlog-metric-num" data-sum-evlog-metric-warn>—</span>' +

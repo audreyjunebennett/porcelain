@@ -9,6 +9,8 @@ globalThis.ChimeraSettings.App = globalThis.ChimeraSettings.App || {};
 globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
   var statusEl = ctx.statusEl;
   var formatLogDateTimeLocal = ctx.formatLogDateTimeLocal;
+  var formatLogRelativeAgo = ctx.formatLogRelativeAgo;
+  var toIsoDatetimeAttr = ctx.toIsoDatetimeAttr;
   var entryCache = ctx.entryCache;
   var getViewMode = ctx.getViewMode;
   var getFlat = ctx.getFlat;
@@ -26,19 +28,138 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
   var sumEvlogVisibleEntriesForService = ctx.sumEvlogVisibleEntriesForService;
   var sumEvlogCountWarnFailFromEntries = ctx.sumEvlogCountWarnFailFromEntries;
   var scopedEvlogTitle = ctx.scopedEvlogTitle;
-  var serviceStripHtml = ctx.serviceStripHtml;
   var contextGrowthStripHtml = ctx.contextGrowthStripHtml;
   var SHOW_CONV_EXPANDED_CONTEXT_STRIP = !!ctx.SHOW_CONV_EXPANDED_CONTEXT_STRIP;
   var metricsPollTimer = null;
   var METRICS_POLL_MS = 12000;
   var uiStatePollTimer = null;
   var UI_STATE_POLL_MS = 60000;
-  /** Provider cards patched on admin poll (must match adminWorkflows feed section). */
-  var ADMIN_PROVIDER_PATCH_SPECS = [
-    { id: "groq", title: "Groq", avatar: "Gq", subtitle: "LPU inference provider with key management." },
-    { id: "gemini", title: "Gemini", avatar: "Gm", subtitle: "Google Gemini provider with key management." },
-    { id: "ollama", title: "Ollama", avatar: "Ol", subtitle: "Local/remote Ollama endpoint for chat and embeddings." }
-  ];
+  function providerCatalogApi() {
+    return globalThis.ChimeraSettings &&
+      ChimeraSettings.Providers &&
+      ChimeraSettings.Providers.Catalog
+      ? ChimeraSettings.Providers.Catalog
+      : null;
+  }
+
+  /** Ordered provider ids for summarized admin-provider-* cards (see settings/providers/catalog.js). */
+  function adminVisibleProviderIds() {
+    return Array.isArray(ctx.adminVisibleProviderIds) ? ctx.adminVisibleProviderIds : [];
+  }
+
+  function adminProviderSpecsFromVisible() {
+    var api = providerCatalogApi();
+    if (!api) return [];
+    return api.buildSpecsFromVisibleIds(adminVisibleProviderIds());
+  }
+
+  function lookupAdminProviderSpec(providerId) {
+    var api = providerCatalogApi();
+    return api ? api.lookupProviderSpec(providerId) : null;
+  }
+
+  function ensureAdminProviderCatalog() {
+    var api = providerCatalogApi();
+    if (!api) return Promise.resolve(null);
+    return api.fetchProviderCatalog(ctx).then(function (data) {
+      if (data && getViewMode() === "summarized") scheduleStoryRebuild();
+      return data;
+    }).catch(function () {
+      return null;
+    });
+  }
+
+  var ADMIN_PROVIDERS_INTRO_HTML =
+    '<div class="sum-workspaces-intro"><p class="sum-workspaces-intro-lead">Providers drive upstream inference through chimera-broker; each card shows configuration, usage, and scoped log activity.</p></div>';
+
+  function buildAdminProviderPickerHtml() {
+    var api = providerCatalogApi();
+    var addable = api && typeof api.addableProviderEntries === "function" ? api.addableProviderEntries(ctx) : [];
+    var listHtml = "";
+    if (!addable.length) {
+      listHtml = '<p class="sg-op-provider-picker__empty muted">All catalog providers are already on this page.</p>';
+    } else {
+      listHtml = '<ul class="sg-op-provider-picker__list" role="listbox" aria-label="Add provider">';
+      for (var pi = 0; pi < addable.length; pi++) {
+        var ent = addable[pi];
+        listHtml +=
+          '<li class="sg-op-provider-picker__item" role="presentation">' +
+          '<button type="button" class="sg-op-provider-picker__option" role="option" data-admin-action="provider-picker-select" data-provider-id="' +
+          escapeHtml(ent.id) +
+          '">' +
+          '<span class="sg-op-provider-picker__avatar" aria-hidden="true">' +
+          escapeHtml(ent.avatar || ent.id.slice(0, 2).toUpperCase()) +
+          "</span>" +
+          '<span class="sg-op-provider-picker__meta">' +
+          '<span class="sg-op-provider-picker__title">' +
+          escapeHtml(ent.title || ent.id) +
+          "</span>" +
+          '<span class="sg-op-provider-picker__sub">' +
+          escapeHtml(ent.subtitle || "") +
+          "</span></span></button></li>";
+      }
+      listHtml += "</ul>";
+    }
+    return (
+      '<div id="sg-op-provider-picker" class="sg-op-provider-picker" hidden>' +
+      '<div class="sg-op-provider-picker__panel">' +
+      listHtml +
+      '<div class="sg-op-provider-picker__foot">' +
+      '<button type="button" class="sg-op-btn sg-op-btn--ghost" data-admin-action="provider-picker-cancel">Cancel</button>' +
+      "</div></div></div>"
+    );
+  }
+
+  function buildAdminProvidersSectionBreakHtml() {
+    if (typeof ctx.operatorSectionHeadHtml !== "function") {
+      return (
+        '<div class="sum-section-label sum-feed-section-title">Providers</div>' +
+        ADMIN_PROVIDERS_INTRO_HTML
+      );
+    }
+    var api = providerCatalogApi();
+    var canAdd = api && typeof api.hasAddableProviders === "function" ? api.hasAddableProviders(ctx) : false;
+    var actionHtml = "";
+    if (typeof ctx.operatorSectionAddBtn === "function") {
+      actionHtml = ctx.operatorSectionAddBtn(
+        {
+          "data-admin-action": "provider-picker-open",
+          id: "sg-op-provider-picker-trigger",
+          "aria-expanded": "false",
+          "aria-controls": "sg-op-provider-picker",
+          "aria-haspopup": "listbox"
+        },
+        "Add provider",
+        canAdd
+          ? { title: "Add a provider card" }
+          : { disabled: true, title: "All catalog providers are already visible" }
+      );
+    }
+    return (
+      '<div class="sg-op-providers-section" id="sg-op-providers-section">' +
+      '<div class="sg-op-providers-section__anchor">' +
+      ctx.operatorSectionHeadHtml("Providers", "hub", { actionHtml: actionHtml }) +
+      buildAdminProviderPickerHtml() +
+      "</div>" +
+      ADMIN_PROVIDERS_INTRO_HTML +
+      "</div>"
+    );
+  }
+
+  function closeAdminProviderPicker() {
+    var picker = document.getElementById("sg-op-provider-picker");
+    var trigger = document.getElementById("sg-op-provider-picker-trigger");
+    if (picker) picker.hidden = true;
+    if (trigger) trigger.setAttribute("aria-expanded", "false");
+  }
+
+  function setAdminProviderPickerOpen(open) {
+    var picker = document.getElementById("sg-op-provider-picker");
+    var trigger = document.getElementById("sg-op-provider-picker-trigger");
+    if (!picker || !trigger || trigger.disabled || trigger.getAttribute("aria-disabled") === "true") return;
+    picker.hidden = !open;
+    trigger.setAttribute("aria-expanded", open ? "true" : "false");
+  }
   var ADMIN_CARD_TABLE_SCROLL_SEL =
     ".sum-metrics-table-wrap, .sg-op-routing-table-scroll, .sg-op-fallback-table-scroll, .sg-op-router-table-scroll";
   /** Per-card patch + full rebuild: admin tables and evlog table wrappers (tbody scroll is in evlog state). */
@@ -96,9 +217,46 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
 
   function summarizedAdminEditingActive() {
     if (ctx.adminUserDrafts && ctx.adminUserDrafts.length) return true;
-    if (ctx.adminRoutingEditing) return true;
-    if (ctx.adminFallbackEditing) return true;
-    if (ctx.adminRouterEditing) return true;
+    if (ctx.virtualModelDrafts && ctx.virtualModelDrafts.length) return true;
+    if (ctx.workspaceManagedEditId != null) return true;
+    return false;
+  }
+
+  function syncSummarizedModelCache() {
+    var snap = buildSummarizedFeedSnapshot();
+    ctx.lastSummarizedModel = snap.model;
+    ctx.lastSummarizedAggregate = snap.agg;
+  }
+
+  /** Enter/exit admin card edit mode: patch one card (bypasses skipCardIds) or full rebuild. */
+  function refreshAdminCardAfterEditToggle(patchFn) {
+    if (typeof patchFn === "function" && patchFn()) {
+      syncSummarizedModelCache();
+      return;
+    }
+    ctx.summarizedForceFullRebuild = true;
+    refreshSummarizedPanel();
+  }
+
+  /** Skipped cards (e.g. while editing) may still need a rebuild when their hash changes. */
+  function summarizedSkippedCardsHashDelta(prevModel, nextModel) {
+    var skip = summarizedPatchSkipCardIds();
+    if (!prevModel || !nextModel || !prevModel.cards || !nextModel.cards) return false;
+    var prevMap = Object.create(null);
+    var nextMap = Object.create(null);
+    var i;
+    for (i = 0; i < prevModel.cards.length; i++) {
+      var pc = prevModel.cards[i];
+      if (pc && pc.id && pc.kind !== "section-break") prevMap[pc.id] = pc;
+    }
+    for (i = 0; i < nextModel.cards.length; i++) {
+      var nc = nextModel.cards[i];
+      if (nc && nc.id && nc.kind !== "section-break") nextMap[nc.id] = nc;
+    }
+    for (var id in skip) {
+      if (!Object.prototype.hasOwnProperty.call(skip, id) || !skip[id]) continue;
+      if (prevMap[id] && nextMap[id] && prevMap[id].hash !== nextMap[id].hash) return true;
+    }
     return false;
   }
 
@@ -111,12 +269,11 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     if (tag === "input" || tag === "textarea" || tag === "select") return true;
     if (a.classList && a.classList.contains("sum-evlog__search")) return true;
     if (a.matches && a.matches("[data-evlog-filter-status]")) return true;
-    if (
-      a.id === "admin-routing-yaml" ||
-      a.id === "admin-fallback-yaml" ||
-      a.id === "admin-router-models-yaml" ||
-      a.id === "admin-router-threshold"
-    ) return true;
+    var aid = a.id != null ? String(a.id) : "";
+    if (aid.indexOf("vm-") === 0 && (tag === "input" || tag === "textarea" || tag === "select")) return true;
+    if (a.closest && a.closest(".sum-card--virtual-model")) return true;
+    if (a.closest && a.closest(".sum-card--virtual-model-draft")) return true;
+    if (a.getAttribute && a.getAttribute("data-vm-draft-field")) return true;
     return false;
   }
 
@@ -144,9 +301,32 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
 
   function summarizedPatchSkipCardIds() {
     var skip = Object.create(null);
-    if (ctx.adminRoutingEditing) skip["admin-routing-rules"] = true;
-    if (ctx.adminFallbackEditing) skip["admin-fallback-chain"] = true;
-    if (ctx.adminRouterEditing) skip["admin-router-model"] = true;
+    if (ctx.workspaceManagedEditId != null) {
+      var wsn = ctx.lastIndexerOperatorWorkspacesNested || [];
+      var wi;
+      for (wi = 0; wi < wsn.length; wi++) {
+        var w = wsn[wi];
+        if (!w || w.id == null) continue;
+        if (operatorWorkspaceNumericId(w) === ctx.workspaceManagedEditId) {
+          skip["ix-opws-" + strHash(String(w.id))] = true;
+          break;
+        }
+      }
+    }
+    var gwVm = ctx.adminStateCache && ctx.adminStateCache.gateway;
+    var vmList = gwVm && gwVm.virtual_models && Array.isArray(gwVm.virtual_models) ? gwVm.virtual_models : [];
+    for (var vmi = 0; vmi < vmList.length; vmi++) {
+      var vmRow = vmList[vmi];
+      if (!vmRow || vmRow.id == null) continue;
+      var vmKey = String(vmRow.id);
+      var vmCardId = "virtual-model-" + vmKey;
+      var vmEl = document.getElementById(vmCardId);
+      if (vmEl && vmEl.open) skip[vmCardId] = true;
+      var vmUi = ctx.virtualModelUi && ctx.virtualModelUi[vmKey];
+      if (vmUi && (vmUi.identityEditing || vmUi.fallbackEditing || vmUi.routingEditing || vmUi.routerEditing)) {
+        skip[vmCardId] = true;
+      }
+    }
     return skip;
   }
 
@@ -470,6 +650,12 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       if (!Patch.shouldUseFullRebuildFromOps(ops)) {
         var replaceCount = Patch.countReplaceCardOps(ops);
         if (replaceCount === 0) {
+          if (summarizedSkippedCardsHashDelta(prevModel, nextModel)) {
+            applySummarizedFullPanelRebuild(psu, nextModel, agg);
+            ctx.lastSummarizedModel = nextModel;
+            ctx.lastSummarizedAggregate = agg;
+            return;
+          }
           ctx.lastSummarizedModel = nextModel;
           ctx.lastSummarizedAggregate = agg;
           return;
@@ -634,7 +820,8 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       getFlat: getFlat,
       strHash: strHash,
       normalizeServiceBucketKey: normalizeServiceBucketKey,
-      indexerGroupIdForFlat: indexerGroupIdForFlat
+      indexerGroupIdForFlat: indexerGroupIdForFlat,
+      getAdminProviderIds: adminVisibleProviderIds
     };
   }
 
@@ -799,13 +986,9 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     if (!agg) return null;
     if (cardId.indexOf("admin-provider-") === 0) {
       var providerId = cardId.slice("admin-provider-".length);
-      for (var pi = 0; pi < ADMIN_PROVIDER_PATCH_SPECS.length; pi++) {
-        if (ADMIN_PROVIDER_PATCH_SPECS[pi].id === providerId) {
-          var spec = ADMIN_PROVIDER_PATCH_SPECS[pi];
-          return buildAdminProviderCardHtml(spec.id, spec.title, spec.avatar, spec.subtitle);
-        }
-      }
-      return null;
+      var specPatch = lookupAdminProviderSpec(providerId);
+      if (!specPatch) return null;
+      return buildAdminProviderCardHtml(specPatch.id, specPatch.title, specPatch.avatar, specPatch.subtitle);
     }
     var svcOrder =
       globalThis.ChimeraSettings &&
@@ -1046,10 +1229,26 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       });
   }
 
+  function resyncVisibleProvidersFromCatalog() {
+    if (adminVisibleProviderIds().length > 0) return Promise.resolve();
+    var api = providerCatalogApi();
+    if (!api) return Promise.resolve();
+    return api.fetchProviderCatalog(ctx, { force: true }).then(function (data) {
+      if (!data || getViewMode() !== "summarized") return;
+      if (adminVisibleProviderIds().length > 0) scheduleStoryRebuild();
+    }).catch(function () {
+      return null;
+    });
+  }
+
   function runUiStatePoll(opts) {
     if (ctx.uiUnauthorized) return Promise.resolve();
     var showErr = opts && opts.showErr;
     return Promise.all([fetchUiState(), fetchAdminTokens()])
+      .then(function () {
+        if (ctx.uiUnauthorized || getViewMode() !== "summarized") return;
+        return resyncVisibleProvidersFromCatalog();
+      })
       .then(function () {
         if (ctx.uiUnauthorized || getViewMode() !== "summarized") return;
         patchGatewayOverviewCard();
@@ -1141,11 +1340,47 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
   function patchChimeraBrokerProviderUiFromSnapshot() {
     if (getViewMode() !== "summarized") return;
     patchChimeraBrokerProviderHealthStrip();
+    patchChimeraBrokerAvailableModelsCount();
     var needRebuild = false;
-    for (var pi = 0; pi < ADMIN_PROVIDER_PATCH_SPECS.length; pi++) {
-      if (!patchAdminProviderCard(ADMIN_PROVIDER_PATCH_SPECS[pi].id)) needRebuild = true;
+    var visibleForBroker = adminVisibleProviderIds();
+    for (var pi = 0; pi < visibleForBroker.length; pi++) {
+      if (!patchAdminProviderCard(visibleForBroker[pi])) needRebuild = true;
     }
     if (needRebuild) refreshSummarizedPanel();
+  }
+
+  function chimeraBrokerProviderSnapshotDataForUi() {
+    if (!ctx.chimeraBrokerProviderSnapshot || !ctx.chimeraBrokerProviderSnapshot.data) return null;
+    var snapshotAgeMs = Date.now() - Number(ctx.chimeraBrokerProviderSnapshot.fetchedClientMs || 0);
+    if (snapshotAgeMs > CHIMERA_BROKER_PROVIDER_STALE_MS) return null;
+    return ctx.chimeraBrokerProviderSnapshot.data;
+  }
+
+  function chimeraBrokerAvailableModelCountResolve(arr) {
+    var snap = chimeraBrokerProviderSnapshotDataForUi();
+    if (
+      globalThis.ChimeraSettings &&
+      ChimeraSettings.Derive &&
+      typeof ChimeraSettings.Derive.chimeraBrokerAvailableModelCount === "function"
+    ) {
+      return ChimeraSettings.Derive.chimeraBrokerAvailableModelCount(arr, function (p) {
+        return getFlat(p);
+      }, snap);
+    }
+    var bx = chimeraBrokerCardMetrics(arr);
+    return bx.catalogModelCount != null && bx.catalogModelCount > 0 ? bx.catalogModelCount : 0;
+  }
+
+  function chimeraBrokerAvailableModelCountLabel(arr) {
+    var n = chimeraBrokerAvailableModelCountResolve(arr);
+    return n > 0 ? formatInt(n) : "—";
+  }
+
+  function patchChimeraBrokerAvailableModelsCount() {
+    if (getViewMode() !== "summarized") return;
+    var el = document.getElementById("chimera-broker-available-models-count");
+    if (!el) return;
+    el.textContent = chimeraBrokerAvailableModelCountLabel(collectChimeraBrokerBufferForStrip());
   }
 
   /** Mirror the chimera-broker-bucket selection in refreshSummarizedPanel so the patched strip's
@@ -1168,7 +1403,7 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     return (
       '<div class="gw-svc-card-intro" id="gw-svc-card-intro">' +
       '<p class="gw-svc-card-intro-lead">' +
-      "An at-a-glance snapshot of this gateway instance—how it listens, where it connects, which supervised helpers started, and light traffic counts from gateway lines in the current view. For richer token rollups and upstream trails, open Gateway usage (Stats); figures here only cover lines loaded in this window." +
+      "An at-a-glance snapshot of this gateway instance—how it listens, where it connects, and which supervised helpers started. HTTP ok/fail counts in the card header reflect gateway lines in the current view; per-line level and HTTP status appear in the event log. For richer token rollups and upstream trails, open Gateway usage (Stats)." +
       "</p>" +
       "</div>"
     );
@@ -1293,6 +1528,44 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     return typeof window.chimeraPickFolder === "function" ? window.chimeraPickFolder : null;
   }
 
+  var WORKSPACE_WEB_UNAVAILABLE_TITLE =
+    "Not available through the web. Use the desktop app.";
+
+  function workspaceDesktopFeaturesAvailable() {
+    return !!nativeFolderPickerFn();
+  }
+
+  function wrapDesktopOnlyLockedControl(btnHtml, locked, overlay) {
+    if (!locked) return btnHtml;
+    var cls = "ws-desktop-only-locked";
+    if (overlay) cls += " ws-desktop-only-locked--overlay";
+    return (
+      '<span class="' +
+      cls +
+      '" title="' +
+      escapeHtml(WORKSPACE_WEB_UNAVAILABLE_TITLE) +
+      '">' +
+      btnHtml +
+      "</span>"
+    );
+  }
+
+  function buildWorkspacesCreateBtnHtml(label) {
+    var lab = label != null && String(label).trim() ? String(label).trim() : "Create workspace";
+    var desktop = workspaceDesktopFeaturesAvailable();
+    var dis = desktop ? "" : " disabled aria-disabled=\"true\"";
+    return wrapDesktopOnlyLockedControl(
+      '<button type="button" class="sum-workspaces-create-btn" data-sum-workspaces-create="1"' +
+        dis +
+        ' title="' +
+        escapeHtml(lab) +
+        '">' +
+        escapeHtml(lab) +
+        "</button>",
+      !desktop
+    );
+  }
+
 
   function saveWorkspaceDraftById(draftId) {
     var d = findWorkspaceDraft(draftId);
@@ -1404,9 +1677,9 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     statusEl.className = msg ? (kind === "err" ? "status-line err" : "status-line") : "status-line";
   }
 
-  function adminPostJSON(url, body) {
+  function adminJsonRequest(url, method, body) {
     return fetch(url, {
-      method: "POST",
+      method: method || "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body || {})
@@ -1417,6 +1690,144 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
         return j;
       });
     });
+  }
+
+  function adminPostJSON(url, body) {
+    return adminJsonRequest(url, "POST", body);
+  }
+
+  function adminPutJSON(url, body) {
+    return adminJsonRequest(url, "PUT", body);
+  }
+
+  function lookupVmSummary(vmId) {
+    var gw = ctx.adminStateCache && ctx.adminStateCache.gateway;
+    var vms = gw && gw.virtual_models && Array.isArray(gw.virtual_models) ? gw.virtual_models : [];
+    for (var i = 0; i < vms.length; i++) {
+      if (vms[i] && Number(vms[i].id) === Number(vmId)) return vms[i];
+    }
+    return null;
+  }
+
+  /** Drop a saved virtual model from feed caches and DOM immediately after DELETE. */
+  function removeVirtualModelFromSummarizedFeed(vmId) {
+    var key = String(vmId);
+    if (ctx.virtualModelDetails) delete ctx.virtualModelDetails[key];
+    if (ctx.virtualModelUi) delete ctx.virtualModelUi[key];
+    var gw = ctx.adminStateCache && ctx.adminStateCache.gateway;
+    if (gw && gw.virtual_models && Array.isArray(gw.virtual_models)) {
+      var kept = [];
+      for (var i = 0; i < gw.virtual_models.length; i++) {
+        if (gw.virtual_models[i] && Number(gw.virtual_models[i].id) !== Number(vmId)) {
+          kept.push(gw.virtual_models[i]);
+        }
+      }
+      gw.virtual_models = kept;
+    }
+    var cardEl = document.getElementById("virtual-model-" + key);
+    if (cardEl && cardEl.parentNode) cardEl.parentNode.removeChild(cardEl);
+    syncSummarizedModelCache();
+  }
+
+  function syncVmSummaryFromDetail(detail) {
+    if (!detail || detail.id == null) return;
+    var gw = ctx.adminStateCache && ctx.adminStateCache.gateway;
+    if (!gw || !gw.virtual_models) return;
+    var key = String(detail.id);
+    for (var i = 0; i < gw.virtual_models.length; i++) {
+      if (gw.virtual_models[i] && String(gw.virtual_models[i].id) === key) {
+        var row = gw.virtual_models[i];
+        row.enabled = !!detail.enabled;
+        row.name = detail.name;
+        row.version = detail.version;
+        row.description = detail.description;
+        row.visibility = detail.visibility;
+        row.routing_policy_enabled = !!detail.routing_policy_enabled;
+        row.tool_router_enabled = !!detail.tool_router_enabled;
+        row.router_models = detail.router_models;
+        row.fallback_depth = detail.fallback_chain && detail.fallback_chain.length ? detail.fallback_chain.length : 0;
+        break;
+      }
+    }
+  }
+
+  function virtualModelCardEl(vmId) {
+    return document.getElementById("virtual-model-" + String(vmId));
+  }
+
+  function virtualModelPanelIsOpen(vmId) {
+    var el = virtualModelCardEl(vmId);
+    return !!(el && el.open);
+  }
+
+  function fetchVirtualModelDetail(vmId, force) {
+    if (ctx.uiUnauthorized) return Promise.resolve(null);
+    var key = String(vmId);
+    if (!ctx.virtualModelDetails) ctx.virtualModelDetails = {};
+    if (!ctx.virtualModelUi) ctx.virtualModelUi = {};
+    var ui = ctx.virtualModelUi[key];
+    if (!ui) {
+      ui = ctx.virtualModelUi[key] = { panelOpen: false, hydrated: false };
+    }
+    if (!force && ctx.virtualModelDetails[key]) {
+      return Promise.resolve(ctx.virtualModelDetails[key]);
+    }
+    ui.detailLoading = true;
+    return fetch("/api/ui/virtual-models/" + encodeURIComponent(key), { credentials: "same-origin" })
+      .then(function (r) {
+        if (r.status === 401) {
+          markUiUnauthorized();
+          return null;
+        }
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.json();
+      })
+      .then(function (j) {
+        ui.detailLoading = false;
+        if (!j) return null;
+        ctx.virtualModelDetails[key] = j;
+        syncVmSummaryFromDetail(j);
+        return j;
+      })
+      .catch(function (e) {
+        ui.detailLoading = false;
+        throw e;
+      });
+  }
+
+  function syncVmSectionOpenFromDom(cardEl, ui) {
+    if (!cardEl || !ui) return;
+    if (!ui.sectionOpen) ui.sectionOpen = { identity: true, fallback: true };
+    var list = cardEl.querySelectorAll("details.sum-vm-section[data-vm-section]");
+    for (var i = 0; i < list.length; i++) {
+      var key = list[i].getAttribute("data-vm-section");
+      if (key) ui.sectionOpen[key] = !!list[i].open;
+    }
+  }
+
+  function patchVirtualModelCard(vmId, opts) {
+    opts = opts || {};
+    if (opts.onlyIfOpen && !virtualModelPanelIsOpen(vmId)) return false;
+    var summary = lookupVmSummary(vmId);
+    if (!summary || typeof buildVirtualModelCardHtml !== "function") return false;
+    var cardId = "virtual-model-" + String(vmId);
+    var oldEl = document.getElementById(cardId);
+    var uiKey = String(vmId);
+    if (oldEl && ctx.virtualModelUi && ctx.virtualModelUi[uiKey]) {
+      syncVmSectionOpenFromDom(oldEl, ctx.virtualModelUi[uiKey]);
+    }
+    var keepOpen = oldEl ? !!oldEl.open : false;
+    var ok = replaceCardById(
+      cardId,
+      function () {
+        return buildVirtualModelCardHtml(summary);
+      },
+      { preserveOpen: keepOpen, preserveScrollSelectors: ADMIN_CARD_TABLE_SCROLL_SEL }
+    );
+    if (ok && ctx.virtualModelUi && ctx.virtualModelUi[String(vmId)]) {
+      ctx.virtualModelUi[String(vmId)].hydrated = true;
+    }
+    return ok;
   }
 
   function fetchAdminState() {
@@ -1451,13 +1862,7 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
   }
 
   function patchAdminProviderCard(providerId) {
-    var spec = null;
-    for (var pi = 0; pi < ADMIN_PROVIDER_PATCH_SPECS.length; pi++) {
-      if (ADMIN_PROVIDER_PATCH_SPECS[pi].id === providerId) {
-        spec = ADMIN_PROVIDER_PATCH_SPECS[pi];
-        break;
-      }
-    }
+    var spec = lookupAdminProviderSpec(providerId);
     if (!spec) return false;
     return replaceCardById(
       "admin-provider-" + providerId,
@@ -1466,27 +1871,6 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       },
       { preserveOpen: true, preserveScrollSelectors: ADMIN_CARD_TABLE_SCROLL_SEL }
     );
-  }
-
-  function patchAdminRoutingCard() {
-    return replaceCardById("admin-routing-rules", buildAdminRoutingRulesCardHtml, {
-      preserveOpen: true,
-      preserveScrollSelectors: ADMIN_CARD_TABLE_SCROLL_SEL
-    });
-  }
-
-  function patchAdminFallbackCard() {
-    return replaceCardById("admin-fallback-chain", buildAdminFallbackCardHtml, {
-      preserveOpen: true,
-      preserveScrollSelectors: ADMIN_CARD_TABLE_SCROLL_SEL
-    });
-  }
-
-  function patchAdminRouterModelsCard() {
-    return replaceCardById("admin-router-model", buildAdminRouterModelCardHtml, {
-      preserveOpen: true,
-      preserveScrollSelectors: ADMIN_CARD_TABLE_SCROLL_SEL
-    });
   }
 
   /** Targeted admin card updates after /api/ui/state + /api/ui/tokens poll (no full panel innerHTML). */
@@ -1502,12 +1886,10 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     if (prevModel && summarizedPatchAvailable()) {
       var onlyCardIds = Object.create(null);
       onlyCardIds["admin-users"] = true;
-      for (var ai = 0; ai < ADMIN_PROVIDER_PATCH_SPECS.length; ai++) {
-        onlyCardIds["admin-provider-" + ADMIN_PROVIDER_PATCH_SPECS[ai].id] = true;
+      var visiblePoll = adminVisibleProviderIds();
+      for (var ai = 0; ai < visiblePoll.length; ai++) {
+        onlyCardIds["admin-provider-" + visiblePoll[ai]] = true;
       }
-      if (!ctx.adminRoutingEditing) onlyCardIds["admin-routing-rules"] = true;
-      if (!ctx.adminFallbackEditing) onlyCardIds["admin-fallback-chain"] = true;
-      if (!ctx.adminRouterEditing) onlyCardIds["admin-router-model"] = true;
       var pollOps = ChimeraSettings.Summarized.Patch.diffSummarizedModels(prevModel, nextModel, {
         onlyCardIds: onlyCardIds,
         skipCardIds: summarizedPatchSkipCardIds()
@@ -1531,17 +1913,9 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
 
     var needRebuild = false;
     if (!patchAdminUsersCard()) needRebuild = true;
-    for (var aj = 0; aj < ADMIN_PROVIDER_PATCH_SPECS.length; aj++) {
-      if (!patchAdminProviderCard(ADMIN_PROVIDER_PATCH_SPECS[aj].id)) needRebuild = true;
-    }
-    if (!ctx.adminRoutingEditing) {
-      if (!patchAdminRoutingCard()) needRebuild = true;
-    }
-    if (!ctx.adminFallbackEditing) {
-      if (!patchAdminFallbackCard()) needRebuild = true;
-    }
-    if (!ctx.adminRouterEditing) {
-      if (!patchAdminRouterModelsCard()) needRebuild = true;
+    var visibleAdmin = adminVisibleProviderIds();
+    for (var aj = 0; aj < visibleAdmin.length; aj++) {
+      if (!patchAdminProviderCard(visibleAdmin[aj])) needRebuild = true;
     }
     if (needRebuild) scheduleStoryRebuild();
     else {
@@ -1643,26 +2017,44 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     return classes[n % classes.length];
   }
 
+  function serviceDisplayLabel(key) {
+    if (
+      globalThis.ChimeraSettings &&
+      ChimeraSettings.Contracts &&
+      typeof ChimeraSettings.Contracts.serviceDisplayLabel === "function"
+    ) {
+      return ChimeraSettings.Contracts.serviceDisplayLabel(key);
+    }
+    var k = String(key || "").trim().toLowerCase();
+    if (!k) return "";
+    if (k.indexOf("chimera-") === 0) return k.slice("chimera-".length);
+    return k;
+  }
+
+  function serviceBadge(key, cls) {
+    return { cls: cls, key: key, lab: serviceDisplayLabel(key) };
+  }
+
   function inferServiceBadge(ev) {
     var src = (ev.source || (ev.parsed && ev.parsed.app) || "").toLowerCase();
     var f = getFlat(ev.parsed);
     var sh = (ev.parsed && ev.parsed.shape) || "";
     if (src === "chimera-vectorstore" || sh === "service.chimera-vectorstore" || f.service === "chimera-vectorstore")
-      return { cls: "sum-svc-vectorstore", lab: "chimera-vectorstore" };
+      return serviceBadge("chimera-vectorstore", "sum-svc-vectorstore");
     if (src === "chimera-indexer" || sh.indexOf("chimera-indexer") === 0 || f.service === "chimera-indexer")
-      return { cls: "sum-svc-indexer", lab: "chimera-indexer" };
+      return serviceBadge("chimera-indexer", "sum-svc-indexer");
     if (src === "chimera-broker" || sh.indexOf("chimera-broker") >= 0 || sh.indexOf("chat.chimera-broker") === 0)
-      return { cls: "sum-svc-broker", lab: "chimera-broker" };
-    if (sh === "http.access" || (f.method && f.path)) return { cls: "sum-svc-web", lab: "web" };
-    if (sh === "chat.routing") return { cls: "sum-svc-gateway", lab: "routing" };
+      return serviceBadge("chimera-broker", "sum-svc-broker");
+    if (sh === "http.access" || (f.method && f.path)) return { cls: "sum-svc-web", key: "web", lab: "web" };
+    if (sh === "chat.routing") return { cls: "sum-svc-gateway", key: "routing", lab: "routing" };
     if (
       src === "chimera-gateway" ||
       src === "gateway" ||
       f.service === "chimera-gateway" ||
       f.service === "gateway"
     )
-      return { cls: "sum-svc-gateway", lab: "chimera-gateway" };
-    return { cls: "sum-svc-gateway", lab: "chimera-gateway" };
+      return serviceBadge("chimera-gateway", "sum-svc-gateway");
+    return serviceBadge("chimera-gateway", "sum-svc-gateway");
   }
 
   /**
@@ -1710,24 +2102,92 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
   }
 
   function conversationCardModelForGroup(events) {
+    events = Array.isArray(events) ? events : [];
+    var model;
     if (globalThis.ChimeraSettings && ChimeraSettings.Derive && typeof ChimeraSettings.Derive.buildConversationCardModel === "function") {
-      return ChimeraSettings.Derive.buildConversationCardModel(events, getFlat);
+      model = ChimeraSettings.Derive.buildConversationCardModel(events, getFlat);
+    } else {
+      model = {
+        stateLabel: "—",
+        stateKind: "complete",
+        progress: {
+          received: "pending",
+          routed: "pending",
+          rag: "pending",
+          broker: "pending",
+          delivered: "pending"
+        },
+        kv: { stream: "", ragCollection: "" },
+        turnCount: 0,
+        chips: { tools: 0, fallback: 0 },
+        ingestRunIds: [],
+        witness: { request: false, response: false }
+      };
     }
-    return {
-      stateLabel: "—",
-      stateKind: "complete",
-      progress: {
-        received: "pending",
-        routed: "pending",
-        rag: "pending",
-        broker: "pending",
-        delivered: "pending"
-      },
-      kv: { turnIndex: "", clientModel: "", upstreamModel: "", stream: "", ragCollection: "", mergeHint: "" },
-      chips: { tools: 0, fallback: 0 },
-      ingestRunIds: [],
-      witness: { request: false, response: false }
-    };
+    return model;
+  }
+
+  function conversationRagRetrievalSummary(events) {
+    if (
+      globalThis.ChimeraSettings &&
+      ChimeraSettings.Derive &&
+      typeof ChimeraSettings.Derive.conversationRagRetrievalSummary === "function"
+    ) {
+      return ChimeraSettings.Derive.conversationRagRetrievalSummary(events, getFlat);
+    }
+    var met = scrapeConversationMetrics(events);
+    return { hits: met.vec, hasWorkspace: false, workspaceTitle: "", workspaceKnown: false };
+  }
+
+  function materialIconHtml(name) {
+    return (
+      '<span class="material-symbols-outlined material-symbols-outlined--sm" aria-hidden="true">' +
+      escapeHtml(String(name || "")) +
+      "</span>"
+    );
+  }
+
+  function conversationVectorsRetrievedMiniCardHtml(rag) {
+    rag = rag || {};
+    var cardCls = "sum-mini-card sum-mini-card--rag-retrieval";
+    if (rag.hasWorkspace && !rag.workspaceKnown) cardCls += " sum-mini-card--error";
+    var parts = ['<div class="' + cardCls + '">'];
+    if (!rag.hasWorkspace && rag.hits == null) {
+      parts.push(
+        '<span class="sum-mini-sub sum-mini-rag-error">' +
+          materialIconHtml("error") +
+          " unknown workspace provided</span>"
+      );
+    }
+    if (rag.hasWorkspace && rag.workspaceTitle) {
+      parts.push(
+        '<span class="sum-mini-rag-line">' +
+          materialIconHtml("database") +
+          '<span class="sum-mini-rag-line-text">' +
+          escapeHtml(rag.workspaceTitle) + 
+          "</span></span>"
+      );
+    }
+    if (rag.hits != null) {
+      parts.push(
+        '<strong class="sum-mini-rag-hits">' +
+        materialIconHtml("text_snippet") +  
+        " " +
+        escapeHtml(String(rag.hits)) +
+        " attached</strong>"
+      );
+    } else if (rag.hasWorkspace) {
+      parts.push('<strong class="sum-mini-rag-hits">—</strong>');
+    }
+    if (rag.hasWorkspace && !rag.workspaceKnown) {
+      parts.push(
+        '<span class="sum-mini-sub sum-mini-rag-error">' +
+          materialIconHtml("error") +
+          " missing or undefined</span>"
+      );
+    }
+    parts.push("</div>");
+    return parts.join("");
   }
 
   function conversationLifecycleStepDefs() {
@@ -1796,7 +2256,6 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     var ch = model.chips || {};
     var parts = [];
     if ((ch.tools || 0) > 0) parts.push("Tools · " + ch.tools);
-    if ((ch.fallback || 0) > 0) parts.push("Fallback · " + ch.fallback);
     if (!parts.length) return "";
     var h = '<div class="sum-conv-chip-row sum-conv-chip-row--summary">';
     for (var pi = 0; pi < parts.length; pi++) {
@@ -1804,39 +2263,6 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     }
     h += "</div>";
     return h;
-  }
-
-  function conversationCardKvHtml(model) {
-    model = model || {};
-    var kv = model.kv || {};
-    function row(k, v) {
-      if (!v || String(v).trim() === "" || String(v) === "—") return "";
-      return (
-        '<div class="sum-conv-kv-row"><dt>' +
-        escapeHtml(k) +
-        "</dt><dd>" +
-        escapeHtml(String(v)) +
-        "</dd></div>"
-      );
-    }
-    var body =
-      row("Turn", kv.turnIndex) +
-      row("Client model", kv.clientModel) +
-      row("Upstream model", kv.upstreamModel) +
-      row("Stream", kv.stream) +
-      row(
-        "RAG collection",
-        kv.ragCollection && typeof ragCollectionLabelForUi === "function"
-          ? ragCollectionLabelForUi(kv.ragCollection)
-          : kv.ragCollection
-      ) +
-      row("Merge", kv.mergeHint);
-    if (!body) return "";
-    return (
-      '<div class="sum-conv-kv"><div class="sum-section-label">Conversation</div><dl class="sum-conv-kv-grid">' +
-      body +
-      "</dl></div>"
-    );
   }
 
   function convEventDedupeKey(ent) {
@@ -2042,10 +2468,10 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
    */
   var TIMELINE_BAR_KINDS = [
     { key: "web", bg: "#42a5f5", label: "Web", title: "Inbound HTTP and API access lines" },
-    { key: "chimera-vectorstore", bg: "#66bb6a", label: "chimera-vectorstore", title: "chimera-vectorstore wrapper and backend lines" },
-    { key: "chimera-broker", bg: "#9575cd", label: "chimera-broker", title: "chimera-broker relay and upstream chat traffic" },
-    { key: "chimera-indexer", bg: "#ffa726", label: "chimera-indexer", title: "chimera-indexer subprocess lines" },
-    { key: "chimera-gateway", bg: "#78909c", label: "chimera-gateway", title: "chimera-gateway routing, startup, config, and other internal logs" }
+    { key: "chimera-vectorstore", bg: "#66bb6a", label: "vectorstore", title: "vectorstore wrapper and backend lines" },
+    { key: "chimera-broker", bg: "#9575cd", label: "broker", title: "broker relay and upstream chat traffic" },
+    { key: "chimera-indexer", bg: "#ffa726", label: "indexer", title: "indexer subprocess lines" },
+    { key: "chimera-gateway", bg: "#78909c", label: "gateway", title: "gateway routing, startup, config, and other internal logs" }
   ];
 
   /** Shared with timelineBarHtml and indexer scope cards (same `.sum-timeline-bar` DOM). */
@@ -2503,11 +2929,210 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     if (name === "chimera-broker") {
       var w = { parsed: ev.parsed, text: ev.text, ts: ev.ts, source: ev.source };
       if (entryIsGatewayUpstreamRelay(w)) {
-        return { cls: "sum-svc-broker sum-svc-badge-filled sum-svc-broker-filled", lab: "chimera-broker" };
+        return {
+          cls: "sum-svc-broker sum-svc-badge-filled sum-svc-broker-filled",
+          key: "chimera-broker",
+          lab: serviceDisplayLabel("chimera-broker")
+        };
       }
       return null;
     }
+    if (name === "chimera-indexer") {
+      var ixLab = indexerEvlogWorkspaceSourceLabel(ev);
+      if (!ixLab) return null;
+      return { kind: "indexer-workspace", lab: ixLab, key: ixLab };
+    }
     return inferServiceBadge(ev);
+  }
+
+  var indexerEvlogWorkspaceLabelMapCacheKey = null;
+  var indexerEvlogWorkspaceLabelMapCache = null;
+
+  function indexerEvlogWorkspaceLabelMapFingerprint() {
+    return [
+      ctx.lastIndexerSummarizeByRun,
+      ctx.lastIndexerSummarizePartitionRegistry,
+      ctx.lastIndexerOperatorWorkspacesFingerprint || "",
+      resolveLogsOperatorUserLabel()
+    ].join("\u0000");
+  }
+
+  function indexerEvlogRegisterWorkspaceLabel(map, label, keys) {
+    if (!map || !label || label === "—" || label === "—:—" || label.indexOf("—:") === 0) return;
+    for (var i = 0; i < keys.length; i++) {
+      var k = String(keys[i] != null ? keys[i] : "").trim();
+      if (k) map.byKey[k] = label;
+    }
+  }
+
+  function buildIndexerEvlogWorkspaceLabelMap() {
+    var byKey = Object.create(null);
+    var byWorkspaceId = Object.create(null);
+    var byProjectFlavor = Object.create(null);
+    var map = { byKey: byKey, byWorkspaceId: byWorkspaceId, byProjectFlavor: byProjectFlavor };
+    var igFn =
+      globalThis.ChimeraSettings &&
+      ChimeraSettings.Derive &&
+      typeof ChimeraSettings.Derive.indexerIgSyntheticGid === "function"
+        ? ChimeraSettings.Derive.indexerIgSyntheticGid
+        : null;
+
+    var byRun = ctx.lastIndexerSummarizeByRun;
+    var preg = ctx.lastIndexerSummarizePartitionRegistry;
+    if (byRun && typeof byRun === "object") {
+      var runKeys = Object.keys(byRun);
+      for (var ri = 0; ri < runKeys.length; ri++) {
+        var bucketId = runKeys[ri];
+        var run = byRun[bucketId];
+        if (!run || !run.events || !run.events.length) continue;
+        var pmeta = null;
+        if (
+          preg &&
+          globalThis.ChimeraSettings &&
+          ChimeraSettings.Derive &&
+          typeof ChimeraSettings.Derive.indexerPartitionMetaForRun === "function"
+        ) {
+          pmeta = ChimeraSettings.Derive.indexerPartitionMetaForRun(
+            preg,
+            run.id,
+            run.events,
+            getFlat
+          );
+        }
+        var meta = collectIndexerRunMeta(run.id, run.events, pmeta);
+        meta = mergePersistedIndexerWatchRoots(meta, run.events, run.id);
+        var label = indexerCardTitleSortLabel(meta);
+        indexerEvlogRegisterWorkspaceLabel(map, label, [
+          bucketId,
+          meta.indexerKey,
+          meta.runId,
+          meta.workspaceId && meta.workspaceId !== "—" ? meta.workspaceId : ""
+        ]);
+        var tid = meta.tenantId != null ? String(meta.tenantId).trim() : "";
+        var proj = meta.projectId && meta.projectId !== "—" ? String(meta.projectId).trim() : "";
+        var flav = meta.flavorId && meta.flavorId !== "—" ? String(meta.flavorId).trim() : "";
+        if (proj) {
+          byProjectFlavor[proj + "\u0000" + normalizeFlavorMatch(flav)] = label;
+          if (igFn) indexerEvlogRegisterWorkspaceLabel(map, label, [igFn(tid, proj, flav)]);
+        }
+        if (meta.workspaceId && meta.workspaceId !== "—") {
+          byWorkspaceId[String(meta.workspaceId).trim()] = label;
+        }
+      }
+    }
+
+    var nested = ctx.lastIndexerOperatorWorkspacesNested || [];
+    for (var wi = 0; wi < nested.length; wi++) {
+      var ws = nested[wi];
+      var wsLabel = operatorManagedWorkspaceTitleText(ws);
+      var wsId = canonicalWorkspaceRowIdKey(ws.id);
+      var wsNum = String(operatorWorkspaceNumericId(ws));
+      indexerEvlogRegisterWorkspaceLabel(map, wsLabel, [wsId, wsNum]);
+      if (wsId) byWorkspaceId[wsId] = wsLabel;
+      var wp = String(ws.project_id || "").trim();
+      var wf = normalizeFlavorMatch(ws.flavor_id);
+      if (wp) byProjectFlavor[wp + "\u0000" + wf] = wsLabel;
+    }
+
+    return map;
+  }
+
+  function getIndexerEvlogWorkspaceLabelMap() {
+    var fp = indexerEvlogWorkspaceLabelMapFingerprint();
+    if (fp !== indexerEvlogWorkspaceLabelMapCacheKey) {
+      indexerEvlogWorkspaceLabelMapCacheKey = fp;
+      indexerEvlogWorkspaceLabelMapCache = buildIndexerEvlogWorkspaceLabelMap();
+    }
+    return indexerEvlogWorkspaceLabelMapCache;
+  }
+
+  function indexerEvlogFlatForEntry(ent) {
+    var raw = getFlat(ent.parsed);
+    if (
+      globalThis.ChimeraSettings &&
+      ChimeraSettings.Derive &&
+      typeof ChimeraSettings.Derive.indexerAugmentFlat === "function"
+    ) {
+      return ChimeraSettings.Derive.indexerAugmentFlat(ent, raw);
+    }
+    return raw;
+  }
+
+  function indexerEvlogLineIsProcessWide(f) {
+    if (
+      globalThis.ChimeraSettings &&
+      ChimeraSettings.Derive &&
+      typeof ChimeraSettings.Derive.indexerFlatIsServiceGlobalOnly === "function" &&
+      ChimeraSettings.Derive.indexerFlatIsServiceGlobalOnly(f)
+    ) {
+      return true;
+    }
+    var msg = indexerFlatMsg(f);
+    if (msg === "indexer.state") return true;
+    if (msg === "gateway.indexer.config") return true;
+    if (flatLooksLikeIndexerRunStart(f) || flatLooksLikeIndexerRunProgress(f) || flatLooksLikeIndexerRunDone(f))
+      return true;
+    if (msg.indexOf("indexer.supervised.") === 0) return true;
+    return false;
+  }
+
+  function indexerEvlogUserLabelFromFlat(f) {
+    if (f.user_label && String(f.user_label).trim() !== "") return String(f.user_label).trim();
+    var tid = String(f.tenant_id || f.principal_id || f.tenant || "").trim();
+    if (tid && ctx.tokenLabelByTenant[tid]) return String(ctx.tokenLabelByTenant[tid]).trim();
+    return resolveLogsOperatorUserLabel();
+  }
+
+  function indexerEvlogWorkspaceSourceLabel(ent) {
+    var f = indexerEvlogFlatForEntry(ent);
+    if (!f || typeof f !== "object") return "";
+    if (indexerEvlogLineIsProcessWide(f)) return "";
+
+    var map = getIndexerEvlogWorkspaceLabelMap();
+    var itk = String(f.indexer_target_key || "").trim();
+    if (itk && map.byKey[itk]) return map.byKey[itk];
+
+    var ik = String(f.indexer_key || "").trim();
+    if (ik && map.byKey[ik]) return map.byKey[ik];
+
+    var rid = String(f.index_run_id || "").trim();
+    if (rid && map.byKey[rid]) return map.byKey[rid];
+
+    var preg = ctx.lastIndexerSummarizePartitionRegistry;
+    if (
+      rid &&
+      preg &&
+      preg[rid] &&
+      globalThis.ChimeraSettings &&
+      ChimeraSettings.Derive &&
+      typeof ChimeraSettings.Derive.indexerBucketGidsForLine === "function"
+    ) {
+      var gids = ChimeraSettings.Derive.indexerBucketGidsForLine(f, preg[rid]);
+      if (gids && gids.length === 1) {
+        var gidLab = map.byKey[String(gids[0]).trim()];
+        if (gidLab) return gidLab;
+      }
+    }
+
+    var sws = String(f.scope_workspace_id || "").trim();
+    if (sws && map.byWorkspaceId[sws]) return map.byWorkspaceId[sws];
+
+    var proj = String(
+      f.scope_project_id || f.project_id || f.ingest_project || ""
+    ).trim();
+    var flav = normalizeFlavorMatch(f.flavor_id);
+    if (proj) {
+      var pfLab = map.byProjectFlavor[proj + "\u0000" + flav];
+      if (pfLab) return pfLab;
+      var title = indexerCardTitleSortLabel({
+        userLabel: indexerEvlogUserLabelFromFlat(f),
+        projectId: proj,
+        flavorId: flav || "—"
+      });
+      if (title && title !== "—" && title.indexOf("—:") !== 0) return title;
+    }
+
+    return "";
   }
 
   /** How long file-level indexer activity stays “fresh” for UI subtitle hints. */
@@ -2572,8 +3197,8 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       var reason =
         meta.lastRecoveryPollFlat.embed_reason_code ||
         meta.lastRecoveryPollFlat.embed_detail ||
-        "embedding unavailable";
-      return "Waiting for embedding — " + String(reason).replace(/_/g, " ");
+        "indexing unavailable";
+      return "Waiting for indexing — " + String(reason).replace(/_/g, " ");
     }
     if (meta && meta.scopeStatusEdgeFlat) {
       var renderGate = globalThis.ChimeraSettings && ChimeraSettings.Render;
@@ -2618,6 +3243,73 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       return stateLine ? stateLine + " — " + pathShow : pathShow;
     }
     return stateLine || "—";
+  }
+
+  function indexerWorkspaceFileCountFromMeta(meta) {
+    if (
+      meta &&
+      meta.scopeWorkspaceTotal != null &&
+      !isNaN(Number(meta.scopeWorkspaceTotal))
+    ) {
+      return Math.round(Number(meta.scopeWorkspaceTotal));
+    }
+    return null;
+  }
+
+  /** Latest qdrant_points for this workspace from scoped logs, then rollup meta. */
+  function indexerWorkspaceEmbeddedChunksFromMeta(meta, evs) {
+    if (Array.isArray(evs) && evs.length) {
+      for (var i = evs.length - 1; i >= 0; i--) {
+        var f = getFlat(evs[i].parsed);
+        var m = indexerFlatMsg(f);
+        if (m !== "indexer.storage.stats" && m.indexOf("indexer.storage.stats") !== 0) continue;
+        if (f.qdrant_points != null && f.qdrant_points !== "") {
+          var qp = Number(f.qdrant_points);
+          if (!isNaN(qp)) return Math.round(qp);
+        }
+      }
+    }
+    if (meta && meta.qdrantPointsLive != null && !isNaN(Number(meta.qdrantPointsLive))) {
+      return Math.round(Number(meta.qdrantPointsLive));
+    }
+    if (meta && meta.vectorsStored != null && !isNaN(Number(meta.vectorsStored))) {
+      return Math.round(Number(meta.vectorsStored));
+    }
+    return null;
+  }
+
+  function indexerWorkspaceMetricWellHtml(count, icon, title) {
+    var lab = count != null && !isNaN(Number(count)) ? formatInt(Math.round(Number(count))) : "—";
+    var titleAttr =
+      title != null && String(title).trim() !== ""
+        ? ' title="' + escapeHtml(String(title)) + '"'
+        : "";
+    return (
+      '<span class="sg-op-inset-well"' +
+      titleAttr +
+      ">" +
+      escapeHtml(lab) +
+      ' <span class="material-symbols-outlined material-symbols-outlined--sm" aria-hidden="true">' +
+      escapeHtml(icon) +
+      "</span></span>"
+    );
+  }
+
+  function indexerWorkspaceCollapsedMetricsHtml(meta, evs) {
+    var files = indexerWorkspaceFileCountFromMeta(meta);
+    var chunks = indexerWorkspaceEmbeddedChunksFromMeta(meta, evs);
+    return (
+      indexerWorkspaceMetricWellHtml(
+        files,
+        "note_stack",
+        "Workspace files tracked by the indexer"
+      ) +
+      indexerWorkspaceMetricWellHtml(
+        chunks,
+        "text_snippet",
+        "Embedded text chunks stored for search retrieval"
+      )
+    );
   }
 
   var INDEXER_HIST_COLS = {
@@ -2742,7 +3434,7 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
           ? Number(lp.total_chunks)
           : null;
     if (cur != null && tot != null && !isNaN(cur) && !isNaN(tot))
-      return "Indexer uploading batch — " + cur + " of " + tot + " chunks embedded";
+      return "Indexer uploading batch — " + cur + " of " + tot + " chunks indexed";
     if (candStr && candStr !== "—")
       return "Indexer uploading batch — latest counters: " + candStr + " candidates / chunks";
     return doneSeen ? "Indexer run completed" : "Indexer uploading batch — in progress";
@@ -2819,192 +3511,51 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     return { queueCap: cap, workers: workers };
   }
 
-  /** Per-file / operator slugs for expanded indexer Summary (service + run cards). */
-  function indexerStructuredRollupCounts(entries) {
-    var upload = 0,
-      ingested = 0,
-      skipped = 0,
-      failed = 0,
-      retry = 0,
-      paused = 0,
-      snapshots = 0;
-    var relSet = {};
-    var workers = null;
-    var queueDepth = null;
-    for (var i = 0; i < entries.length; i++) {
-      var f = getFlat(entries[i].parsed);
-      var m = indexerFlatMsg(f);
-      if (m === "indexer.job.upload") {
-        upload++;
-        if (f.rel) relSet[String(f.rel)] = 1;
-      } else if (m === "indexer.job.ingested" || m === "ingested") {
-        ingested++;
-        if (f.rel) relSet[String(f.rel)] = 1;
-      } else if (m === "indexer.job.skipped") {
-        skipped++;
-        if (f.rel) relSet[String(f.rel)] = 1;
-      } else if (m.indexOf("indexer.job.failed") === 0) failed++;
-      else if (m.indexOf("indexer.retry") === 0) retry++;
-      else if (m.indexOf("indexer.worker.paused") === 0) paused++;
-      else if (m.indexOf("indexer.queue.snapshot") === 0) snapshots++;
-    }
-    for (var j = entries.length - 1; j >= 0; j--) {
-      var fj = getFlat(entries[j].parsed);
-      var mj = indexerFlatMsg(fj);
-      if (mj.indexOf("indexer.queue.snapshot") === 0) {
-        if (fj.workers != null && fj.workers !== "") workers = Number(fj.workers);
-        if (fj.queue_depth != null && fj.queue_depth !== "") queueDepth = Number(fj.queue_depth);
-        break;
-      }
-    }
-    return {
-      upload: upload,
-      ingested: ingested,
-      skipped: skipped,
-      failed: failed,
-      retry: retry,
-      paused: paused,
-      snapshots: snapshots,
-      uniqRel: Object.keys(relSet).length,
-      workers: workers,
-      queueDepth: queueDepth
-    };
-  }
-
-  function indexerStructuredRollupMiniHtml(entries) {
-    var r = indexerStructuredRollupCounts(entries);
-    var sk = formatInt(r.skipped);
-    var ig = formatInt(r.ingested);
-    var up = formatInt(r.upload);
-    var rt = formatInt(r.retry);
-    var fa = formatInt(r.failed);
-    var pu = formatInt(r.paused);
+  function gatewayHttpOkFailTooltip(counters) {
+    var c = counters || {};
+    var detail =
+      (c.http429 || 0) > 0
+        ? formatInt(c.http2xx) +
+          " ok · " +
+          formatInt(c.httpNot2xx) +
+          " fail · " +
+          formatInt(c.http429) +
+          " rate-limited (429)"
+        : formatInt(c.http2xx) + " ok · " + formatInt(c.httpNot2xx) + " fail";
     return (
-      '<div class="sum-mini-row">' +
-      '<div class="sum-mini-card">Skipped (before upload)<strong>' +
-      escapeHtml(sk) +
-      '</strong></div>' +
-      '<div class="sum-mini-card">Successfully ingested<strong>' +
-      escapeHtml(ig) +
-      '</strong></div>' +
-      '<div class="sum-mini-card">Started upload<strong>' +
-      escapeHtml(up) +
-      "</strong></div></div>" +
-      '<div class="sum-mini-row">' +
-      '<div class="sum-mini-card">Retries<strong>' +
-      escapeHtml(rt) +
-      '</strong></div>' +
-      '<div class="sum-mini-card">Failed<strong>' +
-      escapeHtml(fa) +
-      '</strong></div>' +
-      '<div class="sum-mini-card">Worker pauses<strong>' +
-      escapeHtml(pu) +
-      "</strong></div></div>"
+      "HTTP responses in the current log view: 2xx successes (check) vs non-2xx failures (error). " + detail + "."
     );
   }
 
-  /** Caption under aggregate indexer progress bar (sums scope rows across partitioned indexer cards). */
-  function indexerAggregateBacklogCaption(sumRem, sumTot) {
-    if (sumRem !== null && !isNaN(Number(sumRem)) && sumTot !== null && !isNaN(Number(sumTot)))
-      return (
-        formatInt(Math.round(Number(sumRem))) +
-        " remaining of " +
-        formatInt(Math.round(Number(sumTot))) +
-        " total"
-      );
-    if (sumRem !== null && !isNaN(Number(sumRem)))
-      return formatInt(Math.round(Number(sumRem))) + " remaining of — total";
-    if (sumTot !== null && !isNaN(Number(sumTot)))
-      return "— remaining of " + formatInt(Math.round(Number(sumTot))) + " total";
-    return "";
+  function chimeraBrokerRelayOkFailTooltip(metrics) {
+    var m = metrics || {};
+    var detail =
+      (m.relay429N || 0) > 0
+        ? formatInt(m.relayOk) +
+          " ok · " +
+          formatInt(m.relayFail) +
+          " fail · " +
+          formatInt(m.relay429N) +
+          " rate-limited (429)"
+        : formatInt(m.relayOk) + " ok · " + formatInt(m.relayFail) + " fail";
+    return (
+      "Chat relay outcomes since last chimera-broker ready: successful upstream responses (check) vs errors (error). " +
+      detail +
+      "."
+    );
   }
 
-  /** Explains aggregate scope bar while buffers warm up vs when metrics are live. */
-  function indexerAggregateProgressDetailText(agg) {
-    if (!agg || !agg.anyRun) {
-      return "No indexer scopes in the loaded log window — scroll for older lines or wait for indexer traffic.";
+  function indexerQueueDepthTooltip(qi) {
+    qi = qi || {};
+    var detail = formatInt(Math.round(Number(qi.queueDepth))) + " queued";
+    if (qi.ingestInflight != null && !isNaN(Number(qi.ingestInflight))) {
+      detail += " · " + formatInt(Math.round(Number(qi.ingestInflight))) + " in flight";
     }
-    var hasRem = agg.sumRem !== null && !isNaN(Number(agg.sumRem));
-    var hasTot = agg.sumTot !== null && !isNaN(Number(agg.sumTot));
-    if (!hasRem && !hasTot && !agg.allDone) {
-      return "Waiting for indexer.scope.status heartbeats with queue and workspace file totals…";
-    }
-    if (agg.allDone) {
-      return "Tracked runs in view have finished; bar reflects combined scope status when present.";
-    }
-    if (hasRem && Number(agg.sumRem) === 0 && hasTot) {
-      return "No pending ingest or fan-out rows for scopes in view — totals match workspace file counts.";
-    }
-    return "Enqueued + fan-out backlog vs total workspace files.";
-  }
-
-  /**
-   * Sum pending ingest + fan-out rows and workspace file totals across indexer partition buckets
-   * (same metadata as each per-scope indexer card).
-   */
-  function rollupIndexerAggregateScopeProgress(byRun, partitionRegistry) {
-    var sumRem = 0;
-    var sumTot = 0;
-    var anyRem = false;
-    var anyTot = false;
-    var anyRun = false;
-    var allDone = true;
-    if (!byRun || typeof byRun !== "object") {
-      return { sumRem: null, sumTot: null, allDone: false, anyRun: false };
-    }
-    var keys = Object.keys(byRun);
-    for (var i = 0; i < keys.length; i++) {
-      var run = byRun[keys[i]];
-      if (!run || !run.events || !run.events.length) continue;
-      anyRun = true;
-      var pmeta = null;
-      if (
-        partitionRegistry &&
-        globalThis.ChimeraSettings &&
-        ChimeraSettings.Derive &&
-        typeof ChimeraSettings.Derive.indexerPartitionMetaForRun === "function"
-      ) {
-        pmeta = ChimeraSettings.Derive.indexerPartitionMetaForRun(
-          partitionRegistry,
-          run.id,
-          run.events,
-          getFlat
-        );
-      }
-      var meta = collectIndexerRunMeta(run.id, run.events, pmeta);
-      meta = mergePersistedIndexerWatchRoots(meta, run.events, run.id);
-      if (!meta.doneSeen) allDone = false;
-      var qIng =
-        meta.scopeQueueIngestPending != null && !isNaN(Number(meta.scopeQueueIngestPending))
-          ? Number(meta.scopeQueueIngestPending)
-          : null;
-      var qFan =
-        meta.scopeQueueFanoutPending != null && !isNaN(Number(meta.scopeQueueFanoutPending))
-          ? Number(meta.scopeQueueFanoutPending)
-          : null;
-      var pRem = null;
-      if (qIng != null || qFan != null) {
-        pRem = (qIng != null ? qIng : 0) + (qFan != null ? qFan : 0);
-      }
-      var qTot =
-        meta.scopeWorkspaceTotal != null && !isNaN(Number(meta.scopeWorkspaceTotal))
-          ? Math.round(Number(meta.scopeWorkspaceTotal))
-          : null;
-      if (pRem !== null) {
-        sumRem += pRem;
-        anyRem = true;
-      }
-      if (qTot !== null) {
-        sumTot += qTot;
-        anyTot = true;
-      }
-    }
-    return {
-      sumRem: anyRem ? sumRem : null,
-      sumTot: anyTot ? sumTot : null,
-      allDone: anyRun && allDone,
-      anyRun: anyRun
-    };
+    return (
+      "Ingest queue depth from the latest indexer.state line in this log view (stacks icon). " +
+      detail +
+      "."
+    );
   }
 
   function gatewayServicePanelMiniHtml(arr) {
@@ -3017,42 +3568,16 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
         apiKeysTint: "none",
         routingRules: "—",
         supervised: "—"
-      },
-      counters: {
-        http2xx: 0,
-        httpNot2xx: 0,
-        http429: 0,
-        chatReq: 0,
-        chatResp: 0,
-        chatErr: 0,
-        ragQuery: 0,
-        ragHit: 0,
-        ragRetrieveErr: "",
-        ingestOk: 0,
-        ingestFail: 0
       }
     };
     if (globalThis.ChimeraSettings && ChimeraSettings.Derive && typeof ChimeraSettings.Derive.gatewayCardModel === "function") {
       M = ChimeraSettings.Derive.gatewayCardModel(arr, getFlat);
     }
     var kv = M.kv || {};
-    var c = M.counters || {};
     var apiKeysOpen =
       kv.apiKeysTint === "error"
         ? '<dd class="gateway-kv-dd gateway-kv-dd--error">'
         : "<dd>";
-    var ragSub = c.ragRetrieveErr
-      ? c.ragRetrieveErr
-      : "search lines vs per-hit vectors";
-    var httpSub =
-      c.http429 > 0
-        ? formatInt(c.http2xx) +
-          " ok · " +
-          formatInt(c.httpNot2xx) +
-          " fail · " +
-          formatInt(c.http429) +
-          "×429"
-        : formatInt(c.http2xx) + " ok · " + formatInt(c.httpNot2xx) + " fail";
     return (
       '<dl class="indexer-run-kv indexer-run-kv--gateway-summary">' +
       "<dt>listening</dt><dd>" +
@@ -3068,32 +3593,7 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       escapeHtml(kv.routingRules || "—") +
       '</dd><dt>supervised</dt><dd>' +
       escapeHtml(kv.supervised || "—") +
-      "</dd></dl>" +
-      '<div class="gw-panel-timeline">' +
-      '<div class="sum-section-label">Request timeline</div>' +
-      '<p class="sum-timeline-caption muted">Segment width is the share of lines in this view for each kind.</p>' +
-      timelineBarHtml(arr) +
-      timelineLegendHtml() +
-      "</div>" +
-      '<div class="sum-mini-row">' +
-      '<div class="sum-mini-card">HTTP (ok / fail)<strong>' +
-      escapeHtml(formatInt(c.http2xx) + " / " + formatInt(c.httpNot2xx)) +
-      '</strong><span class="sum-mini-sub">' +
-      escapeHtml(httpSub) +
-      '</span></div>' +
-      '<div class="sum-mini-card">Chat (req → resp)<strong>' +
-      escapeHtml(formatInt(c.chatReq) + " → " + formatInt(c.chatResp)) +
-      '</strong><span class="sum-mini-sub">' +
-      escapeHtml(formatInt(c.chatErr) + " relay errors") +
-      '</span></div>' +
-      '<div class="sum-mini-card">RAG (queries · hits)<strong>' +
-      escapeHtml(formatInt(c.ragQuery) + " · " + formatInt(c.ragHit)) +
-      '</strong><span class="sum-mini-sub">' +
-      escapeHtml(ragSub) +
-      '</span></div>' +
-      '<div class="sum-mini-card">Ingest (ok / fail)<strong>' +
-      escapeHtml(formatInt(c.ingestOk) + " / " + formatInt(c.ingestFail)) +
-      '</strong><span class="sum-mini-sub">complete vs failed + chunked errors</span></div></div>'
+      "</dd></dl>"
     );
   }
 
@@ -3197,7 +3697,6 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       auth: "—",
       mcp: "—",
       governance: "—",
-      lastModel: "—",
       backendName: "",
       backendMode: ""
     };
@@ -3209,7 +3708,6 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       if (d.auth) M.auth = d.auth;
       if (d.mcp) M.mcp = d.mcp;
       if (d.governance) M.governance = d.governance;
-      if (d.lastModel) M.lastModel = chimeraBrokerShortModelLabel(d.lastModel);
       if (d.backendName) M.backendName = d.backendName;
       if (d.backendMode) M.backendMode = d.backendMode;
     }
@@ -3239,8 +3737,6 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       escapeHtml(M.mcp) +
       '</dd><dt>governance</dt><dd>' +
       escapeHtml(M.governance) +
-      '</dd><dt>last model</dt><dd>' +
-      escapeHtml(M.lastModel) +
       "</dd></dl>"
     );
   }
@@ -3353,8 +3849,32 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       if (!st) continue;
       if (seen[st.rel]) continue;
       seen[st.rel] = true;
+      if (st.st === "failed" && (f.bytes == null || f.bytes === undefined)) {
+        for (var j = i - 1; j >= 0; j--) {
+          var fj = getFlat(evs[j].parsed);
+          if (String(fj.rel || "").trim() !== st.rel) continue;
+          if (indexerFlatMsg(fj) !== "indexer.job.upload" || fj.bytes == null) continue;
+          var detailFnBytes =
+            globalThis.ChimeraSettings &&
+            ChimeraSettings.Derive &&
+            typeof ChimeraSettings.Derive.shortIngestFailureDetail === "function"
+              ? ChimeraSettings.Derive.shortIngestFailureDetail
+              : globalThis.ChimeraSettings &&
+                  ChimeraSettings.Render &&
+                  typeof ChimeraSettings.Render.shortIngestFailureDetail === "function"
+                ? ChimeraSettings.Render.shortIngestFailureDetail
+                : null;
+          if (detailFnBytes) {
+            st = Object.assign({}, st, {
+              detail: detailFnBytes(Object.assign({}, f, { bytes: fj.bytes }))
+            });
+          }
+          break;
+        }
+      }
       var t = formatLogDateTimeLocal(evs[i].ts);
       rows.push({
+        ts: evs[i].ts,
         t: t || "—",
         rel: st.rel,
         st: st.st,
@@ -3376,11 +3896,11 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       '<table class="sum-metrics-table sum-metrics-table--indexer-recent">' +
       "<colgroup>" +
       '<col class="indexer-recent-col-time">' +
-      '<col class="indexer-recent-col-status">' +
       '<col class="indexer-recent-col-path">' +
       '<col class="indexer-recent-col-detail">' +
+      '<col class="indexer-recent-col-status">' +
       "</colgroup>" +
-      "<thead><tr><th>Time</th><th>Status</th><th>Path</th><th>Detail</th></tr></thead><tbody>";
+      "<thead><tr><th class=\"indexer-recent-cell-time\">Time</th><th class=\"indexer-recent-cell-path\">Path</th><th class=\"indexer-recent-cell-detail\">Detail</th><th class=\"indexer-recent-cell-status\">Status</th></tr></thead><tbody>";
     if (!rows.length) {
       html +=
         '<tr><td colspan="4" class="muted">No file-level activity in the loaded window yet. Scroll up to load older lines.</td></tr>';
@@ -3392,22 +3912,28 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
         else if (it.st === "retrying" || it.st === "skipped") lvlClass = "lvl-WARN";
         else if (it.st === "evaluating" || it.st === "uploading") lvlClass = "lvl-DEBUG";
         else if (it.st === "retrieved") lvlClass = "lvl-INFO";
+        var iso = typeof toIsoDatetimeAttr === "function" ? toIsoDatetimeAttr(it.ts) : "";
+        var relAgo = typeof formatLogRelativeAgo === "function" ? formatLogRelativeAgo(it.ts) : "";
         html +=
           "<tr>" +
-          '<td class="sg-op-indexer-recent-time muted">' +
+          '<td class="indexer-recent-cell-time sum-evlog__cell--time">' +
+          "<time" +
+          (iso ? ' datetime="' + escapeHtml(iso) + '"' : "") +
+          (relAgo ? ' title="' + escapeHtml(relAgo) + '"' : "") +
+          ">" +
           escapeHtml(it.t) +
+          "</time></td>" +
+          '<td class="indexer-recent-cell-path"><code class="sum-mono-id">' +
+          escapeHtml(it.rel) +
+          "</code></td>" +
+          '<td class="indexer-recent-cell-detail muted">' +
+          (it.detail ? escapeHtml(it.detail) : "") +
           "</td>" +
-          '<td><span class="log-line-sum__lvl ' +
+          '<td class="indexer-recent-cell-status"><span class="log-line-sum__lvl ' +
           escapeHtml(lvlClass) +
           '">' +
           escapeHtml(it.st) +
-          "</span></td>" +
-          '<td><code class="sum-mono-id">' +
-          escapeHtml(it.rel) +
-          "</code></td>" +
-          '<td class="muted">' +
-          (it.detail ? escapeHtml(it.detail) : "") +
-          "</td></tr>";
+          "</span></td></tr>";
       }
     }
     html += "</tbody></table></div>";
@@ -3530,19 +4056,6 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     };
   }
 
-  function convWindowMs(g) {
-    var t0 = null;
-    var t1 = null;
-    for (var ti = 0; ti < g.events.length; ti++) {
-      var ins = entryInstant({ ts: g.events[ti].ts });
-      if (ins) {
-        if (!t0 || ins.getTime() < t0.getTime()) t0 = ins;
-        if (!t1 || ins.getTime() > t1.getTime()) t1 = ins;
-      }
-    }
-    return t0 && t1 ? t1.getTime() - t0.getTime() : 0;
-  }
-
   function renderExpandedConv(g) {
     var evs = g.events;
     var cardModel = conversationCardModelForGroup(evs);
@@ -3552,21 +4065,21 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       if (evs[ig].convJoinTier === "ingest") ingestCount++;
     }
     var bar = timelineBarHtml(evs);
-    var spanMs = convWindowMs({ events: evs });
     var met = scrapeConversationMetrics(evs);
-    var tokLine = met.tok != null ? formatInt(met.tok) + " tok" : "—";
+    var tokLine = met.tok != null ? formatInt(met.tok) : "—";
+    var turnsLine = (cardModel.turnCount || 0) > 0 ? String(cardModel.turnCount) : "—";
+    var ragSummary = conversationRagRetrievalSummary(evs);
     var mini =
       '<div class="sum-mini-row">' +
-      '<div class="sum-mini-card">Token count<strong>' +
+      '<div class="sum-mini-card">Turns<strong>' +
+      escapeHtml(turnsLine) +
+      '</strong></div><div class="sum-mini-card">Token Count<strong>' +
       escapeHtml(tokLine) +
-      '</strong></div><div class="sum-mini-card">Duration<strong>' +
-      escapeHtml(humanDurationMs(spanMs)) +
-      '</strong></div><div class="sum-mini-card">Vectors retrieved<strong>' +
-      (met.vec != null ? escapeHtml(String(met.vec)) : "—") +
-      "</strong></div></div>";
+      "</strong></div>" +
+      conversationVectorsRetrievedMiniCardHtml(ragSummary) +
+      "</div>";
     var life = conversationLifecycleBarHtml(cardModel.progress, {});
     var chips = conversationCardChipsSummaryHtml(cardModel);
-    var kvBlock = conversationCardKvHtml(cardModel);
     var ingestBlock = "";
     if (ingestCount > 0 && cardModel.ingestRunIds && cardModel.ingestRunIds.length) {
       ingestBlock =
@@ -3595,21 +4108,20 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
         : g.pid + "\0" + g.cid;
     var convScope = strHash(cardKey);
     var scrollTbodyId = "conv-log-" + convScope;
-    var tbodyInner = sumEvlogBuildTbodyFromConvEvents(evs, turnGroups, convScope);
+    var tbodyInner = sumEvlogBuildTbodyFromConvEvents(evs, turnGroups, convScope, { showSourceColumn: true });
     var mc = sumEvlogCountWarnFailFromEntries(evs);
-    var servicesStrip = typeof serviceStripHtml === "function" ? serviceStripHtml(evs) : "";
     var full =
       '<div class="sum-full-log sum-full-log--evlog">' +
       sumEvlogPanelHtml({
         scrollTbodyId: scrollTbodyId,
+        showSourceColumn: true,
         warnN: mc.warn,
         failN: mc.fail,
         tbodyInnerHtml: tbodyInner,
         title:
           typeof scopedEvlogTitle === "function"
             ? scopedEvlogTitle(conversationScopedLogSubject(g.pid, g.cid))
-            : "Scoped log",
-        titleRightHtml: servicesStrip || ""
+            : "Scoped log"
       }) +
       "</div>";
     var contextStrip =
@@ -3621,7 +4133,6 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       '<div class="sum-section-label">Lifecycle</div>' +
       life +
       chips +
-      kvBlock +
       mini +
       (contextStrip ? '<div class="sum-section-label">Context</div>' + contextStrip : "") +
       ingestBlock +
@@ -3645,7 +4156,6 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       escapeHtml(primaryLogMessage(lastEv.parsed, lastEv.text)) +
       "</span>";
     var cardModel = conversationCardModelForGroup(g.events);
-    var dur = humanDurationMs(convWindowMs(g));
     var st = conversationCardStatus(g, t1, cardModel);
     var cardKey =
       Array.isArray(g.cids) && g.cids.length > 1
@@ -3655,11 +4165,6 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     var ini = avatarInitials(ctx.tokenLabelByTenant[g.pid] || g.pid);
     var av = avatarHueClass(cardKey);
     var sumChips = conversationCardChipsSummaryHtml(cardModel);
-    var metrics =
-      '<span class="sum-metrics">' +
-      '<span class="sum-metric">' +
-      escapeHtml(dur) +
-      "</span></span>";
     var lifeCompact = conversationLifecycleBarHtml(cardModel.progress, { compact: true });
     return (
       '<details class="sum-card sum-card--conversation" id="' +
@@ -3676,10 +4181,10 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       sub +
       (sumChips ? sumChips : "") +
       "</span>" +
-      metrics +
       lifeCompact +
       serviceSummaryStatusPillHtml(st) +
-      '<span class="sum-chev"></span></summary>' +
+      operatorCardChevronHtml() +
+      "</summary>" +
       renderExpandedConv(g) +
       "</details>"
     );
@@ -4266,29 +4771,6 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     ) {
       timelineBlock = '<div class="sum-section-label">Request timeline</div>' + timelineBarHtml(evConv);
     }
-    var aggregateIndexerProgressBlock = "";
-    if (name === "chimera-indexer") {
-      var aggIx = rollupIndexerAggregateScopeProgress(svcCtx.byRun, svcCtx.partitionRegistry);
-      var aggCap = indexerAggregateBacklogCaption(aggIx.sumRem, aggIx.sumTot);
-      var aggDetail = indexerAggregateProgressDetailText(aggIx);
-      var aggCaptionRow =
-        '<div class="indexer-aggregate-caption-row">' +
-        (aggCap !== ""
-          ? '<span class="indexer-scope-caption">' + escapeHtml(aggCap) + "</span>"
-          : "") +
-        '<span class="indexer-aggregate-progress-detail muted">' +
-        escapeHtml(aggDetail) +
-        "</span></div>";
-      aggregateIndexerProgressBlock =
-        '<div class="indexer-aggregate-progress-wrap">' +
-        '<div class="sum-section-label sum-section-label--indexer-progress">' +
-        escapeHtml("Progress (all indexers)") +
-        "</div>" +
-        '<div class="indexer-scope-progress indexer-scope-progress--aggregate" title="Sum of pending ingest + fan-out rows vs workspace files across all indexer scopes (from indexer.scope.status)">' +
-        indexerScopeProgressTimelineBarHtml(aggIx.sumRem, aggIx.sumTot, aggIx.allDone) +
-        aggCaptionRow +
-        "</div></div>";
-    }
     var indexerSummaryKv = "";
     if (name === "chimera-indexer") {
       indexerSummaryKv =
@@ -4312,24 +4794,20 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
           " → " +
           (bx.usageSum > 0 ? formatInt(Math.round(bx.usageSum)) : "—");
       }
-      var rlBox = bx.rateLimitBoxN != null ? bx.rateLimitBoxN : 0;
-      var fbBox = bx.fallbackN != null ? bx.fallbackN : 0;
-      var availModelsStr =
-        bx.catalogModelCount != null && bx.catalogModelCount > 0 ? formatInt(bx.catalogModelCount) : "—";
+      var availModelsStr = chimeraBrokerAvailableModelCountLabel(arr);
       var providerHealthStrip = chimeraBrokerProviderHealthStripHtml(arr);
-      var relayOutcomeStrip = chimeraBrokerRelayOutcomeStripHtml(arr);
       mini =
         buildBrokerCardIntroHtml() +
         '<div class="sum-section-label">Provider health</div>' +
         providerHealthStrip +
+        '<div class="sum-section-label">Relay outcomes</div>' +
+        chimeraBrokerRelayOutcomeStripHtml(arr) +
         '<div class="sum-mini-row sum-mini-row--chimera-broker-deck">' +
-        '<div class="sum-mini-card">Available models<strong>' +
+        '<div class="sum-mini-card">Available models<strong id="chimera-broker-available-models-count">' +
         escapeHtml(availModelsStr) +
-        '</strong><span class="sum-mini-sub">Count from latest chimera-broker catalog sync log (when backend reports a numeric total)</span></div>' +
+        '</strong><span class="sum-mini-sub">Live catalog from chimera-broker /v1/models (refreshed with provider health polls); falls back to log sync lines when stale</span></div>' +
         "</div>" +
         kvB +
-        '<div class="sum-section-label">Relay outcomes</div>' +
-        relayOutcomeStrip +
         '<div class="sum-mini-row sum-mini-row--chimera-broker-deck2">' +
         '<div class="sum-mini-card">Relay (ok / fail)<strong>' +
         escapeHtml(formatInt(bx.relayOk) + " / " + formatInt(bx.relayFail)) +
@@ -4338,15 +4816,9 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
         escapeHtml(tokLineB) +
         "</strong>" +
         '<span class="sum-mini-sub">Prompt tokens sent vs completion usage from upstream JSON</span></div>' +
-        '<div class="sum-mini-card">Rate limits<strong>' +
-        escapeHtml(formatInt(rlBox)) +
-        '</strong><span class="sum-mini-sub">Throttling / HTTP 429 (broker HTTP + chat relay)</span></div>' +
-        '<div class="sum-mini-card">Routing fallback<strong>' +
-        escapeHtml(formatInt(fbBox)) +
-        '</strong><span class="sum-mini-sub">Virtual model fallback attempts (gateway)</span></div>' +
         '</div>';
     } else if (name === "chimera-indexer") {
-      mini = indexerStructuredRollupMiniHtml(arr);
+      mini = "";
     } else if (name === "chimera-gateway") {
       mini = buildGatewayCardIntroHtml() + gatewayServicePanelMiniHtml(arr);
     } else if (name === "chimera-vectorstore") {
@@ -4379,26 +4851,31 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     var cardScope = strHash("svc:" + name);
     var visEnt = sumEvlogVisibleEntriesForService(name, arr, name === "chimera-gateway");
     var mc = sumEvlogCountWarnFailFromEntries(visEnt);
-    var tbodyInner = sumEvlogBuildTbodyFromServiceEntries(name, arr, {
+    var showSourceColumn = name === "chimera-gateway" || name === "chimera-indexer";
+    var evlogBuildOpts = {
       cardScope: cardScope,
       filterGatewayProbe: name === "chimera-gateway"
-    });
+    };
+    if (showSourceColumn) evlogBuildOpts.showSourceColumn = true;
+    var tbodyInner = sumEvlogBuildTbodyFromServiceEntries(name, arr, evlogBuildOpts);
+    var evlogPanelOpts = {
+      scrollTbodyId: scrollTbodyId,
+      showSourceColumn: showSourceColumn,
+      warnN: mc.warn,
+      failN: mc.fail,
+      tbodyInnerHtml: tbodyInner,
+      title: typeof scopedEvlogTitle === "function" ? scopedEvlogTitle(serviceDisplayLabel(name)) : "Scoped log"
+    };
+    if (name === "chimera-indexer") evlogPanelOpts.sourceColumnKind = "indexer-workspace";
     var full =
       '<div class="' + fullLogClass + '">' +
-      sumEvlogPanelHtml({
-        scrollTbodyId: scrollTbodyId,
-        warnN: mc.warn,
-        failN: mc.fail,
-        tbodyInnerHtml: tbodyInner,
-        title: typeof scopedEvlogTitle === "function" ? scopedEvlogTitle(name) : "Scoped log"
-      }) +
+      sumEvlogPanelHtml(evlogPanelOpts) +
       "</div>";
     return (
       '<div class="sum-body">' +
       timelineBlock +
       '<div class="sum-section-label">Summary</div>' +
       indexerSummaryKv +
-      aggregateIndexerProgressBlock +
       mini +
       full +
       "</div>"
@@ -4408,8 +4885,14 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
   function sgOpInsetWellOkFailHtml(okN, failN, prefix, opts) {
     opts = opts || {};
     var lead = prefix ? escapeHtml(String(prefix)) + " " : "";
+    var titleAttr =
+      opts.title != null && String(opts.title).trim() !== ""
+        ? ' title="' + escapeHtml(String(opts.title)) + '"'
+        : "";
     var out =
-      '<span class="sg-op-inset-well">' +
+      '<span class="sg-op-inset-well"' +
+      titleAttr +
+      ">" +
       lead +
       escapeHtml(formatInt(okN)) +
       ' <span class="material-symbols-outlined material-symbols-outlined--sm" aria-hidden="true">check_circle</span> ' +
@@ -4418,6 +4901,28 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       out += ' <span class="material-symbols-outlined material-symbols-outlined--sm" aria-hidden="true">error</span>';
     }
     return out + "</span>";
+  }
+
+  function operatorCardChevronHtml() {
+    if (typeof ctx.operatorCardChevronHtml === "function") {
+      return ctx.operatorCardChevronHtml();
+    }
+    return (
+      '<span class="material-symbols-outlined sg-op-chev-icon" aria-hidden="true">chevron_right</span>' +
+      '<span class="sum-chev" aria-hidden="true"></span>'
+    );
+  }
+
+  /** Append trailing summary chips/pills into one .sum-metrics cluster (user-card parity). */
+  function summaryMetricsHtml(innerHtml, extraHtml) {
+    innerHtml = innerHtml != null ? String(innerHtml) : "";
+    extraHtml = extraHtml != null ? String(extraHtml) : "";
+    if (!innerHtml && !extraHtml) return "";
+    if (innerHtml.indexOf('class="sum-metrics"') >= 0) {
+      if (!extraHtml) return innerHtml;
+      return innerHtml.replace(/<\/span>\s*$/, extraHtml + "</span>");
+    }
+    return '<span class="sum-metrics">' + innerHtml + extraHtml + "</span>";
   }
 
   function serviceSummaryStatusPillHtml(st) {
@@ -4501,7 +5006,7 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     var av = serviceAvatarClass(name);
     /** Single outer .sum-title only — avoid nesting .sum-title (was hiding pills / breaking layout). */
     var titleClass = "sum-title";
-    var displayServiceName = name;
+    var displayServiceName = serviceDisplayLabel(name);
     var titleBlock = escapeHtml(displayServiceName);
     var wms = serviceWindowMs(arr);
     var metrics;
@@ -4509,7 +5014,9 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       var bxC = chimeraBrokerCardMetrics(arr);
       metrics =
         '<span class="sum-metrics">' +
-        sgOpInsetWellOkFailHtml(bxC.relayOk, bxC.relayFail) +
+        sgOpInsetWellOkFailHtml(bxC.relayOk, bxC.relayFail, "", {
+          title: chimeraBrokerRelayOkFailTooltip(bxC)
+        }) +
         chimeraBrokerProviderHealthStripHtml(arr, { compact: true }) +
         "</span>";
     } else if (name === "chimera-vectorstore") {
@@ -4528,7 +5035,9 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
         var gc = gwCardModel.counters || {};
         metrics =
           '<span class="sum-metrics">' +
-          sgOpInsetWellOkFailHtml(gc.http2xx || 0, gc.httpNot2xx || 0) +
+          sgOpInsetWellOkFailHtml(gc.http2xx || 0, gc.httpNot2xx || 0, "", {
+            title: gatewayHttpOkFailTooltip(gc)
+          }) +
           "</span>";
       } else {
         metrics = "";
@@ -4537,9 +5046,12 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       var qiIx = latestIndexerStateQueueInflightFromEntries(arr);
       if (qiIx.queueDepth != null && !isNaN(Number(qiIx.queueDepth))) {
         var qCurIx = formatInt(Math.round(Number(qiIx.queueDepth)));
+        var qTooltipIx = indexerQueueDepthTooltip(qiIx);
         metrics =
           '<span class="sum-metrics">' +
-          '<span class="sg-op-inset-well">' +
+          '<span class="sg-op-inset-well" title="' +
+          escapeHtml(qTooltipIx) +
+          '">' +
           escapeHtml(qCurIx) +
           ' <span class="material-symbols-outlined material-symbols-outlined--sm" aria-hidden="true">stacks</span></span></span>';
       } else {
@@ -4555,6 +5067,8 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
         (sumMs ? '<span class="sum-metric">' + escapeHtml(humanDurationMs(sumMs)) + " Σ</span>" : "") +
         "</span>";
     }
+    var statusHtml = isChimeraBroker ? "" : serviceSummaryStatusPillHtml(st);
+    metrics = summaryMetricsHtml(metrics, statusHtml);
     return (
       '<details class="sum-card" id="' +
       escapeHtml(sid) +
@@ -4572,8 +5086,8 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       escapeHtml(lastMsg) +
       "</span></span>" +
       metrics +
-      (isChimeraBroker ? "" : serviceSummaryStatusPillHtml(st)) +
-      '<span class="sum-chev"></span></summary>' +
+      operatorCardChevronHtml() +
+      "</summary>" +
       renderExpandedService(name, arr, svcCtx) +
       "</details>"
     );
@@ -4656,7 +5170,8 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
         cardScope: ixScope,
         filterGatewayProbe: false,
         indexerRunLine: true,
-        suppressIndexerBadge: true
+        suppressIndexerBadge: true,
+        suppressVectorstoreBadge: true
       });
       mc = sumEvlogCountWarnFailFromEntries(evsFull);
     }
@@ -4809,70 +5324,132 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       : userLine + ":" + prLine;
   }
 
+  function operatorTenantIdsForCollectionMap() {
+    var seen = Object.create(null);
+    var out = [];
+    var byTenant = ctx.tokenLabelByTenant || {};
+    var tk;
+    for (tk in byTenant) {
+      if (!Object.prototype.hasOwnProperty.call(byTenant, tk)) continue;
+      var tid = String(tk).trim();
+      if (tid && !seen[tid]) {
+        seen[tid] = true;
+        out.push(tid);
+      }
+    }
+    var list = ctx.tokenListCache || [];
+    var li;
+    for (li = 0; li < list.length; li++) {
+      var row = list[li] || {};
+      var tid2 =
+        row.tenant_id != null
+          ? String(row.tenant_id).trim()
+          : row.tenantId != null
+            ? String(row.tenantId).trim()
+            : row.tenant != null
+              ? String(row.tenant).trim()
+              : "";
+      if (tid2 && !seen[tid2]) {
+        seen[tid2] = true;
+        out.push(tid2);
+      }
+    }
+    return out;
+  }
+
+  function vectorstoreScopeLabelMapTokenFingerprint() {
+    var keys = ctx.tokenLabelByTenant ? Object.keys(ctx.tokenLabelByTenant).sort() : [];
+    return keys.join("\n") + "\n" + String((ctx.tokenListCache || []).length);
+  }
+
   var vectorstoreScopeLabelMapCacheRun = null;
   var vectorstoreScopeLabelMapCachePreg = null;
+  var vectorstoreScopeLabelMapCacheWsFp = null;
+  var vectorstoreScopeLabelMapCacheTokenFp = null;
   var vectorstoreScopeLabelMapCache = null;
+
+  function registerVectorstoreCollectionScopeLabel(map, collName, label) {
+    var cn = String(collName != null ? collName : "").trim();
+    var lab = String(label != null ? label : "").trim();
+    if (!cn || !lab || lab === "—" || lab === "—:—" || lab.indexOf("—:") === 0) return;
+    map[cn] = lab;
+  }
 
   function buildVectorstoreCollectionScopeLabelMap() {
     var map = {};
+    if (
+      !globalThis.ChimeraSettings ||
+      !ChimeraSettings.Derive ||
+      typeof ChimeraSettings.Derive.vectorstoreCollectionNameFromIndexerMeta !== "function"
+    ) {
+      return map;
+    }
     var byRun = ctx.lastIndexerSummarizeByRun;
-    if (!byRun || typeof byRun !== "object") return map;
     var preg = ctx.lastIndexerSummarizePartitionRegistry;
-    var keys = Object.keys(byRun);
-    for (var i = 0; i < keys.length; i++) {
-      var run = byRun[keys[i]];
-      if (!run || !run.events || !run.events.length) continue;
-      var pmeta = null;
-      if (
-        preg &&
-        globalThis.ChimeraSettings &&
-        ChimeraSettings.Derive &&
-        typeof ChimeraSettings.Derive.indexerPartitionMetaForRun === "function"
-      ) {
-        pmeta = ChimeraSettings.Derive.indexerPartitionMetaForRun(preg, run.id, run.events, getFlat);
+    if (byRun && typeof byRun === "object") {
+      var keys = Object.keys(byRun);
+      for (var i = 0; i < keys.length; i++) {
+        var run = byRun[keys[i]];
+        if (!run || !run.events || !run.events.length) continue;
+        var pmeta = null;
+        if (
+          preg &&
+          typeof ChimeraSettings.Derive.indexerPartitionMetaForRun === "function"
+        ) {
+          pmeta = ChimeraSettings.Derive.indexerPartitionMetaForRun(preg, run.id, run.events, getFlat);
+        }
+        var meta = collectIndexerRunMeta(run.id, run.events, pmeta);
+        meta = mergePersistedIndexerWatchRoots(meta, run.events, run.id);
+        var cn = ChimeraSettings.Derive.vectorstoreCollectionNameFromIndexerMeta(meta);
+        registerVectorstoreCollectionScopeLabel(map, cn, indexerCardTitleSortLabel(meta));
       }
-      var meta = collectIndexerRunMeta(run.id, run.events, pmeta);
-      meta = mergePersistedIndexerWatchRoots(meta, run.events, run.id);
-      if (
-        !globalThis.ChimeraSettings ||
-        !ChimeraSettings.Derive ||
-        typeof ChimeraSettings.Derive.vectorstoreCollectionNameFromIndexerMeta !== "function"
-      )
-        continue;
-      var cn = ChimeraSettings.Derive.vectorstoreCollectionNameFromIndexerMeta(meta);
-      if (!cn) continue;
-      map[cn] = indexerCardTitleSortLabel(meta);
+    }
+    var nested = ctx.lastIndexerOperatorWorkspacesNested || [];
+    var tenantIds = operatorTenantIdsForCollectionMap();
+    var wi;
+    for (wi = 0; wi < nested.length; wi++) {
+      var ws = nested[wi];
+      var wsLabel = operatorManagedWorkspaceTitleText(ws);
+      var ti;
+      for (ti = 0; ti < tenantIds.length; ti++) {
+        var wsCn = ChimeraSettings.Derive.vectorstoreCollectionNameFromIndexerMeta({
+          tenantId: tenantIds[ti],
+          projectId: ws.project_id != null ? String(ws.project_id).trim() : "",
+          flavorId: ws.flavor_id != null ? String(ws.flavor_id).trim() : ""
+        });
+        registerVectorstoreCollectionScopeLabel(map, wsCn, wsLabel);
+      }
     }
     return map;
   }
 
   function vectorstoreCollectionScopeLabelForLogs(collRaw) {
+    var wsFp = ctx.lastIndexerOperatorWorkspacesFingerprint || "";
+    var tokenFp = vectorstoreScopeLabelMapTokenFingerprint();
     if (
       ctx.lastIndexerSummarizeByRun !== vectorstoreScopeLabelMapCacheRun ||
-      ctx.lastIndexerSummarizePartitionRegistry !== vectorstoreScopeLabelMapCachePreg
+      ctx.lastIndexerSummarizePartitionRegistry !== vectorstoreScopeLabelMapCachePreg ||
+      vectorstoreScopeLabelMapCacheWsFp !== wsFp ||
+      vectorstoreScopeLabelMapCacheTokenFp !== tokenFp
     ) {
       vectorstoreScopeLabelMapCacheRun = ctx.lastIndexerSummarizeByRun;
       vectorstoreScopeLabelMapCachePreg = ctx.lastIndexerSummarizePartitionRegistry;
+      vectorstoreScopeLabelMapCacheWsFp = wsFp;
+      vectorstoreScopeLabelMapCacheTokenFp = tokenFp;
       vectorstoreScopeLabelMapCache = buildVectorstoreCollectionScopeLabelMap();
     }
     var c = String(collRaw != null ? collRaw : "").trim();
     if (!c) return c;
     var hit = vectorstoreScopeLabelMapCache && vectorstoreScopeLabelMapCache[c];
-    return hit != null && String(hit).trim() !== "" ? String(hit).trim() : c;
+    if (hit != null && String(hit).trim() !== "" && hit !== c) return String(hit).trim();
+    return c;
   }
 
   function ragCollectionLabelForUi(collRaw) {
     var r = collRaw != null ? String(collRaw).trim() : "";
     if (!r) return "";
-    if (
-      globalThis.ChimeraSettings &&
-      ChimeraSettings.Derive &&
-      typeof ChimeraSettings.Derive.vectorstoreCollectionDisplay === "function"
-    ) {
-      var lab = ChimeraSettings.Derive.vectorstoreCollectionDisplay(r, vectorstoreCollectionScopeLabelForLogs);
-      if (lab != null && String(lab).trim() !== "") return String(lab).trim();
-    }
-    return r;
+    var lab = vectorstoreCollectionScopeLabelForLogs(r);
+    return lab && lab !== r ? lab : r;
   }
 
   function persistIndexerWatchRoots(paths, indexRunId, scopeKey, bucketId) {
@@ -4964,7 +5541,11 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       '</span><span class="sum-sub sum-sub--clamp muted">' +
       escapeHtml("Waiting on status update from an indexer worker") +
       "</span></span>" +
-      '<span class="sum-chev"></span></summary>' +
+      '<span class="sum-metrics">' +
+      indexerWorkspaceCollapsedMetricsHtml(staleMeta, []) +
+      "</span>" +
+      operatorCardChevronHtml() +
+      "</summary>" +
       '<div class="sum-body">' +
       '<div class="sum-section-label">Summary</div>' +
       '<dl class="indexer-run-kv">' +
@@ -5189,7 +5770,7 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
 
   function buildManagedWorkspacePathsEditHtml(wsNum, pathRows) {
     var rows = pathRows && pathRows.length ? pathRows : [];
-    var rmDisabled = rows.length ? "" : " disabled";
+    var addDisabled = ctx.workspaceManagedFolderPickerOpen ? " disabled" : "";
     var selOpts = "";
     var pi;
     for (pi = 0; pi < rows.length; pi++) {
@@ -5208,10 +5789,10 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       selOpts +
       "</select>" +
       '<div class="ws-draft-path-btns">' +
-      '<button type="button" class="sg-op-btn sg-op-btn--ghost ws-managed-btn-add">Add</button>' +
-      '<button type="button" class="sg-op-btn sg-op-btn--ghost ws-managed-btn-remove"' +
-      rmDisabled +
-      ">Remove</button>" +
+      '<button type="button" class="sg-op-btn sg-op-btn--ghost ws-managed-btn-add"' +
+      addDisabled +
+      '>Add</button>' +
+      '<button type="button" class="sg-op-btn sg-op-btn--ghost ws-managed-btn-remove" disabled>Remove</button>' +
       "</div></div>"
     );
   }
@@ -5221,30 +5802,69 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       titleText && String(titleText).trim()
         ? "Configure workspace " + String(titleText).trim()
         : "Configure workspace";
+    var desktop = workspaceDesktopFeaturesAvailable();
+    var dis = desktop ? "" : " disabled aria-disabled=\"true\"";
+    var tip = desktop ? "Configure" : WORKSPACE_WEB_UNAVAILABLE_TITLE;
+    return wrapDesktopOnlyLockedControl(
+      '<button type="button" class="sg-op-yaml-ov-btn ws-managed-btn-configure"' +
+        dis +
+        ' data-ws-managed-id="' +
+        escapeHtml(String(wsNum)) +
+        '" aria-label="' +
+        escapeHtml(lab) +
+        '" title="' +
+        escapeHtml(tip) +
+        '"><span class="material-symbols-outlined" aria-hidden="true">settings</span></button>',
+      !desktop,
+      true
+    );
+  }
+
+  function buildManagedWorkspaceIconActionBtnHtml(extraClass, icon, ariaLabel, title) {
+    var lab = ariaLabel != null ? String(ariaLabel) : "";
+    var tit = title != null ? String(title) : lab;
     return (
-      '<button type="button" class="sg-op-configure-btn sg-op-configure-btn--overlay ws-managed-btn-configure" data-ws-managed-id="' +
-      escapeHtml(String(wsNum)) +
+      '<button type="button" class="sg-op-yaml-ov-btn ' +
+      extraClass +
       '" aria-label="' +
       escapeHtml(lab) +
-      '" title="Configure"><span class="material-symbols-outlined" aria-hidden="true">settings</span></button>'
+      '" title="' +
+      escapeHtml(tit) +
+      '"><span class="material-symbols-outlined" aria-hidden="true">' +
+      escapeHtml(icon) +
+      "</span></button>"
     );
   }
 
-  function buildManagedWorkspaceEditToolbarHtml(wsNum) {
+  function buildManagedWorkspaceEditToolbarHtml(_wsNum) {
     return (
-      '<div class="ws-managed-toolbar">' +
-      '<span class="ws-managed-editing-hint muted">Editing</span>' +
-      '<span class="ws-managed-actions">' +
-      '<button type="button" class="sg-op-btn sg-op-btn--ghost ws-managed-btn-cancel">Cancel</button>' +
-      '<button type="button" class="sg-op-btn ws-managed-btn-save">Save</button>' +
-      '<button type="button" class="sg-op-btn sg-op-btn--ghost sg-op-btn--danger ws-managed-btn-delete">Delete workspace</button>' +
-      "</span></div>"
+      '<div class="ws-managed-edit-controls">' +
+      buildManagedWorkspaceIconActionBtnHtml(
+        "ws-managed-btn-delete",
+        "delete_forever",
+        "Delete workspace",
+        "Delete workspace"
+      ) +
+      buildManagedWorkspaceIconActionBtnHtml(
+        "ws-managed-btn-save",
+        "keep",
+        "Keep watched paths",
+        "Keep"
+      ) +
+      buildManagedWorkspaceIconActionBtnHtml(
+        "ws-managed-btn-refresh",
+        "refresh",
+        "Revert watched paths to last saved",
+        "Refresh"
+      ) +
+      buildManagedWorkspaceIconActionBtnHtml("ws-managed-btn-cancel", "cancel", "Cancel editing", "Cancel") +
+      "</div>"
     );
   }
 
-  function buildManagedWorkspaceToolbarHtml(wsNum, isEdit) {
+  function buildManagedWorkspaceToolbarHtml(wsNum, isEdit, titleText) {
     if (isEdit) return buildManagedWorkspaceEditToolbarHtml(wsNum);
-    return buildManagedWorkspaceConfigureBtnHtml(wsNum);
+    return '<div class="ws-managed-edit-controls">' + buildManagedWorkspaceConfigureBtnHtml(wsNum, titleText) + "</div>";
   }
 
   function beginWorkspaceManagedEdit(wsNum) {
@@ -5260,13 +5880,25 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       initialSnapshot: cloneManagedPathRows(snap),
       paths: cloneManagedPathRows(snap)
     };
-    scheduleStoryRebuild();
+    ctx.summarizedForceFullRebuild = true;
+    refreshSummarizedPanel();
   }
 
   function cancelWorkspaceManagedEdit() {
     ctx.workspaceManagedEditId = null;
     ctx.workspaceManagedStaging = null;
-    scheduleStoryRebuild();
+    ctx.workspaceManagedFolderPickerOpen = false;
+    ctx.summarizedForceFullRebuild = true;
+    refreshSummarizedPanel();
+  }
+
+  function refreshWorkspaceManagedPaths() {
+    var st = ctx.workspaceManagedStaging;
+    if (!st || !Array.isArray(st.initialSnapshot)) return;
+    st.paths = cloneManagedPathRows(st.initialSnapshot);
+    ctx.workspaceManagedFolderPickerOpen = false;
+    ctx.summarizedForceFullRebuild = true;
+    refreshSummarizedPanel();
   }
 
   function refreshOperatorIndexerWorkspaceStateFromConfig() {
@@ -5418,13 +6050,12 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     if (isEdit) {
       pathsBlockHtml = buildManagedWorkspacePathsEditHtml(wsNum, ctx.workspaceManagedStaging.paths);
     }
-    var configureBtn = !isEdit ? buildManagedWorkspaceConfigureBtnHtml(wsNum, titleText) : "";
-    var editToolbar = isEdit ? buildManagedWorkspaceEditToolbarHtml(wsNum) : "";
+    var configureBtn = buildManagedWorkspaceToolbarHtml(wsNum, isEdit, titleText);
     var expanded = renderExpandedIndexer(syntheticRun, entryCache, meta, partitionRegistry, {
       kvOpts: { omitFileCountIfZero: true },
+      recentOpts: { omitWhenEmpty: true },
       pathsBlockHtml: pathsBlockHtml,
-      configureBtnHtml: configureBtn,
-      extraAfterSummaryHtml: editToolbar
+      configureBtnHtml: configureBtn
     });
     var cardCls =
       "sum-card sum-card--collapsible sum-card--indexer-operator-workspace sum-card--workspace-operator" +
@@ -5446,7 +6077,11 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       '</span><span class="sum-sub sum-sub--clamp muted">' +
       escapeHtml(subProse) +
       "</span></span>" +
-      '<span class="material-symbols-outlined sg-op-chev-icon" aria-hidden="true">chevron_right</span></header>' +
+      '<span class="sum-metrics">' +
+      indexerWorkspaceCollapsedMetricsHtml(meta, scopedEvs) +
+      "</span>" +
+      operatorCardChevronHtml() +
+      "</header>" +
       expanded +
       "</article>"
     );
@@ -5499,16 +6134,15 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     }
     var titleText = workspaceCardTitleFromIndexerMeta(meta);
     var configureBtnIx =
-      wsNumIx > 0 && !isIxEdit ? buildManagedWorkspaceConfigureBtnHtml(wsNumIx, titleText) : "";
-    var editToolbarIx = isIxEdit ? buildManagedWorkspaceEditToolbarHtml(wsNumIx) : "";
+      wsNumIx > 0 ? buildManagedWorkspaceToolbarHtml(wsNumIx, isIxEdit, titleText) : "";
     var expOptsIx = {
       kvOpts: {
         omitFileCountIfZero: true,
         workspaceRowId: wsNumIx > 0 ? canonicalWorkspaceRowIdKey(opWsForIx.id) : undefined
       },
+      recentOpts: wsNumIx > 0 ? { omitWhenEmpty: true } : undefined,
       pathsBlockHtml: pathsBlockIx,
-      configureBtnHtml: configureBtnIx,
-      extraAfterSummaryHtml: editToolbarIx
+      configureBtnHtml: configureBtnIx
     };
     var doneSeen = meta.doneSeen;
     var errRecent = countErrorSignalsInEntries(sliceRecent(evs, RECENT_CARD_STATUS_N));
@@ -5571,20 +6205,33 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       backlogLine !== ""
         ? '<span class="indexer-scope-caption">' + escapeHtml(backlogLine) + "</span>"
         : "";
-    var progressStack = indexerCollapsedIdle
-      ? ""
-      : '<div class="indexer-scope-progress" title="Scoped: ingest queue + fan-out file rows pending vs workspace files (from indexer.scope.status)">' +
-      progressBarHtml +
-      captionSpan +
-      "</div>";
+    var indexerScopeProgressReady =
+      doneSeen ||
+      !!(meta.scopeStatusFlat || meta.scopeStatusEdgeFlat) ||
+      (pRem !== null && qTot !== null);
+    var progressStack =
+      indexerCollapsedIdle || !indexerScopeProgressReady
+        ? ""
+        : '<div class="indexer-scope-progress" title="Scoped: ingest queue + fan-out file rows pending vs workspace files (from indexer.scope.status)">' +
+          progressBarHtml +
+          captionSpan +
+          "</div>";
     var avatarIndexer = indexerCollapsedIdle
       ? '<span class="sum-avatar sum-av-c sum-av-indexer-idle" aria-hidden="true">\u2713</span>'
       : '<span class="sum-avatar sum-av-c">IX</span>';
     var statusSpan = indexerCollapsedIdle ? "" : serviceSummaryStatusPillHtml(st);
-    var progressMetrics =
-      progressStack !== ""
-        ? '<span class="sum-metrics sum-metrics--indexer-scope">' + progressStack + "</span>"
-        : "";
+    var workspaceMetrics = indexerWorkspaceCollapsedMetricsHtml(meta, evs);
+    var progressMetrics = "";
+    if (workspaceMetrics || progressStack !== "" || statusSpan !== "") {
+      progressMetrics =
+        '<span class="sum-metrics' +
+        (progressStack !== "" ? " sum-metrics--indexer-scope" : "") +
+        '">' +
+        workspaceMetrics +
+        progressStack +
+        statusSpan +
+        "</span>";
+    }
     var iid = indexerCardDomIdFromMeta(meta, run.id);
     rememberIndexerCardSnapshot(run.id, meta);
     var detailsCls = "sum-card";
@@ -5607,9 +6254,8 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       sub +
       "</span>" +
       progressMetrics +
-      statusSpan +
-      '<span class="material-symbols-outlined sg-op-chev-icon" aria-hidden="true">chevron_right</span>' +
-      '<span class="sum-chev" aria-hidden="true"></span></summary>' +
+      operatorCardChevronHtml() +
+      "</summary>" +
       renderExpandedIndexer(run, evs, meta, partitionRegistry, expOptsIx) +
       "</details>"
     );
@@ -6444,10 +7090,12 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       adminStateCache: ctx.adminStateCache,
       tokenListCache: ctx.tokenListCache,
       workspaceDrafts: ctx.workspaceDrafts,
-      adminProviderSpecs: ADMIN_PROVIDER_PATCH_SPECS,
+      adminProviderSpecs: adminProviderSpecsFromVisible(),
+      virtualModelDrafts: ctx.virtualModelDrafts,
       adminRoutingEditing: ctx.adminRoutingEditing,
       adminFallbackEditing: ctx.adminFallbackEditing,
       adminRouterEditing: ctx.adminRouterEditing,
+      workspaceManagedEditId: ctx.workspaceManagedEditId,
       lastIndexerOperatorWorkspacesNested: ctx.lastIndexerOperatorWorkspacesNested
     };
   }
@@ -6486,6 +7134,13 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       workspaceDraftComparableManagedTitle: workspaceDraftComparableManagedTitle,
       operatorManagedWorkspaceTitleText: operatorManagedWorkspaceTitleText,
       operatorWorkspaceCoveredByIndexerRuns: operatorWorkspaceCoveredByIndexerRuns,
+      operatorWorkspaceNumericId: operatorWorkspaceNumericId,
+      indexerWorkspaceEditActiveForMeta: function (meta) {
+        if (ctx.workspaceManagedEditId == null || !ctx.workspaceManagedStaging) return false;
+        var opWs = findOperatorWorkspaceMatchingIndexerMeta(meta);
+        if (!opWs) return false;
+        return operatorWorkspaceNumericId(opWs) === ctx.workspaceManagedEditId;
+      },
       indexerRunQualifiesForWorkspaceCard: function (run, partitionRegistry) {
         if (
           globalThis.ChimeraSettings &&
@@ -6521,21 +7176,19 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
         }
         return true;
       },
-      adminProvidersSectionBreakHtml: function () {
-        return "";
-      },
-      adminRoutingSectionBreakHtml: function () {
-        if (typeof ctx.operatorSectionHeadHtml !== "function") {
+      adminProvidersSectionBreakHtml: buildAdminProvidersSectionBreakHtml,
+      virtualModelsSectionBreakHtml: function (count) {
+        if (typeof ctx.buildVirtualModelsSectionBreakHtml === "function") {
+          return ctx.buildVirtualModelsSectionBreakHtml(count);
+        }
+        if (typeof ctx.buildVirtualModelsSectionIntroHtml === "function") {
           return (
-            '<div class="sum-section-label sum-feed-section-title">Routing</div>' +
-            '<div class="sum-workspaces-intro"><p class="sum-workspaces-intro-lead">Routing controls are fully editable here: policy YAML, fallback chain, and tool-router settings.</p></div>'
+            '<div class="sum-section-label sum-feed-section-title">Virtual models</div>' +
+            ctx.buildVirtualModelsSectionIntroHtml(count)
           );
         }
-        return (
-          ctx.operatorSectionHeadHtml("Routing", "route") +
-          '<div class="sum-workspaces-intro"><p class="sum-workspaces-intro-lead">Routing controls are fully editable here: policy YAML, fallback chain, and tool-router settings.</p></div>'
-        );
-      }
+        return '<div class="sum-section-label sum-feed-section-title">Virtual models</div>';
+      },
     };
   }
 
@@ -6551,12 +7204,10 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
         return buildAdminUsersCardHtml();
       case "admin-provider":
         return buildAdminProviderCardHtml(src.spec.id, src.spec.title, src.spec.avatar, src.spec.subtitle);
-      case "admin-routing":
-        return buildAdminRoutingRulesCardHtml();
-      case "admin-fallback":
-        return buildAdminFallbackCardHtml();
-      case "admin-router-model":
-        return buildAdminRouterModelCardHtml();
+      case "virtual-model":
+        return typeof buildVirtualModelCardHtml === "function" ? buildVirtualModelCardHtml(src.vm) : null;
+      case "virtual-model-draft":
+        return typeof buildVirtualModelDraftCardHtml === "function" ? buildVirtualModelDraftCardHtml(src.draft) : null;
       case "conversation":
         return buildConvCard(src);
       case "service":
@@ -6584,37 +7235,48 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       return null;
     }
     var deps = summarizedModelDeps();
-    deps.adminProvidersSectionBreakHtml = function () {
-      if (typeof ctx.operatorSectionHeadHtml !== "function") {
-        return (
-          '<div class="sum-section-label sum-feed-section-title">Providers</div>' +
-          '<div class="sum-workspaces-intro"><p class="sum-workspaces-intro-lead">Providers drive upstream inference through chimera-broker; each card shows configuration, usage, and scoped log activity.</p></div>'
-        );
-      }
-      return (
-        ctx.operatorSectionHeadHtml("Providers", "hub") +
-        '<div class="sum-workspaces-intro"><p class="sum-workspaces-intro-lead">Providers drive upstream inference through chimera-broker; each card shows configuration, usage, and scoped log activity.</p></div>'
-      );
-    };
+    deps.adminProvidersSectionBreakHtml = buildAdminProvidersSectionBreakHtml;
     return ChimeraSettings.Summarized.Model.buildSummarizedModel(deps, summarizedModelState(agg));
   }
 
   function summarizedHtmlRenderers() {
     return {
       renderCard: renderSummarizedCardFromModel,
+      conversationsSectionHead: function () {
+        if (typeof ctx.operatorSectionHeadHtml !== "function") {
+          return (
+            '<div class="sum-feed-section-head">' +
+            '<span class="material-symbols-outlined sum-feed-section-icon" aria-hidden="true">forum</span>' +
+            '<span class="sum-feed-section-title sum-section-label">Conversations</span></div>'
+          );
+        }
+        return ctx.operatorSectionHeadHtml("Conversations", "forum");
+      },
       workspacesSectionHead: function () {
         if (typeof ctx.operatorSectionHeadHtml !== "function") {
           return (
             '<div class="sum-feed-section-head">' +
             '<span class="sum-feed-section-title sum-section-label">Workspaces</span>' +
-            '<button type="button" class="sum-workspaces-create-btn" data-sum-workspaces-create="1">Create</button></div>'
+            buildWorkspacesCreateBtnHtml("Create") +
+            "</div>"
           );
         }
+        var webOnly = !workspaceDesktopFeaturesAvailable();
         return ctx.operatorSectionHeadHtml("Workspaces", "database", {
           actionHtml:
             typeof ctx.operatorSectionAddBtn === "function"
-              ? ctx.operatorSectionAddBtn({ "data-sum-workspaces-create": "1" }, "Create workspace")
-              : "",
+              ? ctx.operatorSectionAddBtn(
+                  { "data-sum-workspaces-create": "1" },
+                  "Create workspace",
+                  webOnly
+                    ? {
+                        disabled: true,
+                        title: WORKSPACE_WEB_UNAVAILABLE_TITLE,
+                        desktopLocked: true
+                      }
+                    : undefined
+                )
+              : buildWorkspacesCreateBtnHtml("Create workspace"),
         });
       },
       servicesSectionHead: function () {
@@ -6624,6 +7286,7 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
         return ctx.operatorSectionHeadHtml("Core services", "dns", { iconPrimary: true });
       },
       workspacesSectionIntro: buildWorkspacesSectionIntroHtml,
+      buildWorkspacesCreateBtnHtml: buildWorkspacesCreateBtnHtml,
       emptyFeedMessage: function () {
         return (
           '<p class="muted">No conversation / service cards in the <em>loaded</em> window yet. Chat traffic needs <code>conversation_id</code> in structured logs; <strong>scroll to the top</strong> of this feed to load older lines (indexer snapshots often crowd the recent tail). Switch to <strong>StructuredLogs</strong> for the full stream.</p>'
@@ -6664,6 +7327,8 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
   ctx.resolveLogsOperatorUserLabel = resolveLogsOperatorUserLabel;
   ctx.inferServiceBadge = inferServiceBadge;
   ctx.badgeForServicePanel = badgeForServicePanel;
+  ctx.indexerEvlogWorkspaceSourceLabel = indexerEvlogWorkspaceSourceLabel;
+  ctx.serviceDisplayLabel = serviceDisplayLabel;
   ctx.badgeForIndexerRunLine = badgeForIndexerRunLine;
   if (
     globalThis.ChimeraSettings.Render &&
@@ -6686,9 +7351,8 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
   var buildAdminWorkflowsFeedSection = ctx.buildAdminWorkflowsFeedSection;
   var buildAdminUsersCardHtml = ctx.buildAdminUsersCardHtml;
   var buildAdminProviderCardHtml = ctx.buildAdminProviderCardHtml;
-  var buildAdminRoutingRulesCardHtml = ctx.buildAdminRoutingRulesCardHtml;
-  var buildAdminFallbackCardHtml = ctx.buildAdminFallbackCardHtml;
-  var buildAdminRouterModelCardHtml = ctx.buildAdminRouterModelCardHtml;
+  var buildVirtualModelCardHtml = ctx.buildVirtualModelCardHtml;
+  var buildVirtualModelDraftCardHtml = ctx.buildVirtualModelDraftCardHtml;
   var buildWorkspaceDraftCardHtml = ctx.buildWorkspaceDraftCardHtml;
   var fallbackChainToYAML = ctx.fallbackChainToYAML;
   var parseFallbackChainInput = ctx.parseFallbackChainInput;
@@ -6716,9 +7380,9 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
   ctx.patchGatewayOverviewCard = patchGatewayOverviewCard;
   ctx.patchAdminUsersCard = patchAdminUsersCard;
   ctx.patchAdminProviderCard = patchAdminProviderCard;
-  ctx.patchAdminRoutingCard = patchAdminRoutingCard;
-  ctx.patchAdminFallbackCard = patchAdminFallbackCard;
-  ctx.patchAdminRouterModelsCard = patchAdminRouterModelsCard;
+  ctx.syncSummarizedModelCache = syncSummarizedModelCache;
+  ctx.removeVirtualModelFromSummarizedFeed = removeVirtualModelFromSummarizedFeed;
+  ctx.refreshAdminCardAfterEditToggle = refreshAdminCardAfterEditToggle;
   ctx.patchAdminCardsFromPoll = patchAdminCardsFromPoll;
   ctx.fetchTokenLabels = fetchTokenLabels;
   ctx.fetchGatewayMetrics = fetchGatewayMetrics;
@@ -6730,16 +7394,22 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
   ctx.syncUiStatePolling = syncUiStatePolling;
   ctx.syncChimeraBrokerProviderPolling = syncChimeraBrokerProviderPolling;
   ctx.adminPostJSON = adminPostJSON;
+  ctx.adminPutJSON = adminPutJSON;
+  ctx.fetchVirtualModelDetail = fetchVirtualModelDetail;
+  ctx.patchVirtualModelCard = patchVirtualModelCard;
   ctx.adminSetMessage = adminSetMessage;
   ctx.parseFallbackChainInput = parseFallbackChainInput;
   ctx.fallbackChainToYAML = fallbackChainToYAML;
   ctx.pickFolderForWorkspaceDraft = pickFolderForWorkspaceDraft;
+  ctx.workspaceDesktopFeaturesAvailable = workspaceDesktopFeaturesAvailable;
+  ctx.buildWorkspacesCreateBtnHtml = buildWorkspacesCreateBtnHtml;
   ctx.findWorkspaceDraft = findWorkspaceDraft;
   ctx.appendWorkspaceDraftPath = appendWorkspaceDraftPath;
   ctx.saveWorkspaceDraftById = saveWorkspaceDraftById;
   ctx.removeWorkspaceDraft = removeWorkspaceDraft;
   ctx.beginWorkspaceManagedEdit = beginWorkspaceManagedEdit;
   ctx.cancelWorkspaceManagedEdit = cancelWorkspaceManagedEdit;
+  ctx.refreshWorkspaceManagedPaths = refreshWorkspaceManagedPaths;
   ctx.saveManagedWorkspacePaths = saveManagedWorkspacePaths;
   ctx.deleteManagedWorkspace = deleteManagedWorkspace;
   ctx.markUiUnauthorized = markUiUnauthorized;
@@ -6749,5 +7419,44 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
   ctx.buildIndexerManagedWorkspaceSummaryRowsFromOperatorStore =
     buildIndexerManagedWorkspaceSummaryRowsFromOperatorStore;
   ctx.indexerServiceSummaryWorkspacesHtml = indexerServiceSummaryWorkspacesHtml;
+  ctx.ragCollectionLabelForUi = ragCollectionLabelForUi;
+  ctx.vectorstoreCollectionScopeLabelForLogs = vectorstoreCollectionScopeLabelForLogs;
+  globalThis.ragCollectionLabelForUi = ragCollectionLabelForUi;
+  globalThis.chimeraVectorstoreCollectionScopeLabelForLogs = vectorstoreCollectionScopeLabelForLogs;
+
+  if (
+    globalThis.ChimeraSettings &&
+    ChimeraSettings.Derive &&
+    typeof ChimeraSettings.Derive.mountRagWorkspaceLabel === "function"
+  ) {
+    ChimeraSettings.Derive.mountRagWorkspaceLabel({
+      getOperatorWorkspaces: function () {
+        return ctx.lastIndexerOperatorWorkspacesNested || [];
+      },
+      tenantUserLabel: function (tenantId) {
+        var tid = String(tenantId || "").trim();
+        if (tid && ctx.tokenLabelByTenant[tid]) return String(ctx.tokenLabelByTenant[tid]).trim();
+        return resolveLogsOperatorUserLabel();
+      },
+      operatorWorkspaceTitle: function (ws) {
+        return operatorManagedWorkspaceTitleText(ws);
+      },
+      workspaceTitleFromParts: function (userLabel, projectId, flavorId) {
+        var flav =
+          flavorId != null && String(flavorId).trim() !== "" ? String(flavorId).trim() : "—";
+        return workspaceCardTitleFromIndexerMeta({
+          userLabel: userLabel,
+          projectId: projectId,
+          flavorId: flav
+        });
+      },
+      normalizeFlavor: normalizeFlavorMatch
+    });
+  }
+
+  ctx.ensureAdminProviderCatalog = ensureAdminProviderCatalog;
+  ctx.closeAdminProviderPicker = closeAdminProviderPicker;
+  ctx.setAdminProviderPickerOpen = setAdminProviderPickerOpen;
+  ensureAdminProviderCatalog();
 };
 

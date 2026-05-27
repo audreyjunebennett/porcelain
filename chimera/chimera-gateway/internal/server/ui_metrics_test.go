@@ -162,10 +162,7 @@ metrics:
 		t.Fatal(err)
 	}
 
-	rt, err := NewRuntime(gwPath, testLog())
-	if err != nil {
-		t.Fatal(err)
-	}
+	rt := mustRuntime(t, gwPath)
 	st := rt.MetricsStore()
 	if st == nil {
 		t.Fatal("expected metrics store open")

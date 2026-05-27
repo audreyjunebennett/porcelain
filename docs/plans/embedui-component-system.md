@@ -17,7 +17,7 @@ Operators see cards, chips, tables, and forms across `/ui/logs`, setup, metrics,
 |-------|---------|--------|
 | [Phase 1 — Shared CSS primitives](#phase-1--shared-css-primitives) | `ui.css` + section imports; orphan pages can share buttons, tables, callouts | `done` |
 | [Phase 2 — UI component modules](#phase-2--ui-component-modules) | `embedui/ui/components/*` for Badge, Pill, Chip, Card, Button, tables, timeline | `done` |
-| [Phase 3 — Card render extraction](#phase-3--card-render-extraction) | `summarizedFeed.js` orchestrates only; card HTML lives under `render/cards/` | `todo` |
+| [Phase 3 — Card render extraction](#phase-3--card-render-extraction) | `summarizedFeed.js` orchestrates only; card HTML lives under `render/cards/` | `done` |
 | [Phase 4 — Handler and app shell split](#phase-4--handler-and-app-shell-split) | `wireHandlers.js` and `logs_app.js` shrink to mount + transport | `done` |
 | [Phase 5 — Unify standalone operator pages](#phase-5--unify-standalone-operator-pages) | `setup.html`, `metrics.html`, `panel.html` use shared tokens + `ui.css` | `done` |
 | [Phase 6 — Optional bundle step](#phase-6--optional-bundle-step) | CI/Makefile can emit one embed bundle; dev still loads modules individually | `deferred` |

@@ -106,6 +106,59 @@ func TestLogsDerive_scrapeConversationMetrics_totalTokensAndVec(t *testing.T) {
 	}
 }
 
+func TestLogsDerive_conversationRagRetrievalSummary_workspaceAndHits(t *testing.T) {
+	vm := goja.New()
+	evalJS(t, vm, settingsUIPath(t, "testing", "loader.js"))
+	evalJS(t, vm, settingsUIPath(t, "derive", "ragWorkspaceLabel.js"))
+	evalJS(t, vm, settingsUIPath(t, "derive", "conversationMetrics.js"))
+	mountTestRagWorkspaceLabel(t, vm)
+
+	summaryFn, ok := goja.AssertFunction(vm.Get("ChimeraSettings").ToObject(vm).Get("Derive").ToObject(vm).Get("conversationRagRetrievalSummary"))
+	if !ok {
+		t.Fatal("missing conversationRagRetrievalSummary")
+	}
+
+	events := []map[string]any{
+		{"parsed": map[string]any{"rawFlat": map[string]any{
+			"msg": "conversation.rag.attached", "tenant": "tenant-1", "project": "workspacename", "hits": 8,
+		}}},
+	}
+	v, err := summaryFn(goja.Undefined(), vm.ToValue(events), goja.Undefined())
+	if err != nil {
+		t.Fatal(err)
+	}
+	obj := v.ToObject(vm)
+	if obj.Get("hits").Export() != int64(8) {
+		t.Fatalf("hits=%v", obj.Get("hits").Export())
+	}
+	if got := obj.Get("workspaceTitle").String(); got != "lynn:workspacename" {
+		t.Fatalf("workspaceTitle=%q", got)
+	}
+	if obj.Get("workspaceKnown").Export().(bool) {
+		t.Fatal("expected unknown workspace")
+	}
+	if !obj.Get("hasWorkspace").Export().(bool) {
+		t.Fatal("expected hasWorkspace")
+	}
+
+	knownEvents := []map[string]any{
+		{"parsed": map[string]any{"rawFlat": map[string]any{
+			"msg": "conversation.rag.attached", "tenant": "tenant-1", "project": "task-orchestrator", "hits": 3,
+		}}},
+	}
+	v2, err := summaryFn(goja.Undefined(), vm.ToValue(knownEvents), goja.Undefined())
+	if err != nil {
+		t.Fatal(err)
+	}
+	obj2 := v2.ToObject(vm)
+	if got := obj2.Get("workspaceTitle").String(); got != "lynn:task-orchestrator" {
+		t.Fatalf("known workspaceTitle=%q", got)
+	}
+	if !obj2.Get("workspaceKnown").Export().(bool) {
+		t.Fatal("expected known workspace")
+	}
+}
+
 func TestLogsDerive_conversationBrokerRelayCount_andFlat(t *testing.T) {
 	vm := goja.New()
 	evalJS(t, vm, settingsUIPath(t, "testing", "loader.js"))
@@ -652,7 +705,15 @@ func TestLogsDerive_chimeraBrokerOperatorLine(t *testing.T) {
 	}{
 		{
 			flat: map[string]any{"service": "chimera-broker", "msg": "chimera-broker.http.access", "http_method": "GET", "http_target": "http://localhost:8081/v1/models", "http_status": 200, "http_duration_ms": 3.2},
-			want: "Inbound · GET /v1/models · → 200 · 3 ms",
+			want: "Model catalog refresh · gateway admin · GET /v1/models · → 200 · 3 ms",
+		},
+		{
+			flat: map[string]any{"service": "chimera-broker", "msg": "chimera-broker.http.access", "http_method": "GET", "http_target": "/api/governance/providers", "http_status": 200, "http_duration_ms": 5},
+			want: "Provider roster sync · gateway admin · GET /api/governance/providers · → 200 · 5 ms",
+		},
+		{
+			flat: map[string]any{"service": "chimera-broker", "msg": "chimera-broker.http.access", "http_method": "GET", "http_target": "/api/providers/gemini", "http_status": 200, "http_duration_ms": 4, "provider_id": "gemini"},
+			want: "Provider health probe · gemini · GET /api/providers/gemini · → 200 · 4 ms",
 		},
 		{
 			flat: map[string]any{"service": "chimera-broker", "msg": "chimera-broker.rate_limit", "http_method": "POST", "http_target": "/v1/embeddings", "http_status": 429, "http_duration_ms": 10},
@@ -668,15 +729,15 @@ func TestLogsDerive_chimeraBrokerOperatorLine(t *testing.T) {
 		},
 		{
 			flat: map[string]any{"msg": "chat.chimera-broker.request", "upstreamModel": "groq/openai/gpt-oss-20b", "stream": true, "outgoingTokens": 128},
-			want: "Relay request · gpt-oss-20b · streaming on · 128 tok out",
+			want: "Relay request · gpt-oss-20b · 128 input tok est",
 		},
 		{
 			flat: map[string]any{"msg": "chat.chimera-broker.response", "statusCode": 200, "usageTotalTokens": 50, "responseBytes": 1200},
-			want: "Relay response · HTTP 200 · 50 usage tok · 1200 B",
+			want: "Relay response · HTTP 200 · 50 usage tok",
 		},
 		{
 			flat: map[string]any{"msg": "upstream chat response", "statusCode": 201, "usageTotalTokens": 1, "responseBytes": 10},
-			want: "Relay response · HTTP 201 · 1 usage tok · 10 B",
+			want: "Relay response · HTTP 201 · 1 usage tok",
 		},
 		{
 			flat: map[string]any{"msg": "chat.routing.attempt", "attempt": 2, "upstreamModel": "x/y/z", "chainLen": 3},
@@ -717,11 +778,11 @@ func TestLogsDerive_chimeraBrokerOperatorLine(t *testing.T) {
 	}{
 		{
 			flat: map[string]any{"service": "chimera-broker", "msg": "chimera-broker.http.access", "http_method": "GET", "http_target": "http://localhost:8081/v1/models", "http_status": 200, "http_duration_ms": 3.2},
-			want: "Inbound · GET /v1/models · 3 ms",
+			want: "Model catalog refresh · gateway admin · GET /v1/models · 3 ms",
 		},
 		{
-			flat: map[string]any{"msg": "chat.chimera-broker.response", "statusCode": 200, "usageTotalTokens": 50, "responseBytes": 1200},
-			want: "Relay response · 50 usage tok · 1200 B",
+			flat: map[string]any{"msg": "chat.chimera-broker.response", "statusCode": 200, "usageTotalTokens": 50, "responseBytes": 1200, "finish_reason": "stop"},
+			want: "Provider responded · 50 tokens used (prompt + completion) · finish: stop",
 		},
 	}
 	opts := map[string]any{"forEventLog": true}
@@ -1257,6 +1318,36 @@ func TestLogsDerive_chimeraBrokerCardMetrics_catalogModelCount_gatewayLine(t *te
 	}
 }
 
+func TestLogsDerive_chimeraBrokerAvailableModelCount_snapshotPreferred(t *testing.T) {
+	vm := goja.New()
+	evalJS(t, vm, settingsUIPath(t, "testing", "loader.js"))
+	evalJS(t, vm, settingsUIPath(t, "derive", "chimeraBrokerMetrics.js"))
+	fn, ok := goja.AssertFunction(vm.Get("ChimeraSettings").ToObject(vm).Get("Derive").ToObject(vm).Get("chimeraBrokerAvailableModelCount"))
+	if !ok {
+		t.Fatal("missing chimeraBrokerAvailableModelCount")
+	}
+	arr := []map[string]any{
+		{"text": "", "parsed": map[string]any{"rawFlat": map[string]any{
+			"msg": "chat.chimera-broker.available_models", "service": "gateway", "catalog_model_count": 3,
+		}}},
+	}
+	snap := map[string]any{"catalog_model_count": 99}
+	v, err := fn(goja.Undefined(), vm.ToValue(arr), goja.Undefined(), vm.ToValue(snap))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Export() != int64(99) {
+		t.Fatalf("snapshot count=%v want 99", v.Export())
+	}
+	v2, err := fn(goja.Undefined(), vm.ToValue(arr), goja.Undefined(), goja.Undefined())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v2.Export() != int64(3) {
+		t.Fatalf("log fallback count=%v want 3", v2.Export())
+	}
+}
+
 func TestLogsDerive_vectorstoreCollection_nameGolden(t *testing.T) {
 	vm := goja.New()
 	evalJS(t, vm, settingsUIPath(t, "testing", "loader.js"))
@@ -1528,6 +1619,13 @@ func TestLogsDerive_gatewayCardModel_kvCountersHideRow(t *testing.T) {
 		{"/readyz", true},
 		{"/api/ui/logs", true},
 		{"/ui/settings", true},
+		{"/api/ui/tokens", true},
+		{"/api/ui/state", true},
+		{"/api/ui/chimera-broker/providers", true},
+		{"/api/ui/providers/catalog", true},
+		{"/api/ui/indexer/config", true},
+		{"/api/ui/indexer/workspaces", true},
+		{"/v1/indexer/storage/stats", true},
 		{"/ui/logs", false},
 	} {
 		ent := map[string]any{
@@ -1699,7 +1797,7 @@ func TestLogsDerive_indexerPresent_proseStateAndStats(t *testing.T) {
 	}
 	ps2Str := ps2.String()
 	if !strings.Contains(ps2Str, "12") || !strings.Contains(ps2Str, "waiting to be examined") ||
-		!strings.Contains(ps2Str, "waiting to be embedded") || strings.Contains(ps2Str, "Pipeline") {
+		!strings.Contains(ps2Str, "waiting to be indexed") || strings.Contains(ps2Str, "Pipeline") {
 		t.Fatalf("scope status prose: %q", ps2Str)
 	}
 	skipFlat := map[string]any{
@@ -1726,8 +1824,8 @@ func TestLogsDerive_indexerPresent_proseStateAndStats(t *testing.T) {
 		t.Fatal(err)
 	}
 	psSkipNewStr := psSkipNew.String()
-	if !strings.Contains(psSkipNewStr, "embedded 9 new file") || strings.Contains(psSkipNewStr, "0 unchanged") {
-		t.Fatalf("skipped summary new embed prose: %q", psSkipNewStr)
+	if !strings.Contains(psSkipNewStr, "indexed 9 new file") || strings.Contains(psSkipNewStr, "0 unchanged") {
+		t.Fatalf("skipped summary new index prose: %q", psSkipNewStr)
 	}
 	hotFlat := map[string]any{"service": "indexer", "msg": "indexer.supervised.hot_reload", "n": 2}
 	psHot, err := proseFn(goja.Undefined(), vm.ToValue(hotFlat))
@@ -1747,7 +1845,7 @@ func TestLogsDerive_indexerPresent_proseStateAndStats(t *testing.T) {
 		t.Fatal(err)
 	}
 	pqStr := pq.String()
-	if !strings.Contains(pqStr, "Ingest workers idle") || !strings.Contains(pqStr, "embed queue") {
+	if !strings.Contains(pqStr, "Ingest workers idle") || !strings.Contains(pqStr, "index queue") {
 		t.Fatalf("queue snapshot prose: %q", pqStr)
 	}
 	scanFlat := map[string]any{
@@ -1826,7 +1924,7 @@ func TestLogsDerive_indexerPresent_proseStateAndStats(t *testing.T) {
 	if strings.Contains(fs, "/v1/ingest/session") {
 		t.Fatalf("ingest failure prose should not repeat raw HTTP path: %q", fs)
 	}
-	if !strings.Contains(fs, "chunked upload session missing") {
+	if !strings.Contains(fs, "chunked upload session lost") {
 		t.Fatalf("ingest failure prose: %q", fs)
 	}
 	waitFlat := map[string]any{
@@ -2473,5 +2571,264 @@ func TestLogsRender_sumEvlog_workspaceScopedLogOmitsIndexerBadge(t *testing.T) {
 	}
 	if !strings.Contains(html, "Indexed example.go") {
 		t.Fatalf("expected message body, got %q", html)
+	}
+}
+
+func TestLogsRender_sumEvlog_workspaceScopedLogOmitsVectorstoreBadge(t *testing.T) {
+	vm := goja.New()
+	evalJS(t, vm, settingsUIPath(t, "testing", "loader.js"))
+	evalJS(t, vm, settingsUIPath(t, "util", "escape.js"))
+	evalJS(t, vm, settingsUIPath(t, "operator_copy.js"))
+	evalJS(t, vm, settingsUIPath(t, "render", "operatorMessage.js"))
+	evalJS(t, vm, settingsUIPath(t, "render", "operatorMessageServices.js"))
+	evalJS(t, vm, settingsUIPath(t, "render", "sumEvlog.js"))
+	_, err := vm.RunString(`
+		var ctx = {
+			getFlat: function (p) { return (p && p.rawFlat) || {}; },
+			escapeHtml: ChimeraSettings.escapeHtml,
+			primaryLogMessage: function (parsed, text, opts) {
+				return ChimeraSettings.Render.operatorMessage((parsed && parsed.rawFlat) || {}, opts);
+			},
+			formatLogDateTimeLocal: function () { return "12:00:00"; },
+			formatLogRelativeAgo: function () { return "just now"; },
+			toIsoDatetimeAttr: function () { return "2026-05-22T12:00:00"; },
+			strHash: function (s) { return String(s); },
+			badgeForIndexerRunLine: function (ent) {
+				var src = (ent.source || "").toLowerCase();
+				if (src === "chimera-vectorstore") {
+					return { cls: "sum-svc-chimera-vectorstore", lab: "chimera-vectorstore" };
+				}
+				return { cls: "sum-svc-chimera-indexer", lab: "chimera-indexer" };
+			}
+		};
+		ChimeraSettings.Render.mountSumEvlog(ctx);
+		globalThis.__sumEvlogBuild = ctx.sumEvlogBuildTbodyFromServiceEntries;
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fn, ok := goja.AssertFunction(vm.Get("__sumEvlogBuild"))
+	if !ok {
+		t.Fatal("missing sumEvlogBuildTbodyFromServiceEntries")
+	}
+	entries := []any{
+		map[string]any{
+			"parsed": map[string]any{"rawFlat": map[string]any{
+				"msg": "vectorstore.http.upsert.summary", "upserts_ok": 63, "window_ms": 6000,
+			}},
+			"text":   "",
+			"ts":     "2026-05-22T12:00:00Z",
+			"source": "chimera-vectorstore",
+		},
+	}
+	v, err := fn(
+		goja.Undefined(),
+		vm.ToValue("indexer"),
+		vm.ToValue(entries),
+		vm.ToValue(map[string]any{
+			"indexerRunLine": true, "suppressIndexerBadge": true, "suppressVectorstoreBadge": true, "cardScope": "ws-test",
+		}),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := v.String()
+	if strings.Contains(html, "chimera-vectorstore") {
+		t.Fatalf("workspace scoped log should omit chimera-vectorstore badge, got %q", html)
+	}
+	if !strings.Contains(html, "Updated the indexes of 63 files") {
+		t.Fatalf("expected vectorstore summary prose, got %q", html)
+	}
+}
+
+func TestLogsRender_sumEvlog_convSourceColumnSeparatesBadgeFromMessage(t *testing.T) {
+	vm := goja.New()
+	evalJS(t, vm, settingsUIPath(t, "testing", "loader.js"))
+	evalJS(t, vm, settingsUIPath(t, "util", "escape.js"))
+	evalJS(t, vm, settingsUIPath(t, "contracts.js"))
+	evalJS(t, vm, settingsUIPath(t, "render", "sumEvlog.js"))
+	_, err := vm.RunString(`
+		var ctx = {
+			getFlat: function (p) { return (p && p.rawFlat) || {}; },
+			escapeHtml: ChimeraSettings.escapeHtml,
+			primaryLogMessage: function () { return "Provider responded · llama-3."; },
+			formatLogDateTimeLocal: function () { return "12:00:00"; },
+			formatLogRelativeAgo: function () { return "just now"; },
+			toIsoDatetimeAttr: function () { return "2026-05-22T12:00:00"; },
+			strHash: function (s) { return String(s); },
+			inferServiceBadge: function () {
+				return { cls: "sum-svc-broker", key: "chimera-broker", lab: "broker" };
+			}
+		};
+		ChimeraSettings.Render.mountSumEvlog(ctx);
+		globalThis.__sumEvlogRow = ctx.sumEvlogRowTrHtml;
+		globalThis.__sumEvlogPanel = ctx.sumEvlogPanelHtml;
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rowFn, ok := goja.AssertFunction(vm.Get("__sumEvlogRow"))
+	if !ok {
+		t.Fatal("missing sumEvlogRowTrHtml")
+	}
+	ent := map[string]any{
+		"parsed": map[string]any{"rawFlat": map[string]any{"msg": "chat.chimera-broker.response"}, "levelCanon": "INFO"},
+		"text":   "",
+		"ts":     "2026-05-22T12:00:00Z",
+		"source": "chimera-broker",
+	}
+	rowV, err := rowFn(
+		goja.Undefined(),
+		vm.ToValue(ent),
+		vm.ToValue("conv-scope"),
+		vm.ToValue(0),
+		vm.ToValue(map[string]any{"cls": "sum-svc-broker", "key": "chimera-broker", "lab": "broker"}),
+		vm.ToValue(map[string]any{"showSourceColumn": true}),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	row := rowV.String()
+	if !strings.Contains(row, `class="sum-evlog__cell--source"`) {
+		t.Fatalf("expected source cell, got %q", row)
+	}
+	if !strings.Contains(row, `sum-evlog__cell--source`) || !strings.Contains(row, `sum-svc-badge sum-svc-broker">broker</span>`) {
+		t.Fatalf("expected broker badge in source cell, got %q", row)
+	}
+	if strings.Contains(row, `cell--msg"><span class="sum-svc-badge`) {
+		t.Fatalf("badge should not appear in message cell, got %q", row)
+	}
+	if !strings.Contains(row, "Provider responded") {
+		t.Fatalf("expected message body, got %q", row)
+	}
+	if strings.Contains(row, "chimera-broker") {
+		t.Fatalf("should not show chimera- prefix in row html, got %q", row)
+	}
+
+	panelFn, ok := goja.AssertFunction(vm.Get("__sumEvlogPanel"))
+	if !ok {
+		t.Fatal("missing sumEvlogPanelHtml")
+	}
+	panelV, err := panelFn(goja.Undefined(), vm.ToValue(map[string]any{"showSourceColumn": true, "title": "Scoped log"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	panel := panelV.String()
+	if !strings.Contains(panel, ">Source</th>") {
+		t.Fatalf("expected Source column header, got %q", panel)
+	}
+	if !strings.Contains(panel, `data-sum-evlog-cols="4"`) {
+		t.Fatalf("expected 4 columns, got %q", panel)
+	}
+}
+
+func TestLogsRender_sumEvlog_indexerStorageStatsUnavailableShowsStatus(t *testing.T) {
+	vm := goja.New()
+	evalJS(t, vm, settingsUIPath(t, "testing", "loader.js"))
+	evalJS(t, vm, settingsUIPath(t, "util", "escape.js"))
+	evalJS(t, vm, uiEmbedPath(t, "components", "Pill.js"))
+	evalJS(t, vm, uiEmbedPath(t, "components", "StatusIndicator.js"))
+	evalJS(t, vm, settingsUIPath(t, "render", "sumEvlog.js"))
+	_, err := vm.RunString(`
+		var ctx = {
+			getFlat: function (p) { return (p && p.rawFlat) || {}; },
+			escapeHtml: ChimeraSettings.escapeHtml,
+			primaryLogMessage: function () { return "Could not verify the stored search index"; },
+			formatLogDateTimeLocal: function () { return "06:21:28"; },
+			formatLogRelativeAgo: function () { return "just now"; },
+			toIsoDatetimeAttr: function () { return "2026-05-25T06:21:28"; },
+			strHash: function (s) { return String(s); }
+		};
+		ChimeraSettings.Render.mountSumEvlog(ctx);
+		globalThis.__sumEvlogStatusModel = ctx.sumEvlogRowStatusModel;
+		globalThis.__sumEvlogStatusHtml = ctx.sumEvlogStatusInnerHtml;
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	modelFn, ok := goja.AssertFunction(vm.Get("__sumEvlogStatusModel"))
+	if !ok {
+		t.Fatal("missing sumEvlogRowStatusModel")
+	}
+	parsed := map[string]any{
+		"rawFlat": map[string]any{
+			"msg":            "indexer.storage.stats",
+			"available":      false,
+			"ingest_project": "assistants",
+			"detail":         "qdrant GET /collections/chimera-lynn-assistants-_-976cb46c: status 404: {\"status\":{\"error\":\"Not found\"}}",
+		},
+		"levelCanon": "INFO",
+	}
+	modelV, err := modelFn(goja.Undefined(), vm.ToValue(parsed), vm.ToValue(parsed["rawFlat"]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	model := modelV.ToObject(vm)
+	if model.Get("levelKey").String() != "ERROR" {
+		t.Fatalf("levelKey = %q, want ERROR", model.Get("levelKey").String())
+	}
+	if model.Get("http").ToInteger() != 404 {
+		t.Fatalf("http = %v, want 404", model.Get("http"))
+	}
+	statusFn, ok := goja.AssertFunction(vm.Get("__sumEvlogStatusHtml"))
+	if !ok {
+		t.Fatal("missing sumEvlogStatusInnerHtml")
+	}
+	statusV, err := statusFn(goja.Undefined(), vm.ToValue(parsed))
+	if err != nil {
+		t.Fatal(err)
+	}
+	status := statusV.String()
+	if !strings.Contains(status, "ERROR") {
+		t.Fatalf("expected ERROR pill in status column, got %q", status)
+	}
+	if !strings.Contains(status, "404") {
+		t.Fatalf("expected 404 HTTP pill in status column, got %q", status)
+	}
+}
+
+func TestLogsRender_sumEvlog_panelTitleOnly(t *testing.T) {
+	vm := goja.New()
+	evalJS(t, vm, settingsUIPath(t, "testing", "loader.js"))
+	evalJS(t, vm, uiEmbedPath(t, "util", "escape.js"))
+	evalJS(t, vm, uiEmbedPath(t, "components", "Chip.js"))
+	evalJS(t, vm, settingsUIPath(t, "util", "escape.js"))
+	evalJS(t, vm, settingsUIPath(t, "render", "sumEvlog.js"))
+	_, err := vm.RunString(`
+		var ctx = {
+			getFlat: function (p) { return (p && p.rawFlat) || {}; },
+			escapeHtml: ChimeraSettings.escapeHtml,
+			primaryLogMessage: function () { return "msg"; },
+			formatLogDateTimeLocal: function () { return "12:00:00"; },
+			formatLogRelativeAgo: function () { return "just now"; },
+			toIsoDatetimeAttr: function () { return "2026-05-22T12:00:00"; },
+			strHash: function (s) { return String(s); }
+		};
+		ChimeraSettings.Render.mountSumEvlog(ctx);
+		globalThis.__sumEvlogPanel = ctx.sumEvlogPanelHtml;
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fn, ok := goja.AssertFunction(vm.Get("__sumEvlogPanel"))
+	if !ok {
+		t.Fatal("missing sumEvlogPanelHtml")
+	}
+	v, err := fn(
+		goja.Undefined(),
+		vm.ToValue(map[string]any{
+			"title":            "Scoped log — conv",
+			"showSourceColumn": true,
+		}),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := v.String()
+	if !strings.Contains(html, "Scoped log — conv") {
+		t.Fatalf("expected title in html, got %q", html)
+	}
+	if strings.Contains(html, "sum-conv-services-after-log-hdr") {
+		t.Fatalf("expected no service strip wrapper, got %q", html)
 	}
 }

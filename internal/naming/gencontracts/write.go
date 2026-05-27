@@ -52,6 +52,13 @@ func WriteContractsJS(w io.Writer) error {
 		fmt.Fprintf(&b, "      if (%s) return %q;\n", strings.Join(conds, " || "), rule.Class)
 	}
 	fmt.Fprintf(&b, "      return %q;\n", naming.LogsUIServiceBadgeDefault)
+	b.WriteString("    },\n\n")
+	b.WriteString("    /** UI label: strip chimera- prefix from product/log source keys. */\n")
+	b.WriteString("    serviceDisplayLabel: function (productKey) {\n")
+	b.WriteString("      var k = String(productKey || \"\").trim().toLowerCase();\n")
+	b.WriteString("      if (!k) return \"\";\n")
+	b.WriteString("      if (k.indexOf(\"chimera-\") === 0) return k.slice(\"chimera-\".length);\n")
+	b.WriteString("      return k;\n")
 	b.WriteString("    }\n")
 	b.WriteString("  };\n")
 	b.WriteString("})();\n")

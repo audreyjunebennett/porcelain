@@ -56,6 +56,10 @@ type CatalogSnapshot struct {
 	// re-fetching.
 	ModelIDs []string
 	modelSet map[string]struct{}
+	// ModelContext maps upstream model id → context_length from the live catalog (when present).
+	ModelContext map[string]int64
+	// ModelMaxInputTokens maps upstream model id → max_input_tokens when the catalog provides it.
+	ModelMaxInputTokens map[string]int64
 	// FetchErr is a short error string when OK is false (e.g. transport failure). Empty otherwise.
 	FetchErr string
 }
@@ -78,6 +82,25 @@ func (s *CatalogSnapshot) HasModel(id string) bool {
 	}
 	_, ok := s.modelSet[strings.TrimSpace(id)]
 	return ok
+}
+
+// ContextLength returns the catalog context_length for modelID when captured on the last poll.
+// Returns false on a nil snapshot or when the field was absent.
+func (s *CatalogSnapshot) ContextLength(modelID string) (int64, bool) {
+	if s == nil || len(s.ModelContext) == 0 {
+		return 0, false
+	}
+	n, ok := s.ModelContext[strings.TrimSpace(modelID)]
+	return n, ok && n > 0
+}
+
+// MaxInputTokens returns max_input_tokens from the catalog when present.
+func (s *CatalogSnapshot) MaxInputTokens(modelID string) (int64, bool) {
+	if s == nil || len(s.ModelMaxInputTokens) == 0 {
+		return 0, false
+	}
+	n, ok := s.ModelMaxInputTokens[strings.TrimSpace(modelID)]
+	return n, ok && n > 0
 }
 
 // IsFresh reports whether the snapshot was taken within maxAge of now. Use this before trusting
@@ -166,6 +189,8 @@ func BuildSnapshot(ctx context.Context, res *config.Resolved, apiKey string, tim
 
 	provSet := map[string]struct{}{}
 	modelSet := map[string]struct{}{}
+	modelContext := map[string]int64{}
+	modelMaxInput := map[string]int64{}
 	modelIDs := make([]string, 0, len(data))
 	for _, raw := range data {
 		m, mOK := raw.(map[string]any)
@@ -179,6 +204,12 @@ func BuildSnapshot(ctx context.Context, res *config.Resolved, apiKey string, tim
 		}
 		modelIDs = append(modelIDs, id)
 		modelSet[id] = struct{}{}
+		if n, ok := int64FromCatalogField(m["context_length"]); ok {
+			modelContext[id] = n
+		}
+		if n, ok := int64FromCatalogField(m["max_input_tokens"]); ok {
+			modelMaxInput[id] = n
+		}
 		prov := ""
 		if slash := strings.Index(id, "/"); slash > 0 {
 			prov = id[:slash]
@@ -202,7 +233,27 @@ func BuildSnapshot(ctx context.Context, res *config.Resolved, apiKey string, tim
 	out.providerSet = provSet
 	out.ModelIDs = modelIDs
 	out.modelSet = modelSet
+	if len(modelContext) > 0 {
+		out.ModelContext = modelContext
+	}
+	if len(modelMaxInput) > 0 {
+		out.ModelMaxInputTokens = modelMaxInput
+	}
 	return out
+}
+
+func int64FromCatalogField(v any) (int64, bool) {
+	switch n := v.(type) {
+	case int:
+		return int64(n), n > 0
+	case int64:
+		return n, n > 0
+	case float64:
+		i := int64(n)
+		return i, i > 0
+	default:
+		return 0, false
+	}
 }
 
 func httpStatusOrDash(st int) string {

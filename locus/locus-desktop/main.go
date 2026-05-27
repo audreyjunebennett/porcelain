@@ -47,17 +47,17 @@ Usage:
 
 This binary launches or attaches to %s and opens desktop UI.
 Launcher-only flags:
-  %s <path>   Directory for %s/%s logs (default: ../%s)
+  %s <path>   Supervisor log directory (default: %s)
 
 Environment:
-  %s=1   Append lifecycle events to %s/%s
+  %s=1   Append lifecycle events to %s/%s/%s
 `,
 		locus.BinDesktop,
 		locus.BinDesktop, locus.FlagHeadless,
 		locus.BinDesktop,
 		locus.BinSupervisor,
-		locus.FlagLogDirLong, locus.BinDesktop, locus.BinSupervisor, locus.DirData,
-		locus.EnvTrace, locus.DirRun, locus.FileLifecycleLog,
+		locus.FlagLogDirLong, locus.DirData,
+		locus.EnvTrace, locus.DirData, locus.DirDesktopState, locus.FileLifecycleLog,
 	)
 }
 

@@ -151,6 +151,9 @@
   justify-content: flex-end;
   gap: 0.00rem;
   white-space: nowrap;
+  width: max-content;
+  max-width: 100%;
+  margin-left: auto;
 }
 .sum-metrics-table.sum-evlog__table thead th.sum-evlog__th-status .sum-evlog__th-status-head > .sum-evlog-status__pill {
   min-width: 0;
@@ -190,6 +193,11 @@
   border-radius: 0;
   overflow: visible;
   table-layout: fixed;
+  --sum-evlog-status-col-w: 4.75rem;
+  --sum-evlog-source-col-w: 4.75rem;
+}
+.sum-evlog[data-sum-evlog-source-indexer-workspace] .sum-metrics-table.sum-evlog__table {
+  --sum-evlog-source-col-w: 13.5rem;
 }
 .sum-metrics-table.sum-evlog__table thead,
 .sum-metrics-table.sum-evlog__table tbody {
@@ -206,11 +214,36 @@
 }
 .sum-metrics-table.sum-evlog__table thead th {
   border-top: none;
+  vertical-align: middle;
+}
+/* Partial column dividers: inset vertical rule on every header cell except the first */
+/* Re-enable to help with formatting or possibly for design clarity */
+/* .sum-metrics-table.sum-evlog__table thead th:not(:first-child) {
+  position: relative;
+}
+.sum-metrics-table.sum-evlog__table thead th:not(:first-child)::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.18rem;
+  bottom: 0.22rem;
+  width: 1px;
+  background: #9e9e9e;
+  pointer-events: none;
+} */
+.sum-metrics-table.sum-evlog__table thead th.sum-evlog__th-source {
+  white-space: nowrap;
+}
+.sum-metrics-table.sum-evlog__table thead th.sum-evlog__th-source,
+.sum-metrics-table.sum-evlog__table .sum-evlog__cell--source {
+  padding-left: 0.35rem;
+  padding-right: 0.35rem;
 }
 .sum-metrics-table.sum-evlog__table tbody {
   max-height: 16rem;
   overflow-x: auto;
   overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 .sum-metrics-table.sum-evlog__table thead tr,
 .sum-metrics-table.sum-evlog__table tbody tr {
@@ -224,17 +257,36 @@
 .sum-metrics-table.sum-evlog__table col.sum-evlog__col-time {
   width: 21ch;
 }
+.sum-metrics-table.sum-evlog__table col.sum-evlog__col-source {
+  width: var(--sum-evlog-source-col-w);
+  min-width: 0;
+}
 .sum-metrics-table.sum-evlog__table col.sum-evlog__col-msg {
   min-width: 0;
 }
 .sum-metrics-table.sum-evlog__table col.sum-evlog__col-status {
-  width: 12rem;
-  min-width: 12rem;
+  width: var(--sum-evlog-status-col-w);
+  min-width: 0;
 }
 .sum-metrics-table.sum-evlog__table th.sum-evlog__th-status,
-.sum-metrics-table.sum-evlog__table td.sum-evlog__cell--status {
+.sum-metrics-table.sum-evlog__table td.sum-evlog__cell--status,
+.sum-metrics-table.sum-evlog__table th.sum-evlog__th-source,
+.sum-metrics-table.sum-evlog__table td.sum-evlog__cell--source {
   text-align: right;
+}
+.sum-metrics-table.sum-evlog__table thead th.sum-evlog__th-status,
+.sum-metrics-table.sum-evlog__table thead th.sum-evlog__th-source {
+  vertical-align: middle;
+}
+.sum-metrics-table.sum-evlog__table td.sum-evlog__cell--status,
+.sum-metrics-table.sum-evlog__table td.sum-evlog__cell--source {
   vertical-align: top;
+}
+.sum-metrics-table.sum-evlog__table .sum-evlog__cell--time,
+.sum-metrics-table.sum-evlog__table thead th.sum-evlog__cell--time {
+  width: 21ch;
+  max-width: 21ch;
+  box-sizing: border-box;
 }
 .sum-metrics-table.sum-evlog__table .sum-evlog__cell--time time {
   display: inline-block;
@@ -244,17 +296,25 @@
   color: var(--embed-text-mono-dt);
   font-variant-numeric: tabular-nums;
 }
-.sum-metrics-table.sum-evlog__table .sum-evlog__cell--time {
-  width: 21ch;
-  max-width: 21ch;
+.sum-metrics-table.sum-evlog__table thead th.sum-evlog__th-source,
+.sum-metrics-table.sum-evlog__table .sum-evlog__cell--source {
+  width: var(--sum-evlog-source-col-w);
+  max-width: var(--sum-evlog-source-col-w);
   box-sizing: border-box;
 }
-/* Status rail: header row fits label + slice counts; body cells fit badges */
+/* Status rail: fixed width; body badges may wrap */
+.sum-metrics-table.sum-evlog__table thead th.sum-evlog__th-status,
 .sum-metrics-table.sum-evlog__table .sum-evlog__cell--status {
-  width: 12rem;
-  max-width: 12rem;
+  width: var(--sum-evlog-status-col-w);
+  max-width: var(--sum-evlog-status-col-w);
   box-sizing: border-box;
 }
+.sum-metrics-table.sum-evlog__table td.sum-evlog__cell--status .sum-evlog-status {
+  flex-wrap: wrap;
+  row-gap: 0.2rem;
+}
+.sum-metrics-table.sum-evlog__table thead th.sum-evlog__th-msg,
+.sum-metrics-table.sum-evlog__table thead tr > th:nth-child(2),
 .sum-metrics-table.sum-evlog__table .sum-evlog__cell--msg {
   min-width: 0;
   width: auto;
@@ -281,7 +341,50 @@
   line-height: 1.42;
   color: var(--embed-text-heading);
 }
-/* Leading service tag before message body (unified multi-source logs) */
+/* Source rail: same flex alignment as status column */
+.sum-metrics-table.sum-evlog__table .sum-evlog-source {
+  display: inline-flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.28rem;
+  max-width: 100%;
+  box-sizing: border-box;
+  min-height: 1.45rem;
+}
+.sum-metrics-table.sum-evlog__table .sum-evlog-source .sum-evlog-workspace-source {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--embed-text-secondary);
+  vertical-align: baseline;
+}
+/* Service badges in source column — match status pill size/position */
+.sum-metrics-table.sum-evlog__table .sum-evlog-source .sum-svc-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 0;
+  margin: 0;
+  padding: 0.12rem 0.45rem;
+  border-radius: 4px;
+  font-family: ui-monospace, monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.25;
+  text-align: center;
+  white-space: nowrap;
+  vertical-align: baseline;
+}
+/* Leading service tag before message body (legacy 3-column tables) */
 .sum-metrics-table.sum-evlog__table .sum-evlog__cell--msg > .sum-svc-badge:first-child {
   margin-right: 0.75rem;
   vertical-align: 0.06em;
@@ -384,6 +487,37 @@
   padding: 0.15rem 0.32rem;
   box-sizing: border-box;
   min-height: 1.65rem;
+  position: relative;
+}
+.sum-evlog__resize-handle {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -0.35rem;
+  height: 0.65rem;
+  cursor: ns-resize;
+  touch-action: none;
+  z-index: 3;
+}
+.sum-evlog__resize-handle::after {
+  content: "";
+  display: block;
+  width: 2.25rem;
+  height: 3px;
+  margin: 0.28rem auto 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--embed-text-muted) 55%, transparent);
+  opacity: 0.85;
+  transition: opacity 0.12s ease, background-color 0.12s ease;
+}
+.sum-evlog__resize-handle:hover::after,
+.sum-evlog--resizing .sum-evlog__resize-handle::after {
+  opacity: 1;
+  background: color-mix(in srgb, var(--embed-link-accent) 70%, var(--embed-text-muted));
+}
+.sum-evlog--resizing,
+.sum-evlog--resizing * {
+  user-select: none !important;
 }
 .sum-evlog__footer-left {
   flex: 1 1 0;
@@ -458,7 +592,7 @@
 .sum-evlog__footer-right {
   display: flex;
   flex-direction: row;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: flex-end;
   gap: 0.35rem 0.5rem;

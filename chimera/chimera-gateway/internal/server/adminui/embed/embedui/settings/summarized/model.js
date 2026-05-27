@@ -115,47 +115,48 @@ globalThis.ChimeraSettings.Summarized.Model = globalThis.ChimeraSettings.Summari
         )
       );
     }
-    if (deps.adminRoutingSectionBreakHtml) {
-      pushSectionBreak(cards, deps.adminRoutingSectionBreakHtml(), "05-routing-label");
-    }
     var gw = (state.adminStateCache && state.adminStateCache.gateway) || {};
-    cards.push(
-      makeCard(
-        "admin-routing-rules",
-        "admin-routing",
-        SECTION_OVERVIEW,
-        "06-admin-routing",
-        { editing: !!state.adminRoutingEditing, yamlLen: gw.routing_policy_yaml ? String(gw.routing_policy_yaml).length : 0 },
-        { gateway: gw },
-        { gateway: gw }
-      )
-    );
-    cards.push(
-      makeCard(
-        "admin-fallback-chain",
-        "admin-fallback",
-        SECTION_OVERVIEW,
-        "07-admin-fallback",
-        { editing: !!state.adminFallbackEditing, chainLen: gw.fallback_chain ? gw.fallback_chain.length : 0 },
-        { gateway: gw },
-        { gateway: gw }
-      )
-    );
-    cards.push(
-      makeCard(
-        "admin-router-model",
-        "admin-router-model",
-        SECTION_OVERVIEW,
-        "08-admin-router",
-        {
-          editing: !!state.adminRouterEditing,
-          modelCount: gw.router_models ? gw.router_models.length : 0,
-          toolRouter: !!gw.tool_router_enabled
-        },
-        { gateway: gw },
-        { gateway: gw }
-      )
-    );
+    var vms = gw.virtual_models && Array.isArray(gw.virtual_models) ? gw.virtual_models : [];
+    var vmDrafts =
+      state.virtualModelDrafts && Array.isArray(state.virtualModelDrafts) ? state.virtualModelDrafts : [];
+    if (deps.virtualModelsSectionBreakHtml) {
+      pushSectionBreak(cards, deps.virtualModelsSectionBreakHtml(vms.length), "05-virtual-models-label");
+    }
+    for (var vdi = 0; vdi < vmDrafts.length; vdi++) {
+      var vdraft = vmDrafts[vdi];
+      if (!vdraft || vdraft.id == null) continue;
+      cards.push(
+        makeCard(
+          "virtual-model-draft-" + String(vdraft.id),
+          "virtual-model-draft",
+          SECTION_OVERVIEW,
+          "05-vm-draft-" + String(vdraft.id),
+          { draftId: vdraft.id, name: vdraft.name, version: vdraft.version },
+          { draft: vdraft },
+          { draft: vdraft }
+        )
+      );
+    }
+    for (var vi = 0; vi < vms.length; vi++) {
+      var vm = vms[vi];
+      cards.push(
+        makeCard(
+          "virtual-model-" + String(vm.id),
+          "virtual-model",
+          SECTION_OVERVIEW,
+          "05-vm-" + String(vm.id),
+          {
+            modelId: vm.model_id,
+            enabled: !!vm.enabled,
+            fallbackDepth: vm.fallback_depth,
+            routing: !!vm.routing_policy_enabled,
+            toolRouter: !!vm.tool_router_enabled
+          },
+          { vm: vm },
+          { vm: vm }
+        )
+      );
+    }
   }
 
   function buildConversationCards(cards, agg, deps) {
@@ -281,7 +282,10 @@ globalThis.ChimeraSettings.Summarized.Model = globalThis.ChimeraSettings.Summari
             runId: run.id,
             title: ixHead,
             doneSeen: !!metaLive.doneSeen,
-            eventCount: seqSig.count
+            eventCount: seqSig.count,
+            workspaceEditing: deps.indexerWorkspaceEditActiveForMeta
+              ? !!deps.indexerWorkspaceEditActiveForMeta(metaLive)
+              : false
           },
           seqSig,
           { run: run, partitionRegistry: partitionRegistry }
@@ -355,13 +359,19 @@ globalThis.ChimeraSettings.Summarized.Model = globalThis.ChimeraSettings.Summari
         seenManagedWsTitle[headTtl] = true;
         if (deps.operatorWorkspaceCoveredByIndexerRuns(ows, byRun, partitionRegistry)) continue;
         var opId = "ix-opws-" + deps.strHash(String(ows.id));
+        var wsNumOp =
+          typeof deps.operatorWorkspaceNumericId === "function" ? deps.operatorWorkspaceNumericId(ows) : 0;
+        var wsEditing =
+          state.workspaceManagedEditId != null &&
+          wsNumOp > 0 &&
+          state.workspaceManagedEditId === wsNumOp;
         cards.push(
           makeCard(
             opId,
             "indexer-operator-workspace",
             SECTION_WORKSPACES,
             headTtl + "\u0001opws-" + deps.canonicalWorkspaceRowIdKey(ows.id),
-            { workspaceId: ows.id, title: headTtl },
+            { workspaceId: ows.id, title: headTtl, editing: wsEditing },
             {},
             { workspace: ows, partitionRegistry: partitionRegistry }
           )

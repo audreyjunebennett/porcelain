@@ -64,6 +64,22 @@ func NewTestSnapshotWithModels(at time.Time, modelIDs []string) *CatalogSnapshot
 	}
 }
 
+// NewTestSnapshotWithModelContext builds an OK snapshot with explicit model context lengths.
+func NewTestSnapshotWithModelContext(at time.Time, modelContext map[string]int64) *CatalogSnapshot {
+	modelIDs := make([]string, 0, len(modelContext))
+	for id := range modelContext {
+		modelIDs = append(modelIDs, id)
+	}
+	snap := NewTestSnapshotWithModels(at, modelIDs)
+	if len(modelContext) > 0 {
+		snap.ModelContext = make(map[string]int64, len(modelContext))
+		for id, n := range modelContext {
+			snap.ModelContext[id] = n
+		}
+	}
+	return snap
+}
+
 // ResetAuditorsForTest clears all registered catalog auditors (test isolation).
 func ResetAuditorsForTest() {
 	catalogAuditorsMu.Lock()

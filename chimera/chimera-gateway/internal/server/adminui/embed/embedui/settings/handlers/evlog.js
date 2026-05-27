@@ -18,6 +18,52 @@ globalThis.ChimeraSettings.Handlers.Evlog.wire = function (ctx) {
     var searchTimers = typeof WeakMap !== "undefined" ? new WeakMap() : null;
     /** Pixels from tbody bottom to treat as "stuck to tail" when summarized panel is rebuilt. */
     var SUM_EVLOG_TB_TAIL_SLACK = 6;
+    var SUM_EVLOG_TBODY_MIN_PX = 64;
+    var SUM_EVLOG_TBODY_MAX_PX = 720;
+
+    function sumEvlogTbodyEl(root) {
+      return root ? root.querySelector("[data-sum-evlog-tbody]") : null;
+    }
+    function sumEvlogDefaultTbodyHeightPx(root) {
+      var tb = sumEvlogTbodyEl(root);
+      if (!tb) return 176;
+      var cs = window.getComputedStyle(tb);
+      var mh = cs && cs.maxHeight ? cs.maxHeight : "";
+      if (mh && mh !== "none") {
+        var n = parseFloat(mh);
+        if (isFinite(n) && n > 0) return n;
+      }
+      return root && root.classList && root.classList.contains("sum-evlog--in-card") ? 176 : 256;
+    }
+    function sumEvlogReadTbodyHeightPx(root) {
+      if (!root) return null;
+      if (root._sumEvlogTbodyHeightPx != null && isFinite(root._sumEvlogTbodyHeightPx)) {
+        return root._sumEvlogTbodyHeightPx;
+      }
+      var tb = sumEvlogTbodyEl(root);
+      if (!tb || !tb.style || !tb.style.maxHeight) return null;
+      var inline = parseFloat(tb.style.maxHeight);
+      return isFinite(inline) && inline > 0 ? inline : null;
+    }
+    function sumEvlogClampTbodyHeightPx(px) {
+      var n = Number(px);
+      if (!isFinite(n)) n = SUM_EVLOG_TBODY_MIN_PX;
+      var cap = SUM_EVLOG_TBODY_MAX_PX;
+      try {
+        if (window.innerHeight) cap = Math.min(cap, Math.round(window.innerHeight * 0.72));
+      } catch (eCap) {}
+      return Math.max(SUM_EVLOG_TBODY_MIN_PX, Math.min(cap, Math.round(n)));
+    }
+    function sumEvlogApplyTbodyHeightPx(root, px, opts) {
+      opts = opts || {};
+      if (!root) return;
+      var tb = sumEvlogTbodyEl(root);
+      if (!tb) return;
+      var next = sumEvlogClampTbodyHeightPx(px != null ? px : sumEvlogDefaultTbodyHeightPx(root));
+      tb.style.maxHeight = next + "px";
+      root._sumEvlogTbodyHeightPx = next;
+      if (opts.persist !== false) root.setAttribute("data-sum-evlog-tbody-height", String(next));
+    }
 
     globalThis.sumEvlogCapturePanelState = function (container) {
       var out = {};
@@ -57,13 +103,15 @@ globalThis.ChimeraSettings.Handlers.Evlog.wire = function (ctx) {
         var sh = tb.scrollHeight;
         var ch = tb.clientHeight;
         var nearBottom = sh - st - ch <= SUM_EVLOG_TB_TAIL_SLACK;
+        var tbHeightPx = sumEvlogReadTbodyHeightPx(root);
         out[tb.id] = {
           q: q,
           mode: mode,
           selectedIds: selectedIds,
           anchorId: anchorId,
           scrollTop: st,
-          nearBottom: nearBottom
+          nearBottom: nearBottom,
+          tbodyHeightPx: tbHeightPx
         };
       }
       return out;
@@ -99,6 +147,16 @@ globalThis.ChimeraSettings.Handlers.Evlog.wire = function (ctx) {
             tb.scrollTop = Math.min(wantSo, maxSo);
           }
           continue;
+        }
+
+        if (pack.tbodyHeightPx != null && isFinite(Number(pack.tbodyHeightPx))) {
+          sumEvlogApplyTbodyHeightPx(root, Number(pack.tbodyHeightPx));
+        } else {
+          var savedAttr = root.getAttribute("data-sum-evlog-tbody-height");
+          if (savedAttr) {
+            var savedPx = parseFloat(savedAttr);
+            if (isFinite(savedPx) && savedPx > 0) sumEvlogApplyTbodyHeightPx(root, savedPx);
+          }
         }
 
         var inpAp = root.querySelector(".sum-evlog__search");
@@ -166,6 +224,15 @@ globalThis.ChimeraSettings.Handlers.Evlog.wire = function (ctx) {
       var ms = Date.parse(tEl.getAttribute("datetime"));
       return isNaN(ms) ? NaN : ms;
     }
+    function sumEvlogPanelColCount(root) {
+      if (!root) return 3;
+      var attr = root.getAttribute("data-sum-evlog-cols");
+      if (attr) {
+        var n = parseInt(String(attr), 10);
+        if (!isNaN(n) && n >= 3) return n;
+      }
+      return root.hasAttribute("data-sum-evlog-source") ? 4 : 3;
+    }
     function rowSearchBlob(tr) {
       var blob = "";
       try {
@@ -173,6 +240,8 @@ globalThis.ChimeraSettings.Handlers.Evlog.wire = function (ctx) {
         if (t) blob += " " + t.textContent.trim();
         var iso = tr.querySelector("time[datetime]");
         if (iso && iso.getAttribute("datetime")) blob += " " + iso.getAttribute("datetime");
+        var src = tr.querySelector(".sum-evlog__cell--source");
+        if (src) blob += " " + src.textContent.trim();
         var msg = tr.querySelector(".sum-evlog__cell--msg");
         if (msg) blob += " " + msg.textContent.trim();
         var stat = tr.querySelector(".sum-evlog__cell--status");
@@ -193,6 +262,8 @@ globalThis.ChimeraSettings.Handlers.Evlog.wire = function (ctx) {
     function ensureSearchEmptyRow(tbody) {
       var existing = tbody.querySelector("[data-sum-evlog-search-empty]");
       if (existing) return existing;
+      var root = tbody.closest("[data-sum-evlog-root]");
+      var colspan = sumEvlogPanelColCount(root);
       var tr = document.createElement("tr");
       tr.className = "sum-evlog__row sum-evlog__search-empty-row";
       tr.setAttribute("data-sum-evlog-search-empty", "");
@@ -200,7 +271,7 @@ globalThis.ChimeraSettings.Handlers.Evlog.wire = function (ctx) {
       tr.setAttribute("role", "status");
       var td = document.createElement("td");
       td.className = "sum-evlog__search-empty-cell";
-      td.colSpan = 3;
+      td.colSpan = colspan;
       td.appendChild(document.createTextNode("No matching entries for your search. "));
       var btn = document.createElement("button");
       btn.type = "button";
@@ -215,6 +286,8 @@ globalThis.ChimeraSettings.Handlers.Evlog.wire = function (ctx) {
     function ensureDataEmptyRow(tbody) {
       var existing = tbody.querySelector("[data-sum-evlog-data-empty]");
       if (existing) return existing;
+      var root = tbody.closest("[data-sum-evlog-root]");
+      var colspan = sumEvlogPanelColCount(root);
       var tr = document.createElement("tr");
       tr.className = "sum-evlog__row sum-evlog__search-empty-row";
       tr.setAttribute("data-sum-evlog-data-empty", "");
@@ -222,11 +295,53 @@ globalThis.ChimeraSettings.Handlers.Evlog.wire = function (ctx) {
       tr.setAttribute("role", "status");
       var td = document.createElement("td");
       td.className = "sum-evlog__search-empty-cell";
-      td.colSpan = 3;
+      td.colSpan = colspan;
       td.appendChild(document.createTextNode("No events to display"));
       tr.appendChild(td);
       tbody.appendChild(tr);
       return tr;
+    }
+    function sumEvlogMetricCount(btn) {
+      if (!btn) return 0;
+      var numEl = btn.querySelector(".sum-evlog-metric-num");
+      if (!numEl) return 0;
+      var n = parseInt(String(numEl.textContent || "").trim(), 10);
+      return isNaN(n) ? 0 : n;
+    }
+    function sumEvlogSyncMetricFilterState(root) {
+      var select = root.querySelector("[data-evlog-filter-status]");
+      var mode = select && select.value ? select.value : "all";
+      var wBtn = root.querySelector("[data-sum-evlog-metric-warn]");
+      var fBtn = root.querySelector("[data-sum-evlog-metric-fail]");
+      if (wBtn) {
+        var wCount = sumEvlogMetricCount(wBtn);
+        var wDisabled = wCount <= 0;
+        wBtn.disabled = wDisabled;
+        wBtn.title = wDisabled ? "No warnings" : "Show warnings (click again for all)";
+        var wOn = !wDisabled && mode === "warnings";
+        wBtn.classList.toggle("sum-evlog-metric-group--active", wOn);
+        wBtn.setAttribute("aria-pressed", wOn ? "true" : "false");
+      }
+      if (fBtn) {
+        var fCount = sumEvlogMetricCount(fBtn);
+        var fDisabled = fCount <= 0;
+        fBtn.disabled = fDisabled;
+        fBtn.title = fDisabled ? "No errors" : "Show errors (click again for all)";
+        var fOn = !fDisabled && mode === "errors";
+        fBtn.classList.toggle("sum-evlog-metric-group--active", fOn);
+        fBtn.setAttribute("aria-pressed", fOn ? "true" : "false");
+      }
+    }
+    function sumEvlogToggleStatusFilter(root, wantMode) {
+      var select = root.querySelector("[data-evlog-filter-status]");
+      if (!select) return;
+      var btn = root.querySelector(
+        wantMode === "warnings" ? "[data-sum-evlog-metric-warn]" : "[data-sum-evlog-metric-fail]"
+      );
+      if (sumEvlogMetricCount(btn) <= 0) return;
+      var cur = select.value ? select.value : "all";
+      select.value = cur === wantMode ? "all" : wantMode;
+      sumEvlogRebuildRoot(root);
     }
     function sumEvlogSyncFooter(root) {
       var foot = root.querySelector("[data-sum-evlog-oldest]");
@@ -309,6 +424,7 @@ globalThis.ChimeraSettings.Handlers.Evlog.wire = function (ctx) {
       }
       root._sumEvlogOldestVisible = oldest === Infinity ? NaN : oldest;
       sumEvlogSyncFooter(root);
+      sumEvlogSyncMetricFilterState(root);
     }
     function sumEvlogCopyFromRoot(root) {
       var tbody = root.querySelector("[data-sum-evlog-tbody]");
@@ -325,11 +441,16 @@ globalThis.ChimeraSettings.Handlers.Evlog.wire = function (ctx) {
         var tr = picked[i];
         var t = tr.querySelector("time");
         var timeStr = t ? t.textContent.trim() : "";
+        var src = tr.querySelector(".sum-evlog__cell--source");
+        var srcStr = src ? src.textContent.trim().replace(/\s+/g, " ") : "";
         var msg = tr.querySelector(".sum-evlog__cell--msg");
         var msgStr = msg ? msg.textContent.trim().replace(/\s+/g, " ") : "";
         var stat = tr.querySelector(".sum-evlog__cell--status");
         var statStr = stat ? stat.textContent.trim().replace(/\s+/g, " ") : "";
-        lines.push(timeStr + "\t" + msgStr + "\t" + statStr);
+        var cols = [timeStr, msgStr];
+        if (src) cols.push(srcStr);
+        cols.push(statStr);
+        lines.push(cols.join("\t"));
       }
       var text = lines.join("\n");
       function showToast(ok, msg) {
@@ -358,6 +479,11 @@ globalThis.ChimeraSettings.Handlers.Evlog.wire = function (ctx) {
     function sumEvlogHydrateRoot(root) {
       var tbody = root.querySelector("[data-sum-evlog-tbody]");
       if (!tbody) return;
+      var savedAttr = root.getAttribute("data-sum-evlog-tbody-height");
+      if (savedAttr) {
+        var savedPx = parseFloat(savedAttr);
+        if (isFinite(savedPx) && savedPx > 0) sumEvlogApplyTbodyHeightPx(root, savedPx);
+      }
       ensureSearchEmptyRow(tbody);
       ensureDataEmptyRow(tbody);
       sumEvlogRebuildRoot(root);
@@ -422,6 +548,16 @@ globalThis.ChimeraSettings.Handlers.Evlog.wire = function (ctx) {
           sumEvlogCopyFromRoot(root);
           return;
         }
+        if (t.closest("[data-sum-evlog-metric-warn]")) {
+          ev.preventDefault();
+          sumEvlogToggleStatusFilter(root, "warnings");
+          return;
+        }
+        if (t.closest("[data-sum-evlog-metric-fail]")) {
+          ev.preventDefault();
+          sumEvlogToggleStatusFilter(root, "errors");
+          return;
+        }
         var clr = t.closest("[data-sum-evlog-clear-search]");
         if (clr) {
           ev.preventDefault();
@@ -472,6 +608,45 @@ globalThis.ChimeraSettings.Handlers.Evlog.wire = function (ctx) {
         tr.classList.add("sum-evlog__row--selected");
         root._sumEvlogAnchor = idx;
         sumEvlogSyncFooter(root);
+      },
+      false
+    );
+    document.body.addEventListener(
+      "pointerdown",
+      function (ev) {
+        var t = ev.target;
+        if (!t || typeof t.closest !== "function") return;
+        var handle = t.closest("[data-sum-evlog-resize-handle]");
+        if (!handle) return;
+        var root = handle.closest("[data-sum-evlog-root]");
+        if (!root || !root.closest("#panel-summarized")) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        var tb = sumEvlogTbodyEl(root);
+        if (!tb) return;
+        var startY = ev.clientY;
+        var startH = sumEvlogReadTbodyHeightPx(root);
+        if (startH == null) startH = sumEvlogDefaultTbodyHeightPx(root);
+        root.classList.add("sum-evlog--resizing");
+        try {
+          handle.setPointerCapture(ev.pointerId);
+        } catch (eCap0) {}
+        function onMove(eMove) {
+          var dy = eMove.clientY - startY;
+          sumEvlogApplyTbodyHeightPx(root, startH + dy);
+        }
+        function onUp(eUp) {
+          root.classList.remove("sum-evlog--resizing");
+          try {
+            handle.releasePointerCapture(eUp.pointerId);
+          } catch (eCap1) {}
+          handle.removeEventListener("pointermove", onMove);
+          handle.removeEventListener("pointerup", onUp);
+          handle.removeEventListener("pointercancel", onUp);
+        }
+        handle.addEventListener("pointermove", onMove);
+        handle.addEventListener("pointerup", onUp);
+        handle.addEventListener("pointercancel", onUp);
       },
       false
     );

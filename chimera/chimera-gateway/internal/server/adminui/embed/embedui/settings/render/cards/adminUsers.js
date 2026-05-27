@@ -26,14 +26,6 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminUsers = function (ctx) {
       for (var ck in stats.conv) if (Object.prototype.hasOwnProperty.call(stats.conv, ck)) convN++;
       for (var wk in stats.ws) if (Object.prototype.hasOwnProperty.call(stats.ws, wk)) wsN++;
     }
-    var tokenRows = "";
-    for (var i = 0; i < tokensForUser.length; i++) {
-      var tr = tokensForUser[i] || {};
-      tokenRows +=
-        '<li><code class="sum-mono-id">' + escapeHtml(String(tr.label || "(no label)")) + '</code> · tenant ' +
-        escapeHtml(String(tr.tenant_id || principalId)) + "</li>";
-    }
-    if (!tokenRows) tokenRows = '<li class="muted">No gateway tokens yet.</li>';
     var tokenRaw = "";
     if (tokensForUser[0] && tokensForUser[0].token != null && String(tokensForUser[0].token).trim() !== "") {
       tokenRaw = String(tokensForUser[0].token).trim();
@@ -50,8 +42,8 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminUsers = function (ctx) {
     if (typeof sgOpHealthPillHtml === "function") {
       metricsHtml =
         '<span class="sum-metrics">' +
-        sgOpHealthPillHtml(formatInt(convN) + " conv", "metric") +
-        sgOpHealthPillHtml(formatInt(wsN) + " ws", "metric") +
+        sgOpHealthPillHtml(formatInt(convN), "metric", { icon: "forum", title: "Conversations" }) +
+        sgOpHealthPillHtml(formatInt(wsN), "metric", { icon: "database", title: "Workspaces" }) +
         "</span>";
     }
     return (
@@ -73,19 +65,12 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminUsers = function (ctx) {
       '<span class="material-symbols-outlined sg-op-chev-icon" aria-hidden="true">chevron_right</span>' +
       '<span class="sum-chev" aria-hidden="true"></span></header>' +
       '<div class="sum-body">' +
-      '<dl class="indexer-run-kv indexer-run-kv--gateway-summary">' +
-      "<dt>User id</dt><dd><code class=\"sum-mono-id\">" + escapeHtml(principalId) + "</code></dd>" +
-      "<dt>Conversations</dt><dd>" + escapeHtml(formatInt(convN)) + "</dd>" +
-      "<dt>Workspaces</dt><dd>" + escapeHtml(formatInt(wsN)) + "</dd></dl>" +
-      '<div class="sum-section-label">Gateway tokens</div><ul class="sg-op-key-list">' +
-      tokenRows +
-      "</ul>" +
       '<div class="sum-section-label">Gateway API key</div><div class="sg-op-token-row"><code class="sum-mono-id">' +
       escapeHtml(createdTokenHint) +
       "</code>" +
       createdTokenCopyBtn +
       "</div>" +
-      adminScopedEvlogPanelFromEvents("Scoped log — user", "user-" + principalId, scoped) +
+      adminScopedEvlogPanelFromEvents("Scoped log — user", "user-" + principalId, scoped, { showSourceColumn: true }) +
       "</div></article>"
     );
   }

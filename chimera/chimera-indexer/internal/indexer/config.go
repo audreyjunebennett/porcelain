@@ -197,6 +197,10 @@ type FileConfig struct {
 
 	// ScopeStatusEdgeMinIntervalMS rate-limits edge-triggered scope.status lines per scope (default 2000).
 	ScopeStatusEdgeMinIntervalMS int `yaml:"scope_status_edge_min_interval_ms"`
+
+	// QueueSnapshotIdleInfoIntervalMS controls how often unchanged idle indexer.queue.snapshot
+	// lines repeat at INFO (default 300000 = 5 min). Negative disables idle INFO heartbeats.
+	QueueSnapshotIdleInfoIntervalMS int `yaml:"queue_snapshot_idle_info_interval_ms"`
 }
 
 // Resolved is the runtime indexer configuration after merging YAML, env vars,
@@ -266,6 +270,10 @@ type Resolved struct {
 
 	// ScopeStatusEdgeMinInterval rate-limits edge scope.status emissions per scope (0 = default 2s).
 	ScopeStatusEdgeMinInterval time.Duration
+
+	// QueueSnapshotIdleInfoInterval is how often unchanged idle queue snapshots may repeat at INFO.
+	// Zero disables idle INFO heartbeats (DEBUG only while idle and unchanged).
+	QueueSnapshotIdleInfoInterval time.Duration
 
 	// SupervisedLayer is true when --config names an explicit YAML file (desktop supervised).
 	// Effective watch roots come from GET /v1/indexer/workspaces; YAML roots and --root are ignored.
@@ -434,6 +442,14 @@ func Resolve(fc FileConfig, env func(string) string, ov Overrides) (Resolved, er
 		r.QueueFanoutHWMPercent = fc.QueueFanoutHWMPercent
 	default:
 		r.QueueFanoutHWMPercent = defaultQueueFanoutHWMPercent
+	}
+	switch {
+	case fc.QueueSnapshotIdleInfoIntervalMS < 0:
+		r.QueueSnapshotIdleInfoInterval = 0
+	case fc.QueueSnapshotIdleInfoIntervalMS > 0:
+		r.QueueSnapshotIdleInfoInterval = time.Duration(fc.QueueSnapshotIdleInfoIntervalMS) * time.Millisecond
+	default:
+		r.QueueSnapshotIdleInfoInterval = time.Duration(defaultQueueSnapshotIdleInfoIntervalMs) * time.Millisecond
 	}
 	if fc.Defaults != nil {
 		r.DefaultScope = ScopeFragment{

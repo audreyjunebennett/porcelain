@@ -4,7 +4,7 @@
 |-------|-------|
 | **Doc kind** | `feature-plan` |
 | **Owners / areas** | Gateway, embed UI, operator logs |
-| **Status** | `active` |
+| **Status** | `done` |
 | **Targets** | Operator log presentation layer |
 | **Last updated** | See git history |
 | **Supersedes / superseded by** | None |
@@ -19,7 +19,7 @@ Make the operator log view tell a story instead of dumping JSON. Each user's cha
 | [Phase B — Correlation IDs](#phase-b--correlation-ids-gateway--clients) | Stable `request_id`, `conversation_id`, `index_run_id` across logs | `done` |
 | [Phase C — Indexer run narrative](#phase-c--indexer-run-narrative) | One card per indexer run with progress | `done` |
 | [Phase D — Conversations & subsystem cards](#phase-d--conversation--bifrost-rollup--principal-panel) | Per-user threads and per-service health cards | `done` |
-| [Phase E — Server-side event store](#phase-e--optional-server-side-event-store) | Optional persistence for cross-restart history and search | `todo` |
+| [Phase E — Server-side event store](#phase-e--optional-server-side-event-store) | Optional persistence for cross-restart history and search | `done` |
 
 ---
 
@@ -63,7 +63,7 @@ This document describes a **log presentation layer**: how operator-facing logs s
 ## 2. Design principles
 
 1. **Presentation ≠ storage (initially).** Prefer interpreting existing structured logs in the UI before adding new databases or transports. Add storage or indexed events only when grouping, search, or retention demands it.
-2. **Two modes, one stream:** **Summary** (opinionated layout, optional collapse) and **Detailed** (today’s grid or superset). Toggle must be obvious and persistent (e.g. `localStorage`).
+2. **Two modes, one stream:** **Summary** (opinionated layout, optional collapse) and **Detailed** (today’s grid or superset). Toggle must be obvious; state stays in-memory for the session.
 3. **Shape over syntax:** Classify lines into a small **taxonomy** (`http.access`, `chat.*`, `indexer.*`, `bifrost.*`, `generic`, …) from fields and `msg` patterns, with a safe fallback. Canonical slugs may declare an optional `shape` in [`internal/operatorcopy/messages.yaml`](../../internal/operatorcopy/messages.yaml); the logs UI uses `ChimeraLogs.OperatorCopy.inferShapeForFlat` first, then legacy prefix rules in `logs_app.js`.
 4. **Correlation is explicit:** Threading and rollup require stable **ids** attached in structured logs (`request_id`, `conversation_id`, `index_run_id`, …). Heuristic grouping is a stopgap, not the end state.
 5. **Progressive disclosure:** Headline + badge + metrics first; full key/value (or raw JSON) behind “Details”.
@@ -311,7 +311,7 @@ The agent should pause and ask when:
 - **Summary** hides a field that might be needed for support (e.g. `tenant` visibility).
 - **Indexer estimates** are expensive or misleading (which estimate: files, chunks, bytes?).
 - **Rollup** could obscure **ordering** or **first failure** (need your preference: “first error wins” vs “worst status wins”).
-- **Principal panel** could imply **token fingerprinting** or labels—confirm what may be stored in browser `localStorage` vs memory-only.
+- **Principal panel** could imply **token fingerprinting** or labels—confirm what may be kept in memory-only session state vs omitted from the browser.
 - **Context metrics**—which fields are safe to add to slog (token estimates, chunk counts) vs off-limits.
 - **Subsystem card** “metrics” — which numbers are **observed** vs **misleading** if computed client-side from sparse logs.
 
@@ -362,8 +362,8 @@ _Append here as phases land (date, PR or commit, one paragraph)._
 | Date | Note |
 |------|------|
 | — | Plan authored; no implementation yet. |
-| 2026-04-21 | **version-0.2.1:** Phases A–D (initial): `requestid` middleware; `service` + `request_id` on access logs; chat `conversation_id` (header `X-Chimera-Conversation-Id` or generated) + `principal_id` on chat logs; `msg` tags on chat/RAG/ingest; ingest `index_run_id` echo + indexer client header; indexer `indexer.run.*` + `index_run_id` on process logs; logs UI **Detailed / Summary / Conversations / Subsystems** + `localStorage` view preference; `wrapResponse` initial status fixed so logged **statusCode** matches handler. See [`log-presentation-acceptance.md`](log-presentation-acceptance.md). **Phase E** not implemented. |
-| 2026-04-21 | **Logs UI (presentation follow-up):** **Conversations:** principals as `<details>`, nested cards with start/last/spanned time, **HTTP rollup** (worst status, count, Σ ms), **service chips** (RAG / BiFrost / Qdrant / ingest), **context** strip when `turn_index` / token estimates / hits appear on lines, per-event `<details>` with full fields, **Earlier events** folder. **Subsystems:** first/last/window time, buffered **metrics** chips, expandable timelines, **Conversation** links when `conversation_id`+`principal_id` present. **Indexer runs** view: one card per `index_run_id`, latest `indexer.run.progress` phase/candidates, timelines. `?view=` sync (overrides `localStorage`), `?seq=` / `?principal=` + `?conversation=` focus, `data-log-seq` on table rows, filter prefs persisted, `postMessage` may set `view`. **Phase E** (server event store) still out of scope. |
+| 2026-04-21 | **version-0.2.1:** Phases A–D (initial): `requestid` middleware; `service` + `request_id` on access logs; chat `conversation_id` (header `X-Chimera-Conversation-Id` or generated) + `principal_id` on chat logs; `msg` tags on chat/RAG/ingest; ingest `index_run_id` echo + indexer client header; indexer `indexer.run.*` + `index_run_id` on process logs; logs UI **Detailed / Summary / Conversations / Subsystems**; `wrapResponse` initial status fixed so logged **statusCode** matches handler. See [`log-presentation-acceptance.md`](log-presentation-acceptance.md). **Phase E** not implemented. |
+| 2026-04-21 | **Logs UI (presentation follow-up):** **Conversations:** principals as `<details>`, nested cards with start/last/spanned time, **HTTP rollup** (worst status, count, Σ ms), **service chips** (RAG / BiFrost / Qdrant / ingest), **context** strip when `turn_index` / token estimates / hits appear on lines, per-event `<details>` with full fields, **Earlier events** folder. **Subsystems:** first/last/window time, buffered **metrics** chips, expandable timelines, **Conversation** links when `conversation_id`+`principal_id` present. **Indexer runs** view: one card per `index_run_id`, latest `indexer.run.progress` phase/candidates, timelines. `?view=` sync, `?seq=` / `?principal=` + `?conversation=` focus, `data-log-seq` on table rows, `postMessage` may set `view`. **Phase E** (server event store) still out of scope. |
 | 2026-05-03 | **Phase B (hardening):** Response `X-Request-ID` on all requests; `X-Chimera-Conversation-Id` echoed on chat responses; RAG **internal** DEBUG/TRACE lines carry `request_id`, `conversation_id`, `index_run_id` (ingest), `msg` + `service=gateway`; `ingest_session` (chunked) logs match simple ingest (`ingest.complete`, correlation on errors); `X-chimera-indexer-Run-Id` on session start and indexer config `optional_headers`. |
 | 2026-05-03 | **Indexer structured operator events:** `chimera-indexer` emits `msg` slugs for discovery/reconcile/queue/retry/recovery/job/run-done (`internal/indexer/ops_events.go`, `indexer.go`, `cmd/chimera-indexer/main.go`); field table in `docs/indexer.md` § Structured operator logs. Counters roll up into `indexer.run.done`. |
 | 2026-05-04 | **Summarized expand panels:** removed **Last events** previews from conversation + service `<details>` bodies; **Services** expanded Summary uses rollups from buffered lines — **indexer:** upload/ingest/skipped, fail/retry/pause, workers + latest queue snapshot + unique `rel`; **gateway:** HTTP Σ ms, `ingest.complete` / RAG / chat slug counts, warn+error; **qdrant:** HTTP Σ ms, line count, warn+error. **Indexer run** expand adds the same job rollup plus existing vector / gateway OK\|error mini row. |

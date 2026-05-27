@@ -55,6 +55,55 @@ providers:
 	}
 }
 
+func TestResolve_contextFieldsMergeModelOverProviderOverDefaults(t *testing.T) {
+	cfg, err := Parse([]byte(`
+defaults:
+  context_window: 4096
+  context_safety_factor: 0.9
+  max_body_bytes: 3500000
+providers:
+  groq:
+    context_window: 131072
+    models:
+      groq/groq/compound-mini:
+        max_prompt_tokens: 8192
+        context_safety_factor: 1.0
+`))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+
+	e := cfg.Resolve("groq/other")
+	if e.ContextWindow == nil || *e.ContextWindow != 131072 {
+		t.Fatalf("provider context_window: got %v", e.ContextWindow)
+	}
+	if e.MaxPromptTokens != nil {
+		t.Fatalf("max_prompt_tokens should be nil at provider layer: %v", e.MaxPromptTokens)
+	}
+	if e.ContextSafetyFactor == nil || *e.ContextSafetyFactor != 0.9 {
+		t.Fatalf("safety factor from defaults: got %v", e.ContextSafetyFactor)
+	}
+	if e.MaxBodyBytes == nil || *e.MaxBodyBytes != 3500000 {
+		t.Fatalf("max_body_bytes from defaults: got %v", e.MaxBodyBytes)
+	}
+
+	e2 := cfg.Resolve("groq/groq/compound-mini")
+	if e2.MaxPromptTokens == nil || *e2.MaxPromptTokens != 8192 {
+		t.Fatalf("model max_prompt_tokens: got %v", e2.MaxPromptTokens)
+	}
+	cap, ok := e2.EffectiveContextCap()
+	if !ok || cap != 8192 {
+		t.Fatalf("effective cap should use max_prompt_tokens: got %d ok=%v", cap, ok)
+	}
+}
+
+func TestEffectiveContextCap_nilFieldsNoCap(t *testing.T) {
+	cap, ok := Effective{}.EffectiveContextCap()
+	if ok || cap != 0 {
+		t.Fatalf("want no cap, got %d ok=%v", cap, ok)
+	}
+}
+
 func TestResolve_providerTZInheritsFromDefaultsWhenOnlyDefaultsSet(t *testing.T) {
 	cfg, err := Parse([]byte(`
 defaults:

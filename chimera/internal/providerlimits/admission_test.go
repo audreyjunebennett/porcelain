@@ -55,3 +55,66 @@ func TestDecide_dayTokensDeny(t *testing.T) {
 		t.Fatalf("want TPD deny, got %+v", d)
 	}
 }
+
+func TestDecideContext_noLimits_allows(t *testing.T) {
+	d := DecideContext(Effective{}, RequestAdmission{EstPromptTokens: 100_000, MaxTokens: 4096, BodyBytes: 5_000_000})
+	if !d.Allowed {
+		t.Fatalf("expected allow with no context limits: %+v", d)
+	}
+}
+
+func TestDecideContext_deniesWhenPromptPlusMaxTokensExceedCap(t *testing.T) {
+	window := int64(1000)
+	factor := 1.0
+	eff := Effective{ContextWindow: &window, ContextSafetyFactor: &factor}
+	d := DecideContext(eff, RequestAdmission{EstPromptTokens: 900, MaxTokens: 200})
+	if d.Allowed || d.Reason != ReasonContext {
+		t.Fatalf("want context deny, got %+v", d)
+	}
+	d2 := DecideContext(eff, RequestAdmission{EstPromptTokens: 800, MaxTokens: 200})
+	if !d2.Allowed {
+		t.Fatalf("exact fit should allow: %+v", d2)
+	}
+}
+
+func TestDecideContext_maxPromptTokensTighterThanContextWindow(t *testing.T) {
+	window := int64(131072)
+	promptCap := int64(8192)
+	factor := 1.0
+	eff := Effective{ContextWindow: &window, MaxPromptTokens: &promptCap, ContextSafetyFactor: &factor}
+	d := DecideContext(eff, RequestAdmission{EstPromptTokens: 7500, MaxTokens: 500})
+	if !d.Allowed {
+		t.Fatalf("under max_prompt_tokens should allow: %+v", d)
+	}
+	d2 := DecideContext(eff, RequestAdmission{EstPromptTokens: 8000, MaxTokens: 1000})
+	if d2.Allowed || d2.Reason != ReasonContext {
+		t.Fatalf("max_prompt_tokens should win over context_window: %+v", d2)
+	}
+}
+
+func TestDecideContext_appliesSafetyFactor(t *testing.T) {
+	window := int64(1000)
+	factor := 0.9
+	eff := Effective{ContextWindow: &window, ContextSafetyFactor: &factor}
+	d := DecideContext(eff, RequestAdmission{EstPromptTokens: 900})
+	if !d.Allowed {
+		t.Fatalf("900 <= floor(1000*0.9)=900 should allow: %+v", d)
+	}
+	d2 := DecideContext(eff, RequestAdmission{EstPromptTokens: 901})
+	if d2.Allowed || d2.Reason != ReasonContext {
+		t.Fatalf("901 > 900 effective cap should deny: %+v", d2)
+	}
+}
+
+func TestDecideContext_deniesBodyBytes(t *testing.T) {
+	maxBody := int64(1000)
+	eff := Effective{MaxBodyBytes: &maxBody}
+	d := DecideContext(eff, RequestAdmission{BodyBytes: 1001})
+	if d.Allowed || d.Reason != ReasonBodySize {
+		t.Fatalf("want body deny, got %+v", d)
+	}
+	d2 := DecideContext(eff, RequestAdmission{BodyBytes: 1000})
+	if !d2.Allowed {
+		t.Fatalf("at cap should allow: %+v", d2)
+	}
+}

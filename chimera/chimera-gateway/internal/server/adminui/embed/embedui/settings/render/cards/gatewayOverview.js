@@ -19,6 +19,20 @@ globalThis.ChimeraSettings.Render.Cards.mountGatewayOverview = function (ctx) {
           );
         };
 
+  function serviceDisplayLabel(key) {
+    if (
+      globalThis.ChimeraSettings &&
+      ChimeraSettings.Contracts &&
+      typeof ChimeraSettings.Contracts.serviceDisplayLabel === "function"
+    ) {
+      return ChimeraSettings.Contracts.serviceDisplayLabel(key);
+    }
+    var k = String(key || "").trim().toLowerCase();
+    if (!k) return "";
+    if (k.indexOf("chimera-") === 0) return k.slice("chimera-".length);
+    return k;
+  }
+
   function gatewayServiceHealthTone(raw) {
     var s = String(raw || "").trim().toLowerCase();
     if (
@@ -77,21 +91,21 @@ globalThis.ChimeraSettings.Render.Cards.mountGatewayOverview = function (ctx) {
       var ent = list[i] || {};
       var tone = gatewayServiceHealthTone(ent.raw);
       var lab = stateLabel[tone];
-      var title = String(ent.id || "service") + " · " + lab + (ent.raw != null && ent.raw !== "" ? " (" + String(ent.raw) + ")" : "");
+      var svcLab = serviceDisplayLabel(ent.id || "service");
+      var title = svcLab + " · " + lab + (ent.raw != null && ent.raw !== "" ? " (" + String(ent.raw) + ")" : "");
       segs.push(healthSeg(title, tone));
       if (!compact) {
         labels.push(
           '<span class="sum-bf-prov-health-label" title="' +
             escapeHtml(title) +
             '">' +
-            escapeHtml(String(ent.id || "—")) +
+            escapeHtml(svcLab || "—") +
             "</span>"
         );
       }
     }
     if (compact) {
-      var compactTitle =
-        "chimera-gateway, chimera-broker, chimera-vectorstore, chimera-indexer";
+      var compactTitle = "gateway, broker, vectorstore, indexer";
       return (
         '<span class="sum-metrics">' +
         '<span class="sum-bf-prov-health-root sum-bf-prov-health-root--compact" role="img" aria-label="service health">' +
@@ -104,7 +118,7 @@ globalThis.ChimeraSettings.Render.Cards.mountGatewayOverview = function (ctx) {
     }
     return (
       '<div class="sum-bf-prov-health-root" id="gateway-service-health-strip">' +
-      '<div class="sum-bf-prov-health-track" title="Service health: chimera-gateway, chimera-broker, chimera-vectorstore, chimera-indexer">' +
+      '<div class="sum-bf-prov-health-track" title="Service health: gateway, broker, vectorstore, indexer">' +
       segs.join("") +
       '</div><div class="sum-bf-prov-health-labels">' +
       labels.join("") +

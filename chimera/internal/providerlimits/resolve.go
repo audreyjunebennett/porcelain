@@ -2,6 +2,7 @@ package providerlimits
 
 import (
 	"fmt"
+	"math"
 	"strings"
 	"time"
 )
@@ -17,6 +18,11 @@ type Effective struct {
 	TPM *int64
 	TPD *int64
 
+	ContextWindow       *int64
+	MaxPromptTokens     *int64
+	MaxBodyBytes        *int64
+	ContextSafetyFactor *float64
+
 	// UsageDayTimezone is the IANA tz used to compute RPD/TPD day buckets for this provider.
 	// Empty when no day-scoped limits are enforced (RPD and TPD are both nil).
 	UsageDayTimezone string
@@ -27,6 +33,39 @@ func (e Effective) HasAnyMinuteLimit() bool { return e.RPM != nil || e.TPM != ni
 
 // HasAnyDayLimit reports whether RPD or TPD are enforced.
 func (e Effective) HasAnyDayLimit() bool { return e.RPD != nil || e.TPD != nil }
+
+// HasContextLimit reports whether a token or body context cap is configured.
+func (e Effective) HasContextLimit() bool {
+	return e.ContextWindow != nil || e.MaxPromptTokens != nil || e.MaxBodyBytes != nil
+}
+
+// EffectiveContextCap returns floor(min(context_window, max_prompt_tokens_if_set) × safety_factor).
+// The second value is false when no token context cap is configured.
+func (e Effective) EffectiveContextCap() (int64, bool) {
+	var base int64
+	switch {
+	case e.ContextWindow != nil && e.MaxPromptTokens != nil:
+		base = min64(*e.ContextWindow, *e.MaxPromptTokens)
+	case e.ContextWindow != nil:
+		base = *e.ContextWindow
+	case e.MaxPromptTokens != nil:
+		base = *e.MaxPromptTokens
+	default:
+		return 0, false
+	}
+	factor := 1.0
+	if e.ContextSafetyFactor != nil {
+		factor = *e.ContextSafetyFactor
+	}
+	return int64(math.Floor(float64(base) * factor)), true
+}
+
+func min64(a, b int64) int64 {
+	if a < b {
+		return a
+	}
+	return b
+}
 
 // SplitProviderModel extracts the leading "<provider>/" segment from a BiFrost-style model id.
 // Returns ("", modelID) when no slash is present.
@@ -81,6 +120,22 @@ func applyLayer(eff *Effective, l Layer) {
 	if l.TPD != nil {
 		v := *l.TPD
 		eff.TPD = &v
+	}
+	if l.ContextWindow != nil {
+		v := *l.ContextWindow
+		eff.ContextWindow = &v
+	}
+	if l.MaxPromptTokens != nil {
+		v := *l.MaxPromptTokens
+		eff.MaxPromptTokens = &v
+	}
+	if l.MaxBodyBytes != nil {
+		v := *l.MaxBodyBytes
+		eff.MaxBodyBytes = &v
+	}
+	if l.ContextSafetyFactor != nil {
+		v := *l.ContextSafetyFactor
+		eff.ContextSafetyFactor = &v
 	}
 	if strings.TrimSpace(l.UsageDayTimezone) != "" {
 		eff.UsageDayTimezone = l.UsageDayTimezone

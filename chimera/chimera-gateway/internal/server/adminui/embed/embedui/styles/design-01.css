@@ -118,6 +118,10 @@ html[data-theme="design-01"] #panel-summarized .sum-feed-section--workspaces > .
   margin-top: 0;
 }
 
+html[data-theme="design-01"] #panel-summarized .sum-feed-section--conversations > .sg-op-section-head {
+  margin-top: 0;
+}
+
 html[data-theme="design-01"] #panel-summarized .sum-feed-section:not(.sum-feed-section--workspaces) + .sum-feed-section > .sg-op-section-head {
   margin-top: 2.5rem;
 }
@@ -154,6 +158,11 @@ html[data-theme="design-01"] #panel-summarized .sum-feed-section:not(.sum-feed-s
   transform: rotate(90deg);
 }
 
+html[data-theme="design-01"] #panel-summarized .sum-card[open] > summary .sg-op-chev-icon,
+html[data-theme="design-01"] .sg-op-rail .sum-card[open] > summary .sg-op-chev-icon {
+  transform: rotate(90deg);
+}
+
 .sg-op-section-head__left {
   display: flex;
   align-items: center;
@@ -161,9 +170,17 @@ html[data-theme="design-01"] #panel-summarized .sum-feed-section:not(.sum-feed-s
   min-width: 0;
 }
 
-.sg-op-section-icon {
-  color: var(--embed-color-tertiary, #804f44);
+.sg-op-section-head .material-symbols-outlined.sg-op-section-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
   font-size: 1.35rem;
+  line-height: 1;
+  color: var(--embed-color-tertiary, #804f44);
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
 }
 
 .sg-op-section-icon--primary {
@@ -202,6 +219,18 @@ html[data-theme="design-01"] #panel-summarized .sum-feed-section:not(.sum-feed-s
 html[data-theme="design-01"] #panel-summarized .sg-op-section-action:hover {
   border-color: var(--embed-color-tertiary, #804f44);
   background: var(--embed-surface-elevated, #fff);
+}
+
+.sg-op-section-action:disabled,
+.sg-op-section-action[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+html[data-theme="design-01"] #panel-summarized .sg-op-section-action:disabled:hover,
+html[data-theme="design-01"] #panel-summarized .sg-op-section-action[aria-disabled="true"]:hover {
+  border-color: var(--embed-border-medium, #e3e2e0);
+  background: var(--embed-surface-container-low, #f4f3f0);
 }
 
 .sg-op-section-action .material-symbols-outlined {
@@ -352,62 +381,66 @@ html[data-theme="design-01"] #panel-summarized .sum-avatar {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 }
 
-/* Service avatars — distinct fills with contrast on card / rail backgrounds */
+/* Card avatars — same fill as open card body; accent fg for initials legibility */
 html[data-theme="design-01"] #panel-summarized .sum-avatar.sum-av-svc-chimera-gateway,
 html[data-theme="design-01"] .sg-op-rail .sum-avatar.sum-av-svc-chimera-gateway {
-  background: var(--embed-color-primary-fixed-dim, #abcae5);
-  color: var(--embed-semantic-info-fg, #2b4a60);
+  background: var(--embed-body-tint-svc-gw);
+  color: var(--embed-chev-hover-svc-gw);
 }
 
 html[data-theme="design-01"] #panel-summarized .sum-avatar.sum-av-svc-chimera-broker,
 html[data-theme="design-01"] .sg-op-rail .sum-avatar.sum-av-svc-chimera-broker {
-  background: var(--embed-color-primary-container, #5a7890);
-  color: var(--embed-text-on-primary, #ffffff);
-  box-shadow: 0 1px 4px rgba(26, 28, 26, 0.14);
+  background: var(--embed-body-tint-svc-bf);
+  color: var(--embed-chev-hover-svc-bf);
+  box-shadow: none;
 }
 
 html[data-theme="design-01"] #panel-summarized .sum-avatar.sum-av-svc-chimera-vectorstore,
 html[data-theme="design-01"] .sg-op-rail .sum-avatar.sum-av-svc-chimera-vectorstore {
-  background: var(--embed-color-secondary-container, #c9e8cb);
-  color: var(--embed-semantic-success-fg, #07200f);
+  background: var(--embed-body-tint-svc-qd);
+  color: var(--embed-chev-hover-svc-qd);
 }
 
 html[data-theme="design-01"] #panel-summarized .sum-avatar.sum-av-svc-chimera-indexer,
 html[data-theme="design-01"] .sg-op-rail .sum-avatar.sum-av-svc-chimera-indexer {
-  background: var(--embed-color-tertiary-fixed-dim, #f7b7a9);
-  color: var(--embed-text-on-tertiary-fixed, #673b31);
+  background: var(--embed-body-tint-svc-ix);
+  color: var(--embed-chev-hover-svc-ix);
 }
 
 html[data-theme="design-01"] #panel-summarized .sum-avatar.sum-av-a,
 html[data-theme="design-01"] .sg-op-rail .sum-avatar.sum-av-a {
-  background: var(--embed-color-primary-fixed-dim, #abcae5);
-  color: var(--embed-semantic-info-fg, #2b4a60);
+  background: var(--embed-body-tint-a);
+  color: var(--embed-chev-hover-a);
 }
 
 html[data-theme="design-01"] #panel-summarized .sum-avatar.sum-av-b,
 html[data-theme="design-01"] .sg-op-rail .sum-avatar.sum-av-b {
-  background: var(--embed-color-secondary-container, #c9e8cb);
-  color: var(--embed-semantic-success-fg, #07200f);
+  background: var(--embed-body-tint-b);
+  color: var(--embed-chev-hover-b);
 }
 
 html[data-theme="design-01"] #panel-summarized .sum-avatar.sum-av-c,
 html[data-theme="design-01"] .sg-op-rail .sum-avatar.sum-av-c {
-  background: var(--embed-color-tertiary-fixed-dim, #f7b7a9);
-  color: var(--embed-text-on-tertiary-fixed, #673b31);
+  background: var(--embed-body-tint-c);
+  color: var(--embed-chev-hover-c);
 }
 
 html[data-theme="design-01"] #panel-summarized .sum-avatar.sum-av-d,
 html[data-theme="design-01"] .sg-op-rail .sum-avatar.sum-av-d {
-  background: var(--embed-color-primary-fixed, #cae6ff);
-  color: var(--embed-semantic-info-fg, #2b4a60);
+  background: var(--embed-body-tint-d);
+  color: var(--embed-chev-hover-d);
 }
 
 html[data-theme="design-01"] #panel-summarized .sum-avatar.sum-av-e,
+html[data-theme="design-01"] .sg-op-rail .sum-avatar.sum-av-e {
+  background: var(--embed-chip-strip-bg);
+  color: var(--embed-text-bluegrey-455);
+}
+
 html[data-theme="design-01"] #panel-summarized .sum-avatar.sum-av-f,
-html[data-theme="design-01"] .sg-op-rail .sum-avatar.sum-av-e,
 html[data-theme="design-01"] .sg-op-rail .sum-avatar.sum-av-f {
-  background: var(--embed-surface-container-high, #e9e8e5);
-  color: var(--embed-text-secondary, #42474c);
+  background: var(--embed-body-tint-f);
+  color: var(--embed-chev-hover-f);
 }
 
 html[data-theme="design-01"] .sg-op-rail .sum-title,
@@ -550,16 +583,23 @@ html[data-theme="design-01"] #panel-summarized .sum-card.sum-card--collapsible:n
   letter-spacing: 0.03em;
 }
 
+.sg-op-health-pill--metric .sg-op-health-pill__icon {
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
 /* Summary row: metrics cluster + large operator pills (gallery panel + rails) */
 #panel-summarized .sum-card > summary > .sum-metrics,
-.sg-op-rail .sum-card > summary .sum-metrics {
+.sg-op-rail .sum-card > summary .sum-metrics,
+#panel-summarized .sum-card > .sum-card__hdr > .sum-metrics,
+.sg-op-rail .sum-card > .sum-card__hdr .sum-metrics {
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
   align-items: center;
   justify-content: flex-end;
   flex: 0 1 auto;
-  max-width: 50%;
+  max-width: none;
 }
 
 #panel-summarized .sum-card > summary > .sum-metrics .sg-op-health-pill,
@@ -663,6 +703,18 @@ html[data-theme="design-01"] #panel-summarized .sum-card.sum-card--collapsible:n
   outline-offset: 2px;
 }
 
+.sg-op-configure-btn:disabled,
+.sg-op-configure-btn[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.sg-op-configure-btn:disabled:hover,
+.sg-op-configure-btn[aria-disabled="true"]:hover {
+  border-color: var(--embed-border-medium, #e3e2e0);
+  background: var(--embed-surface-elevated, #fff);
+}
+
 /* Configure in head row (icon-only; no trailing gap after settings glyph) */
 .sg-op-configure-btn.sg-op-configure-btn--inline {
   position: static;
@@ -732,6 +784,50 @@ html[data-theme="design-01"] .sg-op-rail .sum-bf-prov-health-track--compact .sum
   border-radius: calc(var(--sg-op-summary-pill-radius) - 2px) !important;
 }
 
+/* Conversation lifecycle strip — same capsule geometry/height as service-health pills */
+html[data-theme="design-01"] #panel-summarized .sum-card.sum-card--conversation > summary .sum-conv-lifecycle-bar--compact,
+html[data-theme="design-01"] .sg-op-rail .sum-card.sum-card--conversation > summary .sum-conv-lifecycle-bar--compact {
+  align-self: center;
+}
+
+html[data-theme="design-01"] #panel-summarized .sum-card.sum-card--conversation > summary .sum-conv-lifecycle-bar--compact .sum-conv-lifecycle-bar-track,
+html[data-theme="design-01"] .sg-op-rail .sum-card.sum-card--conversation > summary .sum-conv-lifecycle-bar--compact .sum-conv-lifecycle-bar-track {
+  display: flex;
+  gap: 0;
+  margin: 0;
+  padding: 2px;
+  border-radius: var(--sg-op-summary-pill-radius);
+  background: var(--embed-surface-container-low, #f4f3f0);
+  border: 1px solid var(--embed-border-medium, #e3e2e0);
+  box-sizing: border-box;
+  min-height: var(--sg-op-summary-pill-min-h);
+  overflow: hidden;
+}
+
+html[data-theme="design-01"] #panel-summarized .sum-card.sum-card--conversation > summary .sum-conv-lifecycle-bar--compact .sum-conv-lifecycle-seg,
+html[data-theme="design-01"] .sg-op-rail .sum-card.sum-card--conversation > summary .sum-conv-lifecycle-bar--compact .sum-conv-lifecycle-seg {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: calc(var(--sg-op-summary-pill-min-h) - 4px);
+  border: none;
+  border-radius: 0 !important;
+}
+
+html[data-theme="design-01"] #panel-summarized .sum-card.sum-card--conversation > summary .sum-conv-lifecycle-bar--compact .sum-conv-lifecycle-seg:first-child,
+html[data-theme="design-01"] .sg-op-rail .sum-card.sum-card--conversation > summary .sum-conv-lifecycle-bar--compact .sum-conv-lifecycle-seg:first-child {
+  border-radius: calc(var(--sg-op-summary-pill-radius) - 2px) 0 0 calc(var(--sg-op-summary-pill-radius) - 2px) !important;
+}
+
+html[data-theme="design-01"] #panel-summarized .sum-card.sum-card--conversation > summary .sum-conv-lifecycle-bar--compact .sum-conv-lifecycle-seg:last-child,
+html[data-theme="design-01"] .sg-op-rail .sum-card.sum-card--conversation > summary .sum-conv-lifecycle-bar--compact .sum-conv-lifecycle-seg:last-child {
+  border-radius: 0 calc(var(--sg-op-summary-pill-radius) - 2px) calc(var(--sg-op-summary-pill-radius) - 2px) 0 !important;
+}
+
+html[data-theme="design-01"] #panel-summarized .sum-card.sum-card--conversation > summary .sum-conv-lifecycle-bar--compact .sum-conv-lifecycle-seg:only-child,
+html[data-theme="design-01"] .sg-op-rail .sum-card.sum-card--conversation > summary .sum-conv-lifecycle-bar--compact .sum-conv-lifecycle-seg:only-child {
+  border-radius: calc(var(--sg-op-summary-pill-radius) - 2px) !important;
+}
+
 html[data-theme="design-01"] #panel-summarized .sum-card > summary > .sum-metrics .sg-op-inset-well .material-symbols-outlined--sm,
 html[data-theme="design-01"] #panel-summarized .sum-card > .sum-card__hdr .sum-metrics .sg-op-inset-well .material-symbols-outlined--sm,
 html[data-theme="design-01"] .sg-op-rail .sum-card > summary .sg-op-inset-well .material-symbols-outlined--sm,
@@ -747,11 +843,11 @@ html[data-theme="design-01"] .sg-op-rail .sum-card > .sum-card__hdr .sum-metrics
   color: var(--embed-color-secondary, #4a654e);
 }
 
-/* Card summary rows — gateway overview parity (avatar | main | trailing metrics/status | chevron) */
+/* Card summary rows — avatar | main | trailing metrics | chevron (matches user cards) */
 html[data-theme="design-01"] #panel-summarized .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary,
 html[data-theme="design-01"] #panel-summarized .sum-card.sum-card--collapsible:not(.sg-op-user-saved) > .sum-card__hdr {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto 1rem;
   align-items: center;
 }
 
@@ -762,15 +858,30 @@ html[data-theme="design-01"] #panel-summarized .sum-card.sum-card--collapsible:n
 
 html[data-theme="design-01"] #panel-summarized .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary > .sum-metrics,
 html[data-theme="design-01"] #panel-summarized .sum-card.sum-card--collapsible:not(.sg-op-user-saved) > .sum-card__hdr > .sum-metrics {
+  grid-column: 3;
   max-width: none;
   justify-self: end;
 }
 
-html[data-theme="design-01"] #panel-summarized .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary > .sum-status,
-html[data-theme="design-01"] #panel-summarized .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary > .sg-op-health-pill,
-html[data-theme="design-01"] #panel-summarized .sum-card.sum-card--collapsible:not(.sg-op-user-saved) > .sum-card__hdr > .sum-status,
-html[data-theme="design-01"] #panel-summarized .sum-card.sum-card--collapsible:not(.sg-op-user-saved) > .sum-card__hdr > .sg-op-health-pill {
+html[data-theme="design-01"] #panel-summarized .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary > .sg-op-chev-icon,
+html[data-theme="design-01"] #panel-summarized .sum-card.sum-card--collapsible:not(.sg-op-user-saved) > .sum-card__hdr > .sg-op-chev-icon,
+html[data-theme="design-01"] .sg-op-rail .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary > .sg-op-chev-icon,
+html[data-theme="design-01"] .sg-op-rail .sum-card.sum-card--collapsible:not(.sg-op-user-saved) > .sum-card__hdr > .sg-op-chev-icon {
+  grid-column: 4;
   justify-self: end;
+}
+
+html[data-theme="design-01"] #panel-summarized .sum-card.sum-card--conversation > summary > .sg-op-chev-icon,
+html[data-theme="design-01"] .sg-op-rail .sum-card.sum-card--conversation > summary > .sg-op-chev-icon {
+  grid-column: 6;
+  grid-row: 1;
+  justify-self: end;
+  align-self: center;
+}
+
+html[data-theme="design-01"] #panel-summarized .sum-card.sum-card--conversation[open] > summary > .sg-op-chev-icon,
+html[data-theme="design-01"] .sg-op-rail .sum-card.sum-card--conversation[open] > summary > .sg-op-chev-icon {
+  grid-column: 5;
 }
 
 /* Expanded bodies: use full card inner width (routing, workspace, admin forms) */
@@ -781,7 +892,6 @@ html[data-theme="design-01"] #panel-summarized .sum-card > .sum-body .sum-full-l
 html[data-theme="design-01"] #panel-summarized .sum-card > .sum-body .sum-evlog,
 html[data-theme="design-01"] #panel-summarized .sum-card > .sum-body .sg-op-head-row,
 html[data-theme="design-01"] #panel-summarized .sum-card > .sum-body .sg-op-eval-out,
-html[data-theme="design-01"] #panel-summarized .sum-card > .sum-body .ws-managed-toolbar,
 html[data-theme="design-01"] #panel-summarized .sum-card > .sum-body [id^="admin-routing-"],
 html[data-theme="design-01"] #panel-summarized .sum-card > .sum-body [id^="admin-fallback-"],
 html[data-theme="design-01"] #panel-summarized .sum-card > .sum-body [id^="admin-router-"] {
@@ -890,6 +1000,78 @@ html[data-theme="design-01"] #panel-summarized .sum-card--indexer-operator-works
   gap: 0.35rem;
 }
 
+.sum-evlog__footer-metrics {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  flex: 0 0 auto;
+}
+
+.sum-evlog__footer-row .sum-evlog-metric-group {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.12rem;
+  box-sizing: border-box;
+  min-height: 0;
+  margin: 0;
+  padding: 0.06rem 0.32rem;
+  border-radius: 9999px;
+  font-family: inherit;
+  font-size: 0.62rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.sum-evlog__footer-row .sum-evlog-metric-group .sum-evlog-metric-num {
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.sum-evlog__footer-row .sum-evlog-metric-group .sum-evlog-metric-icon {
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
+.sum-evlog__footer-row .sum-evlog-metric-group.sum-evlog-status__lvl--WARN {
+  color: var(--embed-semantic-warn-fg);
+  background: var(--embed-semantic-warn-bg);
+  border: 1px solid color-mix(in srgb, var(--embed-semantic-warn-fg) 18%, transparent);
+}
+
+.sum-evlog__footer-row .sum-evlog-metric-group.sum-evlog-status__lvl--ERROR {
+  color: var(--embed-semantic-error-fg);
+  background: var(--embed-semantic-error-bg);
+  border: 1px solid color-mix(in srgb, var(--embed-semantic-error-fg) 18%, transparent);
+}
+
+.sum-evlog__footer-row .sum-evlog-metric-group:hover {
+  filter: brightness(0.97);
+}
+
+.sum-evlog__footer-row .sum-evlog-metric-group:disabled {
+  opacity: 0.42;
+  cursor: default;
+  filter: none;
+}
+
+.sum-evlog__footer-row .sum-evlog-metric-group:disabled:hover {
+  filter: none;
+}
+
+.sum-evlog__footer-row .sum-evlog-metric-group:focus-visible {
+  outline: 2px solid var(--embed-focus-ring);
+  outline-offset: 1px;
+}
+
+.sum-evlog__footer-row .sum-evlog-metric-group.sum-evlog-metric-group--active {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 28%, transparent);
+}
+
 .sum-metrics-table.sum-evlog__table .sum-evlog-metric-group {
   display: inline-flex;
   align-items: center;
@@ -929,8 +1111,9 @@ html[data-theme="design-01"] #panel-summarized .sum-card--indexer-operator-works
   border: 1px solid color-mix(in srgb, var(--embed-semantic-error-fg) 18%, transparent);
 }
 
-/* Message service tags + row status pills → same capsule geometry as summary chips */
+/* Message service tags + source/status row pills → same capsule geometry as summary chips */
 .sum-metrics-table.sum-evlog__table .sum-evlog__cell--msg > .sum-svc-badge,
+.sum-metrics-table.sum-evlog__table .sum-evlog-source .sum-svc-badge,
 .sum-metrics-table.sum-evlog__table .sum-evlog-status .pill-2xx,
 .sum-metrics-table.sum-evlog__table .sum-evlog-status .pill-4xx,
 .sum-metrics-table.sum-evlog__table .sum-evlog-status .pill-5xx,

@@ -44,12 +44,22 @@ type LogsUITimelineBarKind struct {
 
 // LogsUITimelineBarKinds order matches the summarized gateway card timeline bar.
 // Keys use log source IDs for services and timeline_kind slugs for web traffic.
+// Labels omit the chimera- prefix for operator UI presentation.
 var LogsUITimelineBarKinds = []LogsUITimelineBarKind{
-	{LogSourceChimeraGateway, LogSourceChimeraGateway},
-	{LogSourceChimeraBroker, LogSourceChimeraBroker},
-	{LogSourceChimeraVectorstore, LogSourceChimeraVectorstore},
-	{LogSourceChimeraIndexer, LogSourceChimeraIndexer},
+	{LogSourceChimeraGateway, LogsUIServiceDisplayLabel(LogSourceChimeraGateway)},
+	{LogSourceChimeraBroker, LogsUIServiceDisplayLabel(LogSourceChimeraBroker)},
+	{LogSourceChimeraVectorstore, LogsUIServiceDisplayLabel(LogSourceChimeraVectorstore)},
+	{LogSourceChimeraIndexer, LogsUIServiceDisplayLabel(LogSourceChimeraIndexer)},
 	{TimelineKindWeb, TimelineKindWeb},
+}
+
+// LogsUIServiceDisplayLabel strips the chimera- prefix from product/log source keys for UI labels.
+func LogsUIServiceDisplayLabel(key string) string {
+	const prefix = "chimera-"
+	if len(key) > len(prefix) && key[:len(prefix)] == prefix {
+		return key[len(prefix):]
+	}
+	return key
 }
 
 // LogsUIServiceBadgeRule maps normalized service keys to a CSS class suffix (sum-svc-*).

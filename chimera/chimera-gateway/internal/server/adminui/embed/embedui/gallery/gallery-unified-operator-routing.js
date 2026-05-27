@@ -2,6 +2,9 @@
  * Unified operator gallery: editable routing YAML + fallback chain YAML + router
  * model list with refresh/save overlays; optional /api/ui/* when the page is served over HTTP(S)
  * from the gateway origin (same-origin session cookie).
+ *
+ * Provider tier colors and sample model ids (groq/gemini/ollama) are **fixture-only** for this
+ * static demo page. Live /ui/settings uses GET /api/ui/providers/catalog and session-visible ids.
  */
 (function () {
   "use strict";

@@ -59,7 +59,7 @@ type normalized struct {
 
 // NormalizePayload converts one raw line (no trailing \n) into a single JSON log line.
 func NormalizePayload(raw string) []byte {
-	return wline.NormalizePerLine(raw, alreadyNormalized, normalizePlain, normalizeJSON)
+	return postProcessNormalizedLine(wline.NormalizePerLine(raw, alreadyNormalized, normalizePlain, normalizeJSON))
 }
 
 func normalizeJSON(raw string) []byte {
@@ -342,14 +342,26 @@ func annotateHTTPAccessTarget(out *normalized, target string) {
 	path := httpTargetPath(target)
 	switch path {
 	case "/api/governance/providers":
-		out.ProgressDetail = "governance provider list"
+		out.ProgressDetail = "gateway admin · configured provider roster"
 	case "/v1/models":
-		out.ProgressDetail = "model catalog"
+		out.ProgressDetail = "gateway admin · model catalog refresh"
 	default:
 		if pid := providerIDFromAPIPath(path); pid != "" {
 			out.ProviderID = pid
-			out.ProgressDetail = "provider " + pid
+			out.ProgressDetail = "gateway admin · provider health probe · " + pid
 		}
+	}
+}
+
+func brokerAdminProbeGET(path, method string, status int) bool {
+	if method != "GET" || status < 200 || status >= 300 {
+		return false
+	}
+	switch path {
+	case "/v1/models", "/api/governance/providers":
+		return true
+	default:
+		return providerIDFromAPIPath(path) != ""
 	}
 }
 
@@ -371,10 +383,11 @@ func classifyHTTPAccess(out *normalized, fields map[string]json.RawMessage, mess
 	out.TraceID = wline.JSONString(fields, "trace_id")
 	annotateHTTPAccessTarget(out, target)
 
-	if status >= 200 && status < 300 && method == "GET" && httpTargetPath(target) == "/v1/models" {
+	path := httpTargetPath(target)
+	if brokerAdminProbeGET(path, method, status) {
 		out.Level = "DEBUG"
 	}
-	if status >= 200 && status < 300 && method == "POST" && httpTargetPath(target) == "/v1/embeddings" {
+	if status >= 200 && status < 300 && method == "POST" && path == "/v1/embeddings" {
 		out.Level = "DEBUG"
 	}
 

@@ -92,7 +92,7 @@ func loadCardTestCtx(t *testing.T, vm *goja.Runtime) {
 	for _, f := range []string{
 		"sharedFormat.js", "convCard.js", "serviceCard.js", "gatewayOverview.js", "gatewayUsage.js",
 		"adminShared.js", "adminUsers.js", "adminProvider.js", "adminRouting.js", "adminFallback.js",
-		"adminRouterModels.js", "adminWorkflows.js", "workspaceDraft.js", "mount.js",
+		"adminRouterModels.js", "adminVirtualModels.js", "adminWorkflows.js", "workspaceDraft.js", "mount.js",
 	} {
 		evalJS(t, vm, cardsUIPath(t, f))
 	}
@@ -123,12 +123,14 @@ func loadCardTestCtx(t *testing.T, vm *goja.Runtime) {
 			},
 			tokenListCache: [{ tenant_id: "tenant-a", label: "Alice", index: 0 }],
 			adminUserDrafts: [],
-			adminProviderKeyDraft: { groq: null, gemini: null },
+			virtualModelDrafts: [],
+			nextVirtualModelDraftId: 1,
+			adminProviderKeyDraft: {},
+			adminVisibleProviderIds: ["groq", "ollama"],
 			adminOllamaUrlDraft: null,
 			adminStateCache: {
 				providers: {
 					groq: { keys: [], ok: true },
-					gemini: { keys: [], ok: true },
 					ollama: { keys: [], ok: true, ollama_base_url: "http://127.0.0.1:11434" }
 				}
 			},

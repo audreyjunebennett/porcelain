@@ -81,10 +81,7 @@ func TestBootstrapSetup_servesSharedCSS(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rt, err := NewRuntime(gwPath, testLog())
-	if err != nil {
-		t.Fatal(err)
-	}
+	rt := mustRuntime(t, gwPath)
 	h := NewBootstrapMux(rt, testLog(), &StatusOverlay{EffectiveListen: "127.0.0.1:9"})
 	ts := httptest.NewServer(h)
 	t.Cleanup(ts.Close)

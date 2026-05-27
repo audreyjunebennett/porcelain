@@ -4,7 +4,7 @@
 |-------|-------|
 | **Doc kind** | `refactor-plan` |
 | **Owners / areas** | Gateway admin UI (`adminui/embed`), Locus desktop login defaults, embed UI tests |
-| **Status** | `draft` |
+| **Status** | `done` |
 | **Targets** | Gateway / operator UI v0.3 |
 | **Last updated** | See git history |
 | **Supersedes / superseded by** | Supersedes scattered notes in [`embedui-component-system.md`](embedui-component-system.md) and [`chimera-gateway-package-boundaries.md`](chimera-gateway-package-boundaries.md) for `/ui/logs` / `/ui/desktop` entry URLs |

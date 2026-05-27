@@ -9,6 +9,17 @@ import (
 	"github.com/lynn/porcelain/internal/naming"
 )
 
+func assertNormalizedFieldOrder(t *testing.T, b []byte) {
+	t.Helper()
+	s := string(b)
+	if !strings.HasPrefix(s, `{"timestamp":`) {
+		t.Fatalf("expected timestamp-first JSON, got %s", s)
+	}
+	if strings.HasPrefix(s, `{"_chimera_norm":`) {
+		t.Fatalf("expected _chimera_norm last, got %s", s)
+	}
+}
+
 func TestNormalizePayloadHTTPAccessAndRateLimit(t *testing.T) {
 	raw := `{"level":"info","http.method":"POST","http.target":"/v1/chat/completions","http.status_code":200,"http.request_duration_ms":348,"time":"2026-05-08T14:29:53-05:00","message":"request completed"}`
 	b := NormalizePayload(raw)
@@ -95,16 +106,81 @@ func TestNormalizePayloadBrokerUpstreamLine(t *testing.T) {
 }
 
 func TestNormalizePayloadPlainBannerTimestamp(t *testing.T) {
+	resetBrokerStartupChatterForTest()
 	b := NormalizePayload("╔════ BiFrost ════╗")
+	assertNormalizedFieldOrder(t, b)
 	var m map[string]any
 	if err := json.Unmarshal(b, &m); err != nil {
 		t.Fatal(err)
 	}
-	if m["progress_detail"] == nil || m["progress_detail"] == "" {
-		t.Fatalf("missing banner text: %v", m)
+	if m["level"] != "INFO" {
+		t.Fatalf("first banner level=%v want INFO", m["level"])
+	}
+	if pd, ok := m["progress_detail"]; ok && pd != nil && pd != "" {
+		t.Fatalf("first banner should omit decorative detail: %v", m)
 	}
 	if _, ok := m["timestamp"]; !ok {
 		t.Fatalf("missing timestamp: %v", m)
+	}
+
+	b2 := NormalizePayload("║  more ascii art ║")
+	var m2 map[string]any
+	if err := json.Unmarshal(b2, &m2); err != nil {
+		t.Fatal(err)
+	}
+	if m2["level"] != "DEBUG" {
+		t.Fatalf("second banner level=%v want DEBUG", m2["level"])
+	}
+}
+
+func TestNormalizePayloadStartupChatterDemotesRoutine(t *testing.T) {
+	resetBrokerStartupChatterForTest()
+	cases := []struct {
+		raw       string
+		wantLevel string
+	}{
+		{`{"level":"info","time":"t","message":"config store initialized (sqlite)"}`, "DEBUG"},
+		{`{"level":"info","time":"t","message":"Token refresh worker started"}`, "DEBUG"},
+		{`{"level":"info","time":"t","message":"successfully started chimera-broker, serving UI on http://127.0.0.1:8080"}`, "INFO"},
+		{`{"level":"info","time":"t","message":"42 models added to catalog"}`, "INFO"},
+		{`{"level":"info","time":"t","message":"initializing model catalog"}`, "DEBUG"},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.wantLevel, func(t *testing.T) {
+			b := NormalizePayload(tc.raw)
+			var m map[string]any
+			if err := json.Unmarshal(b, &m); err != nil {
+				t.Fatal(err)
+			}
+			if m["level"] != tc.wantLevel {
+				t.Fatalf("level=%v want %s msg=%v", m["level"], tc.wantLevel, m["msg"])
+			}
+		})
+	}
+}
+
+func TestNormalizePayloadSchemaWarnBoxDemoted(t *testing.T) {
+	resetBrokerStartupChatterForTest()
+	box := NormalizePayload("╔══ schema warning box ══╗")
+	var boxM map[string]any
+	if err := json.Unmarshal(box, &boxM); err != nil {
+		t.Fatal(err)
+	}
+	if boxM["msg"] != "broker.config.schema_warn" {
+		t.Fatalf("msg=%v", boxM["msg"])
+	}
+	if boxM["level"] != "DEBUG" {
+		t.Fatalf("box level=%v want DEBUG", boxM["level"])
+	}
+
+	plain := NormalizePayload(`{"level":"warn","time":"t","message":"config file does not include all schema fields"}`)
+	var plainM map[string]any
+	if err := json.Unmarshal(plain, &plainM); err != nil {
+		t.Fatal(err)
+	}
+	if plainM["level"] != "WARN" {
+		t.Fatalf("plain warn level=%v want WARN", plainM["level"])
 	}
 }
 
@@ -169,8 +245,11 @@ func TestNormalizePayloadHTTPAccessProviderProbe(t *testing.T) {
 	if m["provider_id"] != "ollama" {
 		t.Fatalf("provider_id=%v", m["provider_id"])
 	}
-	if m["progress_detail"] != "provider ollama" {
+	if m["progress_detail"] != "gateway admin · provider health probe · ollama" {
 		t.Fatalf("progress_detail=%v", m["progress_detail"])
+	}
+	if m["level"] != "DEBUG" {
+		t.Fatalf("level=%v want DEBUG for successful admin probe", m["level"])
 	}
 
 	rawGov := `{"level":"info","http.method":"GET","http.target":"/api/governance/providers","http.status_code":200,"time":"t","message":"request completed"}`
@@ -179,8 +258,21 @@ func TestNormalizePayloadHTTPAccessProviderProbe(t *testing.T) {
 	if err := json.Unmarshal(bGov, &mGov); err != nil {
 		t.Fatal(err)
 	}
-	if mGov["progress_detail"] != "governance provider list" {
+	if mGov["progress_detail"] != "gateway admin · configured provider roster" {
 		t.Fatalf("progress_detail=%v", mGov["progress_detail"])
+	}
+	if mGov["level"] != "DEBUG" {
+		t.Fatalf("level=%v want DEBUG for successful governance list", mGov["level"])
+	}
+
+	rawFail := `{"level":"info","http.method":"GET","http.target":"/api/providers/gemini","http.status_code":503,"time":"t","message":"request completed"}`
+	bFail := NormalizePayload(rawFail)
+	var mFail map[string]any
+	if err := json.Unmarshal(bFail, &mFail); err != nil {
+		t.Fatal(err)
+	}
+	if mFail["level"] == "DEBUG" {
+		t.Fatalf("failed admin probe should not be DEBUG, level=%v", mFail["level"])
 	}
 }
 

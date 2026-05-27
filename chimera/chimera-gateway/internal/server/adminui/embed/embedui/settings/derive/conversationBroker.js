@@ -52,3 +52,5 @@ globalThis.ChimeraSettings = globalThis.ChimeraSettings || {};
 globalThis.ChimeraSettings.Derive = globalThis.ChimeraSettings.Derive || {};
 globalThis.ChimeraSettings.Derive.conversationBrokerTimelineFlat = conversationBrokerTimelineFlat;
 globalThis.ChimeraSettings.Derive.conversationBrokerRelayCount = conversationBrokerRelayCount;
+/** @deprecated use conversationBrokerRelayCount */
+globalThis.ChimeraSettings.Derive.conversationChimeraBrokerRelayCount = conversationBrokerRelayCount;

@@ -165,6 +165,8 @@
       if (t) blob += " " + t.textContent.trim();
       var iso = tr.querySelector("time[datetime]");
       if (iso && iso.getAttribute("datetime")) blob += " " + iso.getAttribute("datetime");
+      var src = tr.querySelector(".sum-evlog__cell--source");
+      if (src) blob += " " + src.textContent.trim();
       var msg = tr.querySelector(".sum-evlog__cell--msg");
       if (msg) blob += " " + msg.textContent.trim();
       var stat = tr.querySelector(".sum-evlog__cell--status");
@@ -293,11 +295,16 @@
       var tr = picked[i];
       var t = tr.querySelector("time");
       var timeStr = t ? t.textContent.trim() : "";
+      var src = tr.querySelector(".sum-evlog__cell--source");
+      var srcStr = src ? src.textContent.trim().replace(/\s+/g, " ") : "";
       var msg = tr.querySelector(".sum-evlog__cell--msg");
       var msgStr = msg ? msg.textContent.trim().replace(/\s+/g, " ") : "";
       var stat = tr.querySelector(".sum-evlog__cell--status");
       var statStr = stat ? stat.textContent.trim().replace(/\s+/g, " ") : "";
-      lines.push(timeStr + "\t" + msgStr + "\t" + statStr);
+      var cols = [timeStr];
+      if (src) cols.push(srcStr);
+      cols.push(msgStr, statStr);
+      lines.push(cols.join("\t"));
     }
     var text = lines.join("\n");
     function showToast(ok, msg) {

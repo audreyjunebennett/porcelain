@@ -2,6 +2,13 @@ package providerlimits
 
 import "fmt"
 
+// RequestAdmission carries per-request dimensions for context/body admission (no metrics I/O).
+type RequestAdmission struct {
+	EstPromptTokens int64 // tiktoken on marshalled body (same as TPM estimate today)
+	MaxTokens       int64 // client max_tokens reserve; 0 when omitted
+	BodyBytes       int64 // len(out) after json.Marshal
+}
+
 // Usage is the observed usage for a provider/model over the relevant windows. Callers compute
 // these from the metrics store (gatewaymetrics). Counts are independent of HTTP status today —
 // limits apply to all billable attempts; see plan §3.7.5.
@@ -16,11 +23,13 @@ type Usage struct {
 type Reason string
 
 const (
-	ReasonNone Reason = ""
-	ReasonRPM  Reason = "rpm"
-	ReasonRPD  Reason = "rpd"
-	ReasonTPM  Reason = "tpm"
-	ReasonTPD  Reason = "tpd"
+	ReasonNone     Reason = ""
+	ReasonRPM      Reason = "rpm"
+	ReasonRPD      Reason = "rpd"
+	ReasonTPM      Reason = "tpm"
+	ReasonTPD      Reason = "tpd"
+	ReasonContext  Reason = "context_window"
+	ReasonBodySize Reason = "request_body_bytes"
 )
 
 // Decision is the result of Decide.
@@ -54,4 +63,21 @@ func Decide(eff Effective, usage Usage, estForThisRequest int64) Decision {
 
 func deny(r Reason, detail string) Decision {
 	return Decision{Allowed: false, Reason: r, Detail: detail}
+}
+
+// DecideContext returns Allowed=true when the request fits configured context and body caps.
+// Unset dimensions are never enforced. Pure function — no I/O.
+func DecideContext(eff Effective, req RequestAdmission) Decision {
+	if eff.MaxBodyBytes != nil && req.BodyBytes > *eff.MaxBodyBytes {
+		return deny(ReasonBodySize, fmt.Sprintf("request body %d bytes exceeds cap %d", req.BodyBytes, *eff.MaxBodyBytes))
+	}
+	cap, ok := eff.EffectiveContextCap()
+	if !ok {
+		return Decision{Allowed: true}
+	}
+	need := req.EstPromptTokens + req.MaxTokens
+	if need > cap {
+		return deny(ReasonContext, fmt.Sprintf("context cap %d would be exceeded (prompt=%d, max_tokens=%d)", cap, req.EstPromptTokens, req.MaxTokens))
+	}
+	return Decision{Allowed: true}
 }

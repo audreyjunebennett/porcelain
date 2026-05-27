@@ -32,8 +32,9 @@ const (
 
 // Runtime directory and file names (under the porcelain runtime root).
 const (
-	DirRun             = "run"
 	DirData            = "data"
+	DirDesktopState    = "locus-desktop"      // desktop launcher state under DirData
+	DirSupervisorState = "chimera-supervisor" // supervisor runtime state under DirData
 	DirConfig          = "config"
 	FileLaunchLock     = "locus-desktop-launch.lock"
 	FileLaunchMetadata = "locus-desktop-launch.json"
@@ -73,29 +74,39 @@ func SupervisorSearchNames() []string {
 	return binfind.SearchNames(BinSupervisor)
 }
 
-// RunDirPath returns <runtimeRoot>/run.
-func RunDirPath(runtimeRoot string) string {
-	return filepath.Join(runtimeRoot, DirRun)
+// DataDirPath returns <runtimeRoot>/data.
+func DataDirPath(runtimeRoot string) string {
+	return filepath.Join(runtimeRoot, DirData)
+}
+
+// DesktopStateDirPath returns <runtimeRoot>/data/locus-desktop.
+func DesktopStateDirPath(runtimeRoot string) string {
+	return filepath.Join(runtimeRoot, DirData, DirDesktopState)
+}
+
+// SupervisorStateDirPath returns <runtimeRoot>/data/chimera-supervisor.
+func SupervisorStateDirPath(runtimeRoot string) string {
+	return filepath.Join(runtimeRoot, DirData, DirSupervisorState)
 }
 
 // LaunchLockPath returns the single-instance launch lock file path.
 func LaunchLockPath(runtimeRoot string) string {
-	return filepath.Join(RunDirPath(runtimeRoot), FileLaunchLock)
+	return filepath.Join(DesktopStateDirPath(runtimeRoot), FileLaunchLock)
 }
 
 // LaunchMetadataPath returns the launch diagnostics JSON path.
 func LaunchMetadataPath(runtimeRoot string) string {
-	return filepath.Join(RunDirPath(runtimeRoot), FileLaunchMetadata)
+	return filepath.Join(DesktopStateDirPath(runtimeRoot), FileLaunchMetadata)
 }
 
 // LifecycleEventsPath returns the optional trace JSONL path.
 func LifecycleEventsPath(runtimeRoot string) string {
-	return filepath.Join(RunDirPath(runtimeRoot), FileLifecycleLog)
+	return filepath.Join(DesktopStateDirPath(runtimeRoot), FileLifecycleLog)
 }
 
-// SupervisorLogPath returns the supervisor log file path under logDir.
-func SupervisorLogPath(logDir string) string {
-	return filepath.Join(logDir, FileSupervisorLog)
+// SupervisorLogPath returns <runtimeRoot>/data/locus-desktop-supervisor.log.
+func SupervisorLogPath(runtimeRoot string) string {
+	return filepath.Join(DataDirPath(runtimeRoot), FileSupervisorLog)
 }
 
 // Logf writes a prefixed line to stderr.

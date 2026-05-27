@@ -65,33 +65,6 @@ func (d *discoveryAgg) discoveryScopeLogAttrs() []any {
 	}
 }
 
-// LogQueueSnapshot emits indexer.queue.snapshot for operators / UI rollup.
-func (ix *Indexer) LogQueueSnapshot(phase string) {
-	if ix.log == nil {
-		return
-	}
-	cap := ix.queue.Cap()
-	bulkQ, writeQ, interactQ := ix.queue.LenByTier()
-	args := []any{
-		"msg", "indexer.queue.snapshot",
-		"phase", phase,
-		"queue_depth", ix.queue.Len(),
-		"queue_depth_bulk", bulkQ,
-		"queue_depth_write", writeQ,
-		"queue_depth_interactive", interactQ,
-		"queue_cap", cap,
-		"workers", ix.cfg.Workers,
-		"ingest_completed", atomic.LoadInt64(&ix.opsIngestOK),
-		"ingest_failed_dropped", atomic.LoadInt64(&ix.opsIngestFail),
-		"retry_events", atomic.LoadInt64(&ix.opsRetry),
-		"jobs_dequeued", atomic.LoadInt64(&ix.opsDequeued),
-		"skip_unchanged_corpus_client_hash", atomic.LoadInt64(&ix.opsSkipCorpusClientHash),
-		"skip_unchanged_corpus_sync", atomic.LoadInt64(&ix.opsSkipCorpusSyncMatch),
-		"skip_unchanged_local_sync", atomic.LoadInt64(&ix.opsSkipLocalSync),
-	}
-	ix.log.Info("indexer queue snapshot", args...)
-}
-
 // OpsSnapshot returns operator counters for run lifecycle logs (e.g. indexer.run.done).
 func (ix *Indexer) OpsSnapshot() map[string]int64 {
 	return map[string]int64{

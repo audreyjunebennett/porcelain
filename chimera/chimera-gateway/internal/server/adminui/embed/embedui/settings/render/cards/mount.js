@@ -18,6 +18,7 @@ globalThis.ChimeraSettings.Render.Cards.mountAll = function (ctx) {
   if (typeof C.mountAdminRouting === "function") C.mountAdminRouting(ctx);
   if (typeof C.mountAdminFallback === "function") C.mountAdminFallback(ctx);
   if (typeof C.mountAdminRouterModels === "function") C.mountAdminRouterModels(ctx);
+  if (typeof C.mountAdminVirtualModels === "function") C.mountAdminVirtualModels(ctx);
   if (typeof C.mountAdminWorkflows === "function") C.mountAdminWorkflows(ctx);
   if (typeof C.mountWorkspaceDraft === "function") C.mountWorkspaceDraft(ctx);
 };

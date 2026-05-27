@@ -42,10 +42,22 @@ func TestSupervisorSearchNames_Windows(t *testing.T) {
 
 func TestRuntimePaths(t *testing.T) {
 	root := filepath.FromSlash("/tmp/porcelain")
+	wantDesktopDir := filepath.Join(root, DirData, DirDesktopState)
+	if DesktopStateDirPath(root) != wantDesktopDir {
+		t.Fatalf("desktop state dir: got %s want %s", DesktopStateDirPath(root), wantDesktopDir)
+	}
+	wantSupervisorDir := filepath.Join(root, DirData, DirSupervisorState)
+	if SupervisorStateDirPath(root) != wantSupervisorDir {
+		t.Fatalf("supervisor state dir: got %s want %s", SupervisorStateDirPath(root), wantSupervisorDir)
+	}
 	if filepath.Base(LaunchLockPath(root)) != FileLaunchLock {
 		t.Fatalf("lock path: %s", LaunchLockPath(root))
 	}
 	if filepath.Base(LifecycleEventsPath(root)) != FileLifecycleLog {
 		t.Fatalf("events path: %s", LifecycleEventsPath(root))
+	}
+	wantSupervisorLog := filepath.Join(root, DirData, FileSupervisorLog)
+	if SupervisorLogPath(root) != wantSupervisorLog {
+		t.Fatalf("supervisor log: got %s want %s", SupervisorLogPath(root), wantSupervisorLog)
 	}
 }

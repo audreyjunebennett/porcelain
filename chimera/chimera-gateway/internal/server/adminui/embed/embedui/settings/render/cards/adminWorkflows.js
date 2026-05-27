@@ -13,6 +13,7 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminWorkflows = function (ctx) {
   var buildAdminFallbackCardHtml = ctx.buildAdminFallbackCardHtml;
   var buildAdminRouterModelCardHtml = ctx.buildAdminRouterModelCardHtml;
 
+  /** Legacy static feed demo (gallery / tests). Live summarized feed uses visible ids + catalog. */
   function buildAdminWorkflowsFeedSection() {
     return (
       '<div class="sum-feed-section">' +

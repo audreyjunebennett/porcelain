@@ -11,7 +11,7 @@
 
 ## At a glance
 
-Operators rely on per-card **full event logs** in the summarized logs feed to debug a single conversation or service slice. Today those lines reuse `log-line-sum` (time, level badge, optional service badge, message) inside a scrollable `.sum-full-log` list, with gateway-only visibility toggled by **Show probe HTTP rows** (`localStorage` key `chimera.logs.gateway.showProbes`, `window.__chimeraToggleGatewayProbes`). This plan moves toward a dedicated **event log component**: clearer columns, local search and filters, multi-select with stable identity across filter changes, copy-to-clipboard, summary counts above the list, and an oldest-entry time footer—without changing the meaning of underlying log data.
+Operators rely on per-card **full event logs** in the summarized logs feed to debug a single conversation or service slice. Today those lines reuse `log-line-sum` (time, level badge, optional service badge, message) inside a scrollable `.sum-full-log` list, with gateway-only visibility toggled by **Show probe HTTP rows** (in-memory session flag, `window.__chimeraToggleGatewayProbes`). This plan moves toward a dedicated **event log component**: clearer columns, local search and filters, multi-select with stable identity across filter changes, copy-to-clipboard, summary counts above the list, and an oldest-entry time footer—without changing the meaning of underlying log data.
 
 | Phase | Outcome | Status |
 |-------|---------|--------|

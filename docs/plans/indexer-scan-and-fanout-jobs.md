@@ -19,9 +19,9 @@ When the indexer first scans a workspace, it shouldn't drop files or block other
 | [Phase 2 — Project & flavor tagging](#phase-2--projectflavor-tagging-and-discovery-reporting) | Discovery summaries break down per project + flavor, not one global flood | `done` |
 | [Phase 3 — Scan / fan-out & fair-share](#phase-3--scanjob-fanoutlistjob-fair-share-replace-enqueueinitialscan) | Bounded fan-out with a fair share of bulk capacity per workspace | `done` |
 | [Phase 4 — Priority tiers & watchers](#phase-4--priority-tiers-and-watchers) | File edits jump ahead of bulk indexing | `done` |
-| [Phase 5 — Operator UI per scope](#phase-5--operator-ui-website--desktop) | One summarized log card per project + flavor in `/ui/logs` | `active` |
-| [Phase 6 — Hardening & follow-ups](#phase-6--hardening-and-follow-ups) | Optional finer progress logs and delete-from-index path | `todo` |
-| [Phase 7 — Per-indexer live status](#phase-7--per-indexer-summarized-log-status-planned) | Workspace totals, queued counts, and current file per scope | `todo` |
+| [Phase 5 — Operator UI per scope](#phase-5--operator-ui-website--desktop) | One summarized log card per project + flavor in `/ui/logs` | `done` |
+| [Phase 6 — Hardening & follow-ups](#phase-6--hardening-and-follow-ups) | Optional finer progress logs and delete-from-index path | `done` |
+| [Phase 7 — Per-indexer live status](#phase-7--per-indexer-summarized-log-status-planned) | Workspace totals, queued counts, and current file per scope | `done` |
 
 ---
 

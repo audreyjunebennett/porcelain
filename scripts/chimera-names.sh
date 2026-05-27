@@ -14,8 +14,8 @@
 : "${CHIMERA_BROKER_BIN_BASE:=chimera-broker}"
 : "${CHIMERA_VECTORSTORE_BIN_BASE:=chimera-vectorstore}"
 : "${LOCUS_DESKTOP_BIN_BASE:=locus-desktop}"
-: "${CHIMERA_RUN_DIR:=run}"
-: "${CHIMERA_LOG_DIR:=logs}"
+: "${CHIMERA_DATA_DIR:=data}"
+: "${CHIMERA_SUPERVISOR_STATE_DIR:=${CHIMERA_DATA_DIR}/chimera-supervisor}"
 : "${CHIMERA_DIST_BUNDLE_PREFIX:=chimera-bundle}"
 
 # Release make targets (install / build / package).
@@ -69,11 +69,11 @@
 : "${CHIMERA_CMD_INDEXER:=chimera/chimera-indexer}"
 
 chimera_pid_path() {
-	printf '%s/%s.pid' "${CHIMERA_RUN_DIR}" "${CHIMERA_MAKE_PID_BASENAME}"
+	printf '%s/%s.pid' "${CHIMERA_SUPERVISOR_STATE_DIR}" "${CHIMERA_MAKE_PID_BASENAME}"
 }
 
 chimera_log_path() {
-	printf '%s/%s.log' "${CHIMERA_LOG_DIR}" "${CHIMERA_SUPERVISOR_BIN_BASE}"
+	printf '%s/%s.log' "${CHIMERA_SUPERVISOR_STATE_DIR}" "${CHIMERA_SUPERVISOR_BIN_BASE}"
 }
 
 # Prints the first existing ./<supervisor>[.exe] relative path, or returns 1 if missing.

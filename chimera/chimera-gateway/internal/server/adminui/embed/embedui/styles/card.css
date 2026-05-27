@@ -67,6 +67,38 @@ body.logs-summarized #panel-summarized {
 .sum-card.sum-card--conversation > summary .sum-conv-lifecycle-bar--compact {
   justify-self: center;
 }
+.sum-card.sum-card--conversation > summary > .sum-avatar {
+  grid-column: 1;
+  grid-row: 1;
+}
+.sum-card.sum-card--conversation > summary > .sum-main {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+}
+.sum-card.sum-card--conversation > summary > .sum-metrics {
+  grid-column: 3;
+  grid-row: 1;
+}
+.sum-card.sum-card--conversation > summary > .sum-conv-lifecycle-bar--compact {
+  grid-column: 4;
+  grid-row: 1;
+}
+.sum-card.sum-card--conversation > summary > .sg-op-health-pill,
+.sum-card.sum-card--conversation > summary > .sum-status {
+  grid-column: 5;
+  grid-row: 1;
+}
+.sum-card.sum-card--conversation > summary > .sg-op-chev-icon {
+  grid-column: 6;
+  grid-row: 1;
+  justify-self: end;
+  align-self: center;
+  margin-left: 0;
+}
+.sum-card.sum-card--conversation > summary > .sum-chev {
+  display: none;
+}
 .sum-card.sum-card--conversation > summary .sum-status {
   justify-self: stretch;
   text-align: center;
@@ -83,6 +115,13 @@ body.logs-summarized #panel-summarized {
     minmax(5.5rem, 6.75rem)
     8.25rem
     1rem;
+}
+.sum-card.sum-card--conversation[open] > summary > .sg-op-health-pill,
+.sum-card.sum-card--conversation[open] > summary > .sum-status {
+  grid-column: 4;
+}
+.sum-card.sum-card--conversation[open] > summary > .sg-op-chev-icon {
+  grid-column: 5;
 }
 .sum-card > summary::-webkit-details-marker { display: none; }
 .sum-card[open] > summary { border-bottom: 1px solid var(--embed-border-summary-open); }
@@ -233,25 +272,25 @@ body.logs-summarized #panel-summarized {
   flex: 0 0 auto; width: 2.35rem; height: 2.35rem; border-radius: 50%; font-size: 0.72rem; font-weight: 700;
   display: flex; align-items: center; justify-content: center; color: var(--embed-text-strong); text-transform: uppercase;
 }
-.sum-av-a { background: var(--embed-avatar-a); }
-.sum-av-b { background: var(--embed-avatar-b); }
-.sum-av-c { background: var(--embed-avatar-c); }
-/* Indexer scope: queues empty (idle) — checkmark, same orange as .sum-av-c */
+.sum-av-a { background: var(--embed-body-tint-a); color: var(--embed-chev-hover-a); }
+.sum-av-b { background: var(--embed-body-tint-b); color: var(--embed-chev-hover-b); }
+.sum-av-c { background: var(--embed-body-tint-c); color: var(--embed-chev-hover-c); }
+/* Indexer scope: queues empty (idle) — checkmark, same tint as .sum-av-c */
 .sum-avatar.sum-av-indexer-idle {
-  background: var(--embed-avatar-c);
-  color: var(--embed-text-strong);
+  background: var(--embed-body-tint-c);
+  color: var(--embed-chev-hover-c);
   font-size: 1rem;
   font-weight: 700;
   text-transform: none;
 }
-.sum-av-d { background: var(--embed-avatar-d); }
-.sum-av-e { background: var(--embed-avatar-e); }
-.sum-av-f { background: var(--embed-avatar-f); }
-/* Service summary cards: bubble colors aligned with timeline badges */
-.sum-av-svc-chimera-gateway { background: var(--embed-avatar-svc-gw-bg); color: var(--embed-text-near-black); }
-.sum-av-svc-chimera-broker { background: var(--embed-svc-upstream-filled-bg); color: var(--embed-text-on-inverse); }
-.sum-av-svc-chimera-vectorstore { background: var(--embed-svc-qdrant-filled-bg); color: var(--embed-text-on-inverse); }
-.sum-av-svc-chimera-indexer { background: var(--embed-svc-indexer-filled-bg); color: var(--embed-text-on-inverse); }
+.sum-av-d { background: var(--embed-body-tint-d); color: var(--embed-chev-hover-d); }
+.sum-av-e { background: var(--embed-chip-strip-bg); color: var(--embed-text-bluegrey-455); }
+.sum-av-f { background: var(--embed-body-tint-f); color: var(--embed-chev-hover-f); }
+/* Service cards: avatar fill matches open body tint */
+.sum-av-svc-chimera-gateway { background: var(--embed-body-tint-svc-gw); color: var(--embed-chev-hover-svc-gw); }
+.sum-av-svc-chimera-broker { background: var(--embed-body-tint-svc-bf); color: var(--embed-chev-hover-svc-bf); }
+.sum-av-svc-chimera-vectorstore { background: var(--embed-body-tint-svc-qd); color: var(--embed-chev-hover-svc-qd); }
+.sum-av-svc-chimera-indexer { background: var(--embed-body-tint-svc-ix); color: var(--embed-chev-hover-svc-ix); }
 .sum-main { flex: 1 1 auto; min-width: 0; text-align: left; }
 .sum-title { display: block; font-weight: 600; font-size: 0.88rem; color: var(--embed-text-primary); word-break: break-word; }
 .sum-title.sum-title--service-indexer {
@@ -435,6 +474,11 @@ body.logs-summarized #panel-summarized {
   list-style-position: inside;
 }
 .indexer-advanced-roll .sum-mini-row { margin-top: 0.35rem; }
+.sum-card:not(.sum-card--conversation) > summary > .sg-op-chev-icon,
+.sum-card:not(.sum-card--conversation) > .sum-card__hdr > .sg-op-chev-icon {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
 .sum-chev {
   flex: 0 0 auto;
   color: var(--embed-text-faint);
@@ -456,9 +500,9 @@ body.logs-summarized #panel-summarized {
 .sum-card[open]:has(.sum-avatar.sum-av-d) > .sum-body { background: var(--embed-body-tint-d); }
 .sum-card[open]:has(.sum-avatar.sum-av-e) > .sum-body { background: var(--embed-chip-strip-bg); }
 .sum-card[open]:has(.sum-avatar.sum-av-f) > .sum-body { background: var(--embed-body-tint-f); }
-.sum-card[open]:has(.sum-avatar.sum-av-svc-chimera-gateway) > .sum-body { background: var(--embed-semantic-info-bg); }
+.sum-card[open]:has(.sum-avatar.sum-av-svc-chimera-gateway) > .sum-body { background: var(--embed-body-tint-svc-gw); }
 .sum-card[open]:has(.sum-avatar.sum-av-svc-chimera-broker) > .sum-body { background: var(--embed-body-tint-svc-bf); }
-.sum-card[open]:has(.sum-avatar.sum-av-svc-chimera-vectorstore) > .sum-body { background: var(--embed-conv-chip-bg); }
+.sum-card[open]:has(.sum-avatar.sum-av-svc-chimera-vectorstore) > .sum-body { background: var(--embed-body-tint-svc-qd); }
 .sum-card[open]:has(.sum-avatar.sum-av-svc-chimera-indexer) > .sum-body { background: var(--embed-body-tint-svc-ix); }
 .sum-card[open] > .sum-body .sum-section-label { color: var(--embed-text-secondary); }
 .sum-card[open] > .sum-body .sum-mini-card { color: var(--embed-text-heading); }
@@ -526,8 +570,8 @@ a.sum-ext-link {
   margin: 0 0 0.65rem;
   padding: 0.5rem 0.62rem 0.52rem;
   border-radius: 10px;
-  border: 1px solid rgba(25, 118, 210, 0.16);
-  background: rgb(241, 248, 254);
+  border: 1px solid var(--embed-card-intro-svc-gw-border);
+  background: var(--embed-card-intro-svc-gw-bg);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
 }
 .gw-usage-intro-lead {
@@ -556,14 +600,32 @@ a.sum-ext-link {
   margin-top: 0;
 }
 
-/* Gateway process · explainer strip inside Gateway service card (Services feed; parallels .gw-usage-intro) */
-.gw-svc-card-intro {
+/* Service card explainer strips — lighter tint of the same hue as avatar / body */
+.gw-svc-card-intro,
+.bf-card-intro,
+.qd-card-intro,
+.ix-card-intro {
   margin: 0 0 0.65rem;
   padding: 0.5rem 0.62rem 0.52rem;
   border-radius: 10px;
-  border: 1px solid rgba(25, 118, 210, 0.16);
-  background: rgb(241, 248, 254);
+  border: 1px solid;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+.gw-svc-card-intro {
+  background: var(--embed-card-intro-svc-gw-bg);
+  border-color: var(--embed-card-intro-svc-gw-border);
+}
+.bf-card-intro {
+  background: var(--embed-card-intro-svc-bf-bg);
+  border-color: var(--embed-card-intro-svc-bf-border);
+}
+.qd-card-intro {
+  background: var(--embed-card-intro-svc-qd-bg);
+  border-color: var(--embed-card-intro-svc-qd-border);
+}
+.ix-card-intro {
+  background: var(--embed-card-intro-svc-ix-bg);
+  border-color: var(--embed-card-intro-svc-ix-border);
 }
 .gw-svc-card-intro-lead {
   margin: 0;
@@ -592,14 +654,6 @@ a.sum-ext-link {
 }
 
 /* BiFrost relay · explainer strip inside BiFrost service card (parallels .gw-usage-intro) */
-.bf-card-intro {
-  margin: 0 0 0.65rem;
-  padding: 0.5rem 0.62rem 0.52rem;
-  border-radius: 10px;
-  border: 1px solid rgba(123, 31, 162, 0.18);
-  background: rgb(248, 244, 252);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
-}
 .bf-card-intro-lead {
   margin: 0;
   font-size: 0.76rem;
@@ -624,15 +678,6 @@ a.sum-ext-link {
 }
 .bf-card-intro-bullets li:first-child {
   margin-top: 0;
-}
-
-.qd-card-intro {
-  margin: 0 0 0.65rem;
-  padding: 0.5rem 0.62rem 0.52rem;
-  border-radius: 10px;
-  border: 1px solid rgba(38, 166, 154, 0.22);
-  background: rgb(240, 250, 248);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
 }
 .qd-card-intro-lead {
   margin: 0;
@@ -661,14 +706,6 @@ a.sum-ext-link {
 }
 
 /* Indexer service · explainer strip inside Indexer service card (parallels other *-card-intro) */
-.ix-card-intro {
-  margin: 0 0 0.65rem;
-  padding: 0.5rem 0.62rem 0.52rem;
-  border-radius: 10px;
-  border: 1px solid rgba(245, 124, 0, 0.22);
-  background: rgb(255, 247, 237);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
-}
 .ix-card-intro-lead {
   margin: 0;
   font-size: 0.76rem;
@@ -737,6 +774,35 @@ a.sum-ext-link {
 .sum-workspaces-create-btn:hover {
   background: var(--embed-btn-primary-hover);
   border-color: var(--embed-btn-primary-hover);
+}
+.sum-workspaces-create-btn:disabled,
+.sum-workspaces-create-btn[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.sum-workspaces-create-btn:disabled:hover,
+.sum-workspaces-create-btn[aria-disabled="true"]:hover {
+  background: var(--embed-btn-primary);
+  border-color: var(--embed-btn-primary);
+}
+.ws-desktop-only-locked {
+  display: inline-flex;
+  cursor: not-allowed;
+}
+.ws-desktop-only-locked > button:disabled,
+.ws-desktop-only-locked > button[aria-disabled="true"] {
+  pointer-events: none;
+}
+.ws-desktop-only-locked--overlay {
+  position: absolute;
+  top: 0.65rem;
+  right: 0.75rem;
+  z-index: 2;
+}
+.ws-desktop-only-locked--overlay > .sg-op-yaml-ov-btn {
+  position: static;
+  top: auto;
+  right: auto;
 }
 .sum-workspaces-intro {
   margin: 0 0 0.65rem 0;

@@ -4,7 +4,7 @@
 #   clean-product.sh <product> <mode> [confirm]
 #   clean-product.sh --each <mode> [confirm]
 # Products (canonical list): gateway | supervisor | broker | vectorstore | indexer | desktop | workspace
-#   workspace — shared dirs (bin/, .deps/, run/, logs/, dist/, …); not a shipped product
+#   workspace — shared dirs (bin/, .deps/, dist/, …); not a shipped product
 # Modes: build | install | configure | run | all
 #   confirm: required (1) for Chimera run / all, and for --each run / all
 set -euo pipefail
@@ -35,7 +35,7 @@ chimera_clean_run_confirm_msg() {
 		echo "chimera-gateway-clean-run: removes data/gateway/ — stop the stack first; re-run with CONFIRM=1"
 		;;
 	supervisor)
-		echo "chimera-supervisor-clean-run: removes run/, logs/, chimera/run/ and supervisor pid/log — stop the stack first; re-run with CONFIRM=1"
+		echo "chimera-supervisor-clean-run: removes data/chimera-supervisor/ and legacy run/, logs/ — stop the stack first; re-run with CONFIRM=1"
 		;;
 	broker)
 		echo "chimera-broker-clean-run: removes data/broker/ — stop the stack first; re-run with CONFIRM=1"
@@ -55,7 +55,7 @@ chimera_clean_run_confirm_msg() {
 clean_each_confirm_msg() {
 	case "$1" in
 	all)
-		echo "clean-all: removes workspace and all product artifacts (bin/, data/, .deps/, run/, logs/, dist/, generated config) — stop the stack first; re-run with CONFIRM=1"
+		echo "clean-all: removes workspace and all product artifacts (bin/, data/, .deps/, dist/, generated config) — stop the stack first; re-run with CONFIRM=1"
 		;;
 	run)
 		echo "clean-run: removes all product runtime state — stop the stack first; re-run with CONFIRM=1"
@@ -153,11 +153,11 @@ supervisor)
 	fi
 	if want run; then
 		rm_paths \
-			"$(chimera_pid_path)" \
-			"$(chimera_log_path)" \
-			"chimera/run" \
+			"data/chimera-supervisor" \
+			"data/locus-desktop-supervisor.log" \
 			"run" \
-			"logs"
+			"logs" \
+			"chimera/run"
 	fi
 	;;
 broker)
@@ -217,8 +217,7 @@ indexer)
 	fi
 	if want run; then
 		rm_paths \
-			"data/gateway/indexer.supervised.yaml" \
-			"data/gateway/indexer.sync-state.json"
+			"data/indexer.sync-state.json" 
 	fi
 	;;
 desktop)
@@ -234,7 +233,7 @@ desktop)
 		: # no generated locus desktop config at repo root
 	fi
 	if want run; then
-		rm_paths "locus/run"
+		rm_paths "data/locus-desktop" "locus/data/locus-desktop"
 	fi
 	;;
 *)

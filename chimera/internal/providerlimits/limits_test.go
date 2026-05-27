@@ -149,6 +149,58 @@ providers:
 	}
 }
 
+func TestParse_NegativeContextLimits_error(t *testing.T) {
+	src := `
+providers:
+  x:
+    context_window: -1
+`
+	_, err := Parse([]byte(src))
+	if err == nil || !strings.Contains(err.Error(), "context_window must be >= 0") {
+		t.Fatalf("want negative context_window error, got %v", err)
+	}
+}
+
+func TestParse_InvalidContextSafetyFactor_error(t *testing.T) {
+	src := `
+defaults:
+  context_safety_factor: 0
+`
+	_, err := Parse([]byte(src))
+	if err == nil || !strings.Contains(err.Error(), "context_safety_factor must be > 0") {
+		t.Fatalf("want invalid safety factor error, got %v", err)
+	}
+}
+
+func TestParse_SchemaV2ContextFields(t *testing.T) {
+	src := `
+schema_version: 2
+defaults:
+  context_safety_factor: 0.9
+  max_body_bytes: 3500000
+providers:
+  groq:
+    models:
+      groq/groq/compound-mini:
+        context_window: 131072
+        max_prompt_tokens: 8192
+`
+	cfg, err := Parse([]byte(src))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if cfg.SchemaVersion != 2 {
+		t.Fatalf("schema: %d", cfg.SchemaVersion)
+	}
+	m := cfg.Providers["groq"].Models["groq/groq/compound-mini"]
+	if m.ContextWindow == nil || *m.ContextWindow != 131072 {
+		t.Fatalf("context_window: %v", m.ContextWindow)
+	}
+	if m.MaxPromptTokens == nil || *m.MaxPromptTokens != 8192 {
+		t.Fatalf("max_prompt_tokens: %v", m.MaxPromptTokens)
+	}
+}
+
 func TestLoadOrEmpty_missingFile_empty(t *testing.T) {
 	cfg, err := LoadOrEmpty(filepath.Join(t.TempDir(), "does-not-exist.yaml"))
 	if err != nil {

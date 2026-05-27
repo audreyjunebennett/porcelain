@@ -19,6 +19,10 @@ func saveAppendProviderKey(h *handler.Handler, provider string) http.HandlerFunc
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+		if !apirut.IsKeyedCatalogProvider(provider) {
+			apijson.WriteError(w, http.StatusNotFound, "unknown provider", "")
+			return
+		}
 		var body struct {
 			Value string `json:"value"`
 		}
@@ -68,6 +72,10 @@ func saveRemoveProviderKey(h *handler.Handler, provider string) http.HandlerFunc
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !apirut.IsKeyedCatalogProvider(provider) {
+			apijson.WriteError(w, http.StatusNotFound, "unknown provider", "")
 			return
 		}
 		var body struct {

@@ -22,37 +22,6 @@ details.summary-details summary { cursor: pointer; color: var(--embed-text-link)
 .principal-block[open] > summary::before { content: "▾ "; }
 .principal-inner { margin-top: 0.5rem; padding-left: 0.25rem; }
 .service-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.35rem 0; }
-/* Conversation card: "Full event log" label + service chips on one row */
-.sum-conv-full-log-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-  margin: 0.5rem 0 0.35rem 0;
-}
-.sum-conv-full-log-head .sum-section-label {
-  margin: 0;
-  flex: 1 1 auto;
-  min-width: 8rem;
-}
-.sum-conv-services-after-log-hdr {
-  flex: 0 1 auto;
-  display: flex;
-  justify-content: flex-end;
-  margin: 0;
-  min-width: 0;
-}
-.sum-conv-services-after-log-hdr .service-chips {
-  margin: 0;
-  justify-content: flex-end;
-}
-/* Conversation expanded: service strip chips — neutral surface like the card, darker text for contrast */
-.sum-card.sum-card--conversation .sum-conv-services-after-log-hdr .service-chips .chip {
-  background: var(--embed-chip-strip-bg);
-  color: var(--embed-chip-strip-fg);
-  border-color: var(--embed-chip-strip-border);
-}
 .chip {
   font-size: var(--sum-pill-fs, 0.68rem);
   padding: var(--sum-pill-py, 0.14rem) var(--sum-pill-px, 0.42rem);
@@ -149,36 +118,36 @@ details.summary-details summary { cursor: pointer; color: var(--embed-text-link)
   border-color: var(--embed-text-link);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--embed-text-link) 35%, transparent);
 }
-.ws-managed-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem 0.75rem;
-  margin: 0.5rem 0 0.75rem 0;
-}
-.ws-managed-actions {
+.ws-managed-edit-controls {
+  position: absolute;
+  top: 0.65rem;
+  right: 0.75rem;
+  z-index: 2;
   display: inline-flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
+  flex-direction: row;
   align-items: center;
+  gap: 0.35rem;
 }
-.ws-managed-editing-hint {
-  font-size: 0.78rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
+.ws-managed-edit-controls .sg-op-yaml-ov-btn {
+  position: static;
+  top: auto;
+  right: auto;
 }
-.ws-managed-btn-delete {
-  border: 1px solid color-mix(in srgb, var(--embed-danger, #c62828) 55%, transparent);
-  background: color-mix(in srgb, var(--embed-danger, #c62828) 12%, transparent);
-  color: var(--embed-text-primary, inherit);
-  border-radius: 6px;
-  padding: 0.22rem 0.55rem;
-  font-size: 0.78rem;
-  cursor: pointer;
+.ws-managed-edit-controls .ws-managed-btn-delete {
+  color: var(--embed-danger, #c62828);
+  border-color: color-mix(in srgb, var(--embed-danger, #c62828) 45%, var(--embed-border-medium, #e3e2e0));
 }
-.ws-managed-btn-delete:hover {
-  background: color-mix(in srgb, var(--embed-danger, #c62828) 22%, transparent);
+.ws-managed-edit-controls .ws-managed-btn-delete:hover {
+  border-color: var(--embed-danger, #c62828);
+  background: color-mix(in srgb, var(--embed-danger, #c62828) 10%, var(--embed-surface-container-low, #f4f3f0));
+  color: var(--embed-danger, #c62828);
+}
+.ws-managed-edit-controls .ws-managed-btn-delete:focus-visible {
+  outline-color: var(--embed-danger, #c62828);
+}
+.ws-managed-edit-controls .sg-op-yaml-ov-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 .ws-managed-paths-edit {
   display: flex;

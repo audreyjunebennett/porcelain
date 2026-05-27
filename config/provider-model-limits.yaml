@@ -1,17 +1,118 @@
-# Provider/model usage limits from vendor tables (schema_version 1: rpm, rpd, tpm, tpd only).
+# Provider/model usage limits from vendor tables (schema_version 2: rpm/rpd/tpm/tpd + context caps).
 # Groq: temp/groq-limits.txt (Whisper ASH/ASD not modeled). Gemini: temp/gemini-limits.txt
 # ("-" / "unlimited" → dimension omitted). Gemini day buckets use America/Los_Angeles.
+# groq: https://console.groq.com/docs/rate-limits
+# gemini: https://ai.google.dev/gemini-api/docs/pricing
+#
+# context_window values seeded from catalog-available.snapshot.yaml via: make catalog-limits
+# Effective token cap: floor(min(context_window, max_prompt_tokens_if_set) × context_safety_factor)
 
-schema_version: 1
-
+schema_version: 2
 defaults:
   rpm: null
   rpd: null
   tpm: null
   tpd: null
+  max_body_bytes: 3500000
+  context_safety_factor: 0.9
   usage_day_timezone: UTC
-
 providers:
+  gemini:
+    usage_day_timezone: America/Los_Angeles
+    models:
+      gemini/gemini-2.5-flash:
+        rpm: 5
+        rpd: 20
+        tpm: 250000
+        context_window: 1114112
+      gemini/gemini-2.5-flash-lite:
+        rpm: 10
+        rpd: 20
+        tpm: 250000
+        context_window: 1114112
+      gemini/gemini-2.5-flash-native-audio-preview-12-2025:
+        tpm: 1000000
+        context_window: 139264
+      gemini/gemini-2.5-flash-preview-tts:
+        rpm: 3
+        rpd: 10
+        tpm: 10000
+        context_window: 24576
+      gemini/gemini-3-flash-preview:
+        rpm: 5
+        rpd: 20
+        tpm: 250000
+        context_window: 1114112
+      gemini/gemini-3.1-flash-lite:
+        context_window: 1114112
+      gemini/gemini-3.1-flash-lite-preview:
+        rpm: 15
+        rpd: 500
+        tpm: 250000
+        context_window: 1114112
+      gemini/gemini-3.1-flash-live-preview:
+        tpm: 65000
+        context_window: 196608
+      gemini/gemini-3.1-flash-preview-tts:
+        rpm: 3
+        rpd: 10
+        tpm: 10000
+      gemini/gemini-embedding-001:
+        rpm: 100
+        rpd: 1000
+        tpm: 30000
+        context_window: 2049
+      gemini/gemini-embedding-2-preview:
+        rpm: 100
+        rpd: 1000
+        tpm: 30000
+        context_window: 8193
+      gemini/gemini-robotics-er-1.5-preview:
+        rpm: 10
+        rpd: 20
+        tpm: 250000
+        context_window: 1114112
+      gemini/gemini-robotics-er-1.6-preview:
+        rpm: 5
+        rpd: 20
+        tpm: 250000
+        context_window: 196608
+      gemini/gemma-3-1b-it:
+        rpm: 30
+        rpd: 14400
+        tpm: 15000
+      gemini/gemma-3-2b-it:
+        rpm: 30
+        rpd: 14400
+        tpm: 15000
+      gemini/gemma-3-4b-it:
+        rpm: 30
+        rpd: 14400
+        tpm: 15000
+      gemini/gemma-3-12b-it:
+        rpm: 30
+        rpd: 14400
+        tpm: 15000
+      gemini/gemma-3-27b-it:
+        rpm: 30
+        rpd: 14400
+        tpm: 15000
+      gemini/gemma-4-26b-it:
+        rpm: 15
+        rpd: 1500
+      gemini/gemma-4-31b-it:
+        rpm: 15
+        rpd: 1500
+        context_window: 294912
+      gemini/imagen-4.0-fast-generate-001:
+        rpd: 25
+        context_window: 8672
+      gemini/imagen-4.0-generate-001:
+        rpd: 25
+        context_window: 8672
+      gemini/imagen-4.0-ultra-generate-001:
+        rpd: 25
+        context_window: 8672
   groq:
     usage_day_timezone: UTC
     models:
@@ -20,157 +121,100 @@ providers:
         rpd: 7000
         tpm: 6000
         tpd: 500000
+        context_window: 4096
       groq/canopylabs/orpheus-arabic-saudi:
         rpm: 10
         rpd: 100
         tpm: 1200
         tpd: 3600
+        context_window: 4000
       groq/canopylabs/orpheus-v1-english:
         rpm: 10
         rpd: 100
         tpm: 1200
         tpd: 3600
+        context_window: 4000
       groq/groq/compound:
         rpm: 30
         rpd: 250
         tpm: 70000
+        context_window: 131072
       groq/groq/compound-mini:
         rpm: 30
         rpd: 250
         tpm: 70000
+        context_window: 131072
+        max_prompt_tokens: 8192
       groq/llama-3.1-8b-instant:
         rpm: 30
         rpd: 14400
         tpm: 6000
         tpd: 500000
+        context_window: 131072
       groq/llama-3.3-70b-versatile:
         rpm: 30
         rpd: 1000
         tpm: 12000
         tpd: 100000
+        context_window: 131072
       groq/meta-llama/llama-4-scout-17b-16e-instruct:
         rpm: 30
         rpd: 1000
         tpm: 30000
         tpd: 500000
+        context_window: 131072
       groq/meta-llama/llama-prompt-guard-2-22m:
         rpm: 30
         rpd: 14400
         tpm: 15000
         tpd: 500000
+        context_window: 512
       groq/meta-llama/llama-prompt-guard-2-86m:
         rpm: 30
         rpd: 14400
         tpm: 15000
         tpd: 500000
-      groq/openai/gpt-oss-120b:
-        rpm: 30
-        rpd: 1000
-        tpm: 8000
-        tpd: 200000
-      groq/openai/gpt-oss-20b:
-        rpm: 30
-        rpd: 1000
-        tpm: 8000
-        tpd: 200000
-      groq/openai/gpt-oss-safeguard-20b:
-        rpm: 30
-        rpd: 1000
-        tpm: 8000
-        tpd: 200000
+        context_window: 512
       groq/moonshotai/kimi-k2-instruct:
         rpm: 60
         rpd: 1000
         tpm: 10000
         tpd: 300000
+      groq/openai/gpt-oss-20b:
+        rpm: 30
+        rpd: 1000
+        tpm: 8000
+        tpd: 200000
+        context_window: 131072
+      groq/openai/gpt-oss-120b:
+        rpm: 30
+        rpd: 1000
+        tpm: 8000
+        tpd: 200000
+        context_window: 131072
+      groq/openai/gpt-oss-safeguard-20b:
+        rpm: 30
+        rpd: 1000
+        tpm: 8000
+        tpd: 200000
+        context_window: 131072
       groq/qwen/qwen3-32b:
         rpm: 60
         rpd: 1000
         tpm: 6000
         tpd: 500000
+        context_window: 131072
       groq/whisper-large-v3:
         rpm: 20
         rpd: 2000
+        context_window: 448
       groq/whisper-large-v3-turbo:
         rpm: 20
         rpd: 2000
-
-  gemini:
-    usage_day_timezone: America/Los_Angeles
+        context_window: 448
+  ollama:
     models:
-      gemini/gemini-2.5-flash:
-        rpm: 5
-        tpm: 250000
-        rpd: 20
-      gemini/gemini-2.5-flash-lite:
-        rpm: 10
-        tpm: 250000
-        rpd: 20
-      gemini/gemini-2.5-flash-native-audio-preview-12-2025:
-        tpm: 1000000
-      gemini/gemini-2.5-flash-preview-tts:
-        rpm: 3
-        tpm: 10000
-        rpd: 10
-      gemini/gemini-3-flash-preview:
-        rpm: 5
-        tpm: 250000
-        rpd: 20
-      gemini/gemini-3.1-flash-lite-preview:
-        rpm: 15
-        tpm: 250000
-        rpd: 500
-      gemini/gemini-3.1-flash-live-preview:
-        tpm: 65000
-      gemini/gemini-3.1-flash-preview-tts:
-        rpm: 3
-        tpm: 10000
-        rpd: 10
-      gemini/gemini-embedding-001:
-        rpm: 100
-        tpm: 30000
-        rpd: 1000
-      gemini/gemini-embedding-2-preview:
-        rpm: 100
-        tpm: 30000
-        rpd: 1000
-      gemini/gemini-robotics-er-1.5-preview:
-        rpm: 10
-        tpm: 250000
-        rpd: 20
-      gemini/gemini-robotics-er-1.6-preview:
-        rpm: 5
-        tpm: 250000
-        rpd: 20
-      gemini/gemma-3-12b-it:
-        rpm: 30
-        tpm: 15000
-        rpd: 14400
-      gemini/gemma-3-1b-it:
-        rpm: 30
-        tpm: 15000
-        rpd: 14400
-      gemini/gemma-3-27b-it:
-        rpm: 30
-        tpm: 15000
-        rpd: 14400
-      gemini/gemma-3-2b-it:
-        rpm: 30
-        tpm: 15000
-        rpd: 14400
-      gemini/gemma-3-4b-it:
-        rpm: 30
-        tpm: 15000
-        rpd: 14400
-      gemini/gemma-4-26b-it:
-        rpm: 15
-        rpd: 1500
-      gemini/gemma-4-31b-it:
-        rpm: 15
-        rpd: 1500
-      gemini/imagen-4.0-fast-generate-001:
-        rpd: 25
-      gemini/imagen-4.0-generate-001:
-        rpd: 25
-      gemini/imagen-4.0-ultra-generate-001:
-        rpd: 25
+      ollama/llama3.2:3b:
+        context_window: 131072
+      ollama/qwen3.5:9b:
+        context_window: 131072

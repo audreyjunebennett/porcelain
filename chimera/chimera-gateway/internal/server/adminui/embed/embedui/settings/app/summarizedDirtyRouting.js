@@ -6,8 +6,28 @@ globalThis.ChimeraSettings = globalThis.ChimeraSettings || {};
 globalThis.ChimeraSettings.Summarized = globalThis.ChimeraSettings.Summarized || {};
 
 (function () {
-  var ADMIN_PROVIDER_IDS = ["groq", "gemini", "ollama"];
   var SERVICE_BUCKET_ORDER = ["chimera-broker", "chimera-gateway", "chimera-indexer", "chimera-vectorstore"];
+
+  function adminProviderIdsForDirtyRouting(deps) {
+    if (deps && typeof deps.getAdminProviderIds === "function") {
+      var visible = deps.getAdminProviderIds();
+      if (visible && visible.length) return visible;
+    }
+    if (
+      globalThis.ChimeraSettings &&
+      ChimeraSettings.Providers &&
+      ChimeraSettings.Providers.Catalog &&
+      typeof ChimeraSettings.Providers.Catalog.providerCatalogEntries === "function"
+    ) {
+      var entries = ChimeraSettings.Providers.Catalog.providerCatalogEntries();
+      var out = [];
+      for (var ci = 0; ci < entries.length; ci++) {
+        if (entries[ci] && entries[ci].id) out.push(entries[ci].id);
+      }
+      return out;
+    }
+    return [];
+  }
 
   function flatMsg(f) {
     return String(f.msg != null ? f.msg : f.message != null ? f.message : "").trim();
@@ -174,8 +194,9 @@ globalThis.ChimeraSettings.Summarized = globalThis.ChimeraSettings.Summarized ||
     var f = deps.getFlat(ent.parsed);
     var msgEv = flatMsgLower(f);
     var out = [];
-    for (var pi = 0; pi < ADMIN_PROVIDER_IDS.length; pi++) {
-      var providerId = ADMIN_PROVIDER_IDS[pi];
+    var roster = adminProviderIdsForDirtyRouting(deps);
+    for (var pi = 0; pi < roster.length; pi++) {
+      var providerId = roster[pi];
       var providerHit =
         String(f.provider_id || f.provider || f.upstream_provider || "")
           .toLowerCase() === providerId ||

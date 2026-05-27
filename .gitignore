@@ -34,10 +34,9 @@ locus/bin/
 .deps/
 chimera/.deps/
 
-# Chimera and locus configuration and runtime state (launch lock/metadata, lifecycle events)
+# Chimera and locus configuration and runtime state (supervisor pid files, service data)
 /data/
 /run/
-locus/run/
 chimera/run/
 run/
 

@@ -1,8 +1,15 @@
-# Provider/model usage limits from vendor tables (schema_version 1: rpm, rpd, tpm, tpd only).
+# Provider/model usage limits from vendor tables (schema_version 2: rpm/rpd/tpm/tpd + context caps).
 # Groq: temp/groq-limits.txt (Whisper ASH/ASD not modeled). Gemini: temp/gemini-limits.txt
 # ("-" / "unlimited" → dimension omitted). Gemini day buckets use America/Los_Angeles.
+#
+# Context fields (schema v2):
+#   context_window       — total context tokens (often from catalog context_length)
+#   max_prompt_tokens    — stricter prompt-only cap when vendor/catalog overstates the window
+#   max_body_bytes       — marshalled JSON byte cap (Groq entity-size / proxy limits)
+#   context_safety_factor — multiplier applied to the token cap (defaults below)
+# Effective token cap: floor(min(context_window, max_prompt_tokens_if_set) × safety_factor)
 
-schema_version: 1
+schema_version: 2
 
 defaults:
   rpm: null
@@ -10,6 +17,8 @@ defaults:
   tpm: null
   tpd: null
   usage_day_timezone: UTC
+  context_safety_factor: 0.9
+  max_body_bytes: 3500000
 
 providers:
   groq:
@@ -38,6 +47,8 @@ providers:
         rpm: 30
         rpd: 250
         tpm: 70000
+        context_window: 131072
+        max_prompt_tokens: 8192
       groq/llama-3.1-8b-instant:
         rpm: 30
         rpd: 14400

@@ -25,13 +25,16 @@ function render(text, opts) {
   opts = opts || {};
   var title = opts.title != null ? String(opts.title) : "";
   var extra = opts.className ? " " + String(opts.className) : "";
+  var body = text != null ? text : "";
+  if (typeof body === "function") body = "";
+  else body = String(body);
   return (
     '<span class="chip' +
     escA()(extra.trim() ? extra : "") +
     '"' +
     (title ? ' title="' + escA()(title) + '"' : "") +
     ">" +
-    esc()(text != null ? text : "") +
+    esc()(body) +
     "</span>"
   );
 }
@@ -48,8 +51,11 @@ function renderRow(parts, opts) {
   var wrapCls = opts.wrapClass != null ? String(opts.wrapClass) : "service-chips";
   var inner = "";
   for (var i = 0; i < parts.length; i++) {
-    inner += render(parts[i]);
+    var part = parts[i];
+    if (part == null || typeof part === "function") continue;
+    inner += render(part);
   }
+  if (!inner) return "";
   return '<div class="' + escA()(wrapCls) + '">' + inner + "</div>";
 }
 

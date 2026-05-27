@@ -41,9 +41,12 @@
 }
 /* Draft / managed workspace actions use .sg-op-btn (legacy ws-draft-btn-* classes kept for handlers). */
 .ws-draft-actions .sg-op-btn:disabled,
-.ws-managed-actions .sg-op-btn:disabled {
+.ws-managed-edit-controls .sg-op-yaml-ov-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+.ws-managed-edit-controls .sg-op-yaml-ov-btn .material-symbols-outlined {
+  font-size: 14px;
 }
 .ws-draft-fields {
   display: flex;

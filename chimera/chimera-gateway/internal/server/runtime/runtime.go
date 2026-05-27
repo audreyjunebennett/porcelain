@@ -16,6 +16,7 @@ import (
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/routing"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/catalog"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/vectorstore/qdrant"
+	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/virtualmodel"
 	indexeradapter "github.com/lynn/porcelain/chimera/chimera-indexer/adapter"
 	"github.com/lynn/porcelain/chimera/internal/config"
 	"github.com/lynn/porcelain/chimera/internal/providerlimits"
@@ -36,7 +37,8 @@ type Runtime struct {
 	routing               *routing.Policy
 	metrics               *gatewaymetrics.Store // optional; nil when disabled or init failed
 	operator              *operatorstore.Store  // optional; nil when init failed
-	brokerBaseURLOverride string                // non-empty: after each yaml load, patch broker base + health (supervised chimera-broker)
+	virtualModels         *virtualmodel.Registry
+	brokerBaseURLOverride string // non-empty: after each yaml load, patch broker base + health (supervised chimera-broker)
 
 	toolRouterMu      sync.Mutex
 	toolRouterModel   string
@@ -121,6 +123,16 @@ func NewRuntimeWithBrokerOverride(gatewayPath string, log *slog.Logger, brokerBa
 		}
 	} else {
 		rt.operator = s
+		if err := operatorstore.BootstrapVirtualModels(context.Background(), s, res, log); err != nil {
+			if log != nil {
+				log.Warn("virtual model bootstrap failed", "msg", "gateway.virtual_model.bootstrap_failed", "err", err)
+			}
+		} else {
+			rt.virtualModels = virtualmodel.NewRegistry()
+			if err := rt.virtualModels.Reload(context.Background(), s); err != nil && log != nil {
+				log.Warn("virtual model registry reload failed", "msg", "gateway.virtual_model.reload_failed", "err", err)
+			}
+		}
 	}
 	if res.RAG.Enabled {
 		if s, err := buildRAGService(res, log); err != nil {
@@ -244,6 +256,31 @@ func (rt *Runtime) OperatorStore() *operatorstore.Store {
 	return rt.operator
 }
 
+// VirtualModels returns the in-memory virtual model registry, or nil when operator store is unavailable.
+func (rt *Runtime) VirtualModels() *virtualmodel.Registry {
+	rt.mu.RLock()
+	defer rt.mu.RUnlock()
+	return rt.virtualModels
+}
+
+// ReloadVirtualModels refreshes the registry from operator SQLite and bumps revision.
+func (rt *Runtime) ReloadVirtualModels(ctx context.Context) error {
+	rt.mu.RLock()
+	store := rt.operator
+	reg := rt.virtualModels
+	rt.mu.RUnlock()
+	if store == nil {
+		return nil
+	}
+	if reg == nil {
+		reg = virtualmodel.NewRegistry()
+		rt.mu.Lock()
+		rt.virtualModels = reg
+		rt.mu.Unlock()
+	}
+	return reg.Reload(ctx, store)
+}
+
 // NoteToolRouterAttempt records the last tool-router upstream call (for admin visibility).
 func (rt *Runtime) NoteToolRouterAttempt(model string, err error) {
 	rt.toolRouterMu.Lock()
@@ -351,19 +388,25 @@ func (rt *Runtime) NoteIndexerSupervisorFromLogEntry(ent servicelogs.Entry) {
 	rt.NoteIndexerSupervisorLog(at)
 }
 
-// LimitsGuard returns an admission guard combining the parsed limits spec with live metrics.
-// Returns nil when no limits spec is configured or the metrics store is unavailable; callers
-// treat nil as "no enforcement".
+// LimitsGuard returns an admission guard combining the parsed limits spec with live metrics and
+// optional catalog context overlay. Returns nil when no limits spec is configured. Context
+// admission runs even when the metrics store is unavailable; RPM/TPM require metrics.
 func (rt *Runtime) LimitsGuard() *providerlimits.Guard {
 	rt.mu.RLock()
 	defer rt.mu.RUnlock()
-	if rt.resolved == nil || rt.resolved.ProviderLimitsSpec == nil || rt.metrics == nil {
+	if rt.resolved == nil || rt.resolved.ProviderLimitsSpec == nil {
 		return nil
 	}
-	return &providerlimits.Guard{
-		Cfg:   rt.resolved.ProviderLimitsSpec,
-		Usage: metricsUsageAdapter{store: rt.metrics},
+	g := &providerlimits.Guard{
+		Cfg: rt.resolved.ProviderLimitsSpec,
 	}
+	if rt.metrics != nil {
+		g.Usage = metricsUsageAdapter{store: rt.metrics}
+	}
+	if snap := rt.catalogSnapshot.Load(); snap != nil && snap.OK && snap.IsFresh(time.Now(), catalog.CatalogSnapshotFreshness) {
+		g.Catalog = snap
+	}
+	return g
 }
 
 // metricsUsageAdapter wraps *gatewaymetrics.Store so it satisfies providerlimits.UsageSource
