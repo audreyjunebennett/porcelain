@@ -2,6 +2,7 @@ package genlogmessages
 
 import (
 	"fmt"
+	"go/format"
 	"io"
 	"strings"
 	"unicode"
@@ -32,7 +33,11 @@ func WriteLogMessagesGo(w io.Writer, reg *operatorcopy.Registry) error {
 		fmt.Fprintf(&b, "\t%s = %q\n", name, m.Slug)
 	}
 	b.WriteString(")\n")
-	_, err := io.WriteString(w, b.String())
+	formatted, err := format.Source([]byte(b.String()))
+	if err != nil {
+		return fmt.Errorf("genlogmessages: format: %w", err)
+	}
+	_, err = w.Write(formatted)
 	return err
 }
 
