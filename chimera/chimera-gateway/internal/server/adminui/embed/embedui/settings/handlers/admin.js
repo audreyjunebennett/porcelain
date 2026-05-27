@@ -24,6 +24,7 @@ globalThis.ChimeraSettings.Handlers.Admin.wire = function (ctx) {
   var removeWorkspaceDraft = ctx.removeWorkspaceDraft;
   var beginWorkspaceManagedEdit = ctx.beginWorkspaceManagedEdit;
   var cancelWorkspaceManagedEdit = ctx.cancelWorkspaceManagedEdit;
+  var refreshWorkspaceManagedPaths = ctx.refreshWorkspaceManagedPaths;
   var saveManagedWorkspacePaths = ctx.saveManagedWorkspacePaths;
   var deleteManagedWorkspace = ctx.deleteManagedWorkspace;
 
@@ -93,6 +94,12 @@ globalThis.ChimeraSettings.Handlers.Admin.wire = function (ctx) {
             ev.preventDefault();
             ev.stopPropagation();
             cancelWorkspaceManagedEdit();
+            return;
+          }
+          if (t.closest(".ws-managed-btn-refresh")) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            refreshWorkspaceManagedPaths();
             return;
           }
           if (t.closest(".ws-managed-btn-save")) {

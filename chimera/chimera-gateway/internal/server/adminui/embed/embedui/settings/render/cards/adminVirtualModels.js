@@ -60,17 +60,14 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminVirtualModels = function (ctx)
     return "";
   }
 
-  function vmCopyIconSvg() {
-    return (
-      '<svg class="sum-evlog__copy-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-      '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>'
-    );
-  }
-
-  function vmToolbarIconBtn(action, vmId, title, iconName) {
+  function vmToolbarIconBtn(action, vmId, title, iconName, extraClass) {
     var tit = title != null ? String(title) : "";
+    var cls = "sg-op-yaml-ov-btn";
+    if (extraClass) cls += " " + String(extraClass);
     return (
-      '<button type="button" class="sg-op-yaml-ov-btn" data-admin-action="' +
+      '<button type="button" class="' +
+      cls +
+      '" data-admin-action="' +
       escapeHtml(String(action || "")) +
       '" data-vm-id="' +
       escapeHtml(String(vmId)) +
@@ -104,52 +101,6 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminVirtualModels = function (ctx)
     );
   }
 
-  function vmYamlReadonlyCopyHtml(pfx, taId, text, rows, copyAction, copyTitle) {
-    return (
-      '<div class="sg-op-yaml-wrap sg-op-yaml-wrap--full sum-vm-client-usage-json-wrap">' +
-      '<textarea id="' +
-      escapeHtml(pfx + taId) +
-      '" class="sg-op-yaml-textarea" rows="' +
-      escapeHtml(String(rows != null ? rows : 10)) +
-      '" spellcheck="false" readonly aria-label="' +
-      escapeHtml(String(copyTitle || "Sample JSON body")) +
-      '">' +
-      escapeHtml(String(text != null ? text : "")) +
-      '</textarea><div class="sg-op-yaml-ov"><button type="button" class="sg-op-yaml-ov-btn sum-vm-json-copy-btn" data-admin-action="' +
-      escapeHtml(String(copyAction || "")) +
-      '" title="' +
-      escapeHtml(String(copyTitle || "Copy")) +
-      '" aria-label="' +
-      escapeHtml(String(copyTitle || "Copy")) +
-      '">' +
-      vmCopyIconSvg() +
-      "</button></div></div>"
-    );
-  }
-
-  function vmChatCompletionsUrl() {
-    if (typeof window !== "undefined" && window.location && window.location.origin) {
-      return String(window.location.origin) + "/v1/chat/completions";
-    }
-    return "/v1/chat/completions";
-  }
-
-  function vmChatSampleBodyJson(modelId) {
-    return JSON.stringify(
-      {
-        model: String(modelId || ""),
-        messages: [{ role: "user", content: "" }],
-        stream: false,
-        temperature: null,
-        max_tokens: null,
-        top_p: null,
-        tools: null
-      },
-      null,
-      2
-    );
-  }
-
   function vmSectionToolbarHtml(vm, leadingHtml, editOpts) {
     editOpts = editOpts || {};
     var vmId = vm.id;
@@ -162,6 +113,15 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminVirtualModels = function (ctx)
         '" data-vm-id="' +
         escapeHtml(String(vmId)) +
         '">Generate from catalog</button>';
+    }
+    if (editing && editOpts.deleteAction) {
+      actions += vmToolbarIconBtn(
+        editOpts.deleteAction,
+        vmId,
+        editOpts.deleteTitle || "Delete virtual model",
+        "delete_forever",
+        "vm-identity-btn-delete"
+      );
     }
     if (editing && editOpts.saveAction) {
       actions += vmToolbarIconBtn(editOpts.saveAction, vmId, editOpts.saveTitle || "Keep changes", "keep");
@@ -275,14 +235,6 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminVirtualModels = function (ctx)
     return "vm-" + String(rowId) + "-";
   }
 
-  function vmSectionModelIdNoteHtml(vm) {
-    return (
-      '<p class="sg-op-card-note sg-op-card-note--tight sum-vm-section__intro">Client-facing <code class="sum-mono-id">' +
-      escapeHtml(String(vm.model_id || "")) +
-      "</code> is fixed at create time and sent as the OpenAI <code>model</code> field.</p>"
-    );
-  }
-
   function vmRouterToggleHtml(id, action, vmId, pressed, ariaLabel) {
     return (
       '<button class="sum-router-toggle" type="button" id="' +
@@ -300,7 +252,7 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminVirtualModels = function (ctx)
   }
 
   function vmCardUsageTogglesHtml(vm, pfx) {
-    var visPrivate = String(vm.visibility || "public").toLowerCase() === "private";
+    var visPublic = String(vm.visibility || "public").toLowerCase() !== "private";
     var enabled = !!vm.enabled;
     return (
       '<div class="sum-vm-card-toggles">' +
@@ -322,11 +274,11 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminVirtualModels = function (ctx)
         pfx + "visibility-toggle",
         "vm-identity-visibility-toggle",
         vm.id,
-        visPrivate,
-        "Toggle visibility (on = private)"
+        visPublic,
+        "Toggle visibility (on = public)"
       ) +
       '<span class="sum-vm-hdr-toggle-state muted">' +
-      escapeHtml(visPrivate ? "private" : "public") +
+      escapeHtml(visPublic ? "public" : "private") +
       "</span></span></div>"
     );
   }
@@ -347,20 +299,31 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminVirtualModels = function (ctx)
 
   function vmSectionHeaderHtml(title, opts) {
     opts = opts || {};
-    var trail = "";
-    if (opts.controlsHtml) {
-      trail += String(opts.controlsHtml);
-    }
-    trail += operatorCardChevronHtml();
-    return (
+    var controls = opts.controlsHtml != null ? String(opts.controlsHtml) : "";
+    var desc = opts.desc != null ? String(opts.desc) : "";
+    var out =
       '<summary class="sum-vm-section__hdr">' +
+      '<span class="sum-vm-section__hdr-row">' +
       '<span class="sum-vm-section__title"><span class="sum-section-label">' +
       escapeHtml(String(title || "")) +
       "</span></span>" +
       '<span class="sum-vm-section__trail">' +
-      trail +
-      "</span></summary>"
-    );
+      operatorCardChevronHtml() +
+      "</span></span>";
+    if (desc || controls) {
+      out += '<span class="sum-vm-section__hdr-desc-row">';
+      if (desc) {
+        out +=
+          '<p class="sg-op-card-note sg-op-card-note--tight sum-vm-section__hdr-desc">' +
+          escapeHtml(desc) +
+          "</p>";
+      }
+      if (controls) {
+        out += controls;
+      }
+      out += "</span>";
+    }
+    return out + "</summary>";
   }
 
   function vmConfigureBtn(action, vmId, title) {
@@ -368,35 +331,14 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminVirtualModels = function (ctx)
   }
 
   function buildClientUsageBlock(vm, pfx, loading) {
-    var modelId = String(vm.model_id || "").trim() || "—";
-    var chatUrl = vmChatCompletionsUrl();
-    var sampleBody = vmChatSampleBodyJson(modelId === "—" ? "" : modelId);
     if (loading) {
-      return '<div class="sum-vm-client-usage"><p class="muted">Loading client usage…</p></div>';
+      return '<div class="sum-vm-client-usage"><p class="muted">Loading…</p></div>';
     }
     return (
       '<div class="sum-vm-client-usage">' +
       '<div class="sum-vm-client-usage-hdr">' +
-      '<div class="sum-section-label">Client usage</div>' +
       vmCardUsageTogglesHtml(vm, pfx) +
-      "</div>" +
-      '<p class="sg-op-card-note sg-op-card-note--tight sum-vm-client-usage-lead">Send <code>POST</code> requests to the chat completion url with your API key.</p>' +
-      '<div class="sg-op-token-row sum-vm-client-usage-url-row">' +
-      '<input type="text" class="sg-op-input sg-op-input--readonly" id="' +
-      escapeHtml(pfx) +
-      'chat-url" readonly value="' +
-      escapeHtml(chatUrl) +
-      '" aria-label="Chat completion URL" />' +
-      '<button type="button" class="sg-op-token-copy-btn" data-admin-action="vm-chat-url-copy" data-copy-value="' +
-      escapeHtml(chatUrl) +
-      '" title="Copy URL" aria-label="Copy chat completions URL">' +
-      vmCopyIconSvg() +
-      "</button></div>" +
-      '<p class="sg-op-card-note sg-op-card-note--tight">Set the JSON body field <code>model</code> to <code class="sum-mono-id">' +
-      escapeHtml(modelId) +
-      "</code> to route through this virtual model.</p>" +
-      vmYamlReadonlyCopyHtml(pfx, "chat-body", sampleBody, 10, "vm-chat-body-copy", "Copy sample JSON body") +
-      "</div>"
+      "</div></div>"
     );
   }
 
@@ -460,9 +402,10 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminVirtualModels = function (ctx)
       body = '<p class="muted">Loading…</p>';
     } else {
       body =
-        vmSectionModelIdNoteHtml(vm) +
         vmSectionToolbarHtml(vm, "", {
           editing: ui.identityEditing,
+          deleteAction: "vm-identity-delete",
+          deleteTitle: "Delete virtual model",
           saveAction: "vm-identity-save",
           saveTitle: "Keep identity",
           refreshAction: "vm-identity-refresh",
@@ -556,8 +499,8 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminVirtualModels = function (ctx)
           cancelTitle: "Cancel fallback edit",
           configureAction: "vm-fallback-configure",
           configureTitle: "Configure fallback"
-        }) +
-        '<div class="sg-op-card-note sg-op-card-note--tight">Required. Ordered upstream model ids for failover after the routing policy picks an initial model.</div>' +
+          }
+        ) +
         '<div class="sum-vm-fallback-panel">' +
         '<div id="' +
         pfx +
@@ -578,7 +521,9 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminVirtualModels = function (ctx)
       '<details class="sum-vm-section" data-vm-section="fallback"' +
       vmSectionOpenAttr(ui, "fallback") +
       ">" +
-      vmSectionHeaderHtml("Fallback chain") +
+      vmSectionHeaderHtml("Fallback chain", {
+        desc: "Required. Ordered upstream model ids for failover after the routing policy picks an initial model."
+      }) +
       '<div class="sum-vm-section__body">' +
       body +
       "</div></details>"
@@ -659,8 +604,8 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminVirtualModels = function (ctx)
           cancelTitle: "Cancel routing edit",
           configureAction: "vm-routing-configure",
           configureTitle: "Configure routing"
-        }) +
-        '<div class="sg-op-card-note sg-op-card-note--tight">Optional. First matching rule selects the initial upstream model; otherwise ambiguous default or fallback head applies.</div>' +
+          }
+        ) +
         '<div class="sum-vm-routing-panel">' +
         '<div id="' +
         pfx +
@@ -682,6 +627,7 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminVirtualModels = function (ctx)
       vmSectionOpenAttr(ui, "routing") +
       ">" +
       vmSectionHeaderHtml("Routing policy", {
+        desc: "Optional. First matching rule selects the initial upstream model; otherwise ambiguous default or fallback head applies.",
         controlsHtml: vmSectionHdrToggleHtml(
           "Enabled",
           pfx + "routing-enabled",
@@ -700,8 +646,9 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminVirtualModels = function (ctx)
   function buildToolRouterSection(vm, ui, pfx, loading) {
     var routerModels = Array.isArray(vm.router_models) ? vm.router_models : [];
     var thresholdSaved = String(vm.tool_router_confidence_threshold != null ? vm.tool_router_confidence_threshold : 0.5);
-    var threshold =
+    var thresholdEdit =
       ui.routerThresholdTouched && ui.routerThresholdDraft != null ? String(ui.routerThresholdDraft) : thresholdSaved;
+    var thresholdDisplay = ui.routerEditing ? thresholdEdit : thresholdSaved;
     var routerEnabled =
       ui.routerEnabledTouched && ui.routerEnabledDraft != null ? !!ui.routerEnabledDraft : !!vm.tool_router_enabled;
     var routerYAML = ui.routerModelsTouched
@@ -756,8 +703,22 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminVirtualModels = function (ctx)
           cancelTitle: "Cancel tool router edit",
           configureAction: "vm-router-configure",
           configureTitle: "Configure tool router"
-        }) +
-        '<div class="sg-op-card-note sg-op-card-note--tight">Optional. Slims tools before the main completion when enabled and router models are set.</div>' +
+          }
+        ) +
+        '<div class="sg-op-head-row sum-vm-router-threshold-row">' +
+        '<label class="sg-op-label sg-op-label--inline" for="' +
+        pfx +
+        'router-threshold">Confidence threshold</label>' +
+        '<div class="sg-op-head-actions">' +
+        '<input id="' +
+        pfx +
+        'router-threshold" class="sg-op-input' +
+        (ui.routerEditing ? "" : " sg-op-input--readonly") +
+        '" type="number" min="0" max="1" step="0.05" value="' +
+        escapeHtml(thresholdDisplay) +
+        '"' +
+        (ui.routerEditing ? "" : " readonly") +
+        ' aria-label="Tool router confidence threshold" /></div></div>' +
         '<div id="' +
         pfx +
         'router-table" class="sum-vm-router-panel__view"' +
@@ -770,15 +731,6 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminVirtualModels = function (ctx)
         'router-edit" class="sum-vm-router-panel__view"' +
         vmAttrHidden(!ui.routerEditing) +
         ">" +
-        '<div class="sg-op-head-row sum-vm-router-threshold-row">' +
-        '<label class="sg-op-label sg-op-label--inline" for="' +
-        pfx +
-        'router-threshold">Confidence threshold</label>' +
-        '<input id="' +
-        pfx +
-        'router-threshold" class="sg-op-input" type="number" min="0" max="1" step="0.05" value="' +
-        escapeHtml(threshold) +
-        '" aria-label="Tool router confidence threshold" /></div>' +
         vmYamlTextareaHtml(pfx, "router-yaml-ta", routerYAML, ui.routerModelsTouched, 6) +
         "</div>";
     }
@@ -787,6 +739,7 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminVirtualModels = function (ctx)
       vmSectionOpenAttr(ui, "router") +
       ">" +
       vmSectionHeaderHtml("Tool router", {
+        desc: "Optional. Slims tools before the main completion when enabled and router models are set.",
         controlsHtml: vmSectionHdrToggleHtml(
           "Enabled",
           pfx + "router-enabled",
@@ -909,7 +862,6 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminVirtualModels = function (ctx)
     var version = String(draft.version != null ? draft.version : "");
     var desc = String(draft.description != null ? draft.description : "");
     var modelId = String(draft.model_id != null ? draft.model_id : "");
-    var vis = String(draft.visibility || "public").toLowerCase() === "private" ? "private" : "public";
     var preview = draftModelIdPreview(draft);
     var msg = draft.msg ? String(draft.msg) : "";
     return (
@@ -948,7 +900,7 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminVirtualModels = function (ctx)
       '" type="text" value="' +
       escapeHtml(version) +
       '" placeholder="e.g. 0.3.0" /></div>' +
-      '<div class="ws-draft-field ws-draft-field--wide"><label class="ws-draft-field-label">Model id (optional)</label>' +
+      '<div class="ws-draft-field"><label class="ws-draft-field-label">Model id (optional)</label>' +
       '<input class="ws-draft-input" data-vm-draft-field="model_id" data-vm-draft-id="' +
       escapeHtml(draftId) +
       '" type="text" value="' +
@@ -960,14 +912,6 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminVirtualModels = function (ctx)
       '" rows="3" spellcheck="false" placeholder="Short summary for operators">' +
       escapeHtml(desc) +
       "</textarea></div>" +
-      '<div class="ws-draft-field"><label class="ws-draft-field-label">Visibility</label>' +
-      '<select class="ws-draft-input" data-vm-draft-field="visibility" data-vm-draft-id="' +
-      escapeHtml(draftId) +
-      '"><option value="public"' +
-      (vis === "public" ? " selected" : "") +
-      '>public</option><option value="private"' +
-      (vis === "private" ? " selected" : "") +
-      ">private</option></select></div>" +
       "</div>" +
       (msg ? '<p class="muted ws-draft-hint">' + escapeHtml(msg) + "</p>" : "") +
       "</div></article>"

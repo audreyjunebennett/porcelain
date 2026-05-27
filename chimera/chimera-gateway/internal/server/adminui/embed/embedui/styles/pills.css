@@ -128,7 +128,7 @@ details.summary-details summary { cursor: pointer; color: var(--embed-text-link)
   align-items: center;
   gap: 0.35rem;
 }
-.ws-managed-edit-controls .sg-op-configure-btn {
+.ws-managed-edit-controls .sg-op-yaml-ov-btn {
   position: static;
   top: auto;
   right: auto;
@@ -145,7 +145,7 @@ details.summary-details summary { cursor: pointer; color: var(--embed-text-link)
 .ws-managed-edit-controls .ws-managed-btn-delete:focus-visible {
   outline-color: var(--embed-danger, #c62828);
 }
-.ws-managed-edit-controls .sg-op-configure-btn:disabled {
+.ws-managed-edit-controls .sg-op-yaml-ov-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }

@@ -15,6 +15,8 @@ globalThis.ChimeraSettings.Handlers.VirtualModels.wire = function (ctx) {
   var parseFallbackChainInput = ctx.parseFallbackChainInput;
   var fallbackChainToYAML = ctx.fallbackChainToYAML;
   var refreshSummarizedPanel = ctx.refreshSummarizedPanel;
+  var forceSummarizedFullRebuild = ctx.forceSummarizedFullRebuild;
+  var removeVirtualModelFromSummarizedFeed = ctx.removeVirtualModelFromSummarizedFeed;
   var fetchVirtualModelDetail = ctx.fetchVirtualModelDetail;
   var patchVirtualModelCard = ctx.patchVirtualModelCard;
   var syncVirtualModelCardHeader = ctx.syncVirtualModelCardHeader;
@@ -114,8 +116,10 @@ globalThis.ChimeraSettings.Handlers.VirtualModels.wire = function (ctx) {
     var visibility =
       overrides.visibility != null
         ? String(overrides.visibility)
-        : visEl && String(visEl.getAttribute("aria-pressed") || "").toLowerCase() === "true"
-          ? "private"
+        : visEl
+          ? String(visEl.getAttribute("aria-pressed") || "").toLowerCase() === "true"
+            ? "public"
+            : "private"
           : String(det.visibility || "public");
     var enabled =
       overrides.enabled != null
@@ -296,26 +300,6 @@ globalThis.ChimeraSettings.Handlers.VirtualModels.wire = function (ctx) {
       "change",
       function (ev) {
         var t = ev.target;
-        if (!t || !t.getAttribute) return;
-        var draftField = t.getAttribute("data-vm-draft-field");
-        if (draftField !== "visibility") return;
-        var draftId = Number(String(t.getAttribute("data-vm-draft-id") || "").trim());
-        if (!draftId || !ctx.virtualModelDrafts) return;
-        for (var di = 0; di < ctx.virtualModelDrafts.length; di++) {
-          if (ctx.virtualModelDrafts[di] && Number(ctx.virtualModelDrafts[di].id) === draftId) {
-            ctx.virtualModelDrafts[di].visibility = String(t.value || "public");
-            syncVmDraftChromeFromDom(draftId);
-            break;
-          }
-        }
-      },
-      true
-    );
-
-    document.body.addEventListener(
-      "change",
-      function (ev) {
-        var t = ev.target;
         if (!t || !t.id) return;
         var m = String(t.id).match(/^vm-(\d+)-(visibility|enabled)$/);
         if (!m) return;
@@ -347,7 +331,6 @@ globalThis.ChimeraSettings.Handlers.VirtualModels.wire = function (ctx) {
           version: "",
           description: "",
           model_id: "",
-          visibility: "public",
           saving: false,
           msg: ""
         });
@@ -399,7 +382,7 @@ globalThis.ChimeraSettings.Handlers.VirtualModels.wire = function (ctx) {
           name: saveName,
           version: saveVersion,
           description: String(draftSave.description || "").trim(),
-          visibility: String(draftSave.visibility || "public").trim()
+          visibility: "public"
         };
         var customMid = String(draftSave.model_id || "").trim();
         if (customMid) createBody.model_id = customMid;
@@ -440,37 +423,6 @@ globalThis.ChimeraSettings.Handlers.VirtualModels.wire = function (ctx) {
 
       ev.preventDefault();
 
-      if (act === "vm-chat-url-copy" || act === "vm-chat-body-copy") {
-        var copyVal = String(t.getAttribute("data-copy-value") || "");
-        if (!copyVal) {
-          var copyEl = document.getElementById(
-            pfx + (act === "vm-chat-body-copy" ? "chat-body" : "chat-url")
-          );
-          if (copyEl) copyVal = String(copyEl.value || copyEl.textContent || "");
-        }
-        if (copyVal) {
-          if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(copyVal).catch(function () {});
-          } else {
-            var taCopy = document.createElement("textarea");
-            taCopy.value = copyVal;
-            taCopy.style.position = "fixed";
-            taCopy.style.opacity = "0";
-            document.body.appendChild(taCopy);
-            taCopy.focus();
-            taCopy.select();
-            try {
-              document.execCommand("copy");
-            } catch (_eCopy) {}
-            try {
-              document.body.removeChild(taCopy);
-            } catch (_eCopyRm) {}
-          }
-          adminSetMessage("", act === "vm-chat-body-copy" ? "JSON body copied." : "Chat URL copied.");
-        }
-        return;
-      }
-
       if (act === "vm-identity-configure") {
         vmSectionKeepOpen(ui, "identity");
         ui.identityEditing = true;
@@ -481,6 +433,50 @@ globalThis.ChimeraSettings.Handlers.VirtualModels.wire = function (ctx) {
         vmSectionKeepOpen(ui, "identity");
         ui.identityEditing = false;
         patchVm(vmId);
+        return;
+      }
+      if (act === "vm-identity-delete") {
+        var vmSummary = lookupVmSummary(vmId) || det || {};
+        var vmLabel = String(vmSummary.model_id || vmSummary.name || "").trim();
+        var confirmMsg =
+          "Delete this virtual model" +
+          (vmLabel ? ' "' + vmLabel + '"' : "") +
+          " from configuration? Clients will no longer be able to route through it.";
+        if (!window.confirm(confirmMsg)) {
+          return;
+        }
+        fetch(vmApiPath(vmId), { method: "DELETE", credentials: "same-origin" })
+          .then(function (res) {
+            if (res.ok || res.status === 204) return;
+            return res.text().then(function (txt) {
+              throw new Error((txt && String(txt).trim()) || res.statusText || "delete failed");
+            });
+          })
+          .then(function () {
+            adminSetMessage("", "Virtual model removed.");
+            if (typeof removeVirtualModelFromSummarizedFeed === "function") {
+              removeVirtualModelFromSummarizedFeed(vmId);
+            } else {
+              if (ctx.virtualModelDetails) delete ctx.virtualModelDetails[String(vmId)];
+              if (ctx.virtualModelUi) delete ctx.virtualModelUi[String(vmId)];
+            }
+            if (document.activeElement && document.activeElement.blur) {
+              try {
+                document.activeElement.blur();
+              } catch (_eVmDelBlur) {}
+            }
+            return fetchAdminState();
+          })
+          .then(function () {
+            if (typeof forceSummarizedFullRebuild === "function") {
+              forceSummarizedFullRebuild("vm-deleted");
+            } else {
+              refreshSummarizedPanel();
+            }
+          })
+          .catch(function (e) {
+            adminSetMessage("err", e && e.message ? e.message : String(e));
+          });
         return;
       }
 
@@ -574,7 +570,7 @@ globalThis.ChimeraSettings.Handlers.VirtualModels.wire = function (ctx) {
         var nextOn = String(idToggle.getAttribute("aria-pressed") || "").toLowerCase() !== "true";
         var idPut = vmIdentityPutBody(vmId, {});
         if (act === "vm-identity-enabled-toggle") idPut.enabled = nextOn;
-        else idPut.visibility = nextOn ? "private" : "public";
+        else idPut.visibility = nextOn ? "public" : "private";
         (adminPutJSON || adminPostJSON)(vmApiPath(vmId), idPut)
           .then(function () {
             adminSetMessage("", act === "vm-identity-enabled-toggle" ? "Virtual model " + (nextOn ? "enabled." : "disabled.") : "Visibility set to " + idPut.visibility + ".");

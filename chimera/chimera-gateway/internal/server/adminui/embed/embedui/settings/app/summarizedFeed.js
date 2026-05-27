@@ -1709,6 +1709,26 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     return null;
   }
 
+  /** Drop a saved virtual model from feed caches and DOM immediately after DELETE. */
+  function removeVirtualModelFromSummarizedFeed(vmId) {
+    var key = String(vmId);
+    if (ctx.virtualModelDetails) delete ctx.virtualModelDetails[key];
+    if (ctx.virtualModelUi) delete ctx.virtualModelUi[key];
+    var gw = ctx.adminStateCache && ctx.adminStateCache.gateway;
+    if (gw && gw.virtual_models && Array.isArray(gw.virtual_models)) {
+      var kept = [];
+      for (var i = 0; i < gw.virtual_models.length; i++) {
+        if (gw.virtual_models[i] && Number(gw.virtual_models[i].id) !== Number(vmId)) {
+          kept.push(gw.virtual_models[i]);
+        }
+      }
+      gw.virtual_models = kept;
+    }
+    var cardEl = document.getElementById("virtual-model-" + key);
+    if (cardEl && cardEl.parentNode) cardEl.parentNode.removeChild(cardEl);
+    syncSummarizedModelCache();
+  }
+
   function syncVmSummaryFromDetail(detail) {
     if (!detail || detail.id == null) return;
     var gw = ctx.adminStateCache && ctx.adminStateCache.gateway;
@@ -5786,7 +5806,7 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     var dis = desktop ? "" : " disabled aria-disabled=\"true\"";
     var tip = desktop ? "Configure" : WORKSPACE_WEB_UNAVAILABLE_TITLE;
     return wrapDesktopOnlyLockedControl(
-      '<button type="button" class="sg-op-configure-btn sg-op-configure-btn--overlay ws-managed-btn-configure"' +
+      '<button type="button" class="sg-op-yaml-ov-btn ws-managed-btn-configure"' +
         dis +
         ' data-ws-managed-id="' +
         escapeHtml(String(wsNum)) +
@@ -5804,7 +5824,7 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     var lab = ariaLabel != null ? String(ariaLabel) : "";
     var tit = title != null ? String(title) : lab;
     return (
-      '<button type="button" class="sg-op-configure-btn sg-op-configure-btn--overlay ' +
+      '<button type="button" class="sg-op-yaml-ov-btn ' +
       extraClass +
       '" aria-label="' +
       escapeHtml(lab) +
@@ -5825,7 +5845,18 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
         "Delete workspace",
         "Delete workspace"
       ) +
-      buildManagedWorkspaceIconActionBtnHtml("ws-managed-btn-save", "save", "Save workspace", "Save") +
+      buildManagedWorkspaceIconActionBtnHtml(
+        "ws-managed-btn-save",
+        "keep",
+        "Keep watched paths",
+        "Keep"
+      ) +
+      buildManagedWorkspaceIconActionBtnHtml(
+        "ws-managed-btn-refresh",
+        "refresh",
+        "Revert watched paths to last saved",
+        "Refresh"
+      ) +
       buildManagedWorkspaceIconActionBtnHtml("ws-managed-btn-cancel", "cancel", "Cancel editing", "Cancel") +
       "</div>"
     );
@@ -5833,7 +5864,7 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
 
   function buildManagedWorkspaceToolbarHtml(wsNum, isEdit, titleText) {
     if (isEdit) return buildManagedWorkspaceEditToolbarHtml(wsNum);
-    return buildManagedWorkspaceConfigureBtnHtml(wsNum, titleText);
+    return '<div class="ws-managed-edit-controls">' + buildManagedWorkspaceConfigureBtnHtml(wsNum, titleText) + "</div>";
   }
 
   function beginWorkspaceManagedEdit(wsNum) {
@@ -5856,6 +5887,15 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
   function cancelWorkspaceManagedEdit() {
     ctx.workspaceManagedEditId = null;
     ctx.workspaceManagedStaging = null;
+    ctx.workspaceManagedFolderPickerOpen = false;
+    ctx.summarizedForceFullRebuild = true;
+    refreshSummarizedPanel();
+  }
+
+  function refreshWorkspaceManagedPaths() {
+    var st = ctx.workspaceManagedStaging;
+    if (!st || !Array.isArray(st.initialSnapshot)) return;
+    st.paths = cloneManagedPathRows(st.initialSnapshot);
     ctx.workspaceManagedFolderPickerOpen = false;
     ctx.summarizedForceFullRebuild = true;
     refreshSummarizedPanel();
@@ -7341,6 +7381,7 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
   ctx.patchAdminUsersCard = patchAdminUsersCard;
   ctx.patchAdminProviderCard = patchAdminProviderCard;
   ctx.syncSummarizedModelCache = syncSummarizedModelCache;
+  ctx.removeVirtualModelFromSummarizedFeed = removeVirtualModelFromSummarizedFeed;
   ctx.refreshAdminCardAfterEditToggle = refreshAdminCardAfterEditToggle;
   ctx.patchAdminCardsFromPoll = patchAdminCardsFromPoll;
   ctx.fetchTokenLabels = fetchTokenLabels;
@@ -7368,6 +7409,7 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
   ctx.removeWorkspaceDraft = removeWorkspaceDraft;
   ctx.beginWorkspaceManagedEdit = beginWorkspaceManagedEdit;
   ctx.cancelWorkspaceManagedEdit = cancelWorkspaceManagedEdit;
+  ctx.refreshWorkspaceManagedPaths = refreshWorkspaceManagedPaths;
   ctx.saveManagedWorkspacePaths = saveManagedWorkspacePaths;
   ctx.deleteManagedWorkspace = deleteManagedWorkspace;
   ctx.markUiUnauthorized = markUiUnauthorized;
