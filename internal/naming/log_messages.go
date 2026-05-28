@@ -65,6 +65,7 @@ const (
 	MsgChatRoutingResolved                      = "chat.routing.resolved"
 	MsgChatRoutingRateLimit                     = "chat.routing.rate_limit"
 	MsgChatRoutingModelNotFound                 = "chat.routing.model_not_found"
+	MsgRoutingModelUnavailableSkipped           = "routing.model.unavailable_skipped"
 	MsgChatProviderLimitsBlocked                = "chat.provider_limits.blocked"
 	MsgBrokerStartupBanner                      = "broker.startup.banner"
 	MsgBrokerVersion                            = "broker.version"

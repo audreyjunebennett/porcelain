@@ -23,6 +23,22 @@
       : null;
   }
 
+  function renderAssistantMarkdown(content) {
+    var renderer = md();
+    if (!renderer) return esc(content || "");
+    if (typeof renderer.renderSafe === "function") {
+      return renderer.renderSafe(content || "");
+    }
+    if (typeof renderer.renderPartial === "function") {
+      return renderer.renderPartial(content || "");
+    }
+    var html = renderer.render(content || "");
+    if (typeof renderer.closeOpenHtmlTags === "function") {
+      html = renderer.closeOpenHtmlTags(html);
+    }
+    return html;
+  }
+
   function roleLabel(role) {
     if (role === "user") return "You";
     if (role === "error") return "Error";
@@ -53,6 +69,18 @@
     );
   }
 
+  function renderScoreMeta(score) {
+    if (!score) return "";
+    return (
+      '<span class="chat-embed-item__meta" title="Retrieval confidence score">' +
+      '<span class="chat-embed-item__score">' +
+      esc(score) +
+      "</span>" +
+      '<span class="material-symbols-outlined material-symbols-outlined--sm chat-embed-item__score-icon" aria-hidden="true">readiness_score</span>' +
+      "</span>"
+    );
+  }
+
   function renderRAGHitItems(hits) {
     if (!hits || !hits.length) return "";
     var snippetFn =
@@ -79,9 +107,7 @@
         '<span class="chat-embed-item__source">' +
         esc(src) +
         "</span>" +
-        (score
-          ? '<span class="chat-embed-item__score">' + esc(score) + "</span>"
-          : "") +
+        renderScoreMeta(score) +
         "</summary>" +
         body +
         "</details></li>";
@@ -114,9 +140,7 @@
       return esc(msg.error || msg.content);
     }
     if (msg.role === "assistant") {
-      var renderer = md();
-      if (renderer) return renderer.render(msg.content || "");
-      return esc(msg.content || "");
+      return renderAssistantMarkdown(msg.content || "");
     }
     return esc(msg.content || "");
   }
@@ -194,8 +218,7 @@
     if (!body) return;
 
     if (msg.role === "assistant") {
-      var renderer = md();
-      body.innerHTML = renderer ? renderer.render(msg.content || "") : esc(msg.content || "");
+      body.innerHTML = renderAssistantMarkdown(msg.content || "");
     } else {
       body.textContent = msg.content || "";
     }

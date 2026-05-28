@@ -109,7 +109,14 @@ globalThis.ChimeraSettings.Summarized.Model = globalThis.ChimeraSettings.Summari
           "admin-provider",
           SECTION_OVERVIEW,
           "04-provider-" + spec.id,
-          { providerId: spec.id, keyCount: keys, ok: !!prow.ok },
+          {
+            providerId: spec.id,
+            keyCount: keys,
+            ok: !!prow.ok,
+            modelsAvailable: prow.models_available_count != null ? prow.models_available_count : 0,
+            modelsConfigured: !!prow.models_configured,
+            modelsEditing: state.adminProviderModelsEditingId === spec.id
+          },
           { spec: spec },
           { providerId: spec.id, spec: spec }
         )

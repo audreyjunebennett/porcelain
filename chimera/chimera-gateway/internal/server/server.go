@@ -509,7 +509,7 @@ func writeMergedModelsResponse(w http.ResponseWriter, ctx context.Context, rt *R
 		data = []any{}
 	}
 	ensureOpenAIModelListItems(data)
-	data = catalog.FilterOpenAIModelDataByFreeTier(data, res)
+	data = catalog.FilterOpenAIModelDataByAvailability(data, rt.ProviderModelAvailability(principalID))
 	out := prependVirtualModelsToCatalog(data, rt, principalID, res)
 	_ = json.NewEncoder(w).Encode(map[string]any{"object": "list", "data": out})
 }

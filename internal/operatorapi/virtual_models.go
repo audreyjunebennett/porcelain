@@ -20,6 +20,7 @@ type VirtualModelDetail struct {
 	VirtualModelSummary
 	RoutingPolicyYAML    string   `json:"routing_policy_yaml,omitempty"`
 	FallbackChain        []string `json:"fallback_chain"`
+	FallbackUnavailable  []string `json:"fallback_unavailable,omitempty"`
 	ToolRouterConfidence float64  `json:"tool_router_confidence_threshold"`
 	CreatedByPrincipalID string   `json:"created_by_principal_id,omitempty"`
 	CreatedAt            string   `json:"created_at"`

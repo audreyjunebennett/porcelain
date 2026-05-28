@@ -85,6 +85,17 @@
     return out;
   }
 
+  function closeSnippetHtml(html) {
+    var md =
+      globalThis.ChimeraChat &&
+      ChimeraChat.Render &&
+      ChimeraChat.Render.Markdown &&
+      typeof ChimeraChat.Render.Markdown.closeOpenHtmlTags === "function"
+        ? ChimeraChat.Render.Markdown
+        : null;
+    return md ? md.closeOpenHtmlTags(html) : html;
+  }
+
   function renderMarkdownSnippet(text) {
     var md =
       globalThis.ChimeraChat &&
@@ -94,7 +105,13 @@
         ? ChimeraChat.Render.Markdown
         : null;
     if (md) {
-      return '<div class="chat-embed-item__snippet chat-embed-item__snippet--md">' + md.render(text) + "</div>";
+      var html =
+        typeof md.renderSafe === "function"
+          ? md.renderSafe(text)
+          : typeof md.renderPartial === "function"
+            ? md.renderPartial(text)
+            : closeSnippetHtml(md.render(text));
+      return '<div class="chat-embed-item__snippet chat-embed-item__snippet--md">' + html + "</div>";
     }
     return '<pre class="chat-embed-item__snippet chat-embed-item__snippet--code"><code>' + escapeHtml(text) + "</code></pre>";
   }
@@ -105,7 +122,7 @@
       '<pre class="chat-embed-item__snippet chat-embed-item__snippet--code"><code class="chat-hl"' +
       label +
       ">" +
-      highlightGeneric(text, lang) +
+      closeSnippetHtml(highlightGeneric(text, lang)) +
       "</code></pre>"
     );
   }

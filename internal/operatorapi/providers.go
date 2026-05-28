@@ -51,12 +51,50 @@ type ProviderCatalogResponse struct {
 
 // StateProviderEntry is one provider block inside GET /api/ui/state (keyed by provider name).
 type StateProviderEntry struct {
-	Provider      string             `json:"provider"`
-	OK            bool               `json:"ok"`
-	Error         string             `json:"error,omitempty"`
-	KeyConfigured bool               `json:"key_configured"`
-	KeyHint       string             `json:"key_hint,omitempty"`
-	Keys          []ProviderKeyEntry `json:"keys,omitempty"`
-	OllamaBaseURL string             `json:"ollama_base_url,omitempty"`
-	HTTPStatus    int                `json:"http_status,omitempty"`
+	Provider               string             `json:"provider"`
+	OK                     bool               `json:"ok"`
+	Error                  string             `json:"error,omitempty"`
+	KeyConfigured          bool               `json:"key_configured"`
+	KeyHint                string             `json:"key_hint,omitempty"`
+	Keys                   []ProviderKeyEntry `json:"keys,omitempty"`
+	OllamaBaseURL          string             `json:"ollama_base_url,omitempty"`
+	HTTPStatus             int                `json:"http_status,omitempty"`
+	ModelsAvailableCount   int                `json:"models_available_count,omitempty"`
+	ModelsUnavailableCount int                `json:"models_unavailable_count,omitempty"`
+	ModelsConfigured       bool               `json:"models_configured,omitempty"`
+}
+
+// ProviderModelEntry is one broker model row with operator availability and optional usage counts.
+type ProviderModelEntry struct {
+	ModelID   string `json:"model_id"`
+	Available bool   `json:"available"`
+	Explicit  bool   `json:"explicit"`
+	Calls24h  int    `json:"calls_24h,omitempty"`
+	Errors24h int    `json:"errors_24h,omitempty"`
+}
+
+// ProviderModelsResponse is GET /api/ui/providers/{provider_id}/models.
+type ProviderModelsResponse struct {
+	ProviderID             string               `json:"provider_id"`
+	TenantID               string               `json:"tenant_id"`
+	Models                 []ProviderModelEntry `json:"models"`
+	ModelsAvailableCount   int                  `json:"models_available_count"`
+	ModelsUnavailableCount int                  `json:"models_unavailable_count"`
+	ModelsConfigured       bool                 `json:"models_configured"`
+}
+
+// ProviderModelsUpdateRequest is PUT /api/ui/providers/{provider_id}/models.
+type ProviderModelsUpdateRequest struct {
+	Models map[string]bool `json:"models"`
+}
+
+// ProviderModelsApplyFreeTierResponse is POST /api/ui/providers/{provider_id}/models/apply-free-tier.
+type ProviderModelsApplyFreeTierResponse struct {
+	OK                   bool                 `json:"ok"`
+	ProviderID           string               `json:"provider_id"`
+	TenantID             string               `json:"tenant_id"`
+	Models               []ProviderModelEntry `json:"models"`
+	ModelsAvailableCount int                  `json:"models_available_count"`
+	ModelsUnavailableCount int                `json:"models_unavailable_count"`
+	Note                 string               `json:"note,omitempty"`
 }

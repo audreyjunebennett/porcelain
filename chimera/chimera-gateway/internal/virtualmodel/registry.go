@@ -84,6 +84,20 @@ func (reg *Registry) BootstrapModelID() string {
 	return reg.bootstrapID
 }
 
+// AllEnabled returns a snapshot slice of enabled virtual models in the registry.
+func (reg *Registry) AllEnabled() []*Resolved {
+	if reg == nil {
+		return nil
+	}
+	reg.mu.RLock()
+	defer reg.mu.RUnlock()
+	out := make([]*Resolved, 0, len(reg.byModelID))
+	for _, vm := range reg.byModelID {
+		out = append(out, vm)
+	}
+	return out
+}
+
 // Reload replaces the cache from operator store.
 func (reg *Registry) Reload(ctx context.Context, store *operatorstore.Store) error {
 	if reg == nil {
@@ -210,31 +224,30 @@ func (reg *Registry) ListCatalog(principalID string) []*Resolved {
 	return out
 }
 
-// AllEnabled returns all enabled virtual models in cache.
-func (reg *Registry) AllEnabled() []*Resolved {
-	if reg == nil {
-		return nil
-	}
-	reg.mu.RLock()
-	defer reg.mu.RUnlock()
-	out := make([]*Resolved, 0, len(reg.byModelID))
-	for _, vm := range reg.byModelID {
-		out = append(out, vm)
-	}
-	return out
-}
-
 // PickInitialModel applies per-VM routing policy to select the first upstream model.
 func PickInitialModel(vm *Resolved, body map[string]json.RawMessage, log *slog.Logger) (model string, via routing.Via) {
+	return PickInitialModelWithAvailability(vm, body, log, nil)
+}
+
+// PickInitialModelWithAvailability skips upstream ids the checker reports as unavailable.
+func PickInitialModelWithAvailability(vm *Resolved, body map[string]json.RawMessage, log *slog.Logger, available func(string) bool) (model string, via routing.Via) {
 	if vm == nil {
-		return "", ""
+		return "", routing.ViaChainOnly
 	}
 	if vm.RoutingPolicyEnabled && vm.policy != nil {
-		return vm.policy.PickInitialModel(body, vm.FallbackChain, vm.ModelID, log)
+		return vm.policy.PickInitialModelWithAvailability(body, vm.FallbackChain, vm.ModelID, available, log)
 	}
-	first := ""
-	if len(vm.FallbackChain) > 0 {
-		first = vm.FallbackChain[0]
+	return routingFirstAvailable(vm.FallbackChain, available), routing.ViaChainOnly
+}
+
+func routingFirstAvailable(chain []string, available func(string) bool) string {
+	for _, id := range chain {
+		if id == "" {
+			continue
+		}
+		if available == nil || available(id) {
+			return id
+		}
 	}
-	return first, routing.ViaChainOnly
+	return ""
 }

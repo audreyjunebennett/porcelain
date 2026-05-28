@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/adminui/apirut"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/adminui/handler"
 	"github.com/lynn/porcelain/internal/operatorapi"
 )
@@ -25,7 +26,7 @@ func handleState(h *handler.Handler, w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 12*time.Second)
 	defer cancel()
-	out := BuildResponse(ctx, r, res, h.RT, h.Log)
+	out := BuildResponse(ctx, h.SessionTenantID(r), apirut.PublicGatewayBase(r), res, h.RT, h.Log)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(out)
 }

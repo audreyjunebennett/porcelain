@@ -566,6 +566,10 @@ type ProxyOpts struct {
 	WitnessEmitPayloadSample bool
 	// WitnessPayloadSampleMaxRunes caps each of head and tail in payload samples (default 256).
 	WitnessPayloadSampleMaxRunes int
+	// ModelAvailable reports whether an upstream model id is operator-marked available; nil allows all.
+	ModelAvailable func(upstreamModel string) bool
+	// VirtualModelID scopes routing.model.unavailable_skipped logs to a virtual model.
+	VirtualModelID string
 }
 
 func notifyUpstreamJSONSuccess(opts *ProxyOpts, statusCode int, upstreamModel string, jsonBody []byte) {
@@ -1121,11 +1125,36 @@ func WithVirtualModelFallback(ctx context.Context, w http.ResponseWriter, initia
 	var attemptFailures []fallbackFailureRecord
 	// Upstream ids that returned HTTP 413 on this request are not tried again (duplicate ids in chain).
 	excluded413 := make(map[string]struct{})
+	unavailableSkipped := make(map[string]struct{})
 
 	for i, upstreamModel := range chain {
 		if _, skip := excluded413[upstreamModel]; skip {
 			if log != nil {
 				log.Debug("virtual model skipping model (413 earlier this request)", "msg", "chat.routing.virtual_model_skipped", "upstreamModel", upstreamModel, "index", i)
+			}
+			continue
+		}
+		if opts != nil && opts.ModelAvailable != nil && !opts.ModelAvailable(upstreamModel) {
+			if _, logged := unavailableSkipped[upstreamModel]; !logged {
+				unavailableSkipped[upstreamModel] = struct{}{}
+				if log != nil {
+					providerID := upstreamModel
+					if slash := strings.Index(upstreamModel, "/"); slash > 0 {
+						providerID = upstreamModel[:slash]
+					}
+					logArgs := []any{
+						"msg", naming.MsgRoutingModelUnavailableSkipped,
+						"upstream_model", upstreamModel,
+						"provider_id", providerID,
+						"reason", "operator_unavailable",
+						"index", i + 1,
+						"chainLen", len(chain),
+					}
+					if opts.VirtualModelID != "" {
+						logArgs = append(logArgs, "virtual_model_id", opts.VirtualModelID)
+					}
+					log.Warn("skipping upstream model (operator unavailable)", logArgs...)
+				}
 			}
 			continue
 		}

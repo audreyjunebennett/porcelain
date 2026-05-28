@@ -385,6 +385,11 @@ messages:
   - slug: chat.routing.model_not_found
     formatter: conversation_fallback_model_not_found
     gallery_preview: Model not found (404) · trying next in chain.
+  - slug: routing.model.unavailable_skipped
+    formatter: broker_routing_relay
+    aliases:
+      - skipping upstream model (operator unavailable)
+    gallery_preview: Skipping unavailable model · groq/paid-model · operator configured unavailable · trying next in chain.
   - slug: chat.provider_limits.blocked
     formatter: broker_provider_limits
     aliases:

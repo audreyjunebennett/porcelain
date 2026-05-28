@@ -921,22 +921,24 @@ html[data-theme="design-01"] .sum-feed-section-head .sum-feed-section-title {
   color: var(--embed-text-heading);
 }
 
-/* Workspace cards: scope progress lives in summary metrics column, not under title */
-.sg-op-rail .sum-card--indexer-operator-workspace > summary .indexer-scope-progress,
-.sg-op-rail .sum-card--indexer-operator-workspace > .sum-card__hdr .indexer-scope-progress,
-html[data-theme="design-01"] #panel-summarized .sum-card--indexer-operator-workspace > summary .indexer-scope-progress,
-html[data-theme="design-01"] #panel-summarized .sum-card--indexer-operator-workspace > .sum-card__hdr .indexer-scope-progress,
-html[data-theme="design-01"] #panel-summarized .sum-card > summary .sum-metrics--indexer-scope .indexer-scope-progress {
+/* Workspace cards: scope progress in summary metrics — bar aligns with pill row */
+.sg-op-rail .sum-card > summary .sum-metrics--indexer-scope .indexer-scope-progress,
+.sg-op-rail .sum-card > .sum-card__hdr .sum-metrics--indexer-scope .indexer-scope-progress,
+html[data-theme="design-01"] #panel-summarized .sum-card > summary .sum-metrics--indexer-scope .indexer-scope-progress,
+html[data-theme="design-01"] #panel-summarized .sum-card > .sum-card__hdr .sum-metrics--indexer-scope .indexer-scope-progress {
   max-width: 12.5rem;
   margin-top: 0;
+  padding-top: calc((var(--sg-op-summary-pill-min-h) - 0.45rem) / 2);
 }
 
-.sg-op-rail .sum-card--indexer-operator-workspace > summary .sum-metrics--indexer-scope,
-.sg-op-rail .sum-card--indexer-operator-workspace > .sum-card__hdr .sum-metrics--indexer-scope,
-html[data-theme="design-01"] #panel-summarized .sum-card > summary .sum-metrics--indexer-scope {
+.sg-op-rail .sum-card > summary .sum-metrics--indexer-scope,
+.sg-op-rail .sum-card > .sum-card__hdr .sum-metrics--indexer-scope,
+html[data-theme="design-01"] #panel-summarized .sum-card > summary .sum-metrics--indexer-scope,
+html[data-theme="design-01"] #panel-summarized .sum-card > .sum-card__hdr .sum-metrics--indexer-scope {
   flex: 0 1 auto;
   max-width: min(50%, 14rem);
   min-width: 8rem;
+  align-items: flex-start;
 }
 
 .sg-op-rail .sum-card--indexer-operator-workspace > summary .sum-main,

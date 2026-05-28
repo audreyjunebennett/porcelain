@@ -365,13 +365,46 @@ html[data-theme="design-01"] .chat-viewport::-webkit-scrollbar-thumb {
   white-space: nowrap;
 }
 
-.chat-embed-item__score {
+.chat-embed-item__meta {
   flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
   margin-left: auto;
+}
+
+.chat-embed-item__score {
   font-size: 0.72rem;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--embed-text-faint);
+}
+
+.chat-embed-item__score-icon {
+  font-size: 0.85rem;
+  line-height: 1;
+  color: var(--embed-text-faint);
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 20;
+}
+
+.material-symbols-outlined {
+  font-family: "Material Symbols Outlined";
+  font-weight: normal;
+  font-style: normal;
+  font-size: 1.25rem;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+  -webkit-font-smoothing: antialiased;
+}
+
+.material-symbols-outlined--sm {
+  font-size: 1rem;
 }
 
 .chat-embed-item__snippet {

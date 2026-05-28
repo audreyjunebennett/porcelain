@@ -219,6 +219,7 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     if (ctx.adminUserDrafts && ctx.adminUserDrafts.length) return true;
     if (ctx.virtualModelDrafts && ctx.virtualModelDrafts.length) return true;
     if (ctx.workspaceManagedEditId != null) return true;
+    if (ctx.adminProviderModelsEditingId) return true;
     return false;
   }
 
@@ -326,6 +327,9 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       if (vmUi && (vmUi.identityEditing || vmUi.fallbackEditing || vmUi.routingEditing || vmUi.routerEditing)) {
         skip[vmCardId] = true;
       }
+    }
+    if (ctx.adminProviderModelsEditingId) {
+      skip["admin-provider-" + String(ctx.adminProviderModelsEditingId)] = true;
     }
     return skip;
   }
@@ -1274,6 +1278,10 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       })
       .then(function () {
         if (ctx.uiUnauthorized || getViewMode() !== "summarized") return;
+        return prefetchProviderModelsAvailability();
+      })
+      .then(function () {
+        if (ctx.uiUnauthorized || getViewMode() !== "summarized") return;
         patchGatewayOverviewCard();
         patchAdminCardsFromPoll();
       })
@@ -1723,6 +1731,20 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
     return adminJsonRequest(url, "PUT", body);
   }
 
+  function fetchProviderModels(providerId) {
+    if (ctx.uiUnauthorized) return Promise.reject(new Error("Unauthorized"));
+    var pid = String(providerId || "").trim().toLowerCase();
+    if (!pid) return Promise.reject(new Error("provider required"));
+    return fetch("/api/ui/providers/" + encodeURIComponent(pid) + "/models", { credentials: "same-origin" })
+      .then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (j) {
+          if (r.status === 401) throw new Error("Unauthorized");
+          if (!r.ok) throw new Error((j && j.error) || ("HTTP " + r.status));
+          return j;
+        });
+      });
+  }
+
   function lookupVmSummary(vmId) {
     var gw = ctx.adminStateCache && ctx.adminStateCache.gateway;
     var vms = gw && gw.virtual_models && Array.isArray(gw.virtual_models) ? gw.virtual_models : [];
@@ -1894,6 +1916,68 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       },
       { preserveOpen: true, preserveScrollSelectors: ADMIN_CARD_TABLE_SCROLL_SEL }
     );
+  }
+
+  var providerModelsPrefetchInFlight = Object.create(null);
+
+  function providerIdsNeedingModelsPrefetch() {
+    var st = ctx.adminStateCache || {};
+    var providers = st.providers || {};
+    var hasCreds = typeof ctx.providerHasCredentials === "function" ? ctx.providerHasCredentials : null;
+    var visible = adminVisibleProviderIds();
+    var out = [];
+    for (var i = 0; i < visible.length; i++) {
+      var pid = String(visible[i] || "").trim().toLowerCase();
+      if (!pid) continue;
+      if (ctx.adminProviderModelsEditingId === pid) continue;
+      if (ctx.adminProviderModelsCache && ctx.adminProviderModelsCache[pid]) continue;
+      var prow = providers[pid] || {};
+      if (!prow.models_configured) continue;
+      if (hasCreds && !hasCreds(pid, prow)) continue;
+      out.push(pid);
+    }
+    return out;
+  }
+
+  /** Load saved per-model availability for providers with tenant configuration (read-only checkboxes). */
+  function prefetchProviderModelsAvailability() {
+    if (ctx.uiUnauthorized || typeof fetchProviderModels !== "function") return Promise.resolve(false);
+    var ids = providerIdsNeedingModelsPrefetch();
+    if (!ids.length) return Promise.resolve(false);
+    var jobs = [];
+    for (var i = 0; i < ids.length; i++) {
+      (function (pid) {
+        if (providerModelsPrefetchInFlight[pid]) {
+          jobs.push(providerModelsPrefetchInFlight[pid]);
+          return;
+        }
+        providerModelsPrefetchInFlight[pid] = fetchProviderModels(pid)
+          .then(function (doc) {
+            if (!ctx.adminProviderModelsCache) ctx.adminProviderModelsCache = {};
+            ctx.adminProviderModelsCache[pid] = doc;
+          })
+          .catch(function () {
+            /* keep read-only fallback until a later poll retries */
+          })
+          .finally(function () {
+            delete providerModelsPrefetchInFlight[pid];
+          });
+        jobs.push(providerModelsPrefetchInFlight[pid]);
+      })(ids[i]);
+    }
+    return Promise.all(jobs).then(function () {
+      if (getViewMode() !== "summarized") return false;
+      var anyPatched = false;
+      var needRebuild = false;
+      for (var j = 0; j < ids.length; j++) {
+        var id = ids[j];
+        if (!ctx.adminProviderModelsCache || !ctx.adminProviderModelsCache[id]) continue;
+        if (patchAdminProviderCard(id)) anyPatched = true;
+        else needRebuild = true;
+      }
+      if (needRebuild) scheduleStoryRebuild();
+      return anyPatched;
+    });
   }
 
   /** Targeted admin card updates after /api/ui/state + /api/ui/tokens poll (no full panel innerHTML). */
@@ -7118,6 +7202,7 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       adminRoutingEditing: ctx.adminRoutingEditing,
       adminFallbackEditing: ctx.adminFallbackEditing,
       adminRouterEditing: ctx.adminRouterEditing,
+      adminProviderModelsEditingId: ctx.adminProviderModelsEditingId,
       workspaceManagedEditId: ctx.workspaceManagedEditId,
       lastIndexerOperatorWorkspacesNested: ctx.lastIndexerOperatorWorkspacesNested
     };
@@ -7418,6 +7503,9 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
   ctx.syncChimeraBrokerProviderPolling = syncChimeraBrokerProviderPolling;
   ctx.adminPostJSON = adminPostJSON;
   ctx.adminPutJSON = adminPutJSON;
+  ctx.fetchProviderModels = fetchProviderModels;
+  ctx.providerIdsNeedingModelsPrefetch = providerIdsNeedingModelsPrefetch;
+  ctx.prefetchProviderModelsAvailability = prefetchProviderModelsAvailability;
   ctx.fetchVirtualModelDetail = fetchVirtualModelDetail;
   ctx.patchVirtualModelCard = patchVirtualModelCard;
   ctx.adminSetMessage = adminSetMessage;

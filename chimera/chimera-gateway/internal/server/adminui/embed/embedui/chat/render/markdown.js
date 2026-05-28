@@ -131,8 +131,123 @@
     return out.join("");
   }
 
+  var VOID_TAGS = {
+    area: true,
+    base: true,
+    br: true,
+    col: true,
+    embed: true,
+    hr: true,
+    img: true,
+    input: true,
+    link: true,
+    meta: true,
+    param: true,
+    source: true,
+    track: true,
+    wbr: true
+  };
+
+  function closeOpenHtmlTags(html) {
+    html = html == null ? "" : String(html);
+    if (!html) return html;
+
+    var stack = [];
+    var re = /<\/?([a-zA-Z][a-zA-Z0-9:-]*)([^>]*?)>/g;
+    var result = "";
+    var last = 0;
+    var m;
+
+    while ((m = re.exec(html)) !== null) {
+      result += html.slice(last, m.index);
+      last = m.index + m[0].length;
+      var tag = m[1].toLowerCase();
+      var isClose = m[0].charAt(1) === "/";
+      var selfClose = /\/\s*>$/.test(m[0]) || VOID_TAGS[tag];
+
+      if (isClose) {
+        for (var i = stack.length - 1; i >= 0; i--) {
+          if (stack[i] === tag) {
+            stack.splice(i, 1);
+            break;
+          }
+        }
+      } else if (!selfClose) {
+        stack.push(tag);
+      }
+      result += m[0];
+    }
+
+    result += html.slice(last);
+    for (var j = stack.length - 1; j >= 0; j--) {
+      result += "</" + stack[j] + ">";
+    }
+    return result;
+  }
+
+  function balancePartialInlineMarkdown(text) {
+    text = String(text || "");
+    if (!text) return text;
+
+    var backticks = 0;
+    for (var i = 0; i < text.length; i++) {
+      if (text.charAt(i) === "`") backticks++;
+    }
+    if (backticks % 2 !== 0) text += "`";
+
+    var boldMarkers = text.match(/\*\*/g);
+    if (boldMarkers && boldMarkers.length % 2 !== 0) text += "**";
+
+    var ubMarkers = text.match(/__/g);
+    if (ubMarkers && ubMarkers.length % 2 !== 0) text += "__";
+
+    var singleStars = text.replace(/\*\*/g, "").split("*").length - 1;
+    if (singleStars % 2 !== 0) text += "*";
+
+    var singleUnders = text.replace(/__/g, "").split("_").length - 1;
+    if (singleUnders % 2 !== 0) text += "_";
+
+    return text;
+  }
+
+  function balancePartialMarkdown(text) {
+    text = String(text || "");
+    if (!text) return text;
+
+    var out = [];
+    var re = /```[\s\S]*?```/g;
+    var lastIndex = 0;
+    var m;
+
+    while ((m = re.exec(text)) !== null) {
+      if (m.index > lastIndex) {
+        out.push(balancePartialInlineMarkdown(text.slice(lastIndex, m.index)));
+      }
+      out.push(m[0]);
+      lastIndex = m.index + m[0].length;
+    }
+
+    var tail = text.slice(lastIndex);
+    if (tail.indexOf("```") >= 0) {
+      var fenceIdx = tail.indexOf("```");
+      out.push(balancePartialInlineMarkdown(tail.slice(0, fenceIdx)));
+      out.push(tail.slice(fenceIdx) + "\n```");
+    } else {
+      out.push(balancePartialInlineMarkdown(tail));
+    }
+
+    return out.join("");
+  }
+
   function renderMarkdown(text) {
     var html = renderBlocks(text);
+    return html || "<p></p>";
+  }
+
+  /** Balance partial markdown, render, and close any dangling HTML (streaming / cut-off safe). */
+  function renderSafeMarkdown(text) {
+    var html = renderBlocks(balancePartialMarkdown(text));
+    html = closeOpenHtmlTags(html || "<p></p>");
     return html || "<p></p>";
   }
 
@@ -140,6 +255,10 @@
   globalThis.ChimeraChat.Render = globalThis.ChimeraChat.Render || {};
   globalThis.ChimeraChat.Render.Markdown = {
     render: renderMarkdown,
+    renderSafe: renderSafeMarkdown,
+    renderPartial: renderSafeMarkdown,
+    balancePartial: balancePartialMarkdown,
+    closeOpenHtmlTags: closeOpenHtmlTags,
     escapeHtml: escapeHtml
   };
 })();

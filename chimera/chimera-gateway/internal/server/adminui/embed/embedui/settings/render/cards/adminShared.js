@@ -66,17 +66,86 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminShared = function (ctx) {
     }
     return out;
   }
+  function providerKeyIconBtn(action, providerId, title, iconName, extraAttrs) {
+    extraAttrs = extraAttrs || {};
+    var cls = "sg-op-yaml-ov-btn";
+    if (extraAttrs.extraClass) cls += " " + String(extraAttrs.extraClass);
+    var attrs = "";
+    if (extraAttrs.name != null) {
+      attrs += ' data-name="' + escapeHtml(String(extraAttrs.name)) + '"';
+    }
+    return (
+      '<button type="button" class="' +
+      cls +
+      '" data-admin-action="' +
+      escapeHtml(String(action || "")) +
+      '" data-provider="' +
+      escapeHtml(providerId) +
+      '"' +
+      attrs +
+      ' title="' +
+      escapeHtml(title) +
+      '" aria-label="' +
+      escapeHtml(title) +
+      '"><span class="material-symbols-outlined" aria-hidden="true">' +
+      escapeHtml(String(iconName || "")) +
+      "</span></button>"
+    );
+  }
   function providerRowsHtml(providerId, p) {
     var rows = p && Array.isArray(p.keys) ? p.keys : [];
-    if (!rows.length) return '<li class="muted">No keys yet.</li>';
-    var out = "";
+    if (!rows.length) {
+      return '<p class="muted sg-op-provider-key-empty">No keys saved yet.</p>';
+    }
+    var out = '<ul class="sg-op-provider-key-list">';
     for (var i = 0; i < rows.length; i++) {
       var nm = rows[i] && rows[i].name != null ? String(rows[i].name) : "";
       out +=
-        '<li><code>' + escapeHtml(nm || "(unnamed)") + "</code> · " + escapeHtml((rows[i] && rows[i].key_hint) || "—") +
-        ' <button type="button" class="sg-op-btn sg-op-btn--small sg-op-btn--danger sg-op-btn--pill" data-admin-action="provider-key-delete" data-provider="' + escapeHtml(providerId) + '" data-name="' + escapeHtml(nm) + '">Remove</button></li>';
+        '<li class="sg-op-provider-key-row">' +
+        '<div class="sg-op-provider-key-row__meta">' +
+        '<span class="sg-op-provider-key-row__name">' +
+        escapeHtml(nm || "(unnamed)") +
+        "</span>" +
+        '<code class="sg-op-provider-key-row__hint sum-mono-id">' +
+        escapeHtml((rows[i] && rows[i].key_hint) || "—") +
+        "</code></div>" +
+        providerKeyIconBtn("provider-key-delete", providerId, "Remove key", "delete_forever", {
+          extraClass: "sg-op-provider-key-btn-delete",
+          name: nm
+        }) +
+        "</li>";
     }
-    return out;
+    return out + "</ul>";
+  }
+
+  function providerKeyAddBlockHtml(providerId) {
+    var keyDrafts = ctx.adminProviderKeyDraft || {};
+    var keyDraftVal = keyDrafts[providerId] != null ? String(keyDrafts[providerId]) : "";
+    var keyPlaceholder = "API key";
+    if (
+      globalThis.ChimeraSettings &&
+      ChimeraSettings.Providers &&
+      ChimeraSettings.Providers.Catalog &&
+      typeof ChimeraSettings.Providers.Catalog.lookupProviderSpec === "function"
+    ) {
+      var catSpec = ChimeraSettings.Providers.Catalog.lookupProviderSpec(providerId);
+      if (catSpec && catSpec.key_placeholder) keyPlaceholder = String(catSpec.key_placeholder);
+    }
+    return (
+      '<div class="sg-op-provider-key-add">' +
+      '<div class="sg-op-provider-key-add__label sum-section-label">Add new key</div>' +
+      '<div class="sg-op-provider-key-add__row">' +
+      '<input id="admin-' +
+      escapeHtml(providerId) +
+      '-key" class="sg-op-input sg-op-provider-key-add__input" type="password" placeholder="' +
+      escapeHtml(keyPlaceholder) +
+      '" value="' +
+      escapeHtml(keyDraftVal) +
+      '"/>' +
+      '<button type="button" class="sg-op-provider-key-add-btn" data-admin-action="provider-key-add" data-provider="' +
+      escapeHtml(providerId) +
+      '">Add</button></div></div>'
+    );
   }
 
   function adminProviderIntro(providerId, subtitle) {
@@ -282,6 +351,19 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminShared = function (ctx) {
   }
 
   function adminProviderModelCount(providerId) {
+    var prow = ((ctx.adminStateCache || {}).providers || {})[providerId] || {};
+    var editing = ctx.adminProviderModelsEditingId === providerId;
+    if (editing && ctx.adminProviderModelsDraft && ctx.adminProviderModelsDraft[providerId]) {
+      var draftMap = ctx.adminProviderModelsDraft[providerId].models || {};
+      var draftAvail = 0;
+      for (var dk in draftMap) {
+        if (Object.prototype.hasOwnProperty.call(draftMap, dk) && draftMap[dk]) draftAvail++;
+      }
+      return draftAvail;
+    }
+    if (prow.models_configured && prow.models_available_count != null) {
+      return Number(prow.models_available_count) || 0;
+    }
     var listed = adminProviderCatalogModels(providerId);
     if (listed.length) return listed.length;
     var data = ctx.metricsCache || {};
@@ -537,6 +619,80 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminShared = function (ctx) {
     return list;
   }
 
+  function adminProviderModelsDraftMap(providerId) {
+    if (ctx.adminProviderModelsEditingId !== providerId) return null;
+    if (!ctx.adminProviderModelsDraft || !ctx.adminProviderModelsDraft[providerId]) return null;
+    return ctx.adminProviderModelsDraft[providerId].models || null;
+  }
+
+  function adminProviderModelsMapFromResponse(doc) {
+    var out = {};
+    var rows = doc && Array.isArray(doc.models) ? doc.models : [];
+    for (var i = 0; i < rows.length; i++) {
+      var row = rows[i] || {};
+      var mid = String(row.model_id || "").trim();
+      if (!mid) continue;
+      out[mid] = !!row.available;
+    }
+    return out;
+  }
+
+  function adminProviderModelsAvailabilityMap(providerId) {
+    var draft = adminProviderModelsDraftMap(providerId);
+    if (draft) return draft;
+    if (ctx.adminProviderModelsCache && ctx.adminProviderModelsCache[providerId]) {
+      return adminProviderModelsMapFromResponse(ctx.adminProviderModelsCache[providerId]);
+    }
+    return null;
+  }
+
+  function adminProviderModelEditRows(providerId) {
+    var availMap = adminProviderModelsAvailabilityMap(providerId);
+    var usageRows = adminProviderUsageRows(providerId);
+    if (!availMap) {
+      return usageRows.map(function (ur) {
+        return {
+          model_id: ur.model_id,
+          calls: ur.calls,
+          errors: ur.errors,
+          available: true
+        };
+      });
+    }
+    var seen = {};
+    var out = [];
+    for (var ui = 0; ui < usageRows.length; ui++) {
+      var ur = usageRows[ui];
+      var mid = String(ur.model_id || "").trim();
+      if (!mid) continue;
+      seen[mid] = true;
+      out.push({
+        model_id: mid,
+        calls: ur.calls,
+        errors: ur.errors,
+        available: availMap[mid] !== false
+      });
+    }
+    for (var dm in availMap) {
+      if (!Object.prototype.hasOwnProperty.call(availMap, dm)) continue;
+      if (seen[dm]) continue;
+      out.push({ model_id: dm, calls: 0, errors: 0, available: !!availMap[dm] });
+    }
+    out.sort(function (a, b) {
+      var dc = (b.calls || 0) - (a.calls || 0);
+      if (dc !== 0) return dc;
+      var de = (b.errors || 0) - (a.errors || 0);
+      if (de !== 0) return de;
+      return String(a.model_id || "").localeCompare(String(b.model_id || ""));
+    });
+    return out;
+  }
+
+  function adminProviderSupportsFreeTierAssist(providerId) {
+    var pid = String(providerId || "").toLowerCase();
+    return pid === "groq" || pid === "gemini";
+  }
+
   function adminModelUsageById() {
     var out = {};
     var data = ctx.metricsCache || {};
@@ -659,6 +815,7 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminShared = function (ctx) {
   ctx.fallbackChainToYAML = fallbackChainToYAML;
   ctx.parseFallbackChainInput = parseFallbackChainInput;
   ctx.providerRowsHtml = providerRowsHtml;
+  ctx.providerKeyAddBlockHtml = providerKeyAddBlockHtml;
   ctx.adminProviderIntro = adminProviderIntro;
   ctx.adminProviderAvatarClass = adminProviderAvatarClass;
   ctx.adminProviderHealthEntry = adminProviderHealthEntry;
@@ -671,6 +828,10 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminShared = function (ctx) {
   ctx.adminExtractProviderModel = adminExtractProviderModel;
   ctx.adminProviderCatalogModels = adminProviderCatalogModels;
   ctx.adminProviderUsageRows = adminProviderUsageRows;
+  ctx.adminProviderModelsDraftMap = adminProviderModelsDraftMap;
+  ctx.adminProviderModelsMapFromResponse = adminProviderModelsMapFromResponse;
+  ctx.adminProviderModelEditRows = adminProviderModelEditRows;
+  ctx.adminProviderSupportsFreeTierAssist = adminProviderSupportsFreeTierAssist;
   ctx.adminModelUsageById = adminModelUsageById;
   ctx.adminProviderTierSpan = adminProviderTierSpan;
   ctx.adminScopedEventsForPrincipal = adminScopedEventsForPrincipal;

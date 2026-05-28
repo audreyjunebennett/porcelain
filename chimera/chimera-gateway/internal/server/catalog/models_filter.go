@@ -1,21 +1,24 @@
 package catalog
 
 import (
-	"github.com/lynn/porcelain/chimera/internal/config"
-	"github.com/lynn/porcelain/chimera/internal/providerfreetier"
+	"strings"
+
+	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/providermodels"
 )
 
-// FilterOpenAIModelDataByFreeTier applies the provider free-tier allowlist when configured.
-func FilterOpenAIModelDataByFreeTier(data []any, res *config.Resolved) []any {
-	if res == nil || !res.ShouldApplyFreeTierCatalogFilter() {
+// FilterOpenAIModelDataByAvailability keeps only upstream models marked available for the tenant snapshot.
+// A nil snapshot or empty unavailable set returns data unchanged.
+func FilterOpenAIModelDataByAvailability(data []any, snap *providermodels.TenantSnapshot) []any {
+	if snap == nil || len(data) == 0 {
 		return data
 	}
-	return filterModelDataBySpec(data, res.ProviderFreeTierSpec)
-}
-
-func filterModelDataBySpec(data []any, spec *providerfreetier.Spec) []any {
-	if spec == nil {
+	unavail := snap.UnavailableModelIDs()
+	if len(unavail) == 0 {
 		return data
+	}
+	blocked := make(map[string]struct{}, len(unavail))
+	for _, id := range unavail {
+		blocked[strings.TrimSpace(id)] = struct{}{}
 	}
 	var out []any
 	for _, raw := range data {
@@ -24,9 +27,14 @@ func filterModelDataBySpec(data []any, spec *providerfreetier.Spec) []any {
 			continue
 		}
 		id, _ := m["id"].(string)
-		if spec.Match(id) {
-			out = append(out, raw)
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
 		}
+		if _, skip := blocked[id]; skip {
+			continue
+		}
+		out = append(out, raw)
 	}
 	return out
 }

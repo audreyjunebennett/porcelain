@@ -47,6 +47,41 @@ func vmDetail(vm operatorstore.VirtualModel) operatorapi.VirtualModelDetail {
 	}
 }
 
+func vmDetailForSession(h *handler.Handler, r *http.Request, vm operatorstore.VirtualModel) operatorapi.VirtualModelDetail {
+	out := vmDetail(vm)
+	if h == nil || h.RT == nil {
+		return out
+	}
+	reg := h.RT.ProviderModels()
+	if reg == nil {
+		return out
+	}
+	snap := reg.Snapshot(h.SessionTenantID(r))
+	var unavail []string
+	for _, mid := range out.FallbackChain {
+		mid = strings.TrimSpace(mid)
+		if mid == "" || snap.IsAvailable(mid) {
+			continue
+		}
+		unavail = append(unavail, mid)
+	}
+	if len(unavail) > 0 {
+		out.FallbackUnavailable = unavail
+	}
+	return out
+}
+
+func filterModelsBySessionTenant(h *handler.Handler, r *http.Request, ids []string) []string {
+	if h == nil || h.RT == nil {
+		return ids
+	}
+	reg := h.RT.ProviderModels()
+	if reg == nil {
+		return ids
+	}
+	return reg.FilterAvailable(h.SessionTenantID(r), ids)
+}
+
 func operatorStore(h *handler.Handler) *operatorstore.Store {
 	if h == nil || h.RT == nil {
 		return nil
@@ -143,7 +178,7 @@ func handleGetGET(h *handler.Handler, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(vmDetail(*vm))
+	_ = json.NewEncoder(w).Encode(vmDetailForSession(h, r, *vm))
 }
 
 func handleUpdatePUT(h *handler.Handler, w http.ResponseWriter, r *http.Request) {
@@ -359,13 +394,9 @@ func handleGeneratePOST(h *handler.Handler, w http.ResponseWriter, r *http.Reque
 	}
 	_ = stCode
 	pool := filterByProviderPrefix(ids, body.ProviderPrefix)
-	if res.FilterFreeTierModels && body.ProviderPrefix == "" {
-		if res.ProviderFreeTierSpec != nil && !res.ProviderFreeTierSpec.Empty() {
-			pool = res.ProviderFreeTierSpec.Filter(pool)
-		}
-	}
+	pool = filterModelsBySessionTenant(h, r, pool)
 	if len(pool) == 0 {
-		http.Error(w, "no models left after catalog filter", http.StatusBadRequest)
+		http.Error(w, "no models left after operator availability filter", http.StatusBadRequest)
 		return
 	}
 	chain := routinggen.OrderFallbackChain(pool)

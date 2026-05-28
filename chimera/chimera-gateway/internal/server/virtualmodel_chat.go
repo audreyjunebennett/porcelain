@@ -221,11 +221,14 @@ func handleVirtualModelChat(
 
 	emitConversationRequestWitness(routeLog, res, raw)
 
+	tenantSnap := rt.ProviderModelAvailability(sessTenant)
+	modelAvailable := func(id string) bool { return tenantSnap.IsAvailable(id) }
+
 	var initial string
 	if vmCtx.useLegacyPol && pol != nil {
-		initial, _ = pol.PickInitialModel(raw, vmCtx.fallback, virtualID)
+		initial, _ = pol.PickInitialModelWithAvailability(raw, vmCtx.fallback, virtualID, modelAvailable)
 	} else {
-		initial, _ = virtualmodel.PickInitialModel(vm, raw, routeLog)
+		initial, _ = virtualmodel.PickInitialModelWithAvailability(vm, raw, routeLog, modelAvailable)
 	}
 	if initial == "" {
 		if routeLog != nil {
@@ -249,6 +252,14 @@ func handleVirtualModelChat(
 			"timeline_kind", naming.TimelineKindBroker)
 	}
 	rag.WriteResponseHeaders(w, initial, ragHits)
+	if chatOpts == nil {
+		chatOpts = &chat.ProxyOpts{}
+	} else {
+		cp := *chatOpts
+		chatOpts = &cp
+	}
+	chatOpts.ModelAvailable = modelAvailable
+	chatOpts.VirtualModelID = virtualID
 	chat.WithVirtualModelFallback(ctx, w, initial, vmCtx.fallback, res.UpstreamBaseURL, apiKey, stream, raw,
 		chatTimeout(res), routeLog, rt.Metrics(), rt.LimitsGuard(), chatOpts)
 	return true

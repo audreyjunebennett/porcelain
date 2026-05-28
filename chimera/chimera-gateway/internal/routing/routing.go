@@ -108,7 +108,30 @@ func (p *Policy) PickInitialModel(body map[string]json.RawMessage, fallbackChain
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	return pickFromRules(p.ambiguousDefault, p.rules, lastUser, fallbackChain, p.log)
+	return pickFromRules(p.ambiguousDefault, p.rules, lastUser, fallbackChain, nil, p.log)
+}
+
+// PickInitialModelWithAvailability skips upstream ids the checker reports as unavailable.
+func (p *Policy) PickInitialModelWithAvailability(body map[string]json.RawMessage, fallbackChain []string, virtualModelID string, available func(string) bool) (model string, via Via) {
+	p.ReloadIfStale()
+
+	var clientModel string
+	if m, ok := body["model"]; ok {
+		_ = json.Unmarshal(m, &clientModel)
+	}
+	if clientModel != virtualModelID {
+		if available == nil || available(clientModel) {
+			return clientModel, ViaChainOnly
+		}
+		return firstAvailableModel([]string{clientModel}, available), ViaChainOnly
+	}
+
+	lastUser := lastUserMessageCharCount(body)
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	return pickFromRules(p.ambiguousDefault, p.rules, lastUser, fallbackChain, available, p.log)
 }
 
 func parsePolicyDocument(raw []byte) (ambiguousDefault string, rules []policyRule, err error) {
@@ -130,7 +153,19 @@ func parsePolicyDocument(raw []byte) (ambiguousDefault string, rules []policyRul
 	return ambiguousDefault, rules, nil
 }
 
-func pickFromRules(ambiguousDefault string, rules []policyRule, lastUser int, fallbackChain []string, log *slog.Logger) (model string, via Via) {
+func firstAvailableModel(ids []string, available func(string) bool) string {
+	for _, id := range ids {
+		if id == "" {
+			continue
+		}
+		if available == nil || available(id) {
+			return id
+		}
+	}
+	return ""
+}
+
+func pickFromRules(ambiguousDefault string, rules []policyRule, lastUser int, fallbackChain []string, available func(string) bool, log *slog.Logger) (model string, via Via) {
 	for _, rule := range rules {
 		if len(rule.models) == 0 {
 			continue
@@ -138,23 +173,26 @@ func pickFromRules(ambiguousDefault string, rules []policyRule, lastUser int, fa
 		if rule.minMessageChars != nil && lastUser < *rule.minMessageChars {
 			continue
 		}
-		if log != nil {
-			log.Debug("routing rule matched", "msg", "routing.rule.matched", "rule", rule.name, "initialModel", rule.models[0], "lastUserChars", lastUser)
+		chosen := firstAvailableModel(rule.models, available)
+		if chosen == "" {
+			continue
 		}
-		return rule.models[0], ViaRule
+		if log != nil {
+			log.Debug("routing rule matched", "msg", "routing.rule.matched", "rule", rule.name, "initialModel", chosen, "lastUserChars", lastUser)
+		}
+		return chosen, ViaRule
 	}
 
 	if ambiguousDefault != "" {
-		if log != nil {
-			log.Debug("routing: no rule matched, using ambiguous_default_model", "msg", "routing.rule.no_match.ambiguous_default", "initialModel", ambiguousDefault, "lastUserChars", lastUser)
+		if chosen := firstAvailableModel([]string{ambiguousDefault}, available); chosen != "" {
+			if log != nil {
+				log.Debug("routing: no rule matched, using ambiguous_default_model", "msg", "routing.rule.no_match.ambiguous_default", "initialModel", chosen, "lastUserChars", lastUser)
+			}
+			return chosen, ViaAmbiguousDefault
 		}
-		return ambiguousDefault, ViaAmbiguousDefault
 	}
 
-	first := ""
-	if len(fallbackChain) > 0 {
-		first = fallbackChain[0]
-	}
+	first := firstAvailableModel(fallbackChain, available)
 	if log != nil {
 		log.Debug("routing: no policy default; using first fallback_chain entry", "msg", "routing.rule.no_match.first_fallback", "initialModel", first, "lastUserChars", lastUser)
 	}
@@ -180,7 +218,7 @@ func EvaluatePick(policyYAML []byte, body map[string]json.RawMessage, fallbackCh
 	}
 
 	lastUser := lastUserMessageCharCount(body)
-	model, via = pickFromRules(ambiguous, rules, lastUser, fallbackChain, log)
+	model, via = pickFromRules(ambiguous, rules, lastUser, fallbackChain, nil, log)
 	return model, via, nil
 }
 

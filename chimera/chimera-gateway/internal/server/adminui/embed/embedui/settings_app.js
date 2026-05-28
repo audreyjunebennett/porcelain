@@ -54,6 +54,14 @@ globalThis.ChimeraSettings.Main = function () {
   var adminRoutingEditing = false;
   var adminFallbackEditing = false;
   var adminRouterEditing = false;
+  /** Provider id whose model availability table is in edit mode, or null. */
+  var adminProviderModelsEditingId = null;
+  /** Draft availability maps keyed by provider id: { models: { modelId: bool }, saving?: bool }. */
+  var adminProviderModelsDraft = {};
+  /** Last GET /api/ui/providers/{id}/models response keyed by provider id. */
+  var adminProviderModelsCache = {};
+  /** When true, provider model usage list includes unavailable (disabled) models. */
+  var adminProviderModelsShowUnavailable = {};
   /** Ephemeral token secrets from POST /api/ui/tokens, keyed by tenant_id for in-card masked display + copy. */
   var adminCreatedTokenByTenant = {};
   /** Flat roots from GET /api/ui/indexer/config — fills watched paths when indexer.run.start is outside the log buffer. */
@@ -903,6 +911,10 @@ globalThis.ChimeraSettings.Main = function () {
     adminRoutingEditing: adminRoutingEditing,
     adminFallbackEditing: adminFallbackEditing,
     adminRouterEditing: adminRouterEditing,
+    adminProviderModelsEditingId: adminProviderModelsEditingId,
+    adminProviderModelsDraft: adminProviderModelsDraft,
+    adminProviderModelsCache: adminProviderModelsCache,
+    adminProviderModelsShowUnavailable: adminProviderModelsShowUnavailable,
     virtualModelDetails: {},
     virtualModelUi: {},
     storyRebuildTimer: null,
