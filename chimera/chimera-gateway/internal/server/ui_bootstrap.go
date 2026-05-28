@@ -7,8 +7,11 @@ import (
 	"strings"
 
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/adminui"
+	"github.com/lynn/porcelain/chimera/internal/config"
+	"github.com/lynn/porcelain/chimera/internal/firstsetup"
 	"github.com/lynn/porcelain/chimera/internal/platform/requestid"
 	"github.com/lynn/porcelain/chimera/internal/tokens"
+	"github.com/lynn/porcelain/internal/naming"
 )
 
 // NewBootstrapMux serves only the first-run setup surface (loopback-only in production).
@@ -29,6 +32,7 @@ func NewBootstrapMux(rt *Runtime, log *slog.Logger, overlay *StatusOverlay) http
 	})
 
 	mux.HandleFunc("GET /ui/setup", serveBootstrapHTML("embedui/setup.html"))
+	mux.HandleFunc("GET /ui/assets/embed-theme.js", serveBootstrapAsset("embedui/embed-theme.js", "application/javascript; charset=utf-8"))
 	mux.HandleFunc("GET /ui/assets/theme-tokens.css", serveBootstrapAsset("embedui/theme-tokens.css", "text/css; charset=utf-8"))
 	mux.HandleFunc("GET /ui/assets/ui.css", serveBootstrapAsset("embedui/ui.css", "text/css; charset=utf-8"))
 	mux.HandleFunc("GET /ui/login", func(w http.ResponseWriter, r *http.Request) {
@@ -47,6 +51,15 @@ func NewBootstrapMux(rt *Runtime, log *slog.Logger, overlay *StatusOverlay) http
 	})
 
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok", "bootstrap": true})
+	})
+
+	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -78,6 +91,7 @@ func NewBootstrapMux(rt *Runtime, log *slog.Logger, overlay *StatusOverlay) http
 	})
 
 	mux.HandleFunc("POST /api/ui/setup/token", handleSetupTokenPOST(rt, log))
+	mux.HandleFunc("POST /api/ui/setup/complete", handleSetupCompletePOST(rt, log))
 
 	return requestid.Middleware(loggingMiddleware(log, mux))
 }
@@ -189,6 +203,78 @@ func handleSetupTokenPOST(rt *Runtime, log *slog.Logger) http.HandlerFunc {
 			"tenant_id": tenant,
 			"label":     label,
 			"message":   "Copy this token now. Restart Chimera to start chimera-broker and use the full admin UI.",
+		})
+	}
+}
+
+func handleSetupCompletePOST(rt *Runtime, log *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !BootstrapMode(rt) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusNotFound)
+			_ = json.NewEncoder(w).Encode(map[string]any{"error": "setup already completed — restart the application"})
+			return
+		}
+		var body struct {
+			AccessMode string `json:"access_mode"`
+			LoginMode  string `json:"login_mode"`
+		}
+		dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+		if err := dec.Decode(&body); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{"error": "invalid json"})
+			return
+		}
+		_, tokStore, _ := rt.Snapshot()
+		if tokStore == nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		gatewayPath, err := config.ResolveGatewayConfigPath()
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		result, err := firstsetup.Complete(firstsetup.Request{
+			AccessMode: body.AccessMode,
+			LoginMode:  body.LoginMode,
+		}, firstsetup.Options{
+			TokensPath:  tokStore.Path(),
+			GatewayPath: gatewayPath,
+			DotenvPath:  ".env",
+			EnvKey:      naming.EnvGatewayTokenTarget,
+		})
+		if err != nil {
+			if log != nil {
+				log.Error("setup complete failed", "msg", "gateway.auth.append_failed", "surface", "bootstrap", "err", err)
+			}
+			code := http.StatusInternalServerError
+			if strings.Contains(err.Error(), "already completed") {
+				code = http.StatusNotFound
+			} else if strings.Contains(err.Error(), "must be") {
+				code = http.StatusBadRequest
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(code)
+			_ = json.NewEncoder(w).Encode(map[string]any{"error": err.Error()})
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":                 true,
+			"access_mode":        result.AccessMode,
+			"login_mode":         result.LoginMode,
+			"token":              result.Token,
+			"token_shown":        result.TokenShown,
+			"token_saved_to_env": result.TokenSavedToEnv,
+			"env_skip_reason":    result.EnvSkipReason,
+			"listen_host_local":  result.ListenHostPatched,
+			"message":            "Close the application completely, then start it again to apply your settings.",
 		})
 	}
 }

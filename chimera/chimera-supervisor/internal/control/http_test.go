@@ -96,6 +96,26 @@ func TestHandler_StatusAndMetrics(t *testing.T) {
 	}
 }
 
+func TestHandler_ReadyBootstrap(t *testing.T) {
+	t.Parallel()
+	st := NewState()
+	st.SetRequired(true, true)
+	st.SetVersions("test-version", "")
+	st.SetOperatorUI("http://127.0.0.1:3000", true)
+
+	srv := httptest.NewServer(Handler(st, servicelogs.New(10), nil))
+	t.Cleanup(srv.Close)
+
+	res, err := http.Get(srv.URL + "/readyz")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("readyz status=%d want 200 during bootstrap", res.StatusCode)
+	}
+}
+
 func TestHandler_ReadyDegraded(t *testing.T) {
 	t.Parallel()
 	st := NewState()

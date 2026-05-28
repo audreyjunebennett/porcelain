@@ -40,6 +40,67 @@ func TestBootstrapMode_missingTokensFile(t *testing.T) {
 	}
 }
 
+func TestNewBootstrapMux_setupCompleteThenNotBootstrap(t *testing.T) {
+	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/health" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(up.Close)
+
+	dir := t.TempDir()
+	gwPath := filepath.Join(dir, naming.GatewayConfigFileTarget)
+	writeGateway(t, gwPath, up.URL, []string{"m"}, "")
+	routePath := filepath.Join(dir, "routing-policy.yaml")
+	if err := os.WriteFile(routePath, []byte("rules: []\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(naming.EnvGatewayConfigTarget, gwPath)
+
+	rt := mustRuntime(t, gwPath)
+	h := NewBootstrapMux(rt, testLog(), &StatusOverlay{EffectiveListen: "127.0.0.1:9"})
+	ts := httptest.NewServer(h)
+	t.Cleanup(ts.Close)
+
+	body := bytes.NewBufferString(`{"access_mode":"authenticated","login_mode":"manual"}`)
+	res2, err := http.Post(ts.URL+"/api/ui/setup/complete", "application/json", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res2.Body.Close()
+	if res2.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(res2.Body)
+		t.Fatalf("setup %d: %s", res2.StatusCode, b)
+	}
+	var out map[string]any
+	if err := json.NewDecoder(res2.Body).Decode(&out); err != nil {
+		t.Fatal(err)
+	}
+	tok, _ := out["token"].(string)
+	if len(tok) < 16 {
+		t.Fatalf("token: %q", tok)
+	}
+	if out["token_shown"] != true {
+		t.Fatalf("expected token_shown: %+v", out)
+	}
+
+	if BootstrapMode(rt) {
+		t.Fatal("expected bootstrap mode off after setup complete")
+	}
+
+	res3, err := http.Post(ts.URL+"/api/ui/setup/complete", "application/json", bytes.NewBufferString(`{"access_mode":"open"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res3.Body.Close()
+	if res3.StatusCode != http.StatusNotFound {
+		t.Fatalf("second setup want 404, got %d", res3.StatusCode)
+	}
+}
+
 func TestNewBootstrapMux_setupTokenThenNotBootstrap(t *testing.T) {
 	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

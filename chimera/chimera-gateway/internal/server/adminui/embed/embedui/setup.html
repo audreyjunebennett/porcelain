@@ -11,57 +11,199 @@
   <link rel="stylesheet" href="/ui/assets/theme-tokens.css" />
   <link rel="stylesheet" href="/ui/assets/ui.css" />
 </head>
-<body class="embed-page embed-page--narrow">
-  <h1>Welcome to Chimera</h1>
-  <p>Create your first <strong>gateway token</strong> below. This process only runs on <code>localhost</code> until a token exists. After saving, <strong>restart Chimera</strong> so BiFrost and the full admin UI can start.</p>
+<body class="embed-page embed-page--narrow embed-page--setup">
+  <div id="screen-1">
+    <h1>Choose How Your Server Works</h1>
+    <p class="setup-lead">Pick the mode that fits how you use Chimera on this machine.</p>
 
-  <label class="embed-field" for="label">
-    <span class="embed-field-label">Token label (optional)</span>
-    <input class="embed-input" id="label" type="text" autocomplete="off" placeholder="e.g. laptop, admin"/>
-  </label>
-
-  <div id="err" class="err" hidden></div>
-  <button type="button" id="btn-save" class="btn btn--primary">Create token</button>
-
-  <div id="result" hidden>
-    <div class="callout">
-      <p class="embed-ok">Token created — copy it now. It will not be shown again.</p>
-      <label class="embed-field" for="token-out">
-        <span class="embed-field-label">Gateway token (use as <code>Authorization: Bearer …</code>)</span>
-        <textarea class="embed-textarea" id="token-out" readonly></textarea>
+    <div class="setup-cards" role="radiogroup" aria-label="Server access mode">
+      <label class="setup-card" data-setup-card="open">
+        <span class="setup-card-head">
+          <input type="radio" name="access_mode" value="open" checked />
+          <span class="setup-card-title">Open Mode (Local Only)</span>
+        </span>
+        <span class="setup-card-desc">Runs the server in local-only mode. No API key is required — a single built-in key is used for all requests. The server only listens on localhost for safety.</span>
+        <span class="setup-card-note">Best for personal use on your own machine.</span>
       </label>
-      <button type="button" id="btn-copy" class="btn">Copy token</button>
-      <p>Restart Chimera, then open the admin UI and sign in with this token.</p>
+
+      <label class="setup-card" data-setup-card="authenticated">
+        <span class="setup-card-head">
+          <input type="radio" name="access_mode" value="authenticated" />
+          <span class="setup-card-title">Authenticated Mode (API Key Required)</span>
+        </span>
+        <span class="setup-card-desc">Every request must include your API key. A unique key will be generated for you to copy and save.</span>
+        <span class="setup-card-note">Recommended if you want stronger access control or plan to expose the server beyond localhost.</span>
+      </label>
+    </div>
+
+    <div id="err-1" class="err" hidden></div>
+    <div class="setup-actions">
+      <button type="button" id="btn-continue" class="btn btn--primary">Continue</button>
+    </div>
+  </div>
+
+  <div id="screen-2" hidden>
+    <h1>How Do You Want to Log In?</h1>
+    <p class="setup-lead">Choose how the management page should authenticate on this machine.</p>
+
+    <div class="setup-cards" role="radiogroup" aria-label="Login preference">
+      <label class="setup-card" data-setup-card="automatic">
+        <span class="setup-card-head">
+          <input type="radio" name="login_mode" value="automatic" checked />
+          <span class="setup-card-title">Automatic Login</span>
+        </span>
+        <span class="setup-card-desc">Your browser will automatically authenticate using your saved API key. No login screen will appear.</span>
+      </label>
+
+      <label class="setup-card" data-setup-card="manual">
+        <span class="setup-card-head">
+          <input type="radio" name="login_mode" value="manual" />
+          <span class="setup-card-title">Manual Login</span>
+        </span>
+        <span class="setup-card-desc">You will enter your API key each time you open the management page. Choose this if you prefer explicit control.</span>
+      </label>
+    </div>
+
+    <div id="err-2" class="err" hidden></div>
+    <div class="setup-actions">
+      <button type="button" id="btn-save" class="btn btn--primary">Save &amp; Restart</button>
+    </div>
+  </div>
+
+  <div id="screen-done" hidden>
+    <h1>Setup Saved</h1>
+    <div class="callout">
+      <p class="embed-ok" id="done-lead">Your settings are saved.</p>
+      <p id="done-message">Close the application completely, then start it again to apply your settings.</p>
+
+      <div id="done-token-block" hidden>
+        <label class="embed-field" for="token-out">
+          <span class="embed-field-label">Your API key — copy it now. It will not be shown again.</span>
+          <textarea class="embed-textarea" id="token-out" readonly></textarea>
+        </label>
+        <button type="button" id="btn-copy" class="btn">Copy API key</button>
+      </div>
     </div>
   </div>
 
   <script>
 (function () {
-  var errEl = document.getElementById("err");
-  var resultEl = document.getElementById("result");
+  var screen1 = document.getElementById("screen-1");
+  var screen2 = document.getElementById("screen-2");
+  var screenDone = document.getElementById("screen-done");
+  var err1 = document.getElementById("err-1");
+  var err2 = document.getElementById("err-2");
+  var doneTokenBlock = document.getElementById("done-token-block");
   var tokenOut = document.getElementById("token-out");
-  document.getElementById("btn-save").addEventListener("click", async function () {
-    errEl.hidden = true;
-    errEl.textContent = "";
-    var label = (document.getElementById("label").value || "").trim();
-    var r = await fetch("/api/ui/setup/token", {
+  var doneLead = document.getElementById("done-lead");
+  var doneMessage = document.getElementById("done-message");
+
+  function selectedAccess() {
+    var el = document.querySelector('input[name="access_mode"]:checked');
+    return el ? el.value : "open";
+  }
+
+  function selectedLogin() {
+    var el = document.querySelector('input[name="login_mode"]:checked');
+    return el ? el.value : "automatic";
+  }
+
+  function showErr(el, msg) {
+    el.textContent = msg || "";
+    el.hidden = !msg;
+  }
+
+  function wireCardSelection(scope) {
+    scope.querySelectorAll(".setup-card").forEach(function (card) {
+      card.addEventListener("click", function (e) {
+        if (e.target && e.target.tagName === "INPUT") return;
+        var input = card.querySelector('input[type="radio"]');
+        if (input) input.checked = true;
+        scope.querySelectorAll(".setup-card").forEach(function (c) {
+          c.classList.toggle("setup-card--selected", c === card);
+        });
+      });
+      var input = card.querySelector('input[type="radio"]');
+      if (input) {
+        input.addEventListener("change", function () {
+          scope.querySelectorAll(".setup-card").forEach(function (c) {
+            c.classList.toggle("setup-card--selected", c.querySelector('input[type="radio"]') === input && input.checked);
+          });
+        });
+        if (input.checked) card.classList.add("setup-card--selected");
+      }
+    });
+  }
+
+  wireCardSelection(screen1);
+  wireCardSelection(screen2);
+
+  async function submitSetup(accessMode, loginMode, errEl) {
+    showErr(errEl, "");
+    var body = { access_mode: accessMode };
+    if (accessMode === "authenticated") body.login_mode = loginMode;
+    var r = await fetch("/api/ui/setup/complete", {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ label: label })
+      body: JSON.stringify(body)
     });
     var j = await r.json().catch(function () { return {}; });
     if (!r.ok) {
-      errEl.textContent = j.error || j.detail || ("HTTP " + r.status);
-      errEl.hidden = false;
+      showErr(errEl, j.error || j.detail || ("HTTP " + r.status));
+      return null;
+    }
+    return j;
+  }
+
+  function showDone(j) {
+    screen1.hidden = true;
+    screen2.hidden = true;
+    screenDone.hidden = false;
+    if (j.access_mode === "open") {
+      doneLead.textContent = "Open Mode is configured for localhost.";
+    } else if (j.login_mode === "automatic") {
+      doneLead.textContent = "Authenticated Mode is configured with automatic login.";
+    } else {
+      doneLead.textContent = "Authenticated Mode is configured with manual login.";
+    }
+    doneMessage.textContent = j.message || "Close the application completely, then start it again to apply your settings.";
+    if (j.token_shown && j.token) {
+      tokenOut.value = j.token;
+      doneTokenBlock.hidden = false;
+    } else {
+      doneTokenBlock.hidden = true;
+    }
+  }
+
+  document.getElementById("btn-continue").addEventListener("click", async function () {
+    var access = selectedAccess();
+    if (access === "authenticated") {
+      screen1.hidden = true;
+      screen2.hidden = false;
       return;
     }
-    tokenOut.value = j.token || "";
-    resultEl.hidden = false;
+    var j = await submitSetup("open", "automatic", err1);
+    if (j) showDone(j);
   });
+
+  document.getElementById("btn-save").addEventListener("click", async function () {
+    var j = await submitSetup("authenticated", selectedLogin(), err2);
+    if (j) showDone(j);
+  });
+
   document.getElementById("btn-copy").addEventListener("click", function () {
-    tokenOut.select();
-    document.execCommand("copy");
+    var v = tokenOut.value || "";
+    if (!v) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(v).catch(function () {
+        tokenOut.select();
+        document.execCommand("copy");
+      });
+    } else {
+      tokenOut.select();
+      document.execCommand("copy");
+    }
   });
 })();
   </script>

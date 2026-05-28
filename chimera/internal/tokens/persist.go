@@ -37,6 +37,27 @@ func TenantIDFromLabel(label string) string {
 	return s
 }
 
+// WriteInitialCredential creates or replaces api-keys.yaml with a single credential row.
+func WriteInitialCredential(path, secret, tenantID, label string) error {
+	secret = strings.TrimSpace(secret)
+	tenantID = strings.TrimSpace(tenantID)
+	if !rowIsValidSecret(secret, tenantID) {
+		return fmt.Errorf("invalid credential row")
+	}
+	if d := filepath.Dir(path); d != "" && d != "." {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			return fmt.Errorf("api-keys dir: %w", err)
+		}
+	}
+	doc := defaultCredentialDoc()
+	appendCredentialRow(&doc, secret, tenantID, strings.TrimSpace(label))
+	out, err := yaml.Marshal(&doc)
+	if err != nil {
+		return err
+	}
+	return atomicWriteFile(path, out, 0o600)
+}
+
 // AppendToken adds one client-credential row to path (creates the file if absent). Writes atomically.
 func AppendToken(path, label string) (plainToken, tenantID string, err error) {
 	plainToken, err = GenerateGatewayToken()

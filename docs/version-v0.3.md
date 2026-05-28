@@ -40,7 +40,7 @@ Make the gateway easier to set up and clearer about what it is. This plan’s **
 | [Internal embedding provider (exploration)](#internal-embedding-provider-exploration)      | Optional in-repo or first-install embedding runtime to reduce reliance on Ollama for `/embeddings`                                       | `exploration` |
 | [Logs UI page data refreshing](#logs-ui-page-data-refreshing)                              | Interaction-safe summarized feed; per-card patches and view model (phased)                                                               | `done`        |
 | [Operator-managed virtual models](#operator-managed-virtual-models)                        | Create virtual models from `/ui/settings`; per-model fallback, routing rules, and tool-router; operator SQLite + scoped routing logs     | `done`        |
-| [First-run token handoff](#first-run-token-handoff)                                        | Show, copy, and optionally save the gateway token; restart-friendly                                                                      | `todo`        |
+| [First-run token handoff](#first-run-token-handoff)                                        | Show, copy, and optionally save the gateway token; restart-friendly                                                                      | `done`        |
 | [Setup wizard](#setup-wizard)                                                              | Guided keys -> local server -> test chat -> indexing                                                                                     | `todo`        |
 
 
@@ -420,7 +420,7 @@ v1 may store a monolithic **policy YAML** per virtual model for fastest parity w
 - Per-model card scoped log panel shows routing decisions for that model only.
 - Existing single-VM installs auto-import without manual YAML edit.
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 
@@ -445,7 +445,7 @@ v1 may store a monolithic **policy YAML** per virtual model for fastest parity w
 - Token display must be compatible with whatever the gateway already uses for **tenant auth** (same token used for `Authorization: Bearer` elsewhere).
 - **Save** behavior must be safe on repeated launches (idempotent upsert, no silent clobber of user-set values).
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 
@@ -552,12 +552,6 @@ v1 may store a monolithic **policy YAML** per virtual model for fastest parity w
 - Chat and indexing checks use the same logs and operator surfaces as the main application.
 
 **Status:** `todo`
-
----
-
-## Explicitly not this version
-
-- Do not reintroduce legacy `chimera`, `CHIMERA_*`, or `X-Chimera-*` identifiers in current operator-facing behavior.
 
 ---
 

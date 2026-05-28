@@ -141,6 +141,11 @@ func Run(ctx context.Context, cfg svconfig.Config, version, commit string) error
 			return err
 		}
 		startIndexerChild(res, cfg, path, controlBaseURL, logStore, logLevel, log, indexerCtx, &indexerProc, &indexerWait)
+	} else {
+		// Bootstrap: gateway-only loopback setup surface until api-keys.yaml exists.
+		if err := startGatewayChild(cfg, path, controlBaseURL, logStore, logLevel, log, controlState, &gatewayProc, &gatewayWaitErr, gatewayReadyzURL, stopChildrenFast); err != nil {
+			return err
+		}
 	}
 
 	go func() {

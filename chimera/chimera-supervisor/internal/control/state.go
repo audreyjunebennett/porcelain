@@ -134,7 +134,11 @@ func ContractStatus(s Snapshot) string {
 	return "ok"
 }
 
-// Ready reports whether all required children are ready.
+// Ready reports whether the supervisor is ready to serve the desktop launcher.
+// During first-run bootstrap only the gateway child runs; treat that as ready.
 func Ready(s Snapshot) bool {
+	if s.Bootstrap {
+		return true
+	}
 	return ContractStatus(s) == "ok"
 }

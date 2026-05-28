@@ -135,25 +135,34 @@ func readyFromStatus(client *http.Client, baseURL string) (bool, string) {
 		return false, "supervisor reports degraded readiness"
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusServiceUnavailable {
 		return false, "supervisor reports degraded readiness"
 	}
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	var body map[string]any
-	if json.Unmarshal(raw, &body) != nil {
-		return false, "supervisor reports degraded readiness"
-	}
-	if bootstrap, ok := body["bootstrap"].(bool); ok && bootstrap {
+	if bootstrapModeFromStatusJSON(raw) {
 		return true, ""
 	}
-	if det, _ := body["details"].(map[string]any); det != nil {
-		if ui, _ := det["operator_ui"].(map[string]any); ui != nil {
-			if b, _ := ui["bootstrap"].(bool); b {
-				return true, ""
-			}
-		}
-	}
 	return false, "supervisor reports degraded readiness"
+}
+
+func bootstrapModeFromStatusJSON(raw []byte) bool {
+	var body map[string]any
+	if json.Unmarshal(raw, &body) != nil {
+		return false
+	}
+	if bootstrap, ok := body["bootstrap"].(bool); ok && bootstrap {
+		return true
+	}
+	det, _ := body["details"].(map[string]any)
+	if det == nil {
+		return false
+	}
+	ui, _ := det["operator_ui"].(map[string]any)
+	if ui == nil {
+		return false
+	}
+	b, _ := ui["bootstrap"].(bool)
+	return b
 }
 
 // EntryURL resolves the webview entry route from supervisor /status.

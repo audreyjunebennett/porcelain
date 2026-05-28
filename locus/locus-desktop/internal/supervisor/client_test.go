@@ -67,8 +67,8 @@ func TestWaitReady_BootstrapStatus(t *testing.T) {
 		case "/readyz":
 			w.WriteHeader(http.StatusServiceUnavailable)
 		case "/status":
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{"bootstrap":true}`))
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte(`{"status":"degraded","details":{"operator_ui":{"base_url":"http://127.0.0.1:3000","bootstrap":true}}}`))
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -77,6 +77,15 @@ func TestWaitReady_BootstrapStatus(t *testing.T) {
 	ok, detail := WaitReady(srv.URL, 400*time.Millisecond)
 	if !ok {
 		t.Fatalf("expected bootstrap readiness true, got detail=%q", detail)
+	}
+}
+
+func TestBootstrapModeFromStatusJSON(t *testing.T) {
+	if !bootstrapModeFromStatusJSON([]byte(`{"details":{"operator_ui":{"bootstrap":true}}}`)) {
+		t.Fatal("expected contract-shaped bootstrap status")
+	}
+	if bootstrapModeFromStatusJSON([]byte(`{"details":{"operator_ui":{"bootstrap":false}}}`)) {
+		t.Fatal("expected non-bootstrap")
 	}
 }
 

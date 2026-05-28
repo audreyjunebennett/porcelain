@@ -29,6 +29,13 @@ func TestStandalonePages_embedHTMLUsesSharedCSS(t *testing.T) {
 				t.Fatalf("%s: missing %q", name, want)
 			}
 		}
+		if name == "embedui/setup.html" {
+			for _, want := range []string{"setup-card", "access_mode", "/api/ui/setup/complete"} {
+				if !strings.Contains(s, want) {
+					t.Fatalf("%s: missing %q", name, want)
+				}
+			}
+		}
 		if strings.Contains(s, "<style>") {
 			t.Fatalf("%s: should not use inline <style> blocks", name)
 		}
@@ -93,5 +100,17 @@ func TestBootstrapSetup_servesSharedCSS(t *testing.T) {
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("ui.css status %d", res.StatusCode)
+	}
+
+	resJS, err := http.Get(ts.URL + "/ui/assets/embed-theme.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resJS.Body.Close()
+	if resJS.StatusCode != http.StatusOK {
+		t.Fatalf("embed-theme.js status %d", resJS.StatusCode)
+	}
+	if ct := resJS.Header.Get("Content-Type"); !strings.Contains(ct, "javascript") {
+		t.Fatalf("embed-theme.js Content-Type %q", ct)
 	}
 }
