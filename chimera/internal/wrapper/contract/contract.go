@@ -82,8 +82,8 @@ const (
 
 const (
 	DefaultStartupTimeout  = 30 * time.Second
-	DefaultShutdownTimeout = 15 * time.Second
-	DefaultTerminateWait   = 10 * time.Second
+	DefaultShutdownTimeout = 10 * time.Second
+	DefaultTerminateWait   = 5 * time.Second
 
 	DefaultBackoffInitial    = 1 * time.Second
 	DefaultBackoffMultiplier = 2.0

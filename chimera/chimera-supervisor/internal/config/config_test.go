@@ -22,8 +22,11 @@ func TestParseDefaults(t *testing.T) {
 	if !cfg.LogJSON {
 		t.Fatal("log-json default want true")
 	}
-	if cfg.ShutdownTimeout != 15*time.Second {
+	if cfg.ShutdownTimeout != 10*time.Second {
 		t.Fatalf("shutdown-timeout default mismatch: %v", cfg.ShutdownTimeout)
+	}
+	if cfg.TerminateWait != 5*time.Second {
+		t.Fatalf("terminate-wait default mismatch: %v", cfg.TerminateWait)
 	}
 }
 

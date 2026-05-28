@@ -30,7 +30,7 @@ func TestNormalizePayloadPreservesShutdownChildFields(t *testing.T) {
 }
 
 func TestNormalizePayloadPreservesForceKillFields(t *testing.T) {
-	raw := `{"time":"2026-05-21T22:33:52.6489788Z","level":"WARN","msg":"chimera-supervisor.shutdown.child_force_kill","child":"broker","pid":5150,"timeout":"15s"}`
+	raw := `{"time":"2026-05-21T22:33:52.6489788Z","level":"WARN","msg":"chimera-supervisor.shutdown.child_force_kill","child":"broker","pid":5150,"timeout":"10s"}`
 	b := NormalizePayload(raw)
 	var m map[string]any
 	if err := json.Unmarshal(b, &m); err != nil {
@@ -39,7 +39,7 @@ func TestNormalizePayloadPreservesForceKillFields(t *testing.T) {
 	if m["child"] != "broker" {
 		t.Fatalf("child=%v", m["child"])
 	}
-	if m["timeout"] != "15s" {
+	if m["timeout"] != "10s" {
 		t.Fatalf("timeout=%v", m["timeout"])
 	}
 }

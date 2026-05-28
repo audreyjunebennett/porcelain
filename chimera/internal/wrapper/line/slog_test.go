@@ -7,7 +7,7 @@ import (
 )
 
 func TestNormalizeSlogLinePreservesShutdownAttrs(t *testing.T) {
-	raw := []byte(`{"time":"2026-05-21T22:33:52Z","level":"WARN","msg":"chimera-supervisor.shutdown.child_force_kill","child":"gateway","pid":1234,"timeout":"15s"}`)
+	raw := []byte(`{"time":"2026-05-21T22:33:52Z","level":"WARN","msg":"chimera-supervisor.shutdown.child_force_kill","child":"gateway","pid":1234,"timeout":"10s"}`)
 	b, ok := NormalizeSlogLine(raw, "chimera-supervisor")
 	if !ok {
 		t.Fatal("expected normalize")
@@ -22,7 +22,7 @@ func TestNormalizeSlogLinePreservesShutdownAttrs(t *testing.T) {
 	if m["pid"] != "1234" {
 		t.Fatalf("pid=%v", m["pid"])
 	}
-	if m["timeout"] != "15s" {
+	if m["timeout"] != "10s" {
 		t.Fatalf("timeout=%v", m["timeout"])
 	}
 	if m["service"] != "chimera-supervisor" {
