@@ -380,7 +380,7 @@ func runGatewayBackend(args []string) error {
 		overlay.EffectiveListen = prim.String()
 		go func() {
 			<-rootCtx.Done()
-			shCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			shCtx, cancel := context.WithTimeout(context.Background(), contract.DefaultShutdownTimeout)
 			defer cancel()
 			_ = shut(shCtx)
 		}()
@@ -433,7 +433,7 @@ func runGatewayBackend(args []string) error {
 		})
 	go func() {
 		<-rootCtx.Done()
-		shCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		shCtx, cancel := context.WithTimeout(context.Background(), contract.DefaultShutdownTimeout)
 		defer cancel()
 		_ = srv.Shutdown(shCtx)
 	}()

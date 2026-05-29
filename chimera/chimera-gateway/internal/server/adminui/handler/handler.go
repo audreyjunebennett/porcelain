@@ -43,6 +43,23 @@ func (h *Handler) SessionOK(r *http.Request) bool {
 	return h.Opts.Sessions.Valid(c.Value)
 }
 
+// SessionTenantID returns the api-keys.yaml tenant_id bound at UI login, or "" when absent.
+func (h *Handler) SessionTenantID(r *http.Request) string {
+	return h.SessionPrincipal(r)
+}
+
+// SessionPrincipal returns the durable operator principal_id bound at UI login, or "" when absent.
+func (h *Handler) SessionPrincipal(r *http.Request) string {
+	if h == nil || h.Opts == nil || h.Opts.Sessions == nil {
+		return ""
+	}
+	c, err := r.Cookie(h.cookieName())
+	if err != nil || c.Value == "" {
+		return ""
+	}
+	return h.Opts.Sessions.PrincipalID(c.Value)
+}
+
 // RequireAuthJSON wraps JSON API handlers with session auth.
 func (h *Handler) RequireAuthJSON(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -78,10 +95,11 @@ func (h *Handler) SetSessionCookie(w http.ResponseWriter, token string) (ok bool
 	}
 	h.RT.Sync()
 	_, tokStore, _ := h.RT.Snapshot()
-	if tokStore == nil || tokStore.Validate(token) == nil {
+	rec := tokStore.Validate(token)
+	if tokStore == nil || rec == nil {
 		return false, false
 	}
-	sid, err := h.Opts.Sessions.Issue()
+	sid, err := h.Opts.Sessions.Issue(rec.TenantID)
 	if err != nil {
 		if h.Log != nil {
 			h.Log.Debug("ui session issue", "msg", "ui.session.error", "err", err)

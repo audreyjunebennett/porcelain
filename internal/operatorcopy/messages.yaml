@@ -43,6 +43,8 @@ formatters:
     description: turn_index, clientModel, message_count
   gateway_auth_reloaded:
     description: Optional Active keys count suffix
+  gateway_catalog_fallback_unavailable_model:
+    description: model_id, source, tenant_id for fallback chain audit
   gateway_health_upstream:
     description: ok, status, detail, target host
   gateway_operator_workspace_path_added:
@@ -342,6 +344,9 @@ messages:
     aliases:
       - gateway operator workspace path deleted
     gallery_preview: Watch path removed · C:\repo\old-path
+  - slug: gateway.catalog.fallback_unavailable_model
+    formatter: gateway_catalog_fallback_unavailable_model
+    gallery_preview: Unavailable model still listed in a configured fallback chain.
   - slug: broker.http.access
     formatter: http_broker_inbound
     aliases:
@@ -385,6 +390,11 @@ messages:
   - slug: chat.routing.model_not_found
     formatter: conversation_fallback_model_not_found
     gallery_preview: Model not found (404) · trying next in chain.
+  - slug: routing.model.unavailable_skipped
+    formatter: broker_routing_relay
+    aliases:
+      - skipping upstream model (operator unavailable)
+    gallery_preview: Skipping unavailable model · groq/paid-model · operator configured unavailable · trying next in chain.
   - slug: chat.provider_limits.blocked
     formatter: broker_provider_limits
     aliases:

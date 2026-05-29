@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"github.com/lynn/porcelain/internal/naming"
 	"io"
@@ -192,7 +193,7 @@ func TestUIModels_NoGatewayToken(t *testing.T) {
 	}
 }
 
-func TestModelsList_FreeTierFilter(t *testing.T) {
+func TestModelsList_AvailabilityFilter(t *testing.T) {
 	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -214,20 +215,7 @@ func TestModelsList_FreeTierFilter(t *testing.T) {
 
 	dir := t.TempDir()
 	gwPath := filepath.Join(dir, naming.GatewayConfigFileTarget)
-	gwRaw := "gateway:\n  semver: \"0.1.0\"\n  listen_port: 0\n  listen_host: \"127.0.0.1\"\n" +
-		"broker:\n  base_url: \"" + up.URL + "\"\n  api_key_env: \"" + naming.EnvBrokerAPIKeyTarget + "\"\n" +
-		"health:\n  timeout_ms: 2000\n  chat_timeout_ms: 60000\n" +
-		"paths:\n  tokens: \"./api-keys.yaml\"\n  routing_policy: \"./routing-policy.yaml\"\n" +
-		"  provider_free_tier: \"./provider-free-tier.yaml\"\n" +
-		"routing:\n  filter_free_tier_models: true\n  fallback_chain:\n    - \"groq/x\"\n"
-	if err := os.WriteFile(gwPath, []byte(gwRaw), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	ftPath := filepath.Join(dir, "provider-free-tier.yaml")
-	ftRaw := "format_version: 1\neffective_date: \"2026-01-01\"\nmodels:\n  - groq/x\n"
-	if err := os.WriteFile(ftPath, []byte(ftRaw), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	writeGateway(t, gwPath, up.URL, []string{"groq/x"}, "")
 	tokPath := filepath.Join(dir, "api-keys.yaml")
 	writeTokens(t, tokPath, "tok", "t1")
 	routePath := filepath.Join(dir, "routing-policy.yaml")
@@ -236,6 +224,21 @@ func TestModelsList_FreeTierFilter(t *testing.T) {
 	}
 
 	rt := mustRuntime(t, gwPath)
+	st := rt.OperatorStore()
+	if st == nil {
+		t.Fatal("operator store required")
+	}
+	ctx := context.Background()
+	if err := st.ReplaceProviderModelAvailability(ctx, "t1", "groq", map[string]bool{
+		"groq/x": true,
+		"groq/y": false,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := rt.ReloadProviderModelAvailability(ctx); err != nil {
+		t.Fatal(err)
+	}
+
 	front := httptest.NewServer(NewMux(rt, testLog(), nil, nil))
 	t.Cleanup(front.Close)
 

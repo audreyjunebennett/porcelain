@@ -12,13 +12,15 @@
   <link rel="stylesheet" href="/ui/assets/settings.css" />
 </head>
 <body class="logs-summarized">
-  <header id="logs-chrome" class="logs-chrome" data-testid="logs-chrome">
-    <div id="status" class="status-line" aria-live="polite" data-testid="logs-status"></div>
-    <nav class="logs-chrome__nav" aria-label="Related operator views">
-      <a href="/ui/settings/gallery">Component gallery</a>
-    </nav>
-  </header>
-  <section id="panel-summarized" data-testid="panel-summarized" aria-label="Summarized log feed"></section>
+  <div class="settings-feed-column">
+    <header id="logs-chrome" class="logs-chrome" data-testid="logs-chrome">
+      <div id="status" class="status-line" aria-live="polite" data-testid="logs-status"></div>
+      <nav class="logs-chrome__nav" aria-label="Related operator views">
+        <a href="/ui/settings/gallery">Component gallery</a>
+      </nav>
+    </header>
+    <section id="panel-summarized" data-testid="panel-summarized" aria-label="Summarized log feed"></section>
+  </div>
   <!-- Script order: contracts → ui (ChimeraUI) → util/parse → derive → components → app modules → main → entry -->
   <script src="/ui/assets/settings/testing/loader.js" defer></script>
   <script src="/ui/assets/settings/contracts.js" defer></script>
@@ -39,6 +41,7 @@
   <script src="/ui/assets/ui/components/StatusIndicator.js" defer></script>
   <script src="/ui/assets/ui/components/CollapsibleCard.js" defer></script>
   <script src="/ui/assets/ui/components/TimelineBar.js" defer></script>
+  <script src="/ui/assets/ui/vendor/codemirror-yaml.bundle.js" defer></script>
   <script src="/ui/assets/ui/components/YamlEditorPanel.js" defer></script>
   <script src="/ui/assets/settings/util/escape.js" defer></script>
   <script src="/ui/assets/settings/util/hash.js" defer></script>
@@ -92,6 +95,7 @@
   <script src="/ui/assets/settings/handlers/evlog.js" defer></script>
   <script src="/ui/assets/settings/handlers/chrome.js" defer></script>
   <script src="/ui/assets/settings/handlers/admin.js" defer></script>
+  <script src="/ui/assets/settings/handlers/providerModelsAdmin.js" defer></script>
   <script src="/ui/assets/settings/handlers/virtualModelsAdmin.js" defer></script>
   <script src="/ui/assets/settings/app/wireHandlers.js" defer></script>
   <script src="/ui/assets/settings/main.js" defer></script>

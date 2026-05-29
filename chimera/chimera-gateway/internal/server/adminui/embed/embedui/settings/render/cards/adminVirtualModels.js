@@ -156,7 +156,7 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminVirtualModels = function (ctx)
     var keys = [
       "id", "model_id", "name", "version", "description", "enabled", "visibility",
       "fallback_depth", "routing_policy_enabled", "tool_router_enabled", "router_models",
-      "routing_policy_yaml", "fallback_chain", "tool_router_confidence_threshold"
+      "routing_policy_yaml", "fallback_chain", "fallback_unavailable", "tool_router_confidence_threshold"
     ];
     for (var i = 0; i < keys.length; i++) {
       var k = keys[i];
@@ -304,24 +304,22 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminVirtualModels = function (ctx)
     var out =
       '<summary class="sum-vm-section__hdr">' +
       '<span class="sum-vm-section__hdr-row">' +
+      '<span class="sum-vm-section__lead">' +
+      operatorCardChevronHtml() +
+      "</span>" +
       '<span class="sum-vm-section__title"><span class="sum-section-label">' +
       escapeHtml(String(title || "")) +
-      "</span></span>" +
-      '<span class="sum-vm-section__trail">' +
-      operatorCardChevronHtml() +
       "</span></span>";
-    if (desc || controls) {
-      out += '<span class="sum-vm-section__hdr-desc-row">';
-      if (desc) {
-        out +=
-          '<p class="sg-op-card-note sg-op-card-note--tight sum-vm-section__hdr-desc">' +
-          escapeHtml(desc) +
-          "</p>";
-      }
-      if (controls) {
-        out += controls;
-      }
-      out += "</span>";
+    if (controls) {
+      out += '<span class="sum-vm-section__trail">' + controls + "</span>";
+    }
+    out += "</span>";
+    if (desc) {
+      out +=
+        '<span class="sum-vm-section__hdr-desc-row">' +
+        '<p class="sg-op-card-note sg-op-card-note--tight sum-vm-section__hdr-desc">' +
+        escapeHtml(desc) +
+        "</p></span>";
     }
     return out + "</summary>";
   }
@@ -332,13 +330,18 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminVirtualModels = function (ctx)
 
   function buildClientUsageBlock(vm, pfx, loading) {
     if (loading) {
-      return '<div class="sum-vm-client-usage"><p class="muted">Loading…</p></div>';
+      return (
+        '<div class="sum-vm-section sum-vm-section--bar">' +
+        '<div class="sum-vm-section__hdr sum-vm-section__hdr--bar"><p class="muted">Loading…</p></div></div>'
+      );
     }
     return (
-      '<div class="sum-vm-client-usage">' +
-      '<div class="sum-vm-client-usage-hdr">' +
+      '<div class="sum-vm-section sum-vm-section--bar">' +
+      '<div class="sum-vm-section__hdr sum-vm-section__hdr--bar" aria-label="Model access">' +
+      '<span class="sum-vm-section__hdr-row">' +
+      '<span class="sum-vm-section__trail">' +
       vmCardUsageTogglesHtml(vm, pfx) +
-      "</div></div>"
+      "</span></span></div></div>"
     );
   }
 
@@ -460,12 +463,24 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminVirtualModels = function (ctx)
       }
     }
     var usesByModel = adminModelUsageById();
+    var unavailableSet = {};
+    var unavailList = Array.isArray(vm.fallback_unavailable) ? vm.fallback_unavailable : [];
+    for (var ufi = 0; ufi < unavailList.length; ufi++) {
+      var umid = String(unavailList[ufi] || "").trim();
+      if (umid) unavailableSet[umid] = true;
+    }
     var tableRows = "";
     for (var i = 0; i < displayChain.length; i++) {
       var mid = String(displayChain[i] || "");
       var pm = adminExtractProviderModel(mid);
+      var rowCls = unavailableSet[mid] ? " sg-op-vm-fallback-row--unavailable" : "";
+      var unavailBadge = unavailableSet[mid]
+        ? ' <span class="sg-op-vm-fallback-unavail-badge" title="Operator marked unavailable for this tenant">unavailable</span>'
+        : "";
       tableRows +=
-        "<tr>" +
+        "<tr" +
+        (rowCls ? ' class="' + rowCls.trim() + '"' : "") +
+        ">" +
         '<td class="num">' +
         escapeHtml(String(i + 1)) +
         "</td>" +
@@ -474,7 +489,9 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminVirtualModels = function (ctx)
         "</td>" +
         '<td><code class="sum-mono-id">' +
         escapeHtml(mid) +
-        "</code></td>" +
+        "</code>" +
+        unavailBadge +
+        "</td>" +
         '<td class="num">' +
         escapeHtml(formatInt(usesByModel[mid] || 0)) +
         "</td>" +

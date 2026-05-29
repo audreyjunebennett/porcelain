@@ -39,7 +39,7 @@ type Store struct {
 
 func sqliteDSN(absPath string) string {
 	p := filepath.ToSlash(absPath)
-	return "file:" + p + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
+	return "file:" + p + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)"
 }
 
 // Open creates parent dirs, opens SQLite, applies migrations.

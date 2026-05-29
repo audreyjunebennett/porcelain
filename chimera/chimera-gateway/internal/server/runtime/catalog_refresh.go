@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/operatorstore"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/catalog"
 	"github.com/lynn/porcelain/chimera/internal/config"
 )
@@ -32,6 +33,18 @@ func RefreshAvailableModels(ctx context.Context, rt *Runtime, log *slog.Logger) 
 	snap := catalog.BuildSnapshot(ctx, res, apiKey, healthTimeout(res), log)
 	rt.SetCatalogSnapshot(snap)
 	catalog.EmitAvailableModelsLog(snap, log)
+	if snap != nil && snap.OK {
+		rt.mu.RLock()
+		store := rt.operator
+		rt.mu.RUnlock()
+		if store != nil {
+			if err := operatorstore.BootstrapProviderModelAvailability(ctx, store, res, snap.ModelIDs, log); err != nil && log != nil {
+				log.Warn("provider model availability bootstrap failed", "msg", "gateway.provider_models.bootstrap_failed", "err", err)
+			} else if err := rt.ReloadProviderModelAvailability(ctx); err != nil && log != nil {
+				log.Warn("provider model registry reload failed", "msg", "gateway.provider_models.reload_failed", "err", err)
+			}
+		}
+	}
 	for _, a := range catalog.SnapshotAuditors() {
 		func() {
 			defer func() {

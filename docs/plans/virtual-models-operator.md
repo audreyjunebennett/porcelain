@@ -4,7 +4,7 @@
 |-------|-------|
 | **Doc kind** | `feature-plan` |
 | **Owners / areas** | Gateway runtime, operator SQLite, `/ui/logs` embed UI, routing, metrics, operator docs |
-| **Status** | `draft` |
+| **Status** | `done` |
 | **Targets** | Gateway next minor after unified operator cards baseline |
 | **Last updated** | 2026-05-18 |
 | **Supersedes / superseded by** | Extends [`unified-logs-operator-shell.md`](unified-logs-operator-shell.md); replaces global single-VM routing described in [`configuration.md`](../configuration.md) |
@@ -15,11 +15,11 @@ Today the gateway exposes exactly one virtual model id (`Chimera-<semver>`), har
 
 | Phase | Outcome | Status |
 |-------|---------|--------|
-| [Phase 1 — Data model and routing catalog](#phase-1--data-model-and-routing-catalog) | Virtual models and routing-rule definitions persist in operator SQLite; bootstrap imports the legacy `Chimera-<semver>` stack | `todo` |
-| [Phase 2 — Gateway runtime resolution](#phase-2--gateway-runtime-resolution) | Chat and `GET /v1/models` resolve per-virtual-model routing; logs carry `virtual_model_id` | `todo` |
-| [Phase 3 — Operator HTTP API](#phase-3--operator-http-api) | Session-authenticated CRUD for virtual models and their routing attachments | `todo` |
-| [Phase 4 — Logs UI cards and workflows](#phase-4--logs-ui-cards-and-workflows) | Operators create, edit, enable, and inspect virtual models from `/ui/logs` | `todo` |
-| [Phase 5 — Observability and migration](#phase-5--observability-and-migration) | Per-model usage metrics, scoped log panels, YAML deprecation path | `todo` |
+| [Phase 1 — Data model and routing catalog](#phase-1--data-model-and-routing-catalog) | Virtual models and routing-rule definitions persist in operator SQLite; bootstrap imports the legacy `Chimera-<semver>` stack | `done` |
+| [Phase 2 — Gateway runtime resolution](#phase-2--gateway-runtime-resolution) | Chat and `GET /v1/models` resolve per-virtual-model routing; logs carry `virtual_model_id` | `done` |
+| [Phase 3 — Operator HTTP API](#phase-3--operator-http-api) | Session-authenticated CRUD for virtual models and their routing attachments | `done` |
+| [Phase 4 — Logs UI cards and workflows](#phase-4--logs-ui-cards-and-workflows) | Operators create, edit, enable, and inspect virtual models from `/ui/logs` | `done` |
+| [Phase 5 — Observability and migration](#phase-5--observability-and-migration) | Per-model usage metrics, scoped log panels, YAML deprecation path | `done` |
 
 ---
 
@@ -108,7 +108,7 @@ Virtual model cards in `/ui/logs` let operators add/remove/enable/disable rule a
 - Fresh operator DB + existing `gateway.yaml` / `routing-policy.yaml` → one virtual model row with equivalent routing after import.
 - Unit tests: CRUD round-trip, unique `model_id`, FK cascade on delete.
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 
@@ -136,7 +136,7 @@ Virtual model cards in `/ui/logs` let operators add/remove/enable/disable rule a
 - Disabled or private foreign model → `404` / `403` on chat; omitted from catalog for other users.
 - Existing single-VM deployments behave unchanged after bootstrap import.
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 
@@ -164,7 +164,7 @@ Virtual model cards in `/ui/logs` let operators add/remove/enable/disable rule a
 - curl / handler tests for create → configure fallback → evaluate → chat smoke against VM id.
 - Invalid policy YAML rejected before persist; broker catalog validation on generate matches current routing handlers.
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 
@@ -192,7 +192,7 @@ Virtual model cards in `/ui/logs` let operators add/remove/enable/disable rule a
 - Operator can create a second virtual model, configure distinct fallback, complete a chat in Continue using new `model` id, and see routing lines in that VM's scoped panel.
 - Goja component tests for card HTML + action wiring (mirror [`logs_components_test.go`](../../chimera/chimera-gateway/internal/server/adminui/embed/embedui_test/logs_components_test.go)).
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 
@@ -216,7 +216,7 @@ Virtual model cards in `/ui/logs` let operators add/remove/enable/disable rule a
 - Fixture log comparison: routing lines include `virtual_model_id`; scoped panels exclude other VMs' traffic.
 - Documented upgrade path: existing installs auto-import legacy config; no manual YAML edit required.
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 

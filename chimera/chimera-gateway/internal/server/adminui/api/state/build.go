@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/brokeradmin"
+	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/adminui/api/providers"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/adminui/apirut"
 	gruntime "github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/runtime"
 	"github.com/lynn/porcelain/chimera/internal/brokerclient"
@@ -18,13 +19,15 @@ import (
 )
 
 // BuildResponse assembles GET /api/ui/state from runtime config and live probes.
-func BuildResponse(ctx context.Context, r *http.Request, res *config.Resolved, rt *gruntime.Runtime, log *slog.Logger) operatorapi.StateResponse {
+func BuildResponse(ctx context.Context, tenantID string, publicBaseURL string, res *config.Resolved, rt *gruntime.Runtime, log *slog.Logger) operatorapi.StateResponse {
 	client := apirut.BrokerAdminClient(rt)
 	configured, listOK := brokeradmin.ListConfiguredProviders(ctx, client)
 	probeNames := apirut.ConfiguredProviderIDsResolved(ctx, client, configured, listOK)
 	provOut := make(map[string]operatorapi.StateProviderEntry, len(probeNames))
 	for _, name := range probeNames {
-		provOut[name] = probeStateProvider(ctx, client, name)
+		entry := probeStateProvider(ctx, client, name)
+		providers.EnrichStateProviderModelCounts(ctx, rt, tenantID, &entry)
+		provOut[name] = entry
 	}
 
 	routeBase := ""
@@ -125,7 +128,7 @@ func BuildResponse(ctx context.Context, r *http.Request, res *config.Resolved, r
 		Gateway: operatorapi.GatewayState{
 			Semver:                        res.Semver,
 			VirtualModelID:                bootstrapVMID,
-			PublicBaseURL:                 apirut.PublicGatewayBase(r),
+			PublicBaseURL:                 publicBaseURL,
 			TokenHint:                     "Paste the same gateway token you used to sign in.",
 			FilterFreeTierModels:          res.FilterFreeTierModels,
 			FallbackChain:                 res.FallbackChain,

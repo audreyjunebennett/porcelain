@@ -1,0 +1,64 @@
+/* CodeMirror 6 host inside operator YAML panels (.sg-op-yaml-wrap). */
+.sg-op-yaml-wrap .sg-op-yaml-cm {
+  flex: 1 1 auto;
+  min-height: 10.5rem;
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--embed-border-medium);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--embed-surface-page);
+}
+
+.sg-op-yaml-wrap .sg-op-yaml-cm .cm-editor {
+  height: 100%;
+  min-height: inherit;
+}
+
+.sg-op-yaml-wrap .sg-op-yaml-cm .cm-scroller {
+  min-height: inherit;
+}
+
+.sg-op-yaml-wrap .sg-op-yaml-cm .cm-editor.cm-focused {
+  border-color: var(--embed-focus-ring);
+  box-shadow: 0 0 0 1px var(--embed-focus-ring);
+}
+
+.sg-op-yaml-wrap:has(.sg-op-yaml-cm) .sg-op-yaml-textarea:not(.sg-op-yaml-textarea--sync) {
+  display: none;
+}
+
+.sg-op-yaml-textarea--sync {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.sum-vm-fallback-panel__view .sg-op-yaml-wrap:has(.sg-op-yaml-cm),
+.sum-vm-routing-panel__view .sg-op-yaml-wrap:has(.sg-op-yaml-cm),
+.sg-op-yaml-wrap.sg-op-yaml-wrap--full:has(.sg-op-yaml-cm) {
+  display: flex;
+  flex-direction: column;
+}
+
+.sum-vm-fallback-panel__view .sg-op-yaml-wrap:has(.sg-op-yaml-cm) .sg-op-yaml-cm,
+.sum-vm-routing-panel__view .sg-op-yaml-wrap:has(.sg-op-yaml-cm) .sg-op-yaml-cm,
+.sg-op-yaml-wrap.sg-op-yaml-wrap--full:has(.sg-op-yaml-cm) .sg-op-yaml-cm {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+}
+
+.sg-op-yaml-wrap:has(.sg-op-yaml-cm) .sg-op-yaml-ov {
+  pointer-events: none;
+}
+
+.sg-op-yaml-wrap:has(.sg-op-yaml-cm) .sg-op-yaml-ov-btn {
+  pointer-events: auto;
+}

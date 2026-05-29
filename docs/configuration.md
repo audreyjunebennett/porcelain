@@ -66,8 +66,7 @@ Provider keys (`GROQ_API_KEY`, `GEMINI_API_KEY`, `OPENAI_API_KEY`, etc.) are **n
 | `paths.routing_policy` | Path to `routing-policy.yaml`. |
 | `paths.provider_free_tier` | Path to `provider-free-tier.yaml` (default `./provider-free-tier.yaml` next to `gateway.yaml`). |
 | `paths.provider_model_limits` | Path to `provider-model-limits.yaml` (default `./provider-model-limits.yaml` next to `gateway.yaml`). Missing or empty file means **no enforcement**; invalid file is logged and the gateway starts with an empty spec. See `docs/plans/version-v0.1.1.md` §3.7. **Quota enforcement on chat** compares limits to live usage in the metrics DB — keep `metrics.enabled: true` (default) or limits are not applied even when the YAML is populated. |
-| `routing.filter_free_tier_models` | When **true** and the allowlist file loads successfully, merged `GET /v1/models` lists only ids in both the upstream catalog and the allowlist; `POST /api/ui/routing/generate` (operator UI session) uses the same intersection. |
-| `routing.fallback_chain` | Ordered upstream **model ids** for virtual-model requests (BiFrost: `provider/model`). On **429** / selected **5xx**, the gateway tries the next entry. |
+| `routing.fallback_chain` | Ordered upstream **model ids** for virtual-model requests (BiFrost: `provider/model`). On **429** / selected **5xx**, the gateway tries the next entry. Chain entries marked **unavailable** in operator settings for the request tenant are skipped at runtime (see **Operator model availability** below). |
 | `metrics.enabled` | Default **true**. When **false**, the gateway does **not** open SQLite metrics or record upstream chat outcomes. |
 | `metrics.sqlite_path` | SQLite database file for gateway metrics (relative to **`gateway.yaml`’s directory** unless absolute). Default `../data/gateway/metrics.sqlite`. |
 | `metrics.migrations_dir` | Directory containing `NNNNNN_description.sql` migration files (default `../migrations/chimera-gateway/metrics`). Migrations run **once at startup**; see `docs/plans/version-v0.1.1.md` §3.6. |
@@ -157,6 +156,8 @@ Operator-maintained allowlist of BiFrost `provider/model` ids (and optional `pat
 
 **Reference snapshot (optional):** `make catalog-free` fetches [Groq rate limits](https://console.groq.com/docs/rate-limits) and [Gemini API pricing](https://ai.google.dev/gemini-api/docs/pricing), derives BiFrost-style ids, and writes `config/free-tier-catalog.snapshot.yaml` (gitignored by default). Use `INTERSECT=`_path_ to restrict lines to ids that fuzzy-match a catalog file: JSON or YAML with `data`.`id` (same shape as `GET /v1/models`, e.g. `config/catalog-available.snapshot.yaml` from `make catalog-available`). `make catalog-available` calls `GET /v1/models` on BiFrost (defaults `BIFROST_BASE_URL=http://127.0.0.1:8080`, optional `CHIMERA_BROKER_API_KEY`) and writes `config/catalog-available.snapshot.yaml`. These snapshots are **not** loaded by the gateway automatically; merge entries into `provider-free-tier.yaml` by hand if you want them enforced.
 
+**Operator model availability:** Per-tenant model visibility is configured in the admin UI (`/ui/settings` → provider card → **Configure** under model availability), persisted in operator SQLite, and applied at runtime. `GET /v1/models` and chat routing filter by the bearer token’s `tenant_id` from `api-keys.yaml`. The UI **Apply free-tier defaults** button (Groq/Gemini) proposes toggles from this YAML file but does not save until the operator confirms. `routing.filter_free_tier_models` in `gateway.yaml` is **legacy** — do not use it for new deployments; operator availability replaces global free-tier catalog filtering.
+
 ## `config/routing-policy.yaml`
 
 | Field | Description |
@@ -164,7 +165,7 @@ Operator-maintained allowlist of BiFrost `provider/model` ids (and optional `pat
 | `ambiguous_default_model` | Upstream model id used when **no rule** matches (*Model selection and routing policy · 2*). |
 | `rules` | Ordered list. Each rule may set `when.min_message_chars` (compared to the **last user** message length). First match wins; `models[0]` is the **initial** upstream model. Every id should appear in `routing.fallback_chain`. |
 
-**Operator UI:** with a valid session, `POST /api/ui/routing/generate` fetches the upstream model list, optionally applies the free-tier filter, then writes `routing-policy.yaml` and `routing.fallback_chain` in `gateway.yaml` only if both outputs validate.
+**Operator UI:** with a valid session, `POST /api/ui/routing/generate` fetches the upstream model list, filters by **session tenant** operator model availability, then writes `routing-policy.yaml` and `routing.fallback_chain` in `gateway.yaml` only if both outputs validate. Virtual-model **Generate from catalog** (`POST /api/ui/virtual-models/{id}/routing/generate`) uses the same availability filter for the signed-in tenant.
 
 ## `config/bifrost.config.json`
 

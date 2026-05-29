@@ -695,8 +695,8 @@ func TestUIShellPage_servesWhenAuthed(t *testing.T) {
 		t.Fatal(err)
 	}
 	page := string(b)
-	if !strings.Contains(page, "f-main") || !strings.Contains(page, "/ui/pwa") {
-		t.Fatal("expected app shell with default PWA route")
+	if !strings.Contains(page, "f-main") || !strings.Contains(page, "/ui/chat") {
+		t.Fatal("expected app shell with default chat route")
 	}
 	if !strings.Contains(page, "/ui/settings") || !strings.Contains(page, "material-symbols-outlined") {
 		t.Fatal("expected shell settings control and Material refresh icon")
@@ -866,7 +866,7 @@ func TestUIOperatorPages_serveWithoutLogStore(t *testing.T) {
 	if _, err := client.Post(front.URL+"/api/ui/login", "application/json", strings.NewReader(`{"token":"gw-ui-secret"}`)); err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{"/ui", "/ui/pwa", "/ui/settings", "/ui/settings/gallery"} {
+	for _, path := range []string{"/ui", "/ui/chat", "/ui/pwa", "/ui/settings", "/ui/settings/gallery"} {
 		res, err := client.Get(front.URL + path)
 		if err != nil {
 			t.Fatal(err)

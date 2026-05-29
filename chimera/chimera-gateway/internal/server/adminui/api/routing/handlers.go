@@ -72,7 +72,7 @@ func routingConfigErr(message, typ string) operatorapi.RoutingConfigError {
 	}
 }
 
-func computeRoutingDraft(h *handler.Handler, ctx context.Context, res *config.Resolved) (*routingDraft, int, *operatorapi.RoutingConfigError) {
+func computeRoutingDraft(h *handler.Handler, ctx context.Context, res *config.Resolved, tenantID string) (*routingDraft, int, *operatorapi.RoutingConfigError) {
 	apiKey := h.RT.UpstreamAPIKey()
 	if apiKey == "" {
 		err := routingConfigErr("missing chimera-broker API key", "gateway_config")
@@ -97,16 +97,9 @@ func computeRoutingDraft(h *handler.Handler, ctx context.Context, res *config.Re
 		errBody := routingConfigErr("invalid chimera-broker models JSON", "gateway_upstream")
 		return nil, http.StatusBadGateway, &errBody
 	}
-	pool := ids
-	if res.FilterFreeTierModels {
-		if res.ProviderFreeTierSpec == nil || res.ProviderFreeTierSpec.Empty() {
-			errBody := routingConfigErr("routing.filter_free_tier_models is true but provider-free-tier.yaml is missing, invalid, or empty", "gateway_config")
-			return nil, http.StatusBadRequest, &errBody
-		}
-		pool = res.ProviderFreeTierSpec.Filter(ids)
-	}
+	pool := filterModelsByTenantAvailability(h.RT, tenantID, ids)
 	if len(pool) == 0 {
-		errBody := routingConfigErr("no models left after catalog and optional free-tier filter", "gateway_config")
+		errBody := routingConfigErr("no models left after operator availability filter", "gateway_config")
 		return nil, http.StatusBadRequest, &errBody
 	}
 	chain := routinggen.OrderFallbackChain(pool)
@@ -122,8 +115,19 @@ func computeRoutingDraft(h *handler.Handler, ctx context.Context, res *config.Re
 	}
 	return &routingDraft{
 		IDs: ids, Pool: pool, Chain: chain, RouterModels: routerModels, RouteYAML: routeYAML,
-		FilterFreeTierFlag: res.FilterFreeTierModels,
+		FilterFreeTierFlag: false,
 	}, 0, nil
+}
+
+func filterModelsByTenantAvailability(rt *gruntime.Runtime, tenantID string, ids []string) []string {
+	if rt == nil {
+		return ids
+	}
+	reg := rt.ProviderModels()
+	if reg == nil {
+		return ids
+	}
+	return reg.FilterAvailable(tenantID, ids)
 }
 
 func routingDraftResponse(d *routingDraft, saved bool) operatorapi.RoutingGenerateResponse {
@@ -151,7 +155,7 @@ func handleRoutingPreviewPOST(h *handler.Handler, w http.ResponseWriter, r *http
 		writeRoutingGenJSONError(w, http.StatusInternalServerError, "gateway not configured")
 		return
 	}
-	draft, st, errObj := computeRoutingDraft(h, r.Context(), res)
+	draft, st, errObj := computeRoutingDraft(h, r.Context(), res, h.SessionTenantID(r))
 	if errObj != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(st)
@@ -173,7 +177,7 @@ func handleRoutingGeneratePOST(h *handler.Handler, w http.ResponseWriter, r *htt
 		writeRoutingGenJSONError(w, http.StatusInternalServerError, "gateway not configured")
 		return
 	}
-	draft, st, errObj := computeRoutingDraft(h, r.Context(), res)
+	draft, st, errObj := computeRoutingDraft(h, r.Context(), res, h.SessionTenantID(r))
 	if errObj != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(st)

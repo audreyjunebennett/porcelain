@@ -69,6 +69,7 @@ func BootstrapRegistry() *Registry {
 			"indexer_supervised_workspaces_apply_failed":   {Description: "workspace path apply failure"},
 			"gateway_operator_workspace_path_added":        {Description: "operator UI path add"},
 			"gateway_operator_workspace_path_deleted":      {Description: "operator UI path delete"},
+			"gateway_catalog_fallback_unavailable_model":   {Description: "model_id, source, tenant_id for fallback chain audit"},
 			"indexer_supervised_watch_shutdown_timeout":    {Description: "watch shutdown timeout detail"},
 			"indexer_supervised_session_fatal_exit":        {Description: "session fatal exit detail"},
 			"indexer_supervised_process_exit":              {Description: "supervised process exit detail"},
@@ -258,6 +259,8 @@ func gatewayMessages() []Message {
 		formatted("gateway.operator.workspace.path_deleted", "gateway_operator_workspace_path_deleted",
 			"Watch path removed · C:\\repo\\old-path",
 			"gateway operator workspace path deleted"),
+		formatted("gateway.catalog.fallback_unavailable_model", "gateway_catalog_fallback_unavailable_model",
+			"Unavailable model still listed in a configured fallback chain."),
 	}
 }
 
@@ -290,6 +293,9 @@ func brokerMessages() []Message {
 			"Rate limited on model · TPM limit · used · requested · trying next model."),
 		formatted("chat.routing.model_not_found", "conversation_fallback_model_not_found",
 			"Model not found (404) · trying next in chain."),
+		formatted("routing.model.unavailable_skipped", "broker_routing_relay",
+			"Skipping unavailable model · groq/paid-model · operator configured unavailable · trying next in chain.",
+			"skipping upstream model (operator unavailable)"),
 		formatted("chat.provider_limits.blocked", "broker_provider_limits",
 			"Blocked by provider limits · llama-3.3-70b · context window · 9,500 prompt + 512 max_tokens > cap 8,192",
 			"chat blocked by provider limits", "skipping upstream model (provider limits)"),

@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/lynn/porcelain/chimera/internal/wrapper/contract"
 	"github.com/lynn/porcelain/internal/naming"
 )
 
@@ -100,8 +101,8 @@ func bindFlags(fs *flag.FlagSet, cfg *Config) {
 	fs.DurationVar(&cfg.WaitVectorstore, "wait-vectorstore", 60*time.Second, "Max time to poll chimera-vectorstore /readyz before exit")
 	fs.BoolVar(&cfg.NoWaitVectorstore, "no-wait-vectorstore", false, "Skip chimera-vectorstore readiness poll")
 	fs.BoolVar(&cfg.LogJSON, "log-json", true, "Emit JSON logs (supervisor, wrappers, supervised indexer)")
-	fs.DurationVar(&cfg.ShutdownTimeout, "shutdown-timeout", 15*time.Second, "Max wait per supervised child during graceful shutdown")
-	fs.DurationVar(&cfg.TerminateWait, "terminate-wait", 10*time.Second, "Grace period after signal before force-killing a wrapper/backend")
+	fs.DurationVar(&cfg.ShutdownTimeout, "shutdown-timeout", contract.DefaultShutdownTimeout, "Max wait per supervised child during graceful shutdown")
+	fs.DurationVar(&cfg.TerminateWait, "terminate-wait", contract.DefaultTerminateWait, "Grace period after signal before force-killing a wrapper/backend")
 }
 
 func defaultSupervisorListen() string {

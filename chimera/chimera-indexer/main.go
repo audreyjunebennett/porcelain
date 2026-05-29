@@ -292,7 +292,7 @@ const defaultWorkspacesPollInterval = 30 * time.Second
 // not exit promptly after cancel (e.g. walking a huge tree during fsnotify),
 // operators see ERROR logs instead of silent stall.
 const (
-	supervisedWatchShutdownGrace = 45 * time.Second
+	supervisedWatchShutdownGrace = 40 * time.Second
 	supervisedReloadSessionGrace = 90 * time.Second
 )
 

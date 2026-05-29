@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -674,6 +675,47 @@ providers:
 	if w.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
 	}
+}
+
+func TestWithVirtualModelFallback_skipsOperatorUnavailableModel(t *testing.T) {
+	t.Parallel()
+	var lastModel string
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Model string `json:"model"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		lastModel = req.Model
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, `{"id":"ok","choices":[]}`)
+	}))
+	t.Cleanup(up.Close)
+
+	avail := func(model string) bool {
+		return model != "groq/blocked"
+	}
+	w := httptest.NewRecorder()
+	chain := []string{"groq/blocked", "groq/ok"}
+	opts := &ProxyOpts{
+		ModelAvailable: avail,
+		VirtualModelID: "Test-1.0.0",
+	}
+	WithVirtualModelFallback(context.Background(), w, "groq/blocked", chain, up.URL, "", false, map[string]json.RawMessage{
+		"model": json.RawMessage(`"Test-1.0.0"`),
+	}, time.Minute, testChatLog(t), nil, nil, opts)
+
+	if lastModel != "groq/ok" {
+		t.Fatalf("upstream should see second model, got %q", lastModel)
+	}
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func testChatLog(t *testing.T) *slog.Logger {
+	t.Helper()
+	return slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelDebug}))
 }
 
 func TestWithVirtualModelFallback_allModelsDeniedByContext_returns429(t *testing.T) {

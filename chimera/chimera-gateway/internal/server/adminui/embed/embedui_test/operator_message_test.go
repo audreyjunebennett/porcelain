@@ -235,6 +235,26 @@ func TestOperatorMessage_gatewaySlugs(t *testing.T) {
 			want: "Blocked by provider limits · groq/compound-mini · body size · 4000000 bytes > cap 3500000",
 		},
 		{
+			name: "catalog_fallback_unavailable_virtual_model",
+			flat: map[string]any{
+				"msg":       "gateway.catalog.fallback_unavailable_model",
+				"model_id":  "gemini/gemini-3.1-flash-lite",
+				"source":    "virtual_model:Chimera-0.2.0",
+				"tenant_id": "default",
+			},
+			want: "Unavailable model gemini-3.1-flash-lite still listed in Chimera-0.2.0 virtual model fallback chain · tenant default.",
+		},
+		{
+			name: "catalog_fallback_unavailable_gateway_chain",
+			flat: map[string]any{
+				"msg":       "gateway.catalog.fallback_unavailable_model",
+				"model_id":  "groq/paid",
+				"source":    "gateway.fallback_chain",
+				"tenant_id": "tenant-a",
+			},
+			want: "Unavailable model paid still listed in gateway fallback chain · tenant tenant-a.",
+		},
+		{
 			name: "unknown_slug",
 			flat: map[string]any{"msg": "gateway.metrics.init_failed"},
 			want: "",

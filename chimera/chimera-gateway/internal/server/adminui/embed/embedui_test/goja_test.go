@@ -128,6 +128,9 @@ func loadCardTestCtx(t *testing.T, vm *goja.Runtime) {
 			adminProviderKeyDraft: {},
 			adminVisibleProviderIds: ["groq", "ollama"],
 			adminOllamaUrlDraft: null,
+			adminProviderModelsEditingId: null,
+			adminProviderModelsDraft: {},
+			adminProviderModelsCache: {},
 			adminStateCache: {
 				providers: {
 					groq: { keys: [], ok: true },

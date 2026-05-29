@@ -1,5 +1,39 @@
 /* Embed UI — Cards (summarized feed cards) */
-#panel-summarized { padding: 0.15rem 0 1rem 0; }
+/* Settings /ui/settings column — same max-width + gutter as .chat-viewport / .chat-composer */
+.settings-feed-column {
+  --settings-feed-rail-max: var(--embed-container-max, 52rem);
+  --settings-feed-gutter: var(--embed-space-gutter, 1.5rem);
+  width: 100%;
+  max-width: var(--settings-feed-rail-max);
+  margin-left: auto;
+  margin-right: auto;
+  padding: 0.15rem 0 1rem;
+  box-sizing: border-box;
+}
+.settings-feed-column > #logs-chrome,
+.settings-feed-column > #panel-summarized {
+  box-sizing: border-box;
+  width: calc(100% - 2 * var(--settings-feed-gutter));
+  max-width: calc(var(--settings-feed-rail-max) - 2 * var(--settings-feed-gutter));
+  margin-left: auto;
+  margin-right: auto;
+  min-width: 0;
+}
+#panel-summarized {
+  max-width: none;
+  padding: 0;
+}
+/* Feed blocks must fill the rail; legacy 52rem/80rem caps are for gallery / unconstrained pages */
+.settings-feed-column #panel-summarized .sum-feed-section,
+.settings-feed-column #panel-summarized .sg-op-section-head,
+.settings-feed-column #panel-summarized .sg-op-section-action-bar,
+.settings-feed-column #panel-summarized .sg-op-rail,
+.settings-feed-column #panel-summarized .sg-op-providers-section__anchor,
+.settings-feed-column #panel-summarized .sg-op-virtual-models-section {
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+}
 html.logs-embedded #panel-summarized { max-height: none; }
 body.logs-summarized #panel-summarized {
   overflow: visible;

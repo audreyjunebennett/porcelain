@@ -3,6 +3,7 @@ package session
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,7 +19,12 @@ const defaultSessionTTL = 24 * time.Hour
 type Store struct {
 	mu   sync.Mutex
 	ttl  time.Duration
-	byID map[string]time.Time
+	byID map[string]sessionRecord
+}
+
+type sessionRecord struct {
+	expiresAt   time.Time
+	principalID string
 }
 
 func newStore(ttl time.Duration) *Store {
@@ -27,12 +33,13 @@ func newStore(ttl time.Duration) *Store {
 	}
 	return &Store{
 		ttl:  ttl,
-		byID: make(map[string]time.Time),
+		byID: make(map[string]sessionRecord),
 	}
 }
 
 // Issue creates a session id after the caller has validated the gateway token.
-func (s *Store) Issue() (id string, err error) {
+// principalID is the durable operator identity (today: api-keys.yaml tenant_id at login).
+func (s *Store) Issue(principalID string) (id string, err error) {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
 		return "", err
@@ -41,8 +48,28 @@ func (s *Store) Issue() (id string, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.pruneLocked()
-	s.byID[id] = time.Now().Add(s.ttl)
+	s.byID[id] = sessionRecord{expiresAt: time.Now().Add(s.ttl), principalID: strings.TrimSpace(principalID)}
 	return id, nil
+}
+
+// PrincipalID returns the principal_id bound at Issue time, or "" when unknown/expired.
+func (s *Store) PrincipalID(id string) string {
+	return s.TenantID(id)
+}
+
+// TenantID returns the tenant_id bound at Issue time, or "" when unknown/expired.
+func (s *Store) TenantID(id string) string {
+	if id == "" {
+		return ""
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.pruneLocked()
+	rec, ok := s.byID[id]
+	if !ok || time.Now().After(rec.expiresAt) {
+		return ""
+	}
+	return rec.principalID
 }
 
 // Valid reports whether id is a non-expired session.
@@ -54,7 +81,7 @@ func (s *Store) Valid(id string) bool {
 	defer s.mu.Unlock()
 	s.pruneLocked()
 	exp, ok := s.byID[id]
-	if !ok || time.Now().After(exp) {
+	if !ok || time.Now().After(exp.expiresAt) {
 		return false
 	}
 	return true
@@ -69,8 +96,8 @@ func (s *Store) Revoke(id string) {
 
 func (s *Store) pruneLocked() {
 	now := time.Now()
-	for k, exp := range s.byID {
-		if now.After(exp) {
+	for k, rec := range s.byID {
+		if now.After(rec.expiresAt) {
 			delete(s.byID, k)
 		}
 	}

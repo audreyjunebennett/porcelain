@@ -14,6 +14,7 @@ import (
 
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/assets"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/chat"
+	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/conversationhistory"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/conversationmerge"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/conversationwitness"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/gwhttp"
@@ -509,7 +510,7 @@ func writeMergedModelsResponse(w http.ResponseWriter, ctx context.Context, rt *R
 		data = []any{}
 	}
 	ensureOpenAIModelListItems(data)
-	data = catalog.FilterOpenAIModelDataByFreeTier(data, res)
+	data = catalog.FilterOpenAIModelDataByAvailability(data, rt.ProviderModelAvailability(principalID))
 	out := prependVirtualModelsToCatalog(data, rt, principalID, res)
 	_ = json.NewEncoder(w).Encode(map[string]any{"object": "list", "data": out})
 }
@@ -575,7 +576,41 @@ func attachConversationDelivery(routeLog *slog.Logger, opts **chat.ProxyOpts) {
 		*opts = &chat.ProxyOpts{OnChatDelivery: dfn}
 		return
 	}
-	(*opts).OnChatDelivery = dfn
+	prev := (*opts).OnChatDelivery
+	(*opts).OnChatDelivery = func(st int, stream bool, nb int64, elapsedMs int64) {
+		if prev != nil {
+			prev(st, stream, nb, elapsedMs)
+		}
+		dfn(st, stream, nb, elapsedMs)
+	}
+}
+
+func optionalWorkspaceRowID(r *http.Request) *int64 {
+	raw := strings.TrimSpace(r.Header.Get(naming.HeaderWorkspaceRowIDTarget))
+	if raw == "" {
+		return nil
+	}
+	n, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || n <= 0 {
+		return nil
+	}
+	return &n
+}
+
+func newHistoryRecorder(rt *Runtime, log *slog.Logger, ctx context.Context, r *http.Request, principalID, cid, lastUser, clientModel, proj, flav string) *conversationhistory.Recorder {
+	store := rt.OperatorStore()
+	if store == nil || strings.TrimSpace(cid) == "" {
+		return nil
+	}
+	return conversationhistory.NewRecorder(store, log, ctx, conversationhistory.TurnContext{
+		PrincipalID:    principalID,
+		ConversationID: cid,
+		UserText:       lastUser,
+		SelectedModel:  clientModel,
+		ProjectID:      proj,
+		FlavorID:       flav,
+		WorkspaceRowID: optionalWorkspaceRowID(r),
+	})
 }
 
 func handleV1Chat(w http.ResponseWriter, r *http.Request, rt *Runtime, log *slog.Logger) {
@@ -704,6 +739,9 @@ func handleV1Chat(w http.ResponseWriter, r *http.Request, rt *Runtime, log *slog
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			n, _ := w.Write(out.DedupJSON)
+			if hist := newHistoryRecorder(rt, log, ctx, r, sess.TenantID, cid, lastUser, clientModel, proj, flav); hist != nil {
+				hist.PersistDedup(out.DedupJSON)
+			}
 			if dedupLog != nil {
 				conversationwitness.LogResponseWitness(dedupLog, false, out.DedupJSON)
 				if res.ShouldEmitPayloadSample() {
@@ -769,8 +807,16 @@ func handleV1Chat(w http.ResponseWriter, r *http.Request, rt *Runtime, log *slog
 	chatOpts.WitnessEmitPayloadSample = res.ShouldEmitPayloadSample()
 	chatOpts.WitnessPayloadSampleMaxRunes = res.WitnessSampleMaxRunes()
 
+	histRec := newHistoryRecorder(rt, log, ctx, r, sess.TenantID, cid, lastUser, clientModel, proj, flav)
+	if histRec != nil {
+		histRec.Attach(&chatOpts)
+	}
+
 	vmCtx, vmStatus, vmErrBody := resolveVirtualModelChat(rt, clientModel, sess.TenantID, res)
 	if vmErrBody != nil {
+		if histRec != nil {
+			histRec.PersistGatewayError(vmStatus, vmErrBody)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(vmStatus)
 		_ = json.NewEncoder(w).Encode(vmErrBody)
@@ -778,7 +824,7 @@ func handleV1Chat(w http.ResponseWriter, r *http.Request, rt *Runtime, log *slog
 	}
 	if vmCtx != nil {
 		if handleVirtualModelChat(ctx, w, rt, res, pol, vmCtx, raw, stream, skipToolRouter, th, routeLog,
-			cid, turnIdx, rid, sess.TenantID, proj, flav, apiKey, rtDur, chatOpts) {
+			cid, turnIdx, rid, sess.TenantID, proj, flav, apiKey, rtDur, chatOpts, histRec) {
 			return
 		}
 	}
@@ -790,24 +836,38 @@ func handleV1Chat(w http.ResponseWriter, r *http.Request, rt *Runtime, log *slog
 			routeLog.Warn("conversation errored", "msg", naming.MsgConversationErrored,
 				"statusCode", http.StatusBadRequest, "errorType", "invalid_request", "timeline_kind", naming.TimelineKindBroker)
 		}
+		errBody := map[string]any{
+			"error": map[string]any{"message": "Missing model", "type": "invalid_request"},
+		}
+		if histRec != nil {
+			histRec.PersistGatewayError(http.StatusBadRequest, errBody)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"error": map[string]any{"message": "Missing model", "type": "invalid_request"},
-		})
+		_ = json.NewEncoder(w).Encode(errBody)
 		return
 	}
+
+	rag.WriteResponseHeaders(w, clientModel, nil)
 
 	pr := chat.ProxyChatCompletion(ctx, w, res.UpstreamBaseURL, apiKey, clientModel, stream, raw, chatTimeout(res), routeLog, rt.Metrics(), rt.LimitsGuard(), chatOpts)
 	if pr.Stream {
 		return
 	}
 	if pr.ErrMessage != "" {
+		errBody := map[string]any{
+			"error": map[string]any{"message": pr.ErrMessage, "type": "gateway_upstream"},
+		}
+		if histRec != nil {
+			if len(pr.JSONBody) > 0 {
+				histRec.PersistUpstreamErrorBody(pr.Status, pr.JSONBody)
+			} else {
+				histRec.PersistGatewayError(pr.Status, errBody)
+			}
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(pr.Status)
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"error": map[string]any{"message": pr.ErrMessage, "type": "gateway_upstream"},
-		})
+		_ = json.NewEncoder(w).Encode(errBody)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")

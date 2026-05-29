@@ -1,0 +1,366 @@
+/* Left navigation ribbon — Copilot-style collapsed/expanded panel */
+
+html[data-theme="design-01"] body.shell-page {
+  font-family: var(--embed-font-ui, "Hanken Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif);
+  color: var(--embed-text-primary);
+  -webkit-font-smoothing: antialiased;
+}
+
+.shell-body {  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.shell-body #frame-wrap {
+  border-left: 1px solid var(--embed-sum-card-border, rgba(115, 120, 125, 0.12));
+}
+
+.shell-ribbon {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  width: 3rem;
+  background: var(--embed-surface-elevated, #fff);
+  transition: width 0.22s ease;
+  overflow: hidden;
+  z-index: 2;
+  font-family: var(--embed-font-ui, "Hanken Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif);
+  color: var(--embed-text-primary);
+  -webkit-font-smoothing: antialiased;
+}
+.shell-ribbon--expanded {
+  width: 16rem;
+}
+
+.shell-ribbon__inner {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+}
+
+.shell-ribbon__header {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.15rem;
+  padding: 0.55rem 0.45rem 0.35rem;
+}
+
+.shell-ribbon--expanded .shell-ribbon__header {
+  padding: 0.55rem 0.65rem 0.35rem;
+}
+
+.shell-ribbon__brand-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.1rem;
+}
+
+.shell-ribbon--expanded .shell-ribbon__brand-row {
+  justify-content: space-between;
+  gap: 0.35rem;
+}
+
+.shell-ribbon__brand {
+  display: none;
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 1.05rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  line-height: 1.35;
+  color: var(--embed-text-heading);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.shell-ribbon--expanded .shell-ribbon__brand {
+  display: block;
+}
+
+.shell-ribbon__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  border: none;
+  background: transparent;
+  color: var(--embed-text-secondary);
+  cursor: pointer;
+  border-radius: 8px;
+  padding: 0.45rem;
+  font: inherit;
+  line-height: 1.35;
+  min-width: 2.1rem;
+  min-height: 2.1rem;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.shell-ribbon__btn:hover {
+  background: var(--embed-surface-muted, #faf9f6);
+  color: var(--embed-text-primary);
+}
+
+.shell-ribbon__btn:focus-visible {
+  outline: 2px solid var(--embed-focus-ring, #5a7890);
+  outline-offset: 1px;
+}
+
+.shell-ribbon__btn .material-symbols-outlined {
+  font-size: 1.25rem;
+  flex: 0 0 auto;
+}
+
+.shell-ribbon__toggle {
+  flex: 0 0 auto;
+}
+
+.shell-ribbon__new-chat {
+  align-self: stretch;
+  justify-content: center;
+}
+
+.shell-ribbon--expanded .shell-ribbon__new-chat {
+  justify-content: flex-start;
+  padding-left: 0.55rem;
+  padding-right: 0.55rem;
+  width: 100%;
+}
+
+.shell-ribbon__label {
+  display: none;
+  font-size: 0.86rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.35;
+  color: var(--embed-text-primary);
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+  padding-bottom: 0.05rem;
+}
+.shell-ribbon--expanded .shell-ribbon__label {
+  display: inline;
+}
+
+.shell-ribbon__filters {
+  flex: 0 0 auto;
+  opacity: 0;
+  max-height: 0;
+  overflow: hidden;
+  pointer-events: none;
+  padding: 0 0.65rem 0.35rem;
+  transition: opacity 0.18s ease, max-height 0.22s ease;
+}
+
+.shell-ribbon--expanded .shell-ribbon__filters {
+  opacity: 1;
+  max-height: 3rem;
+  pointer-events: auto;
+}
+
+.shell-ribbon__filters .chat-history__filters {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.shell-ribbon__rule {
+  flex: 0 0 auto;
+  border: none;
+  border-top: 1px solid var(--embed-sum-card-border, rgba(115, 120, 125, 0.12));
+  margin: 0 0.65rem;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+
+.shell-ribbon--expanded .shell-ribbon__rule {
+  opacity: 1;
+}
+
+.shell-ribbon__history-wrap {
+  flex: 0 0 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease, flex 0.22s ease;
+  position: relative;
+  max-height: 0;
+  z-index: 0;
+}
+
+.shell-ribbon__history-wrap::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 0;
+  pointer-events: none;
+  z-index: 2;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+
+.shell-ribbon--expanded .shell-ribbon__history-wrap {
+  flex: 1 1 auto;
+  max-height: none;
+  opacity: 1;
+  pointer-events: auto;
+  border-top: 1px solid var(--embed-sum-card-border, rgba(115, 120, 125, 0.08));
+}
+
+.shell-ribbon--expanded .shell-ribbon__history-wrap::before {
+  opacity: 1;
+}
+
+.shell-ribbon__history-wrap::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1.25rem;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0),
+    var(--embed-surface-elevated, #fff)
+  );
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+
+.shell-ribbon--expanded .shell-ribbon__history-wrap::after {
+  opacity: 1;
+}
+
+.shell-ribbon__footer {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 0.45rem;
+  margin-top: auto;
+  border-top: 1px solid var(--embed-sum-card-border, rgba(115, 120, 125, 0.08));
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.04);
+  background: var(--embed-surface-elevated, #fff);
+  z-index: 1;
+}
+
+.shell-ribbon__settings {
+  justify-content: center;
+  align-self: stretch;
+}
+
+.shell-ribbon__settings:hover {
+  background: transparent;
+}
+
+.shell-ribbon__settings .material-symbols-outlined {
+  display: inline-block;
+  transition: transform 0.55s ease;
+}
+
+.shell-ribbon__settings:hover .material-symbols-outlined {
+  transform: rotate(45deg);
+}
+
+.shell-ribbon--expanded .shell-ribbon__settings {
+  justify-content: flex-start;
+  padding-left: 0.55rem;
+  padding-right: 0.55rem;
+  width: 100%;
+}
+
+.shell-ribbon .chat-history {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  max-width: none;
+  border-right: none;
+  background: transparent;
+}
+
+.shell-ribbon .chat-history__list {
+  padding: 0.35rem 0 0.5rem 0.35rem;
+}
+
+.shell-ribbon .chat-history__row:not(.chat-history__row--active) {
+  margin-right: 0.35rem;
+}
+
+/* Settings page typography — section title, card title, card subtitle */
+.shell-ribbon .chat-history__filter {
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 400;
+  line-height: 1.35;
+  color: var(--embed-text-secondary);
+}
+
+.shell-ribbon .chat-history__filter--active {
+  color: var(--embed-text-primary);
+  border-color: var(--embed-border-medium, #e3e2e0);
+  background: var(--embed-surface-container-low, #f4f3f0);
+}
+
+.shell-ribbon .chat-history__row-title {
+  font-size: 0.86rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.35;
+  color: var(--embed-text-primary);
+}
+
+.shell-ribbon .chat-history__row-time {
+  font-size: 0.72rem;
+  font-weight: 400;
+  line-height: 1.35;
+  color: var(--embed-text-secondary);
+  margin-top: 0.2rem;
+}
+
+.shell-ribbon .chat-history__empty {
+  font-size: 0.82rem;
+  line-height: 1.35;
+  color: var(--embed-text-secondary);
+}
+
+.shell-ribbon .chat-history__row--active {
+  background: var(--embed-surface-muted, #faf9f6);
+  border-radius: 8px 0 0 8px;
+}
+
+.shell-ribbon .chat-history__row--active .chat-history__row-actions {
+  padding-right: 0.35rem;
+}
+
+.shell-ribbon .chat-history__icon-btn {
+  color: var(--embed-text-secondary);
+}
+
+@media (prefers-reduced-motion: reduce) {  .shell-ribbon,
+  .shell-ribbon__filters,
+  .shell-ribbon__rule,
+  .shell-ribbon__history-wrap,
+  .shell-ribbon__history-wrap::before,
+  .shell-ribbon__history-wrap::after,
+  .shell-ribbon__settings .material-symbols-outlined {
+    transition: none;
+  }
+
+  .shell-ribbon__settings:hover .material-symbols-outlined {
+    transform: none;
+  }
+}

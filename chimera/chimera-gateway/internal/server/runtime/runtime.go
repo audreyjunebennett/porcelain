@@ -11,6 +11,7 @@ import (
 
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/gatewaymetrics"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/operatorstore"
+	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/providermodels"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/rag"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/rag/ragembed"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/routing"
@@ -38,6 +39,7 @@ type Runtime struct {
 	metrics               *gatewaymetrics.Store // optional; nil when disabled or init failed
 	operator              *operatorstore.Store  // optional; nil when init failed
 	virtualModels         *virtualmodel.Registry
+	providerModels        *providermodels.Registry
 	brokerBaseURLOverride string // non-empty: after each yaml load, patch broker base + health (supervised chimera-broker)
 
 	toolRouterMu      sync.Mutex
@@ -133,6 +135,11 @@ func NewRuntimeWithBrokerOverride(gatewayPath string, log *slog.Logger, brokerBa
 				log.Warn("virtual model registry reload failed", "msg", "gateway.virtual_model.reload_failed", "err", err)
 			}
 		}
+		rt.providerModels = providermodels.NewRegistry()
+		if err := rt.providerModels.Reload(context.Background(), s); err != nil && log != nil {
+			log.Warn("provider model registry reload failed", "msg", "gateway.provider_models.reload_failed", "err", err)
+		}
+		EnsureFallbackAvailabilityCatalogAuditor(rt)
 	}
 	if res.RAG.Enabled {
 		if s, err := buildRAGService(res, log); err != nil {
@@ -256,6 +263,13 @@ func (rt *Runtime) OperatorStore() *operatorstore.Store {
 	return rt.operator
 }
 
+// SetOperatorStoreForTest assigns the operator SQLite store (tests only).
+func (rt *Runtime) SetOperatorStoreForTest(store *operatorstore.Store) {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	rt.operator = store
+}
+
 // VirtualModels returns the in-memory virtual model registry, or nil when operator store is unavailable.
 func (rt *Runtime) VirtualModels() *virtualmodel.Registry {
 	rt.mu.RLock()
@@ -276,6 +290,40 @@ func (rt *Runtime) ReloadVirtualModels(ctx context.Context) error {
 		reg = virtualmodel.NewRegistry()
 		rt.mu.Lock()
 		rt.virtualModels = reg
+		rt.mu.Unlock()
+	}
+	return reg.Reload(ctx, store)
+}
+
+// ProviderModels returns the in-memory provider model availability registry, or nil when operator store is unavailable.
+func (rt *Runtime) ProviderModels() *providermodels.Registry {
+	rt.mu.RLock()
+	defer rt.mu.RUnlock()
+	return rt.providerModels
+}
+
+// ProviderModelAvailability returns the tenant-scoped availability snapshot (all models available when nil registry).
+func (rt *Runtime) ProviderModelAvailability(tenantID string) *providermodels.TenantSnapshot {
+	reg := rt.ProviderModels()
+	if reg == nil {
+		return &providermodels.TenantSnapshot{TenantID: tenantID}
+	}
+	return reg.Snapshot(tenantID)
+}
+
+// ReloadProviderModelAvailability refreshes the provider model registry from operator SQLite.
+func (rt *Runtime) ReloadProviderModelAvailability(ctx context.Context) error {
+	rt.mu.RLock()
+	store := rt.operator
+	reg := rt.providerModels
+	rt.mu.RUnlock()
+	if store == nil {
+		return nil
+	}
+	if reg == nil {
+		reg = providermodels.NewRegistry()
+		rt.mu.Lock()
+		rt.providerModels = reg
 		rt.mu.Unlock()
 	}
 	return reg.Reload(ctx, store)

@@ -17,7 +17,7 @@ The gateway refactor cleaned naming and split the logs JavaScript monolith, but 
 |-------|---------|--------|
 | [Phase 1 — Admin UI package split](#phase-1--admin-ui-package-split) | `embed`, `session`, and `api/*` subpackages replace monolithic `adminui` | `done` |
 | [Phase 2 — Operator API DTOs](#phase-2--operator-api-dtos) | Shared request/response types for `/api/ui/*` | `done` |
-| [Phase 3 — Generated contracts](#phase-3--generated-contracts) | `contracts.js` and slug constants generated from Go naming registry | `todo` |
+| [Phase 3 — Generated contracts](#phase-3--generated-contracts) | `contracts.js` and slug constants generated from Go naming registry | `done` |
 | [Phase 4 — Test colocation](#phase-4--test-colocation) | Logs UI goja tests live beside embed assets | `done` |
 | [Phase 5 — Deprecate duplicate operator surfaces](#phase-5--deprecate-duplicate-operator-surfaces) | Single canonical path for admin workflows in `/ui/logs` | `done` |
 
@@ -106,7 +106,7 @@ Today:
 - Editing `gateway_logs.go` and running generate updates `contracts.js`; CI fails if stale.
 - Resolves open Q2 from [`chimera-gateway-refactor.md`](chimera-gateway-refactor.md) for constants (copy remains YAML in operator-message plan).
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 

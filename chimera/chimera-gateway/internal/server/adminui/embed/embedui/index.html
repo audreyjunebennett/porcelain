@@ -3,73 +3,27 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Chimera</title>
+  <title>Porcelain</title>
   <script src="/ui/assets/embed-theme.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet" />
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/ui/assets/theme-tokens.css" />
+  <link rel="stylesheet" href="/ui/assets/ui.css" />
+  <link rel="stylesheet" href="/ui/assets/styles/shell-ribbon.css" />
+  <link rel="stylesheet" href="/ui/assets/styles/chat.css" />
   <style>
     * { box-sizing: border-box; }
-    html, body { height: 100%; margin: 0; font-family: system-ui, sans-serif; overflow: hidden; }
-    body {
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+    body.shell-page {
       display: flex;
       flex-direction: column;
     }
-    #shell-top {
-      flex: 0 0 auto;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      background: #f0f0f0;
-      border-bottom: 1px solid #ccc;
-      padding: 0.35rem 0.5rem;
-      position: relative;
-      z-index: 2;
-    }
-    #shell-top .spacer { flex: 1 1 auto; }
-    #btn-reload {
-      flex: 0 0 auto;
-      border: none;
-      background: transparent;
-      padding: 0.35rem 0.6rem;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      color: #333;
-      border-radius: 4px;
-    }
-    #btn-reload:hover { background: #e5e5e5; }
-    #btn-reload .material-symbols-outlined {
-      font-size: 1.25rem;
-      line-height: 1;
-    }
-    #btn-settings {
-      flex: 0 0 auto;
-      border: none;
-      background: transparent;
-      padding: 0.35rem 0.6rem;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      color: #333;
-      border-radius: 4px;
-      min-width: 2.1rem;
-    }
-    #btn-settings:hover { background: #e5e5e5; }
-    #btn-settings .settings-icon {
-      display: inline-block;
-      font-size: 1.05rem;
-      line-height: 1;
-      font-weight: 600;
-    }
-    #btn-settings .settings-icon--close { display: none; }
-    #btn-settings.is-settings .settings-icon--gear { display: none; }
-    #btn-settings.is-settings .settings-icon--close { display: inline-block; }
     #frame-wrap {
       flex: 1 1 auto;
       min-height: 0;
       position: relative;
-      z-index: 1;
       overflow: hidden;
     }
     iframe {
@@ -78,33 +32,56 @@
       width: 100%;
       height: 100%;
       border: none;
-      z-index: 1;
     }
   </style>
 </head>
-<body>
-  <header id="shell-top">
-    <span class="spacer" aria-hidden="true"></span>
-    <button type="button" id="btn-reload" title="Reload (Shift+Click: reset cache)" aria-label="Reload (Shift+Click: reset cache)">
-      <span class="material-symbols-outlined" aria-hidden="true">refresh</span>
-    </button>
-    <button type="button" id="btn-settings" title="Open settings" aria-label="Open settings">
-      <span class="settings-icon settings-icon--gear" aria-hidden="true">&#9881;</span>
-      <span class="settings-icon settings-icon--close" aria-hidden="true">X</span>
-    </button>
-  </header>
-  <div id="frame-wrap">
-    <iframe id="f-main" title="Operator page" src="about:blank"></iframe>
+<body class="shell-page">
+  <div class="shell-body">
+    <nav id="shell-ribbon" class="shell-ribbon" aria-label="Navigation" aria-expanded="false">
+      <div class="shell-ribbon__inner">
+        <div class="shell-ribbon__header">
+          <div class="shell-ribbon__brand-row">
+            <span class="shell-ribbon__brand">Porcelain</span>
+            <button type="button" class="shell-ribbon__btn shell-ribbon__toggle" data-ribbon-action="toggle" title="Show chat history" aria-label="Show chat history">
+              <span class="material-symbols-outlined" aria-hidden="true">side_navigation</span>
+            </button>
+          </div>
+          <button type="button" class="shell-ribbon__btn shell-ribbon__new-chat" data-ribbon-action="new-chat" title="New chat" aria-label="New chat">
+            <span class="material-symbols-outlined" aria-hidden="true">edit_square</span>
+            <span class="shell-ribbon__label">New chat</span>
+          </button>
+        </div>
+        <div id="shell-ribbon-filters" class="shell-ribbon__filters" aria-label="History filter"></div>
+        <hr class="shell-ribbon__rule" aria-hidden="true" />
+        <div class="shell-ribbon__history-wrap">
+          <aside id="chat-history" class="chat-history" aria-label="Conversation history"></aside>
+        </div>
+        <div class="shell-ribbon__footer">
+          <button type="button" class="shell-ribbon__btn shell-ribbon__settings" data-ribbon-action="settings" title="Settings" aria-label="Settings">
+            <span class="material-symbols-outlined" aria-hidden="true">settings</span>
+            <span class="shell-ribbon__label">Settings</span>
+          </button>
+        </div>
+      </div>
+    </nav>
+    <div id="frame-wrap">
+      <iframe id="f-main" title="Operator page" src="about:blank"></iframe>
+    </div>
   </div>
+  <script src="/ui/assets/ui/util/escape.js"></script>
+  <script src="/ui/assets/chat/historyClient.js"></script>
+  <script src="/ui/assets/chat/historyPanel.js"></script>
+  <script src="/ui/assets/shell/navRibbon.js"></script>
   <script>
 (function () {
-  var DEFAULT_ROUTE = "/ui/pwa";
+  var DEFAULT_ROUTE = "/ui/chat";
   var SETTINGS_ROUTE = "/ui/settings?embed=1";
   var shellReturnRoute = DEFAULT_ROUTE;
+  var shellReturnConversationId = "";
   var origin = window.location.origin;
   var frame = document.getElementById("f-main");
-  var reloadBtn = document.getElementById("btn-reload");
-  var settingsBtn = document.getElementById("btn-settings");
+  var ribbonEl = document.getElementById("shell-ribbon");
+  var historyRoot = document.getElementById("chat-history");
 
   function normalizeRoute(raw) {
     var s = String(raw || "").trim();
@@ -122,19 +99,16 @@
     var n = normalizeRoute(raw);
     return n || fallback;
   }
-  function isSettingsRoute(route) {
-    return String(route || "").indexOf("/ui/settings") === 0;
+  function routePath(route) {
+    var r = String(route || "");
+    var q = r.indexOf("?");
+    return q >= 0 ? r.slice(0, q) : r;
   }
-  function updateSettingsButton(inSettings) {
-    if (!settingsBtn) return;
-    settingsBtn.classList.toggle("is-settings", !!inSettings);
-    if (inSettings) {
-      settingsBtn.title = "Close settings";
-      settingsBtn.setAttribute("aria-label", "Close settings");
-    } else {
-      settingsBtn.title = "Open settings";
-      settingsBtn.setAttribute("aria-label", "Open settings");
-    }
+  function isSettingsRoute(route) {
+    return routePath(route).indexOf("/ui/settings") === 0;
+  }
+  function isChatRoute(route) {
+    return routePath(route) === "/ui/chat";
   }
   function currentRouteFromFrame() {
     try {
@@ -152,7 +126,6 @@
     var target = getSafeRoute(route, DEFAULT_ROUTE);
     if (!frame) return;
     frame.src = target;
-    updateSettingsButton(isSettingsRoute(target));
   }
   function notifySettingsActive() {
     var route = currentRouteFromFrame();
@@ -166,90 +139,34 @@
   }
   if (frame) {
     frame.addEventListener("load", function () {
-      var loadedRoute = getSafeRoute(currentRouteFromFrame(), DEFAULT_ROUTE);
-      updateSettingsButton(isSettingsRoute(loadedRoute));
       notifySettingsActive();
     });
   }
-  navigateFrame(DEFAULT_ROUTE);
 
-  function cacheBustedSrc(src) {
-    var s = String(src || "");
-    if (!s || s === "about:blank") return s;
-    var hash = "";
-    var hIdx = s.indexOf("#");
-    if (hIdx >= 0) { hash = s.slice(hIdx); s = s.slice(0, hIdx); }
-    var q = s.indexOf("?") >= 0 ? "&" : "?";
-    return s + q + "__reload=" + Date.now() + hash;
-  }
-
-  async function resetWebviewCacheBestEffort() {
-    try { sessionStorage.clear(); } catch (_e) {}
-    try {
-      if (globalThis.caches && caches.keys) {
-        var cks = await caches.keys();
-        for (var ck = 0; ck < cks.length; ck++) {
-          try { await caches.delete(cks[ck]); } catch (_e4) {}
-        }
-      }
-    } catch (_e5) {}
-    try {
-      if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
-        var regs = await navigator.serviceWorker.getRegistrations();
-        for (var r = 0; r < regs.length; r++) {
-          try { await regs[r].unregister(); } catch (_e6) {}
-        }
-      }
-    } catch (_e7) {}
-    try {
-      if (globalThis.indexedDB && indexedDB.databases && indexedDB.deleteDatabase) {
-        var dbs = await indexedDB.databases();
-        for (var d = 0; d < dbs.length; d++) {
-          var nm = dbs[d] && dbs[d].name ? String(dbs[d].name) : "";
-          if (!nm) continue;
-          try { indexedDB.deleteDatabase(nm); } catch (_e8) {}
-        }
-      }
-    } catch (_e9) {}
-  }
-
-  function reloadCurrent(ev) {
-    var fr = frame;
-    if (!fr) return;
-    var wantReset = !!(ev && ev.shiftKey);
-    if (!wantReset) {
-      try {
-        if (fr.contentWindow && fr.contentWindow.location && fr.contentWindow.location.reload) {
-          fr.contentWindow.location.reload();
-          return;
-        }
-      } catch (_e2) {}
-      try { fr.src = cacheBustedSrc(fr.getAttribute("src") || fr.src); } catch (_e3) {}
-      return;
+  ChimeraShell.NavRibbon.mount({
+    ribbon: ribbonEl,
+    historyRoot: historyRoot,
+    frame: frame,
+    origin: origin,
+    navigateFrame: navigateFrame,
+    currentRouteFromFrame: currentRouteFromFrame,
+    isSettingsRoute: isSettingsRoute,
+    isChatRoute: isChatRoute,
+    getShellReturnRoute: function () {
+      return shellReturnRoute;
+    },
+    setShellReturnRoute: function (route) {
+      shellReturnRoute = getSafeRoute(route, DEFAULT_ROUTE);
+    },
+    getShellReturnConversationId: function () {
+      return shellReturnConversationId;
+    },
+    setShellReturnConversationId: function (conversationId) {
+      shellReturnConversationId = String(conversationId || "").trim();
     }
-    Promise.resolve()
-      .then(function () { return resetWebviewCacheBestEffort(); })
-      .then(function () {
-        try { fr.src = cacheBustedSrc(fr.getAttribute("src") || fr.src); } catch (_e4) {}
-      });
-  }
+  });
 
-  if (reloadBtn) {
-    reloadBtn.addEventListener("click", function (ev) {
-      reloadCurrent(ev);
-    });
-  }
-  if (settingsBtn) {
-    settingsBtn.addEventListener("click", function () {
-      var route = getSafeRoute(currentRouteFromFrame(), DEFAULT_ROUTE);
-      if (isSettingsRoute(route)) {
-        navigateFrame(getSafeRoute(shellReturnRoute, DEFAULT_ROUTE));
-        return;
-      }
-      shellReturnRoute = route;
-      navigateFrame(SETTINGS_ROUTE);
-    });
-  }
+  navigateFrame(DEFAULT_ROUTE);
 })();
   </script>
 </body>

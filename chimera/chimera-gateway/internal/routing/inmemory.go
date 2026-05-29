@@ -50,5 +50,27 @@ func (p *InMemoryPolicy) PickInitialModel(body map[string]json.RawMessage, fallb
 	lastUser := lastUserMessageCharCount(body)
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return pickFromRules(p.ambiguousDefault, p.rules, lastUser, fallbackChain, log)
+	return pickFromRules(p.ambiguousDefault, p.rules, lastUser, fallbackChain, nil, log)
+}
+
+// PickInitialModelWithAvailability skips upstream ids the checker reports as unavailable.
+func (p *InMemoryPolicy) PickInitialModelWithAvailability(body map[string]json.RawMessage, fallbackChain []string, virtualModelID string, available func(string) bool, log *slog.Logger) (model string, via Via) {
+	if p == nil {
+		first := firstAvailableModel(fallbackChain, available)
+		return first, ViaChainOnly
+	}
+	var clientModel string
+	if m, ok := body["model"]; ok {
+		_ = json.Unmarshal(m, &clientModel)
+	}
+	if clientModel != virtualModelID {
+		if available == nil || available(clientModel) {
+			return clientModel, ViaChainOnly
+		}
+		return firstAvailableModel([]string{clientModel}, available), ViaChainOnly
+	}
+	lastUser := lastUserMessageCharCount(body)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return pickFromRules(p.ambiguousDefault, p.rules, lastUser, fallbackChain, available, log)
 }

@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/adminui/api/auth"
+	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/adminui/api/conversations"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/adminui/api/indexer"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/adminui/api/logs"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/adminui/api/metrics"
@@ -36,5 +37,6 @@ func Register(mux *http.ServeMux, rt *gruntime.Runtime, log *slog.Logger, ui *se
 	routing.Register(mux, h)
 	indexer.Register(mux, h)
 	virtualmodels.Register(mux, h)
+	conversations.Register(mux, h)
 	logs.Register(mux, h)
 }

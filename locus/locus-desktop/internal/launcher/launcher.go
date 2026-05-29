@@ -20,7 +20,7 @@ const (
 	AttachStartupTimeout       = 60 * time.Second
 	LaunchLockTimeout          = 4 * time.Second
 	ReadinessTimeout           = 45 * time.Second
-	OwnedSupervisorStopTimeout = 45 * time.Second
+	OwnedSupervisorStopTimeout = 40 * time.Second
 )
 
 // FilterSupervisorArgs removes launcher-only flags before passing args to chimera-supervisor.

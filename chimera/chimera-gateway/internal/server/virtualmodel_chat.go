@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/chat"
+	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/conversationhistory"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/operatorstore"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/rag"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/routing"
@@ -147,6 +148,7 @@ func handleVirtualModelChat(
 	apiKey string,
 	rtDur time.Duration,
 	chatOpts *chat.ProxyOpts,
+	histRec *conversationhistory.Recorder,
 ) bool {
 	vm := vmCtx.vm
 	if vm == nil {
@@ -187,6 +189,7 @@ func handleVirtualModelChat(
 
 	coords := vectorstore.Coords{TenantID: sessTenant, ProjectID: proj, FlavorID: flav}
 	collection := vectorstore.CollectionName(coords)
+	var ragHits []vectorstore.Hit
 	if !res.RAG.Enabled || rt.RAG() == nil {
 		if routeLog != nil {
 			routeLog.Debug("conversation RAG skipped", "msg", naming.MsgConversationRagSkipped,
@@ -207,6 +210,7 @@ func handleVirtualModelChat(
 					"virtual_model_id", virtualID, "timeline_kind", naming.TimelineKindVectorstore)
 			}
 		} else if ctxBlock := rag.FormatRetrievedContext(hits); ctxBlock != "" {
+			ragHits = hits
 			rag.InjectSystemMessage(raw, ctxBlock)
 			if routeLog != nil {
 				routeLog.Info("conversation RAG attached", "msg", naming.MsgConversationRagAttached,
@@ -219,11 +223,14 @@ func handleVirtualModelChat(
 
 	emitConversationRequestWitness(routeLog, res, raw)
 
+	tenantSnap := rt.ProviderModelAvailability(sessTenant)
+	modelAvailable := func(id string) bool { return tenantSnap.IsAvailable(id) }
+
 	var initial string
 	if vmCtx.useLegacyPol && pol != nil {
-		initial, _ = pol.PickInitialModel(raw, vmCtx.fallback, virtualID)
+		initial, _ = pol.PickInitialModelWithAvailability(raw, vmCtx.fallback, virtualID, modelAvailable)
 	} else {
-		initial, _ = virtualmodel.PickInitialModel(vm, raw, routeLog)
+		initial, _ = virtualmodel.PickInitialModelWithAvailability(vm, raw, routeLog, modelAvailable)
 	}
 	if initial == "" {
 		if routeLog != nil {
@@ -231,14 +238,19 @@ func handleVirtualModelChat(
 				"statusCode", http.StatusServiceUnavailable, "errorType", "gateway_config",
 				"virtual_model_id", virtualID, "timeline_kind", naming.TimelineKindBroker)
 		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusServiceUnavailable)
-		_ = json.NewEncoder(w).Encode(map[string]any{
+		errBody := map[string]any{
 			"error": map[string]any{
 				"message": "Could not resolve an initial upstream model for the virtual model (check routing policy and fallback chain).",
 				"type":    "gateway_config",
 			},
-		})
+		}
+		if histRec != nil {
+			histRec.SetRAGHits(ragHits)
+			histRec.PersistGatewayError(http.StatusServiceUnavailable, errBody)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(errBody)
 		return true
 	}
 	if routeLog != nil {
@@ -246,6 +258,18 @@ func handleVirtualModelChat(
 			"virtual_model_id", virtualID, "clientModel", virtualID, "upstreamModel", initial,
 			"timeline_kind", naming.TimelineKindBroker)
 	}
+	rag.WriteResponseHeaders(w, initial, ragHits)
+	if histRec != nil {
+		histRec.SetRAGHits(ragHits)
+	}
+	if chatOpts == nil {
+		chatOpts = &chat.ProxyOpts{}
+	} else {
+		cp := *chatOpts
+		chatOpts = &cp
+	}
+	chatOpts.ModelAvailable = modelAvailable
+	chatOpts.VirtualModelID = virtualID
 	chat.WithVirtualModelFallback(ctx, w, initial, vmCtx.fallback, res.UpstreamBaseURL, apiKey, stream, raw,
 		chatTimeout(res), routeLog, rt.Metrics(), rt.LimitsGuard(), chatOpts)
 	return true

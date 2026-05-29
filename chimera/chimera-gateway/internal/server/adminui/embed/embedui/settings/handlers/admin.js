@@ -268,6 +268,11 @@ globalThis.ChimeraSettings.Handlers.Admin.wire = function (ctx) {
     }
 
     function syncYamlOverlayVScrollFromTarget(t) {
+      var yep = globalThis.ChimeraUI && globalThis.ChimeraUI.YamlEditorPanel;
+      if (yep && typeof yep.syncOverlayVScrollFromTarget === "function") {
+        yep.syncOverlayVScrollFromTarget(t);
+        return;
+      }
       if (!t || String(t.tagName || "").toLowerCase() !== "textarea") return;
       var wrap = t.closest && t.closest(".sg-op-yaml-wrap");
       if (!wrap) return;
@@ -275,14 +280,19 @@ globalThis.ChimeraSettings.Handlers.Admin.wire = function (ctx) {
     }
 
     function applyRoutingPolicyDraftToEditor() {
-      var y = document.getElementById("admin-routing-yaml");
-      if (!y) return;
-      y.value = String(ctx.routingPolicyDraft != null ? ctx.routingPolicyDraft : "");
+      var val = String(ctx.routingPolicyDraft != null ? ctx.routingPolicyDraft : "");
+      var yep = globalThis.ChimeraUI && globalThis.ChimeraUI.YamlEditorPanel;
+      if (yep && typeof yep.setValue === "function") {
+        yep.setValue("admin-routing-yaml", val);
+      } else {
+        var y = document.getElementById("admin-routing-yaml");
+        if (y) y.value = val;
+      }
       var savedPolicy = String((((ctx.adminStateCache && ctx.adminStateCache.gateway) || {}).routing_policy_yaml) || "");
-      ctx.routingPolicyTouched = String(y.value) !== savedPolicy;
+      ctx.routingPolicyTouched = val !== savedPolicy;
       var wrap = document.getElementById("admin-routing-policy-wrap");
       if (wrap) wrap.classList.toggle("sg-op-yaml-wrap--dirty", !!ctx.routingPolicyTouched);
-      syncYamlOverlayVScrollFromTarget(y);
+      syncYamlOverlayVScrollFromTarget(wrap);
     }
 
     document.body.addEventListener("input", function (ev) {
@@ -807,9 +817,9 @@ globalThis.ChimeraSettings.Handlers.Admin.wire = function (ctx) {
     }, true);
 
     window.addEventListener("resize", function () {
-      var textareas = document.querySelectorAll(".sg-op-yaml-wrap textarea");
-      for (var i = 0; i < textareas.length; i++) {
-        syncYamlOverlayVScrollFromTarget(textareas[i]);
+      var wraps = document.querySelectorAll(".sg-op-yaml-wrap");
+      for (var i = 0; i < wraps.length; i++) {
+        syncYamlOverlayVScrollFromTarget(wraps[i]);
       }
     });
   }

@@ -185,7 +185,6 @@ func BuildSnapshot(ctx context.Context, res *config.Resolved, apiKey string, tim
 	if data == nil {
 		data = []any{}
 	}
-	data = FilterOpenAIModelDataByFreeTier(data, res)
 
 	provSet := map[string]struct{}{}
 	modelSet := map[string]struct{}{}

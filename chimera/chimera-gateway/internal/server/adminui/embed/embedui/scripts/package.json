@@ -1,0 +1,16 @@
+{
+  "name": "chimera-embedui-codemirror",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build-codemirror.mjs"
+  },
+  "devDependencies": {
+    "@codemirror/commands": "^6.8.1",
+    "@codemirror/lang-yaml": "^6.1.2",
+    "@codemirror/language": "^6.11.3",
+    "@codemirror/state": "^6.5.2",
+    "@codemirror/view": "^6.38.6",
+    "esbuild": "^0.25.12"
+  }
+}

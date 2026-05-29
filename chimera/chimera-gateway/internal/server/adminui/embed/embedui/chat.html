@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Chimera — Chat</title>
+  <script src="/ui/assets/embed-theme.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/ui/assets/theme-tokens.css" />
+  <link rel="stylesheet" href="/ui/assets/ui.css" />
+  <link rel="stylesheet" href="/ui/assets/styles/chat.css" />
+</head>
+<body class="chat-page embed-page">
+  <div class="chat-layout">
+    <div class="chat-main">
+      <header id="chat-title-bar" class="chat-title-host" aria-label="Conversation title"></header>
+      <main id="chat-viewport" class="chat-viewport" aria-live="polite" aria-label="Conversation"></main>
+      <footer class="chat-composer" aria-label="Message composer">
+        <div class="chat-composer__panel">
+          <textarea id="chat-input" rows="1" placeholder="Message…" aria-label="Message input"></textarea>
+          <div class="chat-composer__footer">
+            <div class="chat-composer__selectors">
+              <label class="chat-composer__select-wrap">
+                <span class="visually-hidden" id="chat-model-label">Model</span>
+                <select id="chat-model" aria-labelledby="chat-model-label"></select>
+              </label>
+              <label class="chat-composer__select-wrap">
+                <span class="visually-hidden" id="chat-workspace-label">Workspace</span>
+                <select id="chat-workspace" aria-labelledby="chat-workspace-label"></select>
+              </label>
+            </div>
+            <button type="button" class="btn btn--primary chat-composer__send" id="chat-send" title="Send message" aria-label="Send message">
+              <span aria-hidden="true">↑</span>
+            </button>
+          </div>
+        </div>
+      </footer>
+    </div>
+  </div>
+  <script src="/ui/assets/ui/util/escape.js"></script>
+  <script src="/ui/assets/ui/components/CollapsibleCard.js"></script>
+  <script src="/ui/assets/chat/state.js"></script>
+  <script src="/ui/assets/chat/gatewayClient.js"></script>
+  <script src="/ui/assets/chat/streamHandler.js"></script>
+  <script src="/ui/assets/chat/scroll.js"></script>
+  <script src="/ui/assets/chat/render/markdown.js"></script>
+  <script src="/ui/assets/chat/render/snippet.js"></script>
+  <script src="/ui/assets/chat/render/messages.js"></script>
+  <script src="/ui/assets/chat/render/titleBar.js"></script>
+  <script src="/ui/assets/chat/render/input.js"></script>
+  <script src="/ui/assets/chat/historyClient.js"></script>
+  <script src="/ui/assets/chat/app.js"></script>
+</body>
+</html>

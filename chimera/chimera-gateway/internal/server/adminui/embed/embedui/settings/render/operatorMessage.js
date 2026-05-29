@@ -569,6 +569,22 @@
       if (!isNaN(n) && n >= 0) return base + " Models listed: " + Math.round(n) + ".";
       return base;
   };
+  formatters.gateway_catalog_fallback_unavailable_model = function (flat) {
+      var model = flat.model_id != null ? String(flat.model_id).trim() : "";
+      var shortModel = brokerShortModel(model) || model;
+      var source = flat.source != null ? String(flat.source).trim() : "";
+      var chainLabel = "fallback chain";
+      if (source === "gateway.fallback_chain") {
+        chainLabel = "gateway fallback chain";
+      } else if (source.indexOf("virtual_model:") === 0) {
+        var vmId = source.slice("virtual_model:".length).trim();
+        chainLabel = vmId ? vmId + " virtual model fallback chain" : "virtual model fallback chain";
+      }
+      var tenant = flat.tenant_id != null ? String(flat.tenant_id).trim() : "";
+      var tenantBit = tenant ? " · tenant " + tenant : "";
+      var modPart = shortModel || "model";
+      return "Unavailable model " + modPart + " still listed in " + chainLabel + tenantBit + ".";
+  };
   formatters.http_access = function (flat, entry, opts) {
       opts = opts || {};
       var omitStatus = opts.forEventLog === true;

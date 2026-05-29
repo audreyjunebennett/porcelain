@@ -20,7 +20,7 @@ Keep the operator log page easy to evolve. Make file names match what they do, s
 | [Workstream C — CSS clarity](#workstream-c--css-clarity) | Sectioned `logs.css` paired with a DOM map | `partial` (broker/vectorstore class renames; full CSS sectioning optional) |
 | [Workstream D — JavaScript architecture](#workstream-d--javascript-architecture-main-effort) | Split `logs_main.js` into focused modules with injectable deps | `done` (`logs_app.js`, `app/*`, `render/sumEvlog.js`) |
 | [Workstream E — Testing strategy](#workstream-e--testing-strategy) | Goja coverage for new pure modules and view-mode logic | `done` (`logs_components_test.go`) |
-| [Workstream F — Server alignment](#workstream-f--server-alignment) | Document `servicelogs.Entry` for UI parsing assumptions | `todo` (optional follow-up) |
+| [Workstream F — Server alignment](#workstream-f--server-alignment) | Document `servicelogs.Entry` for UI parsing assumptions | `done` (optional follow-up) |
 
 ---
 

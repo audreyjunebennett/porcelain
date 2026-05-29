@@ -643,4 +643,4 @@ fmt:
 fmt-check:
 	$(GITBASH) scripts/fmt-check.sh $(FMT_DIRS)
 
-precommit: fmt-check vet test
+precommit: contracts-generate fmt fmt-check vet test

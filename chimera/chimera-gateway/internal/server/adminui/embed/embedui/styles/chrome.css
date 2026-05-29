@@ -40,6 +40,9 @@ body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; margin: 0;
 html.logs-embedded .logs-chrome__nav {
   display: none;
 }
+body.logs-summarized .settings-feed-column > #logs-chrome {
+  margin-bottom: 0.5rem;
+}
 /* App shell (/ui): iframe viewport must use % height, not vh — 100vh inside an iframe
    can match the outer window and overflow the iframe, breaking hit-testing on the parent tab bar (WebView). */
 html.logs-embedded,
@@ -59,10 +62,14 @@ body.logs-summarized {
   height: auto;
   overflow: auto;
   display: block;
+  padding-left: 0;
+  padding-right: 0;
 }
 html.logs-embedded body.logs-summarized {
   height: auto;
   max-height: none;
+  padding-left: 0;
+  padding-right: 0;
 }
 body.logs-summarized #raw-bottom-toolbar {
   margin-top: 0;
