@@ -26,7 +26,7 @@ This document plans a **cross-platform desktop shell** that wraps a **system web
 
 **Implementation direction:** work toward **one primary executable** (`chimera` / `chimera.exe`) that the user launches in **desktop mode**: it starts the **supervised stack** (optional Qdrant, BiFrost, and the **HTTP gateway** in-process, per [`supervisor.md`](../supervisor.md)), then opens the **webview** against the gateway’s `/ui/…` entry. The same binary also supports **headless** operation (no webview) for servers, automation, and future **platform installers** that install a bundle without a desktop shell.
 
-**Related docs:** [`cli-tool.plan.md`](cli-tool.plan.md) (operator CLI, shared BiFrost assumptions), [`supervisor.md`](../supervisor.md), [`bifrost-discovery.md`](../bifrost-discovery.md), [`configuration.md`](../configuration.md), [`vscode-continue/`](../vscode-continue/) (Continue examples).
+**Related docs:** [`cli-tool.plan.md`](cli-tool.plan.md) (operator CLI, shared BiFrost assumptions), [`supervisor.md`](../supervisor.md), [`reference/bifrost-upstream.md`](../reference/bifrost-upstream.md), [`configuration.md`](../configuration.md), [`vscode-continue/`](../vscode-continue/) (Continue examples).
 
 ---
 

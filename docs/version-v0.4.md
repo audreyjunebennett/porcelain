@@ -13,7 +13,7 @@
 
 **v0.4** delivers **ensemble** (“heavy thinking”): the gateway orchestrates **parallel drafts**, optional **critique/synthesize**, and clear **streaming error** behavior when a phase fails—without pushing queueing or security-milestone work forward. It also **productizes external human escalation**: configurable surfaces, privacy disclosure, confidence-based engagement, and **paste-back / session** handling so operators can safely involve a human outside the stack when policy demands it.
 
-On the **RAG** side, indexers continue to send content through the gateway so **embeddings land in the vector store**; **workspace embedding scope** (**user + project + flavor**, base corpus + unions) ships as a coherent retrieval model. Operators gain **lifecycle controls** to **remove or purge** corpus tied to a **specific workspace** (scoped indexer / tenant–project–flavor), without ad-hoc Qdrant surgery. **Peer backends** let one operator route to another’s published OpenAI-compatible upstream (typically BiFrost) over a host-routable URL. The **desktop or web** shell gains **first-class settings**: change configuration **in the app** (not only by editing YAML on disk), plus **search** on the settings surface and/or **across the application** so options are discoverable as surface area grows.
+On the **RAG** side, indexers send **manifest ingest** (pre-chunked files with line metadata) through the gateway so **embeddings land in the vector store** with **line-accurate snippets** in chat; **workspace embedding scope** (**user + project + flavor**, base corpus + unions) ships as a coherent retrieval model. Operators gain **lifecycle controls** to **remove or purge** corpus tied to a **specific workspace** (scoped indexer / tenant–project–flavor), without ad-hoc Qdrant surgery. **Peer backends** let one operator route to another’s published OpenAI-compatible upstream (typically BiFrost) over a host-routable URL. The **desktop or web** shell gains **first-class settings**: change configuration **in the app** (not only by editing YAML on disk), plus **search** on the settings surface and/or **across the application** so options are discoverable as surface area grows.
 
 | Focus | Outcome | Status |
 |-------|---------|--------|
@@ -21,6 +21,7 @@ On the **RAG** side, indexers continue to send content through the gateway so **
 | [Triggers and streaming semantics](#triggers-and-streaming-semantics) | **Automatic** ensemble triggers plus manual **`//deep`** (trimmed) on **virtual `chimera-<semver>`** only; gateway **may** strip `//deep` before upstream; **critique/synthesize** and **streaming** behavior on ensemble phase failure **fully specified** here (*Ensemble orchestration · 1–3*) | `todo` |
 | [External human escalation](#external-human-escalation) | Configurable **name + URL** surfaces, mandatory **privacy disclosure**, engagement only when internal attempts are **exhausted** and **low confidence** (thresholds configurable), **single copy-paste** escalation prompt with **paste-back delimiter**, merge on delimiter, **no blocking wait** without explicit UX (*External human escalation · 1–6*; signals **3** aligned with ensemble milestone) | `todo` |
 | [Workspace embedding scope (project + flavor)](#workspace-embedding-scope-project--flavor) | Ingestion keys `(user, project, flavor)`; project-only = base corpus; flavored queries union base + flavor; multi-workspace request pool | `todo` |
+| [Indexer manifest ingest (line metadata)](#indexer-manifest-ingest-line-metadata) | Indexer pre-chunks with manifest; line/byte spans in Qdrant + segment index; chat gutter UI, revision coherence, expansion tools ([`plans/indexer-manifest-ingest.md`](plans/indexer-manifest-ingest.md)) | `todo` |
 | [Indexer workspace lifecycle and purge](#indexer-workspace-lifecycle-and-purge) | Operator-visible way to **manage** indexers and **remove or purge** vectors for a **specific workspace** (aligned collection / tenant scope) while embeddings remain gateway-mediated into the RAG DB | `todo` |
 | [Indexer Phase 7 — model-assisted strategy](#indexer-phase-7--model-assisted-strategy) | Optional flow: summarize watch tree + ignore rules + config to a **gateway or LLM** endpoint; receive **recommended** indexing patterns, priorities, and exclusions ([`plans/indexer.md`](plans/indexer.md) Phase 7) | `todo` |
 | [Configuration in the desktop or web UI](#configuration-in-the-desktop-or-web-ui) | Change **runtime-relevant** settings through the **desktop or web** interface; file-based config remains source of truth or sync target as designed—**no** requirement to hand-edit YAML for supported knobs | `todo` |
@@ -32,13 +33,13 @@ On the **RAG** side, indexers continue to send content through the gateway so **
 
 ## What this version is
 
-**v0.4** is the **ensemble roadmap** milestone referenced in [`porcelain.plan.md`](porcelain.plan.md): the point at which **two-phase ensemble**, **triggers**, **streaming error** semantics, and **external human escalation** (including paste-back and session behavior) are **specified and shippable** as a coherent product slice—not partial stubs.
+**v0.4** is the **ensemble roadmap** milestone referenced in [`chimera.plan.md`](chimera.plan.md): the point at which **two-phase ensemble**, **triggers**, **streaming error** semantics, and **external human escalation** (including paste-back and session behavior) are **specified and shippable** as a coherent product slice—not partial stubs.
 
 The same train adds **operator-grade RAG housekeeping**: indexers produce embeddings stored **via** the gateway into the **vector database**; **workspace embedding scope (project + flavor)** defines ingestion keys and **base + flavor union** retrieval; operators can **target** a workspace (or indexer registration) for **purge / remove** so retired trees do not leave orphaned vectors. **Peer backends** enable cross-host upstream routing without gateway-to-gateway chaining. **Indexer Phase 7** (model-assisted indexing strategy) is scoped here as an optional operator-facing improvement on top of the shipped indexer baseline ([`plans/indexer.md`](plans/indexer.md) Phases 2–6). It also advances the **desktop (and any web)** shell toward **settings parity**: edit supported configuration **in UI**, with **search** to navigate dense settings and optionally the rest of the app.
 
 For **`model: Chimera-<gateway_semver>`**, the gateway continues to own **routing policy** and the **fallback chain** (*Gateway turn orchestration*); **RAG** remains as in prior versions when enabled. **Per-turn dispatch** evaluates ensemble triggers anew each message (*Gateway runtime · 2*). **Fail-over / fail-fast** within the model chain and peers still apply; **no** gateway-side request queues (*Release roadmap · v0.8*).
 
-**Companion docs:** [`porcelain.plan.md`](porcelain.plan.md) (requirements: *Ensemble orchestration*, *External human escalation*, *Responsibility split*, *Gateway runtime*, *Chat turn resilience and degradation*, *Workspace indexing and retrieval*, *Indexer live storage API*), [`configuration.md`](configuration.md), [`plans/indexer.md`](plans/indexer.md), [`plans/env-precedence-contract.md`](plans/env-precedence-contract.md) (unified env/config precedence), [`plans/desktop-ui.md`](plans/desktop-ui.md), [`plans/operator-cli.md`](plans/operator-cli.md) (operator CLI for gateway/BiFrost), [`plans/_template.md`](plans/_template.md).
+**Companion docs:** [`chimera.plan.md`](chimera.plan.md) (requirements: *Ensemble orchestration*, *External human escalation*, *Responsibility split*, *Gateway runtime*, *Chat turn resilience and degradation*, *Workspace indexing and retrieval*, *Indexer live storage API*), [`configuration.md`](configuration.md), [`plans/indexer.md`](plans/indexer.md), [`plans/env-precedence-contract.md`](plans/env-precedence-contract.md) (unified env/config precedence), [`plans/desktop-ui.md`](plans/desktop-ui.md), [`plans/operator-cli.md`](plans/operator-cli.md) (operator CLI for gateway/BiFrost), [`plans/_template.md`](plans/_template.md).
 
 ---
 
@@ -107,13 +108,38 @@ For **`model: Chimera-<gateway_semver>`**, the gateway continues to own **routin
 
 ---
 
+## Indexer manifest ingest (line metadata)
+
+**Goal:** Operators see **file path and line ranges** (e.g. `L42–58`) on workspace snippets in chat, with a **line-number gutter** and **mid-line** `…` markers; the model receives the same ranges in injected context. The indexer **pre-chunks** every file and sends a **manifest**; the gateway embeds and stores spans in **Qdrant** and a **segment index** in operator SQLite for **revision coherence** and **expansion tools**.
+
+**Execution plan:** [`plans/indexer-manifest-ingest.md`](plans/indexer-manifest-ingest.md) — eight phases from shared `chimera/internal/chunk` through re-index and ship. **No legacy ingest path** after ship.
+
+**Scope**
+
+- **Manifest-only ingest** — Indexer uploads chunk texts + line/byte metadata; gateway trusts manifest, rejects invalid files with bounded logging.
+- **Shared chunk library** — `chimera/internal/chunk`; knobs from `GET /v1/indexer/config` only.
+- **Retrieval + UI** — Extend `X-Chimera-RAG-Hits`, system context, conversation history, `/ui/chat` gutter rendering.
+- **Revision coherence** — Staleness vs live file hash; warn/strict modes (toggle placement TBD in plan open questions).
+- **Tooling** — Context-around, adjacent chunks, line read APIs; indexer vs gateway file-serving TBD.
+- **Re-index** — Full re-index all workspaces on ship; coordinate with [`plans/indexer-sync-state-sqlite-and-force-reindex.md`](plans/indexer-sync-state-sqlite-and-force-reindex.md).
+
+**Acceptance**
+
+- After re-index, chat RAG hits show **L{start}–{end}** with gutter lines on a known repo file.
+- Saved conversation history includes line fields on retrieval rows.
+- Documented tool APIs resolve segment neighbors and line windows.
+
+**Status:** `todo`
+
+---
+
 ## Indexer workspace lifecycle and purge
 
 **Goal:** Give operators a **supported**, **authenticated** path to **manage** indexer-associated corpus in the **RAG vector store**—including **removing or purging** a **specific workspace**—without requiring direct database consoles for routine cleanup.
 
 **Scope**
 
-- **Embeddings path** — Preserve the contract that **indexers** (and ingest callers) go through the **gateway** for chunking/embeddings and **vector writes** (*Workspace indexing and retrieval · 1*); this section adds **management** and **delete** semantics, not a bypass for writes.
+- **Embeddings path** — Preserve the contract that **indexers** (and ingest callers) go through the **gateway** for **embeddings** and **vector writes** (*Workspace indexing and retrieval · 1*); chunking moves to the indexer manifest ([Indexer manifest ingest](#indexer-manifest-ingest-line-metadata)). This section adds **management** and **delete** semantics, not a bypass for writes.
 - **Identify “workspace”** — Define the operator-visible handle (e.g. **registered indexer** + roots, or **`tenant_id` / `project_id` / `flavor_id`** triple consistent with *Workspace indexing · 8–10* and *Tenant authentication · 1–2*) used to scope **purge** and **list** actions.
 - **Operations** — At minimum: **purge** (delete vectors/payload for that scope) and clarity on **stop/disable** a specific indexer instance if multiple indexers run; optional **dry-run** or **preview counts** if live storage APIs support it (*Observability · 2*).
 - **Surface** — Gateway **REST** (preferred for parity with ingest/indexer config) and/or **desktop** action that calls the same backend; document **auth** (same gateway token model as ingest).
@@ -259,7 +285,7 @@ Then retrieval must query embeddings from **both**:
 
 **Scope**
 
-This theme summarizes what [`porcelain.plan.md`](porcelain.plan.md) assigns to **v0.4** so implementation and docs stay aligned.
+This theme summarizes what [`chimera.plan.md`](chimera.plan.md) assigns to **v0.4** so implementation and docs stay aligned.
 
 ### Release-roadmap slice
 
@@ -267,7 +293,7 @@ From the master **Release roadmap** table:
 
 - **Peer-to-peer model backends**: call **another operator’s BiFrost** (or compatible OpenAI proxy) over a **host-routable** URL and **published** port (not Compose-internal DNS from another machine).
 - **Proxy-issued credentials** (e.g. virtual keys where the upstream supports them) for **cross-host** authentication.
-- **Gateway / upstream configuration** and **operator documentation** for peer paths: *Peer topology · 1–3*, *Model selection and routing policy · 3* (peer as `base_url` / `api_base`), and *Deployment · 3* (cross-host publishing vs intra-stack DNS)—see [`porcelain.plan.md`](porcelain.plan.md).
+- **Gateway / upstream configuration** and **operator documentation** for peer paths: *Peer topology · 1–3*, *Model selection and routing policy · 3* (peer as `base_url` / `api_base`), and *Deployment · 3* (cross-host publishing vs intra-stack DNS)—see [`chimera.plan.md`](chimera.plan.md).
 - **Per-key / usage observability** (*Resilience · 1*): track which key/backend was used and exposure to RPM/TPM-style limits where upstream headers exist.
 
 ### Product rules
@@ -316,7 +342,7 @@ From the master **Release roadmap** table:
 | In-app configuration | Edit a documented setting in UI; gateway (or supervised stack) reflects it per documented reload/restart rules |
 | Settings / app search | Settings search finds a documented control by partial name; if global search is in train, second scenario from **Acceptance** |
 | Peer backends | Peer upstream + credentials + docs meet the peer scope checklist |
-| Docs/config | [`configuration.md`](configuration.md) and examples list ensemble, escalation, workspace scope, purge, peer backends, and UI-editable keys; cross-links from [`porcelain.plan.md`](porcelain.plan.md) release row when published |
+| Docs/config | [`configuration.md`](configuration.md) and examples list ensemble, escalation, workspace scope, purge, peer backends, and UI-editable keys; cross-links from [`chimera.plan.md`](chimera.plan.md) release row when published |
 | Tests | Unit/integration coverage for phase scheduling, delimiter parsing, streaming error branches, purge scoping, and settings validation per repo conventions |
 
 ---

@@ -8,6 +8,9 @@
 | **Targets** | gateway v0.4 naming and supervision cutover |
 | **Last updated** | See git history |
 | **Supersedes / superseded by** | None |
+| **As-built** | [`docs/features/chimera-wrapper-binary-contract.md`](../features/chimera-wrapper-binary-contract.md), [`product-naming-contract.md`](../features/product-naming-contract.md), [`structured-operator-log-lines.md`](../features/structured-operator-log-lines.md) |
+
+**Behavioral source of truth:** the [wrapper binary contract](../features/chimera-wrapper-binary-contract.md) describes as-built behavior; this plan is delivery history.
 
 ## At a glance
 

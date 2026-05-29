@@ -8,6 +8,9 @@
 | **Targets** | Conversation card and per-conversation timeline in the operator log view; correlation and slugs sufficient to reconstruct each chat turn end-to-end (routing, RAG, tools, upstream, delivery) without stopping at heuristics alone |
 | **Last updated** | 2026-05-09 |
 | **Supersedes / superseded by** | None |
+| **As-built** | [`docs/features/operator-settings-ui.md`](../features/operator-settings-ui.md) |
+
+**Behavioral source of truth:** the [settings UI](../features/operator-settings-ui.md) feature record describes as-built conversation lifecycle presentation; this plan is delivery history.
 
 ## At a glance
 
@@ -298,13 +301,13 @@ Expanded: key-value row includes **last `turn_index`**, **upstream model**, **cl
 
 **Deliverables**
 
-- BiFrost: set upstream `X-Request-Id` from the gateway `request_id`; investigate whether BiFrost exposes that id on subprocess rows; document the result in [`bifrost-discovery.md`](../bifrost-discovery.md). Implement `bifrostline` `request_id` propagation only when the platform provides the value.
+- BiFrost: set upstream `X-Request-Id` from the gateway `request_id`; investigate whether BiFrost exposes that id on subprocess rows; document the result in [`reference/bifrost-upstream.md`](../reference/bifrost-upstream.md). Implement `bifrostline` `request_id` propagation only when the platform provides the value.
 - Qdrant: ensure normalized lines expose `collection` and timestamps for tier 4/4b; if local Qdrant can accept a harmless query parameter for correlation in dev-only mode, document behind config (optional; do not require for acceptance). Attribute overlapping tier-4b matches to the most recent span.
 - Gateway: always emit **`conversation.rag.span`** when RAG retrieval runs so tier 4b does not depend on subprocess cooperation alone. Future RAG interactions should emit the same span shape when they perform vector work.
 
 **Acceptance**
 
-- Either BiFrost subprocess rows appear with `request_id`, or `bifrost-discovery.md` records the gap and gateway relay remains canonical. Do not add `bifrost.relay.echo_missing` unless it carries operator-useful detail beyond the existing gateway relay lifecycle.
+- Either BiFrost subprocess rows appear with `request_id`, or `reference/bifrost-upstream.md` records the gap and gateway relay remains canonical. Do not add `bifrost.relay.echo_missing` unless it carries operator-useful detail beyond the existing gateway relay lifecycle.
 - Tier 4b join verified in UI or derive tests using text fixtures with RAG plus Qdrant HTTP lines inside `window_ms`, including overlapping spans where the most recent span wins.
 
 **Status:** `done`

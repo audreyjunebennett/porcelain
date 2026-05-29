@@ -22,7 +22,7 @@ Give operators a small command-line tool, `chimeractl`, that confirms the gatewa
 
 This document plans a **separate operator-facing CLI** for health checks and BiFrost-oriented setup (Groq, Gemini, Ollama). It is distinct from the `chimera` gateway/supervisor binary built by `make chimera-build` ([`cmd/chimera`](../cmd/chimera)), to keep a small **read-only / config** tool separate from the long-running server.
 
-**Related docs:** [`supervisor.md`](../supervisor.md), [`bifrost-discovery.md`](../bifrost-discovery.md), [`configuration.md`](../configuration.md).
+**Related docs:** [`supervisor.md`](../supervisor.md), [`reference/bifrost-upstream.md`](../reference/bifrost-upstream.md), [`configuration.md`](../configuration.md).
 
 ---
 
@@ -45,7 +45,7 @@ Releases below are **plan milestones** for `chimeractl` and the **gateway/BiFros
 **Gateway and BiFrost**
 
 - Ship [`config/bifrost.config.json`](../config/bifrost.config.json) with **`config_store` enabled** so BiFrost persists provider config and exposes the management APIs this CLI uses.
-- **Stop using environment variables** as the primary way to inject Groq/Gemini (and related) secrets into BiFrost for the default stack: operators use `chimeractl` (or the BiFrost UI/API) instead of `GROQ_API_KEY` / `GEMINI_API_KEY` in `.env` / the shell. Update [`env.example`](../env.example), [`supervisor.md`](../supervisor.md), and [`bifrost-discovery.md`](../bifrost-discovery.md) accordingly when implementing.
+- **Stop using environment variables** as the primary way to inject Groq/Gemini (and related) secrets into BiFrost for the default stack: operators use `chimeractl` (or the BiFrost UI/API) instead of `GROQ_API_KEY` / `GEMINI_API_KEY` in `.env` / the shell. Update [`env.example`](../env.example), [`supervisor.md`](../supervisor.md), and [`reference/bifrost-upstream.md`](../reference/bifrost-upstream.md) accordingly when implementing.
 
 ### Version 0.8
 
@@ -179,7 +179,7 @@ Operator commands that mutate provider keys or Ollama **must** use BiFrost’s *
 
 **Prerequisite (v0.1):** [`config/bifrost.config.json`](../config/bifrost.config.json) (copied into the BiFrost app dir on `chimera serve` startup) **must** include `config_store` enabled (e.g. SQLite under the BiFrost data directory) so configuration persists and admin routes behave as documented. Without `config_store`, file-only mode does not support this workflow. **v0.1** lands the config-store bootstrap together with `chimeractl` and removes reliance on provider env vars for the default stack ([§ Version 0.1](#version-01)).
 
-**CLI config:** `bifrost_url` plus optional credentials for dashboard/admin auth ([`bifrost-discovery.md`](../bifrost-discovery.md) remains the reference for env-vs-file nuances in **static** JSON; runtime changes go through the API once `config_store` is on).
+**CLI config:** `bifrost_url` plus optional credentials for dashboard/admin auth ([`reference/bifrost-upstream.md`](../reference/bifrost-upstream.md) remains the reference for env-vs-file nuances in **static** JSON; runtime changes go through the API once `config_store` is on).
 
 **Implementation order:** `health` first (gateway only, no BiFrost). `provider set-key` and `ollama set-url` require a **running** BiFrost with `config_store` and appropriate auth if enabled.
 

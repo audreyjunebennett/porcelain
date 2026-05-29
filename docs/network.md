@@ -17,7 +17,7 @@ Operator vocabulary and refactor plan: [plans/chimera-gateway-refactor.md](plans
 | **chimera-broker** (wrapper) | **7730** control / **8080** backend | LLM relay |
 | **chimera-vectorstore** (wrapper) | **7740** control / **6333** HTTP, **6334** gRPC | Vectors (optional) |
 
-`chimera serve` supervises broker and vectorstore wrappers on loopback by default. `config/gateway.yaml` `upstream.base_url` should point at the broker backend (e.g. `http://127.0.0.1:8080`). The supervisor overrides URLs to match supervised listen addresses.
+`chimera-supervisor` manages broker and vectorstore wrappers on loopback by default. `config/gateway.yaml` `upstream.base_url` should point at the broker backend (e.g. `http://127.0.0.1:8080`). The supervisor overrides URLs to match supervised listen addresses.
 
 **On the host**, use `http://127.0.0.1:3000` for Continue’s `apiBase` (plus `/v1` as required by your client).
 

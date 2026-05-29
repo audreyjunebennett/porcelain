@@ -4,10 +4,11 @@
 |-------|-------|
 | **Doc kind** | `feature-plan` |
 | **Owners / areas** | Indexer, Gateway RAG, vector storage |
-| **Status** | `active` |
+| **Status** | `shipped` |
 | **Targets** | Gateway v0.2+ RAG and indexer REST APIs |
 | **Last updated** | See git history |
 | **Supersedes / superseded by** | None |
+| **As-built** | [`docs/features/indexer.md`](../features/indexer.md) (+ [workspaces](../features/indexer-workspaces.md), [ingest pipeline](../features/indexer-ingest-pipeline.md), [health/logs](../features/indexer-health-and-operator-logs.md)) |
 
 ## At a glance
 
@@ -24,9 +25,9 @@ Keep your project files searchable in chat without manual uploads. The indexer w
 
 ---
 
-This document plans a **portable Go binary** that watches configured directories, respects ignore rules, and sends **whole-file** bodies to the **chimera-gateway** for **server-side chunking and embedding** (same strategy as [`porcelain.plan.md`](../porcelain.plan.md): one document per request; gateway owns chunk boundaries and can change them without indexer upgrades). It complements gateway **ingest** and **indexer** APIs (`POST /v1/ingest`, `GET /v1/indexer/config`, etc.).
+This document plans a **portable Go binary** that watches configured directories, respects ignore rules, and sends **whole-file** bodies to the **chimera-gateway** for **server-side chunking and embedding** (same strategy as [`chimera.plan.md`](../chimera.plan.md): one document per request; gateway owns chunk boundaries and can change them without indexer upgrades). It complements gateway **ingest** and **indexer** APIs (`POST /v1/ingest`, `GET /v1/indexer/config`, etc.).
 
-**Related docs:** [`cli-tool.plan.md`](cli-tool.plan.md) (configuration precedence pattern), [`porcelain.plan.md`](../porcelain.plan.md), [`network.md`](../network.md), [`log-presentation-layer.plan.md`](log-presentation-layer.plan.md) (operator log UX for supervised processes).
+**Related docs:** [`cli-tool.plan.md`](cli-tool.plan.md) (configuration precedence pattern), [`chimera.plan.md`](../chimera.plan.md), [`network.md`](../network.md), [`log-presentation-layer.plan.md`](log-presentation-layer.plan.md) (operator log UX for supervised processes).
 
 **Current code (this repo):** `chimera-indexer` is implemented (`chimera/chimera-indexer`, `internal/indexer`); local builds report `dev` from `--version` unless release ldflags are set. Operator guide [`indexer.md`](../indexer.md), example [`config/indexer.example.yaml`](../config/indexer.example.yaml). Makefile targets `chimera-indexer-build` / `chimera-indexer-run` / `chimera-indexer-install` and `scripts/clean.sh` / `scripts/print-make-help.sh` include the binary. **Still missing** relative to this document: durable offline queue and optional **global discovery without cwd** edge cases. **Shipped:** layered YAML, `GET /health` during recovery, **Mode B** per-step retries, `GET /v1/indexer/corpus/inventory`, **Phase 5** optional supervision under `chimera serve` / **desktop** with `--log-json`, single supervised `config_path`, BFF `/api/ui/indexer/*`, native folder picker (`chimeraPickFolder`) in the desktop webview, operator **logs** tee (`Application: indexer`), and **Phase 6** layered config merge. **Planned (Phase 7):** model-assisted indexing strategy. **Beyond shipped phases:** richer **health and update-status** reporting (structured progress fields), optional remote log shipping.
 
@@ -76,7 +77,7 @@ This document plans a **portable Go binary** that watches configured directories
 **Scope**
 
 - **`project_id` / `workspace_id`** and `flavor_id` — support **global defaults** in YAML, plus **per-root** and **per-glob** overrides (merge order documented in [§ Configuration schema](#configuration-schema-evolution)).
-- **Alignment with Continue** — same values must be sent as `X-Chimera-Project` / `X-Chimera-Flavor-Id` on chat for RAG to hit the same corpus ([`porcelain.plan.md`](../porcelain.plan.md) § Client integration).
+- **Alignment with Continue** — same values must be sent as `X-Chimera-Project` / `X-Chimera-Flavor-Id` on chat for RAG to hit the same corpus ([`chimera.plan.md`](../chimera.plan.md) § Client integration).
 
 ### Phase 4 — Large files: dual-mode ingest + authoritative server hash
 
@@ -248,7 +249,7 @@ overrides:
 
 ## Chunking and gateway contract
 
-**Product decision (this plan):** the **indexer sends the whole file** (multipart `file` and/or JSON fields per gateway schema); the **gateway** applies `chunk_size`, `chunk_overlap`, **embedding**, and **Qdrant** writes. That matches [`porcelain.plan.md`](../porcelain.plan.md) (**one document per request**; gateway chunking defaults configurable and surfaced via `GET /v1/indexer/config`).
+**Product decision (this plan):** the **indexer sends the whole file** (multipart `file` and/or JSON fields per gateway schema); the **gateway** applies `chunk_size`, `chunk_overlap`, **embedding**, and **Qdrant** writes. That matches [`chimera.plan.md`](../chimera.plan.md) (**one document per request**; gateway chunking defaults configurable and surfaced via `GET /v1/indexer/config`).
 
 **Rationale:** the service works at **file** (document) granularity for ingest APIs and storage evolution; chunking strategy can improve **without** shipping a new indexer binary.
 
@@ -267,7 +268,7 @@ For **ingest failures** (transient HTTP errors, **503**, **429**, network errors
 1. **Retry with exponential backoff** — **configurable** `retry_max_attempts` (small integer, e.g. default **5**), `retry_base_delay`, `retry_max_delay` (cap per wait). Jitter optional. Apply per failing operation or per batch per implementation, but **must** bound total attempts.
 2. **After the last backoff attempt fails** — **pause** the ingest **queue** (do **not** discard queued work; continue **collecting** filesystem events if desired, subject to backpressure limits).
 3. **Recovery polling** — while paused, periodically call gateway **status** endpoints to determine whether **ingest / RAG storage** is available again:
-   - `GET /v1/indexer/storage/health` (Bearer token; scoped per [`porcelain.plan.md`](../porcelain.plan.md) **indexer REST**) — **implemented**; client parses `ok`, `status`, `detail`, and the structured `{"error":{...}}` shape when RAG is disabled.
+   - `GET /v1/indexer/storage/health` (Bearer token; scoped per [`chimera.plan.md`](../chimera.plan.md) **indexer REST**) — **implemented**; client parses `ok`, `status`, `detail`, and the structured `{"error":{...}}` shape when RAG is disabled.
    - `GET /health` for overall gateway / upstream readiness — **implemented** when `recovery_include_root_health` is **true** (default); set `false` to use only storage health.
 4. **Resume** when responses indicate **healthy / not degraded** for the paths relevant to ingest (exact JSON fields documented with gateway implementation). **Reset** backoff state for subsequent failures.
 

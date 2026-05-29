@@ -8,6 +8,9 @@
 | **Targets** | Operator log presentation layer |
 | **Last updated** | See git history |
 | **Supersedes / superseded by** | None |
+| **As-built** | [`docs/features/operator-log-message-registry.md`](../features/operator-log-message-registry.md), [`operator-settings-ui.md`](../features/operator-settings-ui.md) |
+
+**Behavioral source of truth:** the [log message registry](../features/operator-log-message-registry.md) and [settings UI](../features/operator-settings-ui.md) feature records describe as-built behavior; this plan is delivery history.
 
 ## At a glance
 

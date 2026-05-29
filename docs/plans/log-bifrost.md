@@ -17,7 +17,7 @@ The supervised **BiFrost** subprocess (`bifrost-http`) writes JSON lines (`-log-
 3. **UI contract** for the **BiFrost service card** — collapsed pills, expanded mini-cards, full event log — so an operator can answer "which providers are healthy, what model is in use, and why did the last call fail?" at a glance.
 4. **[P6](#p6--summarized-headline-prose)** One-line **summarized log headlines** so rows in **Logs → BiFrost** (and relay-adjacent gateway lines) show prose derived from structured fields instead of bare dotted slugs.
 
-**Related docs:** [`supervisor.md`](../supervisor.md), [`bifrost-discovery.md`](../bifrost-discovery.md), [`log-presentation-layer.md`](log-presentation-layer.md), [`log-qdrant.md`](log-qdrant.md), [`log-conversations.md`](log-conversations.md).
+**Related docs:** [`supervisor.md`](../supervisor.md), [`reference/bifrost-upstream.md`](../reference/bifrost-upstream.md), [`log-presentation-layer.md`](log-presentation-layer.md), [`log-qdrant.md`](log-qdrant.md), [`log-conversations.md`](log-conversations.md).
 
 | Phase | Outcome | Status |
 |-------|---------|--------|

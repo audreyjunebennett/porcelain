@@ -8,6 +8,9 @@
 | **Targets** | v0.4 desktop/supervisor boundary |
 | **Last updated** | See git history |
 | **Supersedes / superseded by** | None |
+| **As-built** | [`docs/features/locus-desktop-supervisor.md`](../features/locus-desktop-supervisor.md) (`partial` — Phase 4 packaging still open) |
+
+**Behavioral source of truth:** the [Locus desktop ↔ supervisor](../features/locus-desktop-supervisor.md) feature record describes as-built behavior; this plan is delivery history.
 
 ## At a glance
 

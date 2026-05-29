@@ -1,126 +1,78 @@
-# BiFrost (+ optional Qdrant) subprocesses + Chimera (`chimera serve`)
+# Supervised stack (`chimera-supervisor`)
 
-Phase 3 of [go-bifrost-migration.plan.md](plans/go-bifrost-migration.plan.md): one command can start **Qdrant** (optional), **BiFrost**, and the **Go Chimera** HTTP server in the **same** parent process. **SIGINT** / **SIGTERM** triggers graceful HTTP **shutdown**, then **all** supervised children are **stopped** (reverse order is not guaranteed; context cancel ends them together).
+One command starts the **Chimera wrapper stack**: optional `chimera-vectorstore`, `chimera-broker`, `chimera-gateway`, and optional `chimera-indexer`. Each managed service is a **wrapper binary** that supervises its upstream backend behind a shared contract (health, readiness, lifecycle, structured logs). **SIGINT** / **SIGTERM** triggers graceful shutdown of the control plane and managed children.
+
+**Platform contracts (read before adding binaries):**
+
+- [Wrapper binary contract](features/chimera-wrapper-binary-contract.md)
+- [Structured log lines](features/structured-operator-log-lines.md)
+- [Product naming](features/product-naming-contract.md)
+- [Locus desktop ↔ supervisor](features/locus-desktop-supervisor.md) (desktop launcher)
 
 ## Runtime layout
 
 | Piece | Role |
 |-------|------|
-| **Parent** | Go `chimera serve` — HTTP gateway (`config/gateway.yaml`, api keys, routing). |
-| **Child (optional)** | **Qdrant** native binary — `QDRANT__STORAGE__STORAGE_PATH`, `QDRANT__SERVICE__HOST`, `QDRANT__SERVICE__HTTP_PORT`, `QDRANT__SERVICE__GRPC_PORT` (defaults **6333** / **6334**), plus `QDRANT__LOGGER__FORMAT=json` so subprocess logs are **one JSON object per line** (easier to pipe into the operator UI buffer). Before lines hit `servicelogs`, **`internal/servicelogs/qdrantline`** rewrites each complete line into gateway-style JSON with stable **`msg`** slugs (`qdrant.*`), **`service":"qdrant"`**, and structured fields (`collection`, `http_status`, …) — see [`docs/plans/log-qdrant.md`](plans/log-qdrant.md). Readiness: `GET /readyz`. Omit by leaving `-qdrant-bin` empty. When `rag.enabled` is **true**, the gateway uses Qdrant for RAG; supervise Qdrant for a full local stack. |
-| **Child** | BiFrost HTTP binary (`bifrost-http`) — started with `-app-dir`, `-host`, `-port`, `-log-level`, `-log-style` (empty → **`json`**, one zerolog JSON object per line). `APP_HOST` / `APP_PORT` are also set for compatibility. Working directory = **data dir**. Before lines hit `servicelogs`, **`internal/servicelogs/bifrostline`** rewrites each complete stdout/stderr line into gateway-style JSON with stable **`msg`** slugs (`bifrost.*`), **`service":"bifrost"`**, and structured fields for the operator UI — see [`docs/plans/log-bifrost.md`](plans/log-bifrost.md). |
-| **Child (optional)** | `chimera-indexer` — started when `indexer.supervised` is configured in `gateway.yaml` (see [indexer.md](indexer.md) supervised mode). Receives `CHIMERA_GATEWAY_URL` and a merged `--config` file; stderr can be structured JSON (`--log-json`). |
-| **Config copy** | Your `bifrost.config.json` is copied to `<bifrost-data-dir>/config.json` on each start. |
+| **`chimera-supervisor`** | Parent orchestrator; control HTTP plane (`/healthz`, `/readyz`, `/status`, `/shutdown`); tees child logs into `servicelogs` ring buffer. |
+| **`chimera-vectorstore`** | Wrapper around upstream vector store (default `qdrant` via `--bin`); exposes Chimera listen addr; translates `VECTORSTORE__*` env. |
+| **`chimera-broker`** | Wrapper around upstream LLM broker (BiFrost `bifrost-http` via `--bin`); exposes Chimera listen addr; translates `BROKER__*` env. |
+| **`chimera-gateway`** | Wrapper around gateway backend process; operator UI at `/ui/*`; merges config, RAG, chat, operator SQLite. |
+| **`chimera-indexer`** (optional) | Workspace file watcher; polls gateway for SQLite workspace list; ingest via gateway APIs. |
 
-Chimera’s upstream URL is **overridden** to `http://<upstream-host>:<bifrost-port>` (default `http://127.0.0.1:8080`) so the running gateway always targets the supervised BiFrost instance.
+The supervisor **does not** exec upstream `qdrant` or `bifrost-http` directly — only Chimera wrapper binaries. Upstream paths are passed to wrappers as `--bin`.
 
-The gateway exposes `GET /status` (JSON, no auth — same sensitivity as `/health`) with `supervisor.active: true`, BiFrost/Qdrant listen hints, and upstream probe results. The desktop shell and operators can poll this endpoint; see [gui-testing.md](gui-testing.md).
+Gateway upstream URL is wired to the supervised broker endpoint. When `rag.enabled` is true, the gateway uses the supervised vector store.
 
-## Obtaining the BiFrost binary
-
-The repository does **not** vendor BiFrost. Install per [BiFrost documentation](https://docs.getbifrost.ai/) (release binary, package, or build from [source](https://github.com/maximhq/bifrost)). You need the **HTTP server** artifact (`bifrost-http` from a source build’s `tmp/`), not only the CLI `bifrost`.
-
-### Build from pinned sources (recommended)
-
-**Install from `chimera/deps.lock`** (clone BiFrost + Qdrant source under `.deps/`, build BiFrost, fetch Qdrant release binary → `./bin/`):
+## Obtaining binaries
 
 ```bash
-make chimera-install
+make chimera-install    # BiFrost + Qdrant upstream + build wrappers
+make chimera-supervisor-build
+make chimera-supervisor-run   # foreground stack
 ```
 
-Use `make install` when you also want `make desktop-install` (desktop WebView/CGO OS deps). **Full onboarding** (install, build `chimera` + desktop, run desktop UI with supervisor):
+Full desktop path: `make up` (install, build, run `locus-desktop`). See [installation.md](installation.md) and [packaging.md](packaging.md).
 
-```bash
-make up
-```
+Provider keys (`GROQ_API_KEY`, `GEMINI_API_KEY`, …) and `CHIMERA_BROKER_API_KEY` are read from the **supervisor process environment** and inherited by children.
 
-Foreground stack: `make chimera-supervisor-run` (gateway + BiFrost + Qdrant). Background: `make chimera-start` (after `make chimera-build`); PID and log under `data/chimera-supervisor/` (`chimera-supervisor.pid`, `chimera-supervisor.log`); stop with `make chimera-stop`, status with `make chimera-status`. For BiFrost only in the foreground, run `./chimera serve -bifrost-bin ./bin/bifrost-http` (no Qdrant).
+## Common supervisor flags
 
-Upstream BiFrost `make build` includes the UI (`build-ui`) and needs **Node.js 20+** and a matching **npm** (not only Go). `make chimera-install` checks Node before building.
+Run `./chimera-supervisor -h` for the full list. Typical overrides:
 
-Otherwise put `bifrost-http` (or a compatible binary) on `PATH` as `bifrost`, or pass `-bifrost-bin /full/path`.
+| Flag | Meaning |
+|------|---------|
+| `-listen` | Supervisor control plane bind (desktop derives webview base from this) |
+| `-gateway-bin` | Path to `chimera-gateway` wrapper |
+| `-broker-bin` | Path to `chimera-broker` wrapper |
+| `-vectorstore-bin` | Path to `chimera-vectorstore` wrapper |
+| `-indexer-bin` | Path to `chimera-indexer` (when supervised indexer enabled) |
+| `-config` | Gateway YAML path (default `config/gateway.yaml`) |
 
-### `fork/exec ./bin/bifrost-http: no such file or directory` (binary exists)
-
-The kernel resolves a **relative** `-bifrost-bin` path against the **process current working directory**, not the repo root. If `chimera serve` starts with a different cwd (some IDE tasks, `go run` from another directory), `./bin/bifrost-http` misses. Chimera resolves `./…` and `bin/…` to an **absolute** path before exec; use `-bifrost-bin /home/you/src/chimera-gateway/bin/bifrost-http` if you still see issues, or run from the repo root.
-
-### Troubleshooting `npm ci` / `Cannot read property '@base-ui/react' of undefined`
-
-That error usually means `npm` is too old (e.g. **npm 6** with **Node 10**). On Ubuntu, **snap**’s `node` package is often **v10**; BiFrost’s UI expects a current **Node** (see BiFrost `ui/package.json` / Next 15). Fix by installing **Node 20+** (nvm, fnm, [nodejs.org](https://nodejs.org/), or your distro’s `nodejs` package) and ensuring `which node` points at it **before** snap’s `/snap/bin/node`. Then run `make chimera-install` again.
-
-Provider keys (`GROQ_API_KEY`, `GEMINI_API_KEY`, etc.) are read from the **environment** of the `chimera serve` process and inherited by the BiFrost child. Qdrant inherits the same environment (optional `QDRANT__*` overrides).
-
-## Qdrant binary
-
-Supervision is for a full local stack; the gateway **calls Qdrant** when `rag.enabled` is **true** (**v0.2+**). Without RAG, Qdrant may still be supervised but the gateway does not require it.
-
-- **Pinned version:** `QDRANT_RELEASE` in `chimera/deps.lock` (used by `scripts/qdrant-from-release.sh`, `scripts/release-build-qdrant.sh`, and GoReleaser).
-- **Local install:** `make chimera-install` (includes Qdrant) or `bash scripts/qdrant-from-release.sh` alone → `./bin/qdrant` or `qdrant.exe` (see `scripts/qdrant-from-release.sh`).
-- **Full local stack (Qdrant + BiFrost + gateway):** `make up` or `make chimera-supervisor-run` (foreground).
-
-### Qdrant startup log warnings (optional YAML and `./static`)
-
-You do **not** need `config/config` or `config/development` (or other optional YAML) for the stack Chimera starts. Chimera configures Qdrant with environment variables (`QDRANT__STORAGE__STORAGE_PATH`, `QDRANT__SERVICE__HOST`, HTTP/gRPC ports, etc.; see `internal/supervisor/qdrant.go`), and the Qdrant process **working directory** is set to the **storage directory** (default `data/qdrant`). Qdrant may still probe for optional config files relative to that directory. If they are missing, it logs a **WARN** and continues using **environment variables and defaults**.
-
-Add YAML only when you want settings that are easier to express in a file (for example clustering or extra services). Follow [Qdrant’s configuration guide](https://qdrant.tech/documentation/guides/configuration/) and place files where Qdrant expects them for your chosen layout (often under the storage or run directory).
-
-A message that `./static` does not exist refers to Qdrant’s built-in **dashboard** static files. A release binary started with **cwd** in the storage directory usually has no `./static` there, so the web UI is not served. That is common for minimal or repackaged builds.
-
-For this repository, Qdrant is optional when **RAG is off**. With **RAG on**, the gateway depends on Qdrant for ingest and retrieval. Most operational checks use the HTTP API on the configured port (default **6333**), for example `GET /readyz`, not the dashboard.
-
-**Summary:** These warnings are **safe to ignore** for local development unless you want a custom Qdrant file-based configuration or the full web UI—in which case follow Qdrant’s docs and use a build or layout that includes the `static` assets.
-
-## Usage
-
-From the repo root (with `config/gateway.yaml`, `config/api-keys.yaml`, `config/bifrost.config.json`):
-
-```bash
-export CHIMERA_BROKER_API_KEY=bifrost-local-dummy
-export GROQ_API_KEY=...   # as needed
-go run ./cmd/chimera serve
-# or: ./chimera serve
-```
-
-Common flags:
-
-| Flag | Default | Meaning |
-|------|---------|---------|
-| `-bifrost-bin` | `bifrost` | `bifrost-http` (or name on PATH); use `./bin/bifrost-http` (or `bifrost-http.exe`) after `make chimera-install` |
-| `-bifrost-config` | `config/bifrost.config.json` | Source JSON copied into data dir |
-| `-bifrost-data-dir` | `data/bifrost` | Writable BiFrost state directory |
-| `-bifrost-bind` | `127.0.0.1` | `-host` (and `APP_HOST`) |
-| `-bifrost-port` | `8080` | `-port` (and `APP_PORT`) |
-| `-bifrost-log-level` | `info` | `-log-level` |
-| `-bifrost-log-style` | `json` | `-log-style` (`json` or `pretty`) |
-| `-upstream-host` | `127.0.0.1` | Host segment for Chimera → BiFrost URL (use when BiFrost binds `0.0.0.0`) |
-| `-wait-bifrost` | `60s` | Max time to poll `/health` before exiting |
-| `-no-wait-bifrost` | off | Skip readiness poll (debug only) |
-| `-qdrant-bin` | *(empty)* | Qdrant executable; set e.g. `./bin/qdrant` to supervise Qdrant |
-| `-qdrant-storage` | `data/qdrant` | On-disk vector storage (created) |
-| `-qdrant-bind` | `127.0.0.1` | `QDRANT__SERVICE__HOST` |
-| `-qdrant-http-port` | `6333` | HTTP API port |
-| `-qdrant-grpc-port` | `6334` | gRPC port |
-| `-qdrant-health-host` | `127.0.0.1` | Host for `/readyz` probe when `qdrant-bind` is `0.0.0.0` |
-| `-wait-qdrant` | `60s` | Max time to poll `/readyz` |
-| `-no-wait-qdrant` | off | Skip Qdrant readiness poll |
-
-Gateway flags `‑config` and `‑listen` apply as in gateway-only mode. See `chimera serve -h`.
+Wrapper-specific tuning uses `GATEWAY__*`, `BROKER__*`, `VECTORSTORE__*` env vars — see [product naming contract](features/product-naming-contract.md).
 
 ## Make targets
 
-- `make chimera-install` → toolchain check + BiFrost + Qdrant per `chimera/deps.lock`
-- `make install` → `chimera-install` then `desktop-install`
-- `make up` → `install`, `chimera-build`, `desktop-build`, `desktop-run`
-- `make chimera-supervisor-run` → foreground `go run … serve` with `./bin/qdrant` and `./bin/bifrost-http`
-- `make chimera-start` / `make chimera-stop` / `make chimera-status` / `make logs` → background supervisor lifecycle (`scripts/chimera-start.sh`, etc.)
-- `scripts/qdrant-from-release.sh` → Qdrant binary only → `./bin/` (invoked by `make chimera-install`; run by hand to refresh Qdrant without full install)
+- `make chimera-install` — toolchain + upstream deps per `chimera/deps.lock`
+- `make chimera-supervisor-run` — foreground supervised stack
+- `make chimera-start` / `make chimera-stop` / `make chimera-status` — background lifecycle (`data/chimera-supervisor/`)
+- `make locus-desktop-run` — desktop shell (connect-first to supervisor)
 
-## Manual checklist (Linux)
+## Logs and operator UI
 
-1. Run `make chimera-install` (or ensure `./bin/bifrost-http` exists) or pass `-bifrost-bin`.
-2. Run `chimera serve`; confirm `GET http://127.0.0.1:3000/health` (or your listen port) returns `ok` when BiFrost is up.
-3. Send **SIGINT** to the parent; confirm child processes exit (no orphan `bifrost` / `qdrant` in `ps`).
+Child stdout/stderr pass through per-service `*line` normalizers into the in-process log buffer consumed by **`/ui/settings`**. Log JSON shape is defined in [structured operator log lines](features/structured-operator-log-lines.md).
 
-## CI
+After login: app shell **`/ui`**, settings and event log **`/ui/settings`**. See [README.md](README.md).
 
-End-to-end tests with real BiFrost/Qdrant binaries are **optional** (network, secrets). Unit tests cover config copy, env merge, `WaitHealthy`, and context-cancel kills `sleep` children on Unix.
+## Manual checklist
+
+1. `make chimera-install` and `make chimera-supervisor-build`.
+2. Run `make chimera-supervisor-run`; confirm supervisor `/readyz` and gateway `/health`.
+3. Open `/ui/login` (or use `locus-desktop`).
+4. SIGINT the supervisor; confirm wrapper children exit (no orphan upstream processes).
+
+## Related docs
+
+- [configuration.md](configuration.md) — gateway YAML, reload
+- [indexer.md](indexer.md) — indexer operator guide
+- [network.md](network.md) — ports and traffic flow
+- Historical delivery: [`plans/vectorstore-broker-wrapper-hard-cut.md`](plans/vectorstore-broker-wrapper-hard-cut.md)

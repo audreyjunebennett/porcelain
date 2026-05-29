@@ -35,7 +35,7 @@ This document is a **phased migration plan**. Each phase has a **deliverable**, 
 
 **Non-goals for this document**
 
-- It does not replace [porcelain.plan.md](../porcelain.plan.md) for normative product requirements; it **implements** a technical path toward v0.1+ goals described in [version-v0.1.md](version-v0.1.md).
+- It does not replace [chimera.plan.md](../chimera.plan.md) for normative product requirements; it **implements** a technical path toward v0.1+ goals described in [version-v0.1.md](version-v0.1.md).
 
 ---
 
@@ -53,7 +53,7 @@ After completing work for a phase:
 
 | Date | Phase | Summary | Reference |
 |------|--------|---------|-----------|
-| 2026-04-03 | Phase 0 | BiFrost + TypeScript gateway discovery: `docs/bifrost-discovery.md` added; operator verified VS Code → Chimera → BiFrost; Compose/image and compatibility matrix recorded. Optional: pin BiFrost image digest; add `curl` receipts to discovery doc if desired. | [bifrost-discovery.md](../bifrost-discovery.md) |
+| 2026-04-03 | Phase 0 | BiFrost + TypeScript gateway discovery: `docs/reference/bifrost-upstream.md` added; operator verified VS Code → Chimera → BiFrost; Compose/image and compatibility matrix recorded. Optional: pin BiFrost image digest; add `curl` receipts to discovery doc if desired. | [reference/bifrost-upstream.md](../reference/bifrost-upstream.md) |
 | 2026-04-04 | Phase 1 | Go module `github.com/lynn/porcelain`: `cmd/chimera` binary, `internal/gateway` health + `/v1/*` reverse proxy (SSE flush), `httptest` integration tests, `.github/workflows/go.yml` (fmt/vet/test -race), `scripts/precommit-smoke.sh`. README mapping table. No YAML config file yet (flags + env). | `go.mod`, [README.md](../README.md) |
 | 2026-04-04 | Phase 2 | v0.1 parity in Go: `config/gateway.yaml` + mtime reload, `tokens` / `routing-policy` stores, virtual model + fallback (429/5xx), BiFrost `/api/models` + `/v1/models`, `checks.upstream` health JSON, slog logging. Packages: `internal/config`, `tokens`, `routing`, `upstream`, `chat`, `server`. Tests: routing policy, 429 fallback integration, models list order. **Dual-ship:** Compose `chimera` stays TypeScript until a later phase; operators may run Go binary with same YAML. Optional: script against live BiFrost in CI — not added (network/secrets). | [configuration.md](../configuration.md), [README.md](../README.md) |
 | 2026-04-04 | Phase 3 | `chimera serve` / `supervise`: subprocess BiFrost (`APP_HOST`/`APP_PORT`, data dir, config copy), poll `/health`, gateway with `NewRuntimeWithUpstreamOverride` loopback URL; SIGINT/SIGTERM → HTTP Shutdown then child cancel. `internal/supervisor`, docs [supervisor.md](../supervisor.md). Tests: env merge, config copy, WaitHealthy, sleep killed on cancel (Unix). E2E with real BiFrost binary: optional/deferred. | [supervisor.md](../supervisor.md) |
@@ -70,7 +70,7 @@ After completing work for a phase:
 
 **Deliverable**
 
-- `docs/bifrost-discovery.md` (or equivalent) containing:
+- `docs/reference/bifrost-upstream.md` (or equivalent) containing:
   - Exact BiFrost version(s) tried and install method(s) (e.g. Docker image tag, released binary, `npx`).
   - Minimal **BiFrost configuration** needed for at least one real completion (chat) and `GET /v1/models`.
   - `config/gateway.yaml` (or env) settings: `upstream.base_url` points at BiFrost (or any OpenAI-compatible proxy). Legacy `litellm` YAML keys remain supported as fallbacks.
@@ -91,7 +91,7 @@ After completing work for a phase:
 - [x] Install and run BiFrost per official docs; record version and command lines.
 - [x] Configure at least one provider **only in BiFrost**; confirm completions work **directly** against BiFrost.
 - [x] Point existing gateway config at BiFrost; fix or document any gateway-side changes needed (minimal diff to TS allowed if required for discovery).
-- [x] Write `docs/bifrost-discovery.md` with the sections above.
+- [x] Write `docs/reference/bifrost-upstream.md` with the sections above.
 - [x] Execute and record results of the **acceptance** checks (pass/fail/skip with reason).
 
 **Status:** ☐ Not started · ☐ In progress · ☑ **Complete**
@@ -129,7 +129,7 @@ After completing work for a phase:
 
 **Deliverable**
 
-- Go gateway passes a **parity checklist** derived from TypeScript behavior and `docs/bifrost-discovery.md`.
+- Go gateway passes a **parity checklist** derived from TypeScript behavior and `docs/reference/bifrost-upstream.md`.
 - Migration note (**decision**): **Dual-ship** for now — the **Dockerfile / Compose `chimera` service** remains **TypeScript**; the **Go `chimera` binary** is an alternative runtime using the **same YAML**. Removing or archiving the Node server is **out of scope** until packaging/supervisor phases; no hard sunset date.
 
 **Tests / acceptance criteria**
@@ -255,7 +255,7 @@ After completing work for a phase:
 | Topic | Primary location after migration |
 |--------|----------------------------------|
 | Go entrypoint | `cmd/chimera/` (`go build -o chimera ./cmd/chimera`) |
-| Discovery artifacts | `docs/bifrost-discovery.md` |
+| Discovery artifacts | `docs/reference/bifrost-upstream.md` |
 | Subprocess BiFrost + Go | `docs/supervisor.md`, `chimera serve` |
 | Packaging | `docs/packaging.md` |
 | GUI testing | `docs/gui-testing.md` |

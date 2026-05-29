@@ -51,9 +51,9 @@ The **chat path** records **tiktoken-compatible `cl100k_base`** estimates on the
 
 **Status:** The capabilities below are **shipped** in the **v0.2.0** baseline and subsequent patches (**v0.2.1** logging/UI/conversation merge, **v0.2.2** supervised indexer + shell). Per-patch operator detail lives in § **[Shipped releases: v0.2.0 through v0.2.2](#shipped-releases-v020-through-v022)** below.
 
-This document pulls together **everything scoped to product v0.2** from `[porcelain.plan.md](porcelain.plan.md)` (authoritative product roadmap), `[network.md](network.md)`, `[configuration.md](configuration.md)`, and cross-links the **file indexer** work in a **separate** plan: `[plans/indexer.md](plans/indexer.md)`.
+This document pulls together **everything scoped to product v0.2** from `[chimera.plan.md](chimera.plan.md)` (authoritative product roadmap), `[network.md](network.md)`, `[configuration.md](configuration.md)`, and cross-links the **file indexer** work in a **separate** plan: `[plans/indexer.md](plans/indexer.md)`.
 
-**Tone:** normative items below track **locked** product decisions in the gateway plan; where the **in-tree** stack differs from the original LiteLLM + TypeScript + Compose description, treat this document as the **capability target** and align the Go gateway + BiFrost implementation to the same **HTTP contracts** and **behavior**. Cross-reference topical requirements in `[porcelain.plan.md](porcelain.plan.md)` using *Section · item* notation (e.g. *Workspace indexing · 10*).
+**Tone:** normative items below track **locked** product decisions in the gateway plan; where the **in-tree** stack differs from the original LiteLLM + TypeScript + Compose description, treat this document as the **capability target** and align the Go gateway + BiFrost implementation to the same **HTTP contracts** and **behavior**. Cross-reference topical requirements in `[chimera.plan.md](chimera.plan.md)` using *Section · item* notation (e.g. *Workspace indexing · 10*).
 
 **Companion:** v0.1 working notes and checklist live in `[version-v0.1.md](version-v0.1.md)`.
 
@@ -63,7 +63,7 @@ This document pulls together **everything scoped to product v0.2** from `[porcel
 
 **v0.2** is the **RAG baseline**: gateway-mediated **ingestion**, **query-time retrieval**, **Qdrant** (or another backend behind the **vector-store adapter**), **tenant-scoped** access to ingested data, and **indexer-facing REST** so an external `chimera-indexer` (and operators) can drive indexing without embedding locally.
 
-**Release roadmap summary** (from `[porcelain.plan.md](porcelain.plan.md)`):
+**Release roadmap summary** (from `[chimera.plan.md](chimera.plan.md)`):
 
 - `POST /v1/ingest`
 - **Indexer REST:** `GET /v1/indexer/config`, `GET /v1/indexer/storage/health`, `GET /v1/indexer/storage/stats`, `GET /v1/indexer/corpus/inventory` (live Qdrant readings + paginated source/hash inventory; no persisted metric history in-gateway)
@@ -115,7 +115,7 @@ This document pulls together **everything scoped to product v0.2** from `[porcel
 
 **Status:** `**done`** — implemented in `**internal/tokencount**` (tiktoken-compatible `**cl100k_base**`) and wired through `**internal/chat**` for `**POST /v1/chat/completions**`.
 
-- **What gets counted:** After the gateway builds the **outbound** JSON body (client fields plus resolved `**model`** and `**stream**`), the **entire marshalled string** is passed through `**tokencount.Count`** — the same estimate feeds **structured logs**, **SQLite usage metrics**, and **provider limit** admission (`[docs/tokencount-talk.md](tokencount-talk.md)` discusses calibration vs upstream tokenizers).
+- **What gets counted:** After the gateway builds the **outbound** JSON body (client fields plus resolved `**model`** and `**stream**`), the **entire marshalled string** is passed through `**tokencount.Count`** — the same estimate feeds **structured logs**, **SQLite usage metrics**, and **provider limit** admission (`[docs/reference/tokencount-notes.md](reference/tokencount-notes.md)` discusses calibration vs upstream tokenizers).
 - **Logging:** Successful counts appear on the upstream relay line (e.g. structured field `**outgoingTokens`**, `**msg**` `chat.bifrost.request`). Count failures **do not** fail the request; they degrade to logging without the numeric field.
 - **CLI:** Operators can run `**chimera tokencount`** for ad-hoc counts (`cl100k_base`, optional `**o200k_base**` display for comparison) — not required for gateway operation.
 - **Embedding / RAG paths:** Pre-embed counting for ingest chunks and retrieval query strings remains aligned with the same `**tokencount`** package where those code paths need estimates; product caveats about **approximate** counts vs non–cl100k upstream models still apply.
@@ -342,11 +342,11 @@ This is the **current** system the gateway plan targets for **v0.2** — the anc
 | `tenant_id`                  | Gateway-issued **Bearer token** (server-side; not chosen per request by the client for chat) | Scopes **all** RAG data; retrieval and ingest apply only within this tenant.                                                                                                                                                                                 |
 | `project_id`                 | `X-Chimera-Project` header on chat (when RAG applies) and on ingest, else **token default**  | Selects the **project** / corpus namespace within the tenant.                                                                                                                                                                                                |
 | `flavor_id`                  | Optional `X-Chimera-Flavor-Id`, else **token default**                                       | Selects a **variant** corpus (e.g. branch, profile) within tenant + project.                                                                                                                                                                                 |
-| **Qdrant collection**        | Derived **deterministically** by the gateway from `(tenant_id, project_id, flavor_id)`       | **One collection per triple**; naming follows encoding rules in `[porcelain.plan.md](porcelain.plan.md)` (lowercase, slug-safe, collision hash suffix). **No** reliance on payload filters for tenancy at v0.2 — isolation is by **collection**. |
+| **Qdrant collection**        | Derived **deterministically** by the gateway from `(tenant_id, project_id, flavor_id)`       | **One collection per triple**; naming follows encoding rules in `[chimera.plan.md](chimera.plan.md)` (lowercase, slug-safe, collision hash suffix). **No** reliance on payload filters for tenancy at v0.2 — isolation is by **collection**. |
 | `**source` (indexed paths)** | Indexer / ingest client                                                                      | **Relative path** under configured roots in `[plans/indexer.md](plans/indexer.md)`; avoids leaking absolute host paths in bodies.                                                                                                                            |
 
 
-**Operational note:** Operators still configure **how** the gateway reaches Qdrant (URL, API key, adapter). `[porcelain.plan.md](porcelain.plan.md)` defaults to an HTTP health probe (e.g. `6333` in Compose); a local **gRPC** client on `6334` remains compatible with the same **collection naming** and payload contract as long as the adapter uses one consistent Qdrant API mode.
+**Operational note:** Operators still configure **how** the gateway reaches Qdrant (URL, API key, adapter). `[chimera.plan.md](chimera.plan.md)` defaults to an HTTP health probe (e.g. `6333` in Compose); a local **gRPC** client on `6334` remains compatible with the same **collection naming** and payload contract as long as the adapter uses one consistent Qdrant API mode.
 
 ---
 
@@ -498,7 +498,7 @@ Use this to track cross-cutting v0.2 work; gate detailed indexer items in `[plan
 
 | Document                                                                         | Role                                                                                           |
 | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `[porcelain.plan.md](porcelain.plan.md)`                             | Authoritative product requirements and roadmap                                                 |
+| `[chimera.plan.md](chimera.plan.md)`                             | Authoritative product requirements and roadmap                                                 |
 | `[plans/indexer.md](plans/indexer.md)`                                           | `chimera-indexer` milestones and gateway coordination                                            |
 | `[version-v0.1.md](version-v0.1.md)`                                             | v0.1 delivery notes and exploration                                                            |
 | `[network.md](network.md)`                                                       | Ports and v0.2+ Qdrant data path                                                               |
@@ -510,7 +510,7 @@ Use this to track cross-cutting v0.2 work; gate detailed indexer items in `[plan
 | `[plans/indexer-scan-and-fanout-jobs.md](plans/indexer-scan-and-fanout-jobs.md)` | Queue-safe scan/fan-out, fairness, indexer telemetry aligned with logs                         |
 | `[plans/makefile.md](plans/makefile.md)`                                         | `**catalog-free`**, `**catalog-available**`, `**config-provider-free-tier**` targets           |
 | `[version-v0.1.1.md](version-v0.1.1.md)`                                         | Gateway metrics SQLite, upstream events — baseline for § **Usage metrics and provider limits** |
-| `[tokencount-talk.md](tokencount-talk.md)`                                       | Chat-path token estimate semantics vs TPM admission                                            |
+| `[reference/tokencount-notes.md](reference/tokencount-notes.md)`                                       | Chat-path token estimate semantics vs TPM admission                                            |
 
 
 Deferred notes on **running embeddings locally** (ONNX alignment, optional **vectordb-cli**-style paths, retrieval-depth ideas) live in `[version-v0.3.md](version-v0.3.md)` under **Internal embedding provider (exploration)** — relevant only if that exploration ships or informs indexer-side experiments; they are **not** part of the locked v0.2 HTTP ingest contract.

@@ -1,5 +1,7 @@
 # Cognitive Router & Meta-Policy Engine Architecture
 
+> **North-star architecture** — not all layers below are shipped. For **as-built** chat routing, RAG, and virtual models see [features/README.md](features/README.md) and [gateway-chat-routing-pipeline.md](features/gateway-chat-routing-pipeline.md). Normative product requirements: [chimera.plan.md](chimera.plan.md).
+
 ## Purpose
 
 This document describes the architecture of a **Cognitive Routing Gateway** sitting in front of an LLM infrastructure gateway (e.g., BiFrost).

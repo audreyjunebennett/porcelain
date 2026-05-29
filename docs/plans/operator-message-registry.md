@@ -8,6 +8,9 @@
 | **Targets** | One editable catalog for structured-log slugs and operator-friendly lines |
 | **Last updated** | 2026-05-18 |
 | **Supersedes / superseded by** | Extends [`log-presentation-layer.md`](log-presentation-layer.md); revisits open Q2 in [`chimera-gateway-refactor.md`](chimera-gateway-refactor.md) (codegen for JS constants) |
+| **As-built** | [`docs/features/operator-log-message-registry.md`](../features/operator-log-message-registry.md) |
+
+**Behavioral source of truth:** the [feature record](../features/operator-log-message-registry.md) describes as-built behavior; this plan is delivery history.
 
 ## At a glance
 

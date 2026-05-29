@@ -4,10 +4,11 @@
 |-------|-------|
 | **Doc kind** | `feature-plan` |
 | **Owners / areas** | Gateway, `chimera-indexer`, desktop supervisor, embed UI (`/ui/logs` workspaces), persistence |
-| **Status** | `draft` |
+| **Status** | `shipped` |
 | **Targets** | Gateway + indexer next minor; desktop inherits supervised behavior |
 | **Last updated** | See git history |
 | **Supersedes / superseded by** | None |
+| **As-built** | [`docs/features/indexer-workspaces.md`](../features/indexer-workspaces.md) — Phase 3 incremental watcher without session reload **not** shipped; poll + full reload documented as gap |
 
 ## At a glance
 

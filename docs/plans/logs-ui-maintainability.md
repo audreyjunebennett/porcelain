@@ -8,6 +8,7 @@
 | **Targets** | Logs UI maintainability, clarity, and testability |
 | **Last updated** | 2026-05-18 |
 | **Supersedes / superseded by** | Follows [`log-view-refactor.plan.md`](log-view-refactor.plan.md); **superseded by** [`chimera-gateway-refactor.md`](chimera-gateway-refactor.md) Phases 5–6 |
+| **As-built** | None — superseded; see [`operator-settings-ui.md`](../features/operator-settings-ui.md) and [`chimera-gateway-refactor.md`](chimera-gateway-refactor.md) |
 
 ## At a glance
 

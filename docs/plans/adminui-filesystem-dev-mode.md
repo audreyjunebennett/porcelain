@@ -8,8 +8,9 @@
 | **Targets** | Gateway / desktop v0.3 developer workflow |
 | **Last updated** | See git history |
 | **Supersedes / superseded by** | Complements [`embedui-component-gallery.md`](embedui-component-gallery.md) (CSS-only, no live APIs) |
+| **As-built** | [`docs/features/operator-ui-filesystem-dev-mode.md`](../features/operator-ui-filesystem-dev-mode.md) |
 
-## At a glance
+**Behavioral source of truth:** the [filesystem dev mode](../features/operator-ui-filesystem-dev-mode.md) feature record describes as-built behavior; this plan is delivery history.
 
 Developers editing the operator settings UI today must rebuild `chimera-gateway` (and often restart the supervised stack) to see JavaScript or CSS changes. This plan adds an optional **filesystem asset root** so the gateway serves `embedui/` from disk while production builds keep compile-time `//go:embed`. Set one environment variable, run `locus-desktop` or `chimera-supervisor` as usual, edit files under `adminui/embed/embedui/`, and refresh the browser—no gateway rebuild for static asset changes.
 

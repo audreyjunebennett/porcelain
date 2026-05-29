@@ -28,7 +28,7 @@ Stand up the chimera-gateway in Go in front of BiFrost: chat completions work, t
 
 This document is for **Audrey** (and a Cursor agent helping her) to **explore** what "done enough" for **v0.1** means in practice, how the repo behaves **today**, and which directions are **worth investigating** versus **already decided** in the product plan.
 
-**Tone:** everything under *Explorations* is **optional research**, not a commitment. The authoritative roadmap and locked decisions remain in [`porcelain.plan.md`](porcelain.plan.md). Normative UI/desktop detail lives in [`plans/desktop-ui.md`](plans/desktop-ui.md).
+**Tone:** everything under *Explorations* is **optional research**, not a commitment. The authoritative roadmap and locked decisions remain in [`chimera.plan.md`](chimera.plan.md). Normative UI/desktop detail lives in [`plans/desktop-ui.md`](plans/desktop-ui.md).
 
 ---
 
@@ -99,7 +99,7 @@ Making a fast, portable application is important for the v0.1 release as it dict
 
 - **Context:** **v0.2** RAG may use supervised **Qdrant** or another backend. A portable install may want vectors **off by default** until RAG is in use.
 - **Idea:** spike **embedded** Qdrant (where license and artifact size allow), another embedded vector backend, or a small local store for early RAG—so operators are not required to run a separate Qdrant container for every setup.
-- **Plan alignment:** v0.2 in [`porcelain.plan.md`](porcelain.plan.md) assumes a **swappable vector-store adapter**; if that boundary stays stable, embedded and remote Qdrant can remain interchangeable behind the same interface.
+- **Plan alignment:** v0.2 in [`chimera.plan.md`](chimera.plan.md) assumes a **swappable vector-store adapter**; if that boundary stays stable, embedded and remote Qdrant can remain interchangeable behind the same interface.
 
 ### 4. Portable “first run” (**implemented**)
 
@@ -275,4 +275,4 @@ Instead of hand-authoring `routing-policy.yaml` and fallback chains from scratch
 | Catalog snapshot tool (reference) | `make catalog-free`, `chimera/cmd/catalog-write-free/`, `internal/freecatalog/` |
 | Regenerate routing (API)          | `POST /api/ui/routing/generate` (`internal/server/ui_routing_generate.go`) |
 | Operator UI (embed)               | `internal/server/embedui/`, `internal/server/ui_handlers.go` |
-| Product / locked decisions        | [`porcelain.plan.md`](porcelain.plan.md)                               |
+| Product / locked decisions        | [`chimera.plan.md`](chimera.plan.md)                               |

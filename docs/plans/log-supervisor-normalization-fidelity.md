@@ -8,6 +8,9 @@
 | **Targets** | Supervised stack (locus-desktop → chimera-supervisor → wrapped gateway / broker / vectorstore / indexer); operator log buffer, SSE stream, and `locus-desktop-supervisor.log` |
 | **Last updated** | See git history |
 | **Supersedes / superseded by** | Complements [`log-qdrant.md`](log-qdrant.md), [`log-bifrost.md`](log-bifrost.md), [`log-gateway.md`](log-gateway.md), [`log-view-indexer.md`](log-view-indexer.md); does not replace per-service taxonomy plans |
+| **As-built** | [`docs/features/structured-operator-log-lines.md`](../features/structured-operator-log-lines.md), [`indexer-health-and-operator-logs.md`](../features/indexer-health-and-operator-logs.md), [`operator-settings-ui.md`](../features/operator-settings-ui.md) |
+
+**Behavioral source of truth:** the [structured operator log lines](../features/structured-operator-log-lines.md) feature record describes as-built log pipeline behavior; this plan is delivery history.
 
 ## At a glance
 

@@ -9,14 +9,13 @@ The gateway
 chunks, embeds, and writes vectors to Qdrant, so the indexer never embeds or
 chunks locally.
 
-See [`plans/indexer.plan.md`](plans/indexer.plan.md) for the full product plan and
-non-goals; this document is the operator-facing quick start.
+**As-built contracts:** [features/indexer.md](features/indexer.md), [indexer-workspaces](features/indexer-workspaces.md), [indexer-ingest-pipeline](features/indexer-ingest-pipeline.md). Delivery history: [plans/indexer.md](plans/indexer.md). This document is the operator quick start.
 
-## Supervised mode (`chimera serve` / desktop) — indexer plan Phase 5 / gateway v0.2.2+
+## Supervised mode (`chimera-supervisor` / desktop)
 
 When `indexer.supervised.enabled: true` is set in `config/gateway.yaml`
-(and RAG is enabled, or `start_when_rag_disabled: true`), `chimera serve`
-starts `chimera-indexer` as a child process after BiFrost is healthy. The child
+(and RAG is enabled, or `start_when_rag_disabled: true`), `chimera-supervisor`
+starts `chimera-indexer` as a child process after the broker is healthy. The child
 inherits the parent environment and receives `CHIMERA_GATEWAY_URL` pointing
 at this gateway instance; set `CHIMERA_GATEWAY_TOKEN` in the environment so
 ingest can authenticate.
@@ -31,7 +30,7 @@ ingest can authenticate.
   **`chimera-indexer` process detects the edit** (debounced), stops the
   current watcher session, and **starts a new session**—**no full desktop
   restart**. If the indexer binary is stale, or other gateway settings
-  change, you still restart **`chimera serve`/desktop**.
+  change, you still restart **`chimera-supervisor`/desktop**.
 - **Standalone `chimera-indexer`** (no `--config`): unchanged—roots come from
   merged YAML and optional `--root` as before.
 - **Logs:** stderr/stdout are teed into the same ring buffer as BiFrost/Qdrant;
@@ -40,7 +39,7 @@ ingest can authenticate.
 
 ### Structured operator logs (`--log-json`)
 
-After a successful `GET /v1/indexer/config`, the logger adds `tenant_id`, `principal_id` (same as tenant), and `user_label` to **all** structured lines via `log.With`, plus `indexer_key` when **every watched root resolves to the same** ingest `indexer_target_key`; if roots map to **multiple** projects/flavors, `indexer_multi_target` is set instead (**no** single `indexer_key`) so `/ui/settings` can split cards using `root_scopes` / job lines. Every line carries `index_run_id` and `service":"indexer"`. Stable slug `msg` for grouping: see [`plans/log-presentation-layer.plan.md`](plans/log-presentation-layer.plan.md).
+After a successful `GET /v1/indexer/config`, the logger adds `tenant_id`, `principal_id` (same as tenant), and `user_label` to **all** structured lines via `log.With`, plus `indexer_key` when **every watched root resolves to the same** ingest `indexer_target_key`; if roots map to **multiple** projects/flavors, `indexer_multi_target` is set instead (**no** single `indexer_key`) so `/ui/settings` can split cards using `root_scopes` / job lines. Every line carries `index_run_id` and `service":"indexer"`. Stable slug `msg` for grouping: see [structured-operator-log-lines](features/structured-operator-log-lines.md).
 
 | `msg` slug | When | Notable fields |
 |------------|------|----------------|
@@ -112,7 +111,7 @@ where absent meant verbose INFO lines).
 **Binary:** place `chimera-indexer` next to the **same executable** that runs
 supervision (`chimera`, `locus-desktop`, etc.—see `executableDir` in
 `cmd/chimera/serve_defaults.go`), or set `indexer.supervised.bin`, or ensure
-it is on `PATH`. After `make chimera-indexer-build`, restart `chimera serve`
+it is on `PATH`. After `make chimera-indexer-build`, restart `chimera-supervisor`
 or desktop so the child process is started again; otherwise you may still be
 running an older `chimera-indexer` on disk.
 

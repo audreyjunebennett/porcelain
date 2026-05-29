@@ -8,6 +8,9 @@
 | **Targets** | Gateway operator settings, `GET /v1/models`, virtual-model routing |
 | **Last updated** | See git history |
 | **Supersedes / superseded by** | Replaces `routing.filter_free_tier_models` and YAML-only catalog filtering; builds on [`embedui-dynamic-provider-cards.md`](embedui-dynamic-provider-cards.md) and [`virtual-models-operator.md`](virtual-models-operator.md) |
+| **As-built** | [`docs/features/operator-provider-model-availability.md`](../features/operator-provider-model-availability.md) |
+
+**Behavioral source of truth:** the [feature record](../features/operator-provider-model-availability.md) describes as-built behavior; this plan is delivery history.
 
 ## At a glance
 

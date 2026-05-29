@@ -4,10 +4,11 @@
 |-------|-------|
 | **Doc kind** | `feature-plan` |
 | **Owners / areas** | Gateway (`indexerapi`, `/health`, catalog), `chimera-indexer`, operator logs (`servicelogs`, embed UI) |
-| **Status** | `done` |
+| **Status** | `shipped` |
 | **Targets** | Gateway + indexer minor after v0.3 operator-log work |
 | **Last updated** | 2026-05-22 |
 | **Supersedes / superseded by** | Extends [`indexer-workspaces-accurate-reporting.md`](indexer-workspaces-accurate-reporting.md) Phase 3 (log volume); complements [`indexer.md`](indexer.md) failure handling |
+| **As-built** | [`docs/features/indexer-health-and-operator-logs.md`](../features/indexer-health-and-operator-logs.md) |
 
 ## At a glance
 

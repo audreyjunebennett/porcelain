@@ -8,6 +8,9 @@
 | **Targets** | Gateway / operator UI v0.3 |
 | **Last updated** | See git history |
 | **Supersedes / superseded by** | Supersedes scattered notes in [`embedui-component-system.md`](embedui-component-system.md) and [`chimera-gateway-package-boundaries.md`](chimera-gateway-package-boundaries.md) for `/ui/logs` / `/ui/desktop` entry URLs |
+| **As-built** | [`docs/features/operator-settings-ui.md`](../features/operator-settings-ui.md), [`operator-left-navigation-ribbon.md`](../features/operator-left-navigation-ribbon.md) |
+
+**Behavioral source of truth:** the [settings UI](../features/operator-settings-ui.md) and [navigation ribbon](../features/operator-left-navigation-ribbon.md) feature records describe as-built behavior; this plan is delivery history.
 
 ## At a glance
 

@@ -50,9 +50,9 @@ Make the gateway easier to set up and clearer about what it is. This plan’s **
 
 This document is the **working plan for v0.3** for this repository (**Chimera**: intelligent routing and memory layer; see [Product naming](#product-naming)). Body **sections are ordered** for delivery narrative: [Product naming](#product-naming) and [Credential file naming](#credential-file-naming) first; then [Internal embedding provider (exploration)](#internal-embedding-provider-exploration) and [Operator-managed virtual models](#operator-managed-virtual-models); then [First-run token handoff](#first-run-token-handoff) and [Setup wizard](#setup-wizard). **v0.3** targets **layered product naming** (**Porcelain**, **Chimera**, **Locus**), **api-keys** language, optional **in-repo / first-install** embedding weights **within license**, and **multi-model routing** (virtual models with per-model policy). **Workspace embedding scope (project + flavor)** and **peer backends** are scoped in [`version-v0.4.md`](version-v0.4.md). Naming and README wording in line with branch `origin/feat/chimera-branding` should be folded into this release unless superseded by a written decision.
 
-**Companion docs:** `[porcelain.plan.md](porcelain.plan.md)`, `[configuration.md](configuration.md)`, `[plans/indexer.md](plans/indexer.md)`, `[plans/v0-3-naming-migration.md](plans/v0-3-naming-migration.md)` (product naming execution), `[plans/virtual-models-operator.md](plans/virtual-models-operator.md)` (virtual models execution), plus implementation plans in [Related plans](#related-plans) (gateway/embed UI refactor, supervisor contract, wrapper hard cut).
+**Companion docs:** `[chimera.plan.md](chimera.plan.md)`, `[configuration.md](configuration.md)`, `[plans/indexer.md](plans/indexer.md)`, `[plans/v0-3-naming-migration.md](plans/v0-3-naming-migration.md)` (product naming execution), `[plans/virtual-models-operator.md](plans/virtual-models-operator.md)` (virtual models execution), plus implementation plans in [Related plans](#related-plans) (gateway/embed UI refactor, supervisor contract, wrapper hard cut).
 
-Authoritative **architecture and numbered requirements** remain in `[porcelain.plan.md](porcelain.plan.md)` unless this plan explicitly revises them. **Indexer** **Phase 3** in `[plans/indexer.md](plans/indexer.md)` (e.g. scoped overrides, headers) is **not** the same shipping train as **gateway desktop v0.3**; cross-link when both touch the same API.
+Authoritative **architecture and numbered requirements** remain in `[chimera.plan.md](chimera.plan.md)` unless this plan explicitly revises them. **Indexer** **Phase 3** in `[plans/indexer.md](plans/indexer.md)` (e.g. scoped overrides, headers) is **not** the same shipping train as **gateway desktop v0.3**; cross-link when both touch the same API.
 
 ---
 
@@ -96,7 +96,7 @@ These names are **roles**, not four separate shipping binaries unless noted:
 
 - Written **naming decision**: when **Chimera** vs **Porcelain** appears (gateway-only vs suite), **Locus** copy guidelines, and canonical names for env/header/bin/path surfaces.
 - UI, installer, about screens, and packaged artifacts match the layered story (**Chimera** gateway inside **Porcelain**).
-- Documentation set (README, onboarding, `[porcelain.plan.md](porcelain.plan.md)` release row when updated) reflects the architecture narrative; historical “chimera-gateway” OK in release notes only when labeled historical.
+- Documentation set (README, onboarding, `[chimera.plan.md](chimera.plan.md)` release row when updated) reflects the architecture narrative; historical “chimera-gateway” OK in release notes only when labeled historical.
 - Companion components (**indexer**, desktop app, Compose samples) updated for any new headers/env aliases called out above.
 - Make tasks are updated to use a variable name for the product name
 - Product name is defined in a minimum number of locations
@@ -568,7 +568,7 @@ v1 may store a monolithic **policy YAML** per virtual model for fastest parity w
 | Setup wizard                     | Six steps navigate correctly, support skip/finish, and use shared router regeneration; embedding combobox reflects internal provider when implemented.               |
 
 
-When this plan is implemented, update `[porcelain.plan.md](porcelain.plan.md)` **Release roadmap** row for v0.3 if the shipped scope differs (e.g. split onboarding vs RAG scope into separate releases).
+When this plan is implemented, update `[chimera.plan.md](chimera.plan.md)` **Release roadmap** row for v0.3 if the shipped scope differs (e.g. split onboarding vs RAG scope into separate releases).
 
 ---
 
@@ -585,6 +585,6 @@ When this plan is implemented, update `[porcelain.plan.md](porcelain.plan.md)` *
 
 - `[version-v0.2.md](version-v0.2.md)` - previous version
 - `[version-v0.4.md](version-v0.4.md)` - next version (workspace embedding scope, peer backends)
-- `[porcelain.plan.md](porcelain.plan.md)` - product roadmap and requirements
+- `[chimera.plan.md](chimera.plan.md)` - product roadmap and requirements
 - `[configuration.md](configuration.md)` - configuration reference
 

@@ -4,10 +4,11 @@
 |-------|-------|
 | **Doc kind** | `feature-plan` |
 | **Owners / areas** | Indexer, queueing, logs UI |
-| **Status** | `done` |
+| **Status** | `shipped` |
 | **Targets** | Queue-safe initial indexing and fan-out jobs |
 | **Last updated** | See git history |
 | **Supersedes / superseded by** | Replaces the old synchronous `EnqueueInitialScan` behavior |
+| **As-built** | [`docs/features/indexer-ingest-pipeline.md`](../features/indexer-ingest-pipeline.md) |
 
 ## At a glance
 

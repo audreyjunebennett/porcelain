@@ -8,6 +8,9 @@
 | **Targets** | gateway v0.3 naming train |
 | **Last updated** | See git history |
 | **Supersedes / superseded by** | Supersedes `naming-migration.md`, `v0.3_naming_migration_1c31a8cf.plan.md`, `v0-3-naming-phase1-inventory.md`, `v0-3-naming-hard-cut-execution.md` |
+| **As-built** | [`docs/features/product-naming-contract.md`](../features/product-naming-contract.md) |
+
+**Behavioral source of truth:** the [product naming contract](../features/product-naming-contract.md) describes as-built behavior; this plan is delivery history.
 
 ## At a glance
 

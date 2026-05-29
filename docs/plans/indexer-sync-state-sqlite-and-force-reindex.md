@@ -7,7 +7,7 @@
 | **Status** | `draft` |
 | **Targets** | locus-desktop supervised stack; gateway + indexer next minor |
 | **Last updated** | 2026-05-25 |
-| **Supersedes / superseded by** | Complements [`indexer-workspaces-sqlite-gateway-api.md`](indexer-workspaces-sqlite-gateway-api.md) (workspace list polling). Does not replace corpus inventory reconciliation in [`indexer.md`](../indexer.md). |
+| **Supersedes / superseded by** | Complements [`indexer-workspaces-sqlite-gateway-api.md`](indexer-workspaces-sqlite-gateway-api.md) (workspace list polling). Coordinates with [`indexer-manifest-ingest.md`](indexer-manifest-ingest.md) (segment index vs sync checkpoints). Does not replace corpus inventory reconciliation in [`indexer.md`](../indexer.md). |
 
 ## At a glance
 

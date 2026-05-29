@@ -1,0 +1,52 @@
+---
+description: Plans vs feature records — where to read and what to update
+globs: docs/**/*.md
+alwaysApply: true
+---
+
+# Plans vs feature records
+
+## Where to look
+
+| Need | Read |
+|------|------|
+| Current behavior, invariants, routes, code map | [`docs/features/README.md`](../../docs/features/README.md) |
+| **New `chimera-*` wrapper or supervised binary** | [Wrapper binary contract](../../docs/features/chimera-wrapper-binary-contract.md), [Product naming](../../docs/features/product-naming-contract.md), [Structured log lines](../../docs/features/structured-operator-log-lines.md) |
+| **Chat routing, tool router, fallback, or new router stage** | [Gateway chat routing pipeline](../../docs/features/gateway-chat-routing-pipeline.md) |
+| Future intent or draft design | [`docs/plans/`](../../docs/plans/) with `Status: draft` or `active` |
+| Delivery history, phase acceptance, rationale | Shipped plans in [`docs/plans/README.md`](../../docs/plans/README.md) |
+| Install, run, configure | [`docs/README.md`](../../docs/README.md) operator runbooks |
+| Product vision + normative requirements | [`docs/chimera.plan.md`](../../docs/chimera.plan.md) |
+| Integration references (BiFrost, token notes) | [`docs/reference/`](../../docs/reference/) |
+
+## Rules for agents
+
+1. **Do not implement from a shipped plan** if a feature record exists — the feature record is behavioral source of truth.
+2. **Draft plans may not match the codebase** — verify in code before assuming behavior exists.
+3. **After shipping behavior**, update or create the feature record; add an **As-built** link in the plan front-matter table.
+4. **Platform contracts** (`Doc kind: platform-contract`) describe extender/binary integration — read before adding wrappers or normalizers.
+5. **Operator features** (`Doc kind: feature-record`) describe UI and operator-visible product behavior.
+6. **Do not delete shipped plans** — they preserve delivery context; feature records distill what must stay true going forward.
+
+## When changing operator or indexer behavior
+
+1. Read the relevant feature record(s) first.
+2. Change code and tests.
+3. Update the feature record if invariants, interfaces, or code map changed.
+4. Link new work to a draft plan if one exists; mark the plan shipped when done.
+
+## When adding a new wrapped binary
+
+1. Read [chimera-wrapper-binary-contract.md](../../docs/features/chimera-wrapper-binary-contract.md).
+2. Implement `wrapper/runtime.Adapter` and use `internal/naming` env keys.
+3. Add a `*line` normalizer for structured stderr; follow [structured-operator-log-lines.md](../../docs/features/structured-operator-log-lines.md).
+4. Add e2e contract tests mirroring broker/vectorstore patterns.
+5. Update feature record if the shared contract changes; extend pipeline doc **Target extensibility** when adding a stage.
+
+## When adding a chat router stage (transform, retrieval, policy, admission)
+
+1. Read [gateway-chat-routing-pipeline.md](../../docs/features/gateway-chat-routing-pipeline.md) for stage order and invariants.
+2. Prefer extending an existing stage package (`transform`, `rag`, `routing`, `providerlimits`, `chat`) before new orchestration in handlers.
+3. Wire config through virtual model stack where operator-visible; document new fields in [operator-virtual-models.md](../../docs/features/operator-virtual-models.md) if settings change.
+4. Add stable log slugs to [operator message registry](../../docs/features/operator-log-message-registry.md).
+5. Do not call upstream outside `chat.WithVirtualModelFallback` unless explicitly designing a new stage type documented in the pipeline feature.

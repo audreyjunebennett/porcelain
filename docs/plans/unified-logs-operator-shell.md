@@ -8,6 +8,9 @@
 | **Targets** | Gateway operator UI (post–log view refactor baseline) |
 | **Last updated** | See git history |
 | **Supersedes / superseded by** | None |
+| **As-built** | [`docs/features/operator-settings-ui.md`](../features/operator-settings-ui.md), [`operator-left-navigation-ribbon.md`](../features/operator-left-navigation-ribbon.md) |
+
+**Behavioral source of truth:** the [settings UI](../features/operator-settings-ui.md) and [navigation ribbon](../features/operator-left-navigation-ribbon.md) feature records describe as-built behavior; this plan is delivery history.
 
 ## At a glance
 

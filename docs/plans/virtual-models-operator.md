@@ -8,6 +8,9 @@
 | **Targets** | Gateway next minor after unified operator cards baseline |
 | **Last updated** | 2026-05-18 |
 | **Supersedes / superseded by** | Extends [`unified-logs-operator-shell.md`](unified-logs-operator-shell.md); replaces global single-VM routing described in [`configuration.md`](../configuration.md) |
+| **As-built** | [`docs/features/operator-virtual-models.md`](../features/operator-virtual-models.md), [`gateway-chat-routing-pipeline.md`](../features/gateway-chat-routing-pipeline.md) |
+
+**Behavioral source of truth:** the [virtual models](../features/operator-virtual-models.md) and [chat routing pipeline](../features/gateway-chat-routing-pipeline.md) feature records describe as-built behavior; this plan is delivery history.
 
 ## At a glance
 

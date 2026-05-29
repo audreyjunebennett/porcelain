@@ -115,7 +115,7 @@ make clean
 - **Supervisor:** [docs/supervisor.md](docs/supervisor.md)
 - **Packaging / releases:** [docs/packaging.md](docs/packaging.md)
 - **Security:** [SECURITY.md](SECURITY.md)
-- **Product / requirements (normative):** [docs/porcelain.plan.md](docs/porcelain.plan.md)
+- **Product / requirements (normative):** [docs/chimera.plan.md](docs/chimera.plan.md)
 
 ## Development roadmap
 
@@ -126,7 +126,7 @@ make clean
 | **v0.2.0 – v0.2.2** | [Shipped releases + capability plan](docs/version-v0.2.md) |
 | **v0.3.0** | [Working plan — v0.3](docs/version-v0.3.md) |
 | **v0.4.0** | [Working plan — v0.4](docs/version-v0.4.md) |
-| **Later** | [Release roadmap](docs/porcelain.plan.md#release-roadmap) in [docs/porcelain.plan.md](docs/porcelain.plan.md) |
+| **Later** | [Release roadmap](docs/chimera.plan.md#release-roadmap) in [docs/chimera.plan.md](docs/chimera.plan.md) |
 
 ## License
 

@@ -7,7 +7,10 @@
 | **Status** | `done` |
 | **Targets** | Gateway next patch after v0.2 routing baseline |
 | **Last updated** | 2026-05-24 |
-| **Supersedes / superseded by** | Extends [`version-v0.1.1.md`](../version-v0.1.1.md) §3.7 (TPM/RPM admission); complements [`tokencount-talk.md`](../tokencount-talk.md) |
+| **Supersedes / superseded by** | Extends [`version-v0.1.1.md`](../version-v0.1.1.md) §3.7 (TPM/RPM admission); complements [`reference/tokencount-notes.md`](../reference/tokencount-notes.md) |
+| **As-built** | [`docs/features/context-window-admission.md`](../features/context-window-admission.md) (`partial`) |
+
+**Behavioral source of truth:** the [feature record](../features/context-window-admission.md) describes as-built behavior; this plan is delivery history.
 
 ## At a glance
 
@@ -57,7 +60,7 @@ Root causes in current code:
 
 RAG injection order is already correct: attach retrieved context **before** token witness and routing ([`server.go`](../../chimera/chimera-gateway/internal/server/server.go) `handleV1Chat`). Context admission runs on the **final** proxied body.
 
-**Related docs:** [`configuration.md`](../configuration.md) (`provider-model-limits.yaml`), [`tokencount-talk.md`](../tokencount-talk.md), [`version-v0.2.md`](../version-v0.2.md) § usage metrics.
+**Related docs:** [`configuration.md`](../configuration.md) (`provider-model-limits.yaml`), [`reference/tokencount-notes.md`](../reference/tokencount-notes.md), [`version-v0.2.md`](../version-v0.2.md) § usage metrics.
 
 ---
 
@@ -216,7 +219,7 @@ RAG injection order is already correct: attach retrieved context **before** toke
   - `outgoingTokens`, `max_tokens`, `body_bytes`, `context_cap`, `reason` (`context_window` | `request_body_bytes`).
 - Optional operator-copy slug in [`internal/operatorcopy/messages.yaml`](../../internal/operatorcopy/messages.yaml) for evlog rendering (follow existing `chat.provider_limits.blocked` pattern).
 - Update [`configuration.md`](../configuration.md) § provider-model-limits with schema v2, formulas, and link to `make catalog-limits`.
-- Short note in [`tokencount-talk.md`](../tokencount-talk.md) cross-linking context admission (implementation ordering item #2 satisfied).
+- Short note in [`reference/tokencount-notes.md`](../reference/tokencount-notes.md) cross-linking context admission (implementation ordering item #2 satisfied).
 
 **Acceptance**
 
@@ -251,7 +254,7 @@ Resolve before or during implementation; remove this section when closed.
 | RAG then routing order | [`chimera/chimera-gateway/internal/server/server.go`](../../chimera/chimera-gateway/internal/server/server.go) `handleV1Chat` |
 | Limits guard wiring | [`chimera/chimera-gateway/internal/server/runtime/runtime.go`](../../chimera/chimera-gateway/internal/server/runtime/runtime.go) `LimitsGuard` |
 | Live catalog poll | [`chimera/chimera-gateway/internal/server/catalog/availablemodels.go`](../../chimera/chimera-gateway/internal/server/catalog/availablemodels.go) |
-| Token estimate | [`chimera/internal/tokencount/`](../../chimera/internal/tokencount/), [`docs/tokencount-talk.md`](../tokencount-talk.md) |
+| Token estimate | [`chimera/internal/tokencount/`](../../chimera/internal/tokencount/), [`docs/reference/tokencount-notes.md`](../reference/tokencount-notes.md) |
 | Config load | [`chimera/internal/config/config.go`](../../chimera/internal/config/config.go) `ProviderLimitsSpec` |
 
 ### Config examples

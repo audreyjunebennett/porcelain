@@ -4,10 +4,11 @@
 |-------|-------|
 | **Doc kind** | `feature-plan` |
 | **Owners / areas** | Gateway embed UI (`/ui/logs`), `chimera-indexer`, `servicelogs`, operator SQLite store |
-| **Status** | `done` |
+| **Status** | `shipped` |
 | **Targets** | Next gateway + indexer minor after operator-store workspaces are default |
 | **Last updated** | 2026-05-19 |
 | **Supersedes / superseded by** | Complements [`indexer-workspaces-sqlite-gateway-api.md`](indexer-workspaces-sqlite-gateway-api.md) (Phase 1 done; Phases 2–3 still open). UI flicker/summary fixes are in flight separately. |
+| **As-built** | [`docs/features/indexer-workspaces.md`](../features/indexer-workspaces.md) (also [`indexer-health-and-operator-logs.md`](../features/indexer-health-and-operator-logs.md) for log pinning / scope status) |
 
 ## At a glance
 

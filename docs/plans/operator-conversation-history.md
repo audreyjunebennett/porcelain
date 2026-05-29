@@ -4,10 +4,13 @@
 |-------|-------|
 | **Doc kind** | `feature-plan` |
 | **Owners / areas** | Gateway operator SQLite, chat/RAG persistence, gateway embed UI, admin UI session |
-| **Status** | `done` |
+| **Status** | `shipped` |
 | **Targets** | Gateway operator shell (`/ui`), chat route (`/ui/chat`), operator SQLite |
 | **Last updated** | See git history |
 | **Supersedes / superseded by** | Builds on [`operator-chat-ui.md`](operator-chat-ui.md) |
+| **As-built** | [`docs/features/operator-conversation-history.md`](../features/operator-conversation-history.md) |
+
+**Behavioral source of truth:** the [feature record](../features/operator-conversation-history.md) describes as-built behavior; this plan is delivery history.
 
 ## At a glance
 
@@ -21,7 +24,7 @@ Operators should be able to return to past gateway chats days later: each saved 
 | [Phase 4 — Chat UI history panel](#phase-4--chat-ui-history-panel) | Browse, flag, rename, delete, open, and copy saved threads | `done` |
 
 ---
-
+Do I use plan document templates for plans that have already been delivered    
 ## Background
 
 **Problem.** The shipped operator chat UI ([`operator-chat-ui.md`](operator-chat-ui.md)) keeps the full transcript only in browser memory. **New chat** clears it; reload loses it. Operators cannot revisit prior threads, compare retrieval context across sessions, or share a durable transcript outside the ephemeral settings event log.

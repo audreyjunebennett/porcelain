@@ -8,6 +8,9 @@
 | **Targets** | Gateway operator shell (`/ui`), chat route (`/ui/chat`) |
 | **Last updated** | See git history |
 | **Supersedes / superseded by** | None |
+| **As-built** | [`docs/features/operator-chat-ui.md`](../features/operator-chat-ui.md) |
+
+**Behavioral source of truth:** the [feature record](../features/operator-chat-ui.md) describes as-built behavior; this plan is delivery history.
 
 ## At a glance
 
