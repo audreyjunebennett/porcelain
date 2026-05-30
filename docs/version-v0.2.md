@@ -2,7 +2,7 @@
 
 
 | Field                          | Value                                                                                                                            |
-| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
+|--------------------------------|----------------------------------------------------------------------------------------------------------------------------------|
 | **Doc kind**                   | `version-roadmap`                                                                                                                |
 | **Owners / areas**             | Gateway RAG, indexer, vector storage, operator logs UI (webview / desktop), chat token estimates, usage metrics, provider limits |
 | **Status**                     | `shipped`                                                                                                                        |
@@ -27,7 +27,7 @@ The **chat path** records **tiktoken-compatible `cl100k_base`** estimates on the
 
 
 | Theme                                                                                  | Outcome                                                                                                                                       | Status |
-| -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+|----------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------|--------|
 | [Ingestion API](#ingestion-api)                                                        | `POST /v1/ingest` accepts whole files; the gateway chunks, embeds, and stores                                                                 | `done` |
 | [Indexer REST](#indexer-rest-gateway-owned)                                            | Config, storage health and stats, paginated corpus inventory                                                                                  | `done` |
 | [Chunking, embeddings, Qdrant](#chunking-embedding-and-qdrant)                         | One collection per (tenant, project, flavor); stable payload fields                                                                           | `done` |
@@ -35,7 +35,7 @@ The **chat path** records **tiktoken-compatible `cl100k_base`** estimates on the
 | [Token counting (chat path)](#token-counting-chat-path)                                | `cl100k_base` estimate on outbound chat JSON; structured log (`outgoingTokens`); same estimate drives metrics + quota admission               | `done` |
 | [Usage metrics and provider limits](#usage-metrics-and-provider-limits)                | SQLite minute/day rollups; RPM/RPD/TPM/TPD from YAML; **429** `gateway_provider_limits` when a call would exceed                              | `done` |
 | [Health probe](#health-and-operations)                                                 | `/health` adds a Qdrant probe when RAG is enabled                                                                                             | `done` |
-| [Workspace indexer (`chimera-indexer`, Phase 2)](#file-indexer-v02)                          | Watch roots, ignore rules, queue-safe scan/fan-out, ingest aligned with v0.2 APIs                                                             | `done` |
+| [Workspace indexer (`chimera-indexer`, Phase 2)](#file-indexer-v02)                    | Watch roots, ignore rules, queue-safe scan/fan-out, ingest aligned with v0.2 APIs                                                             | `done` |
 | [Operator logs UI](#operator-logs-ui-correlation--summarized-views)                    | Correlation + tagging; conversation / subsystem views; Indexers cards; SSE/poll; desktop shell — **Themes** subsections                       | `done` |
 | [Indexer chunked ingestion](#themes-indexer-chunked-ingestion)                         | Session API when files exceed `**max_whole_file_bytes`**; indexer uses whole POST or chunked transport per config                             | `done` |
 | [Conversation headers & Continue](#themes-conversation-headers-and-continue-templates) | `**X-Chimera-Conversation-Id**` (+ project/flavor); gateway accepts or generates; templates in `**vscode-continue/**`                         | `done` |
@@ -295,9 +295,9 @@ Operator-maintained `**config/provider-model-limits.yaml`** follows `**schema_ve
 
 
 | Target                               | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `**make catalog-free**`              | Runs `**chimera/cmd/catalog-write-free**`: fetches **Groq** + **Gemini** public docs, extracts **BiFrost-style model ids** and **rate-limit metadata**, writes `**config/catalog-free-tier.snapshot.yaml`** (override with `**OUT=**`). Optional `**INTERSECT=**` filters to a catalog file.                                                                                                                                                                                                       |
-| `**make catalog-available**`         | Runs `**chimera/cmd/catalog-write-available**`: `**GET**` BiFrost `**/v1/models**`, writes `**config/catalog-available.snapshot.yaml**` (**requires** BiFrost up; `**OUT=`** override).                                                                                                                                                                                                                                                                                                            |
+|--------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `**make catalog-free**`              | Runs `**chimera/cmd/catalog-write-free**`: fetches **Groq** + **Gemini** public docs, extracts **BiFrost-style model ids** and **rate-limit metadata**, writes `**config/catalog-free-tier.snapshot.yaml`** (override with `**OUT=**`). Optional `**INTERSECT=**` filters to a catalog file.                                                                                                                                                                                               |
+| `**make catalog-available**`         | Runs `**chimera/cmd/catalog-write-available**`: `**GET**` BiFrost `**/v1/models**`, writes `**config/catalog-available.snapshot.yaml**` (**requires** BiFrost up; `**OUT=`** override).                                                                                                                                                                                                                                                                                                    |
 | `**make config-provider-free-tier**` | Runs `**catalog-available**` then `**catalog-write-free**` with `**INTERSECT=**` the available snapshot; writes `**config/catalog-free-tier.snapshot.yaml**` and `**config/provider-free-tier.generated.yaml**` (override `**FREE_OUT=**`, `**PROVIDER_FT_OUT=**`). Produces `**provider-free-tier**` YAML (`**format_version**`, patterns such as `**ollama/***`, intersected Groq/Gemini ids) for **routing / free-tier filtering** — see `[docs/plans/makefile.md](plans/makefile.md)`. |
 
 
@@ -337,13 +337,13 @@ All **indexer** milestones, configuration schema, gateway client behavior, Makef
 This is the **current** system the gateway plan targets for **v0.2** — the anchor for how requests and index payloads map to storage.
 
 
-| Concept                      | Where it comes from                                                                          | Role                                                                                                                                                                                                                                                         |
-| ---------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `tenant_id`                  | Gateway-issued **Bearer token** (server-side; not chosen per request by the client for chat) | Scopes **all** RAG data; retrieval and ingest apply only within this tenant.                                                                                                                                                                                 |
-| `project_id`                 | `X-Chimera-Project` header on chat (when RAG applies) and on ingest, else **token default**  | Selects the **project** / corpus namespace within the tenant.                                                                                                                                                                                                |
-| `flavor_id`                  | Optional `X-Chimera-Flavor-Id`, else **token default**                                       | Selects a **variant** corpus (e.g. branch, profile) within tenant + project.                                                                                                                                                                                 |
+| Concept                      | Where it comes from                                                                          | Role                                                                                                                                                                                                                                         |
+|------------------------------|----------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `tenant_id`                  | Gateway-issued **Bearer token** (server-side; not chosen per request by the client for chat) | Scopes **all** RAG data; retrieval and ingest apply only within this tenant.                                                                                                                                                                 |
+| `project_id`                 | `X-Chimera-Project` header on chat (when RAG applies) and on ingest, else **token default**  | Selects the **project** / corpus namespace within the tenant.                                                                                                                                                                                |
+| `flavor_id`                  | Optional `X-Chimera-Flavor-Id`, else **token default**                                       | Selects a **variant** corpus (e.g. branch, profile) within tenant + project.                                                                                                                                                                 |
 | **Qdrant collection**        | Derived **deterministically** by the gateway from `(tenant_id, project_id, flavor_id)`       | **One collection per triple**; naming follows encoding rules in `[chimera.plan.md](chimera.plan.md)` (lowercase, slug-safe, collision hash suffix). **No** reliance on payload filters for tenancy at v0.2 — isolation is by **collection**. |
-| `**source` (indexed paths)** | Indexer / ingest client                                                                      | **Relative path** under configured roots in `[plans/indexer.md](plans/indexer.md)`; avoids leaking absolute host paths in bodies.                                                                                                                            |
+| `**source` (indexed paths)** | Indexer / ingest client                                                                      | **Relative path** under configured roots in `[plans/indexer.md](plans/indexer.md)`; avoids leaking absolute host paths in bodies.                                                                                                            |
 
 
 **Operational note:** Operators still configure **how** the gateway reaches Qdrant (URL, API key, adapter). `[chimera.plan.md](chimera.plan.md)` defaults to an HTTP health probe (e.g. `6333` in Compose); a local **gRPC** client on `6334` remains compatible with the same **collection naming** and payload contract as long as the adapter uses one consistent Qdrant API mode.
@@ -362,10 +362,10 @@ The virtual model id stays `**Chimera-<gateway.semver>`** (set in `config/gatewa
 - Log UI and correlation: `[plans/log-presentation-layer.md](plans/log-presentation-layer.md)`
 
 
-| Release                                                                         | Outcome                                                                     | Status |
-| ------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ------ |
-| [v0.2.0](#v020--rag-baseline-ingest-indexer-apis-chimera-indexer)                 | RAG baseline: ingest, retrieval, Qdrant, `chimera-indexer`                    | `done` |
-| [v0.2.1](#v021--logging-correlation-logs-ui-optional-conversation-merge)        | Per-request correlation, richer logs UI, optional conversation merge        | `done` |
+| Release                                                                         | Outcome                                                                       | Status |
+|---------------------------------------------------------------------------------|-------------------------------------------------------------------------------|--------|
+| [v0.2.0](#v020--rag-baseline-ingest-indexer-apis-chimera-indexer)               | RAG baseline: ingest, retrieval, Qdrant, `chimera-indexer`                    | `done` |
+| [v0.2.1](#v021--logging-correlation-logs-ui-optional-conversation-merge)        | Per-request correlation, richer logs UI, optional conversation merge          | `done` |
 | [v0.2.2](#v022--desktop-shell-supervised-indexer-indexer--continue-operator-ui) | Desktop shell, supervised `chimera-indexer`, indexer and Continue admin pages | `done` |
 
 
@@ -458,10 +458,10 @@ The virtual model id stays `**Chimera-<gateway.semver>`** (set in `config/gatewa
 
 
 | Release   | Quick check                                                                                                                                                                                                       |
-| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|-----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **0.2.0** | `rag.enabled: true`, `GET /health` shows Qdrant when configured; `POST /v1/ingest` and `GET /v1/indexer/config` succeed with a valid token; virtual-model chat includes retrieved context when collections exist. |
 | **0.2.1** | Logs show `request_id` and `conversation_id`; `/ui/logs` view modes persist; optional `conversation_merge` behaves per config when metrics DB is enabled.                                                         |
-| **0.2.2** | With `indexer.supervised.enabled`, `chimera-indexer` appears in supervisor logs and `/ui/logs` (source **indexer**); `/ui/indexer` and Continue snippet pages load after login.                                     |
+| **0.2.2** | With `indexer.supervised.enabled`, `chimera-indexer` appears in supervisor logs and `/ui/logs` (source **indexer**); `/ui/indexer` and Continue snippet pages load after login.                                   |
 
 
 ### See also (releases context)
@@ -478,7 +478,7 @@ Use this to track cross-cutting v0.2 work; gate detailed indexer items in `[plan
 
 
 | Area                       | Action                                                                                                                                                                                                                                                                                                                              |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|----------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **Config**                 | Gateway config to enable/disable RAG, embedding model id, Qdrant (or adapter) connection, chunking knobs, retrieval thresholds, feature flags as needed.                                                                                                                                                                            |
 | **HTTP API**               | Implement `POST /v1/ingest`, `GET /v1/indexer/config`, `GET /v1/indexer/storage/health`, `GET /v1/indexer/storage/stats`; document schemas and limits (e.g. max body size for whole-file ingest).                                                                                                                                   |
 | **Chat path**              | Virtual model: when RAG enabled, run retrieval + prompt assembly; honor `X-Chimera-Project` / `X-Chimera-Flavor-Id`.                                                                                                                                                                                                                |
@@ -487,8 +487,8 @@ Use this to track cross-cutting v0.2 work; gate detailed indexer items in `[plan
 | **Qdrant / adapter**       | Collections per triple; payload fields; collection naming; cosine/dot and dimension checks.                                                                                                                                                                                                                                         |
 | **Health**                 | Extend `GET /health` with Qdrant probe when RAG enabled.                                                                                                                                                                                                                                                                            |
 | **Logs UI**                | Themes under § **Operator logs UI** and § **File indexer**; correlation IDs; `/ui/logs` modes and APIs (`[plans/log-presentation-layer.md](plans/log-presentation-layer.md)`, `[plans/log-view-refactor.md](plans/log-view-refactor.md)`, `[plans/log-view-indexer.md](plans/log-view-indexer.md)`); desktop shell (`/ui/desktop`). |
-| **Docs**                   | Update `docs/network.md`, `docs/configuration.md`, ingestion/indexer references; `**vscode-continue/`** headers (project, flavor, **conversation**); § **Additional operator themes**.                                                                                                                          |
-| **Indexer**                | Follow `[plans/indexer.md](plans/indexer.md)` **Phase 2** checklist and **Gateway coordination**; queue/fairness themes — `[plans/indexer-scan-and-fanout-jobs.md](plans/indexer-scan-and-fanout-jobs.md)`.                                                                                                                    |
+| **Docs**                   | Update `docs/network.md`, `docs/configuration.md`, ingestion/indexer references; `**vscode-continue/`** headers (project, flavor, **conversation**); § **Additional operator themes**.                                                                                                                                              |
+| **Indexer**                | Follow `[plans/indexer.md](plans/indexer.md)` **Phase 2** checklist and **Gateway coordination**; queue/fairness themes — `[plans/indexer-scan-and-fanout-jobs.md](plans/indexer-scan-and-fanout-jobs.md)`.                                                                                                                         |
 
 
 ---
@@ -497,20 +497,20 @@ Use this to track cross-cutting v0.2 work; gate detailed indexer items in `[plan
 
 
 | Document                                                                         | Role                                                                                           |
-| -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `[chimera.plan.md](chimera.plan.md)`                             | Authoritative product requirements and roadmap                                                 |
-| `[plans/indexer.md](plans/indexer.md)`                                           | `chimera-indexer` milestones and gateway coordination                                            |
+|----------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------|
+| `[chimera.plan.md](chimera.plan.md)`                                             | Authoritative product requirements and roadmap                                                 |
+| `[plans/indexer.md](plans/indexer.md)`                                           | `chimera-indexer` milestones and gateway coordination                                          |
 | `[version-v0.1.md](version-v0.1.md)`                                             | v0.1 delivery notes and exploration                                                            |
 | `[network.md](network.md)`                                                       | Ports and v0.2+ Qdrant data path                                                               |
 | `[configuration.md](configuration.md)`                                           | Config files and v0.2+ tenant scoping note                                                     |
 | `[plans/log-presentation-layer.md](plans/log-presentation-layer.md)`             | Log presentation layer (correlation, view modes; Phase E deferred)                             |
 | `[plans/log-view-refactor.md](plans/log-view-refactor.md)`                       | `/ui/logs` modularization, APIs (poll + SSE), view modes and deep-link params                  |
 | `[plans/log-view-indexer.md](plans/log-view-indexer.md)`                         | Indexer cards and summarized indexer UX in `/ui/logs`                                          |
-| `[plans/unified-logs-operator-shell.md](plans/unified-logs-operator-shell.md)`   | Single operator surface: logs stream plus overview/config cards; desktop shell unification   |
+| `[plans/unified-logs-operator-shell.md](plans/unified-logs-operator-shell.md)`   | Single operator surface: logs stream plus overview/config cards; desktop shell unification     |
 | `[plans/indexer-scan-and-fanout-jobs.md](plans/indexer-scan-and-fanout-jobs.md)` | Queue-safe scan/fan-out, fairness, indexer telemetry aligned with logs                         |
 | `[plans/makefile.md](plans/makefile.md)`                                         | `**catalog-free`**, `**catalog-available**`, `**config-provider-free-tier**` targets           |
 | `[version-v0.1.1.md](version-v0.1.1.md)`                                         | Gateway metrics SQLite, upstream events — baseline for § **Usage metrics and provider limits** |
-| `[reference/tokencount-notes.md](reference/tokencount-notes.md)`                                       | Chat-path token estimate semantics vs TPM admission                                            |
+| `[reference/tokencount-notes.md](reference/tokencount-notes.md)`                 | Chat-path token estimate semantics vs TPM admission                                            |
 
 
 Deferred notes on **running embeddings locally** (ONNX alignment, optional **vectordb-cli**-style paths, retrieval-depth ideas) live in `[version-v0.3.md](version-v0.3.md)` under **Internal embedding provider (exploration)** — relevant only if that exploration ships or informs indexer-side experiments; they are **not** part of the locked v0.2 HTTP ingest contract.
@@ -523,7 +523,7 @@ The former agent checklist for token counting is **superseded** by the shipped l
 
 
 | Concern                               | Location                                                                                                                              |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+|---------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------|
 | Tokenizer (`cl100k_base`)             | `[internal/tokencount](../internal/tokencount/)`                                                                                      |
 | Chat relay, estimates, metrics record | `[internal/chat/chat.go](../internal/chat/chat.go)` (`prepareChatPayload`, `estTokensFromPayload`, `recordUpstreamMetrics`)           |
 | SQLite recording / rollups            | `[internal/gatewaymetrics](../internal/gatewaymetrics/)`                                                                              |

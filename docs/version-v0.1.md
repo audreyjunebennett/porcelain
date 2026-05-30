@@ -1,28 +1,28 @@
 # Version 0.1 — gateway baseline (working notes)
 
-| Field | Value |
-|-------|-------|
-| **Doc kind** | `working-notes` |
-| **Owners / areas** | Gateway, desktop, supervisor, operator UI |
-| **Status** | `shipped` |
-| **Targets** | Gateway v0.1 |
-| **Last updated** | See git history |
+| Field                          | Value                                                                                                                   |
+|--------------------------------|-------------------------------------------------------------------------------------------------------------------------|
+| **Doc kind**                   | `working-notes`                                                                                                         |
+| **Owners / areas**             | Gateway, desktop, supervisor, operator UI                                                                               |
+| **Status**                     | `shipped`                                                                                                               |
+| **Targets**                    | Gateway v0.1                                                                                                            |
+| **Last updated**               | See git history                                                                                                         |
 | **Supersedes / superseded by** | Historical working notes; followed by [`version-v0.1.1.md`](version-v0.1.1.md) and [`version-v0.2.md`](version-v0.2.md) |
 
 ## At a glance
 
 Stand up the chimera-gateway in Go in front of BiFrost: chat completions work, the operator UI works, and a single desktop binary opens a window where operators manage provider keys, see logs, and copy a Continue config. This is the working-notes scratchpad from that release — useful as history; the current code is the source of truth.
 
-| Theme | Outcome | Status |
-|-------|---------|--------|
-| [Hide extra console; in-app logs](#1-desktop-hide-the-extra-console-show-logs-in-the-webview-implemented) | No console window; gateway logs surface in the webview | `done` |
-| [Tabbed desktop shell](#2-desktop-webview-multiple-tabs-main-logs-admin-implemented) | Main / Logs / Admin tabs in one window | `done` |
-| [Move off containers](#3-moving-away-from-containers-implemented) | Single Go binary with optional supervised BiFrost / Qdrant | `done` |
-| [Portable first run](#4-portable-first-run-implemented) | Copyable token, no auto-seeded `tokens.yaml` | `done` |
-| [Bootstrap before first token](#5-startup--login-first-run-and-missing-config-experience-implemented) | Loopback-only setup page; full stack starts after a token exists | `done` |
-| [Multiple provider keys](#6-support-multiple-groq-gemini-api-keys-and-ollama) | Add and remove Groq / Gemini key rows in the panel | `done` |
-| [Routing / fallback from catalog](#7-routing--fallback-v01-basic-ordering-from-available-models) | Deterministic chain generated from `/v1/models`; admin UI partial | `active` |
-| [Exploration: smarter routers](#exploration) | Self-organizing router and per-turn small-model router | `deferred` |
+| Theme                                                                                                     | Outcome                                                           | Status     |
+|-----------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------|------------|
+| [Hide extra console; in-app logs](#1-desktop-hide-the-extra-console-show-logs-in-the-webview-implemented) | No console window; gateway logs surface in the webview            | `done`     |
+| [Tabbed desktop shell](#2-desktop-webview-multiple-tabs-main-logs-admin-implemented)                      | Main / Logs / Admin tabs in one window                            | `done`     |
+| [Move off containers](#3-moving-away-from-containers-implemented)                                         | Single Go binary with optional supervised BiFrost / Qdrant        | `done`     |
+| [Portable first run](#4-portable-first-run-implemented)                                                   | Copyable token, no auto-seeded `tokens.yaml`                      | `done`     |
+| [Bootstrap before first token](#5-startup--login-first-run-and-missing-config-experience-implemented)     | Loopback-only setup page; full stack starts after a token exists  | `done`     |
+| [Multiple provider keys](#6-support-multiple-groq-gemini-api-keys-and-ollama)                             | Add and remove Groq / Gemini key rows in the panel                | `done`     |
+| [Routing / fallback from catalog](#7-routing--fallback-v01-basic-ordering-from-available-models)          | Deterministic chain generated from `/v1/models`; admin UI partial | `active`   |
+| [Exploration: smarter routers](#exploration)                                                              | Self-organizing router and per-turn small-model router            | `deferred` |
 
 ---
 
@@ -80,11 +80,11 @@ These are the **last mile** items for v0.1 UX and routing, articulated from the 
 **Goal:** A **tabbed** (or segmented) shell:
 
 
-| Tab       | Purpose                                                                                                                                            |
-| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tab       | Purpose                                                                                                                                               |
+|-----------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **Main**  | Primary operator surface — welcome, status, or landing agreed with [`plans/desktop-ui.md`](plans/desktop-ui.md) (not only jumping straight to panel). |
-| **Logs**  | Live tail of gateway + supervised services (feeds §1).                                                                                             |
-| **Admin** | Existing admin console — equivalent to today’s `**/ui/panel`** (and login flow when needed).                                                       |
+| **Logs**  | Live tail of gateway + supervised services (feeds §1).                                                                                                |
+| **Admin** | Existing admin console — equivalent to today’s `**/ui/panel`** (and login flow when needed).                                                          |
 
 
 Implementation options include **native tab UI** around multiple webviews, **one webview** loading a thin local “chrome” page with **iframes** or **client-side tabs** hitting gateway routes, or a **small shell HTML** page served by the gateway. The shared requirement is **same-origin or documented cookie** behavior so the **admin session** remains valid across tabs.
@@ -157,16 +157,16 @@ Making a fast, portable application is important for the v0.1 release as it dict
 
 Use this to track work; tick in PRs or remove items as completed.
 
-| Area | Action |
-|------|--------|
-| `cmd/chimera/serve.go` | Detect bootstrap vs normal from token store state; **skip** `StartQdrant` / BiFrost when bootstrapping; avoid **blocking** gateway startup on upstream health in bootstrap; **dual-stack loopback** listen in bootstrap. |
-| `internal/server/` | Separate **bootstrap** mux vs **full** mux; redirect or entry URLs for desktop; **POST** (or equivalent) to **append** token to YAML safely; admin **token CRUD** behind session auth. |
-| `internal/tokens/` | Helpers as needed: **count valid tokens**, **atomic save** / merge into YAML without dropping unrelated content. |
-| `internal/server/embedui/` | `setup.html` (or similar) for first token; admin components for **token list / add / delete**. |
-| **Packaging** | `scripts/release-package.sh`, `.goreleaser.yaml`: ship `tokens.example.yaml`; **do not** copy it to `tokens.yaml`. |
-| `scripts/configure.sh` | **Do not** auto-create `config/tokens.yaml` from the example (or gate behind an explicit flag if you must preserve dev ergonomics — default off). |
-| **Docs / README** | First-run story: **no** pre-created `tokens.yaml`; optional manual copy from example for advanced users. |
-| **Tests** | Tests that assume BiFrost always up with empty/missing tokens need **bootstrap** or **fixture tokens** paths. |
+| Area                       | Action                                                                                                                                                                                                                   |
+|----------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `cmd/chimera/serve.go`     | Detect bootstrap vs normal from token store state; **skip** `StartQdrant` / BiFrost when bootstrapping; avoid **blocking** gateway startup on upstream health in bootstrap; **dual-stack loopback** listen in bootstrap. |
+| `internal/server/`         | Separate **bootstrap** mux vs **full** mux; redirect or entry URLs for desktop; **POST** (or equivalent) to **append** token to YAML safely; admin **token CRUD** behind session auth.                                   |
+| `internal/tokens/`         | Helpers as needed: **count valid tokens**, **atomic save** / merge into YAML without dropping unrelated content.                                                                                                         |
+| `internal/server/embedui/` | `setup.html` (or similar) for first token; admin components for **token list / add / delete**.                                                                                                                           |
+| **Packaging**              | `scripts/release-package.sh`, `.goreleaser.yaml`: ship `tokens.example.yaml`; **do not** copy it to `tokens.yaml`.                                                                                                       |
+| `scripts/configure.sh`     | **Do not** auto-create `config/tokens.yaml` from the example (or gate behind an explicit flag if you must preserve dev ergonomics — default off).                                                                        |
+| **Docs / README**          | First-run story: **no** pre-created `tokens.yaml`; optional manual copy from example for advanced users.                                                                                                                 |
+| **Tests**                  | Tests that assume BiFrost always up with empty/missing tokens need **bootstrap** or **fixture tokens** paths.                                                                                                            |
 
 ---
 
@@ -259,20 +259,20 @@ Instead of hand-authoring `routing-policy.yaml` and fallback chains from scratch
 
 ## Quick reference — key files
 
-| Area                              | Path                                                         |
-| --------------------------------- | ------------------------------------------------------------ |
-| Gateway CLI                       | `cmd/chimera/`                                               |
-| Desktop webview (tag `desktop`)   | `cmd/chimera/webview_desktop.go`, `default_mode_desktop.go`  |
-| HTTP server, health, models, chat | `internal/server/`, `internal/chat/`, `internal/upstream/`   |
-| Config load / reload              | `internal/config/`                                           |
-| Routing policy                    | `internal/routing/`                                          |
-| Supervisor (BiFrost / Qdrant)     | `internal/supervisor/`                                       |
-| Gateway config                    | `config/gateway.yaml`                                        |
-| Gateway tokens (example ships; live file not auto-created on first boot) | `config/tokens.example.yaml`, `config/tokens.yaml` (see §5) |
-| BiFrost bootstrap                 | `config/bifrost.config.json`                                 |
-| Routing rules                     | `config/routing-policy.yaml`                                 |
-| Free-tier allowlist (optional)    | `config/provider-free-tier.yaml`                             |
-| Catalog snapshot tool (reference) | `make catalog-free`, `chimera/cmd/catalog-write-free/`, `internal/freecatalog/` |
-| Regenerate routing (API)          | `POST /api/ui/routing/generate` (`internal/server/ui_routing_generate.go`) |
-| Operator UI (embed)               | `internal/server/embedui/`, `internal/server/ui_handlers.go` |
-| Product / locked decisions        | [`chimera.plan.md`](chimera.plan.md)                               |
+| Area                                                                     | Path                                                                            |
+|--------------------------------------------------------------------------|---------------------------------------------------------------------------------|
+| Gateway CLI                                                              | `cmd/chimera/`                                                                  |
+| Desktop webview (tag `desktop`)                                          | `cmd/chimera/webview_desktop.go`, `default_mode_desktop.go`                     |
+| HTTP server, health, models, chat                                        | `internal/server/`, `internal/chat/`, `internal/upstream/`                      |
+| Config load / reload                                                     | `internal/config/`                                                              |
+| Routing policy                                                           | `internal/routing/`                                                             |
+| Supervisor (BiFrost / Qdrant)                                            | `internal/supervisor/`                                                          |
+| Gateway config                                                           | `config/gateway.yaml`                                                           |
+| Gateway tokens (example ships; live file not auto-created on first boot) | `config/tokens.example.yaml`, `config/tokens.yaml` (see §5)                     |
+| BiFrost bootstrap                                                        | `config/bifrost.config.json`                                                    |
+| Routing rules                                                            | `config/routing-policy.yaml`                                                    |
+| Free-tier allowlist (optional)                                           | `config/provider-free-tier.yaml`                                                |
+| Catalog snapshot tool (reference)                                        | `make catalog-free`, `chimera/cmd/catalog-write-free/`, `internal/freecatalog/` |
+| Regenerate routing (API)                                                 | `POST /api/ui/routing/generate` (`internal/server/ui_routing_generate.go`)      |
+| Operator UI (embed)                                                      | `internal/server/embedui/`, `internal/server/ui_handlers.go`                    |
+| Product / locked decisions                                               | [`chimera.plan.md`](chimera.plan.md)                                            |

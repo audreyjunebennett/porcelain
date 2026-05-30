@@ -1,14 +1,14 @@
 # Version 0.3 - Chimera branding and onboarding
 
 
-| Field                          | Value                                                |
-| ------------------------------ | ---------------------------------------------------- |
-| **Doc kind**                   | `version-roadmap`                                    |
-| **Owners / areas**             | Gateway desktop, onboarding, branding |
-| **Status**                     | `active`                                             |
-| **Targets**                    | Gateway/desktop v0.3                                 |
-| **Last updated**               | See git history                                      |
-| **Supersedes / superseded by** | Builds on `[version-v0.2.md](version-v0.2.md)`       |
+| Field                          | Value                                          |
+|--------------------------------|------------------------------------------------|
+| **Doc kind**                   | `version-roadmap`                              |
+| **Owners / areas**             | Gateway desktop, onboarding, branding          |
+| **Status**                     | `active`                                       |
+| **Targets**                    | Gateway/desktop v0.3                           |
+| **Last updated**               | See git history                                |
+| **Supersedes / superseded by** | Builds on `[version-v0.2.md](version-v0.2.md)` |
 
 
 ## At a glance
@@ -16,32 +16,32 @@
 Make the gateway easier to set up and clearer about what it is. This plan’s **sections follow a single narrative**: **rename** (Porcelain · Chimera · Locus), **credential file naming** (`api-keys` / `secret`), **internal embedding** exploration, **operator-managed virtual models** (per-model routing from `/ui/settings`), then **first-run token handoff** and the **setup wizard**.
 
 
-| Theme                                                                                      | Outcome                                                                                                                                  | Status        |
-| ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
-| [Product naming](#product-naming)                                                          | Layered names in docs, UI, and startup logs with naming contracts ([`plans/v0-3-naming-migration.md`](plans/v0-3-naming-migration.md))   | `done`        |
-| [Credential file naming](#credential-file-naming)                                          | `api-keys.yaml` / `api_keys` / `secret`; reserve "token" for tokenizer counts                                                            | `done`        |
-| [Operator UI filesystem dev mode](#operator-ui-filesystem-dev-mode)                        | Serve `embedui/` from disk via `CHIMERA_ADMINUI_ROOT` for live UI edits without rebuilding the gateway                                   | `done`        |
-| [plans/chimera-gateway-package-boundaries.md](plans/chimera-gateway-package-boundaries.md) | Admin UI / operator API package split; shared DTOs                                                                                       | `done`        |
-| [plans/chimera-gateway-refactor.md](plans/chimera-gateway-refactor.md)                     | Gateway naming clarity; logs UI modularization train                                                                                     | `done`        |
-| [plans/adminui-filesystem-dev-mode.md](plans/adminui-filesystem-dev-mode.md)               | Optional `CHIMERA_ADMINUI_ROOT` disk serving for embed UI dev                                                                            | `done`        |
-| [plans/embedui-component-gallery.md](plans/embedui-component-gallery.md)                   | Static component gallery paths and upkeep                                                                                                | `done`        |
-| [plans/embedui-component-system.md](plans/embedui-component-system.md)                     | Reusable embed UI primitives and module split                                                                                            | `done`        |
-| [plans/embedui-event-log-panel.md](plans/embedui-event-log-panel.md)                       | Per-card event log layout and interaction                                                                                                | `done`        |
-| [plans/embedui-logs-workspaces-merge.md](plans/embedui-logs-workspaces-merge.md)           | Unify logs and workspace indexers in embed UI                                                                                            | `done`        |
-| [plans/embedui-theme-styleguide.md](plans/embedui-theme-styleguide.md)                     | Theme tokens and static styleguide                                                                                                       | `done`        |
-| [plans/locus-desktop-supervisor-contract.md](plans/locus-desktop-supervisor-contract.md)   | Desktop ↔ supervisor process and readiness contract                                                                                      | `done`        |
+| Theme                                                                                        | Outcome                                                                                                                                | Status        |
+|----------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------|---------------|
+| [Product naming](#product-naming)                                                            | Layered names in docs, UI, and startup logs with naming contracts ([`plans/v0-3-naming-migration.md`](plans/v0-3-naming-migration.md)) | `done`        |
+| [Credential file naming](#credential-file-naming)                                            | `api-keys.yaml` / `api_keys` / `secret`; reserve "token" for tokenizer counts                                                          | `done`        |
+| [Operator UI filesystem dev mode](#operator-ui-filesystem-dev-mode)                          | Serve `embedui/` from disk via `CHIMERA_ADMINUI_ROOT` for live UI edits without rebuilding the gateway                                 | `done`        |
+| [plans/chimera-gateway-package-boundaries.md](plans/chimera-gateway-package-boundaries.md)   | Admin UI / operator API package split; shared DTOs                                                                                     | `done`        |
+| [plans/chimera-gateway-refactor.md](plans/chimera-gateway-refactor.md)                       | Gateway naming clarity; logs UI modularization train                                                                                   | `done`        |
+| [plans/adminui-filesystem-dev-mode.md](plans/adminui-filesystem-dev-mode.md)                 | Optional `CHIMERA_ADMINUI_ROOT` disk serving for embed UI dev                                                                          | `done`        |
+| [plans/embedui-component-gallery.md](plans/embedui-component-gallery.md)                     | Static component gallery paths and upkeep                                                                                              | `done`        |
+| [plans/embedui-component-system.md](plans/embedui-component-system.md)                       | Reusable embed UI primitives and module split                                                                                          | `done`        |
+| [plans/embedui-event-log-panel.md](plans/embedui-event-log-panel.md)                         | Per-card event log layout and interaction                                                                                              | `done`        |
+| [plans/embedui-logs-workspaces-merge.md](plans/embedui-logs-workspaces-merge.md)             | Unify logs and workspace indexers in embed UI                                                                                          | `done`        |
+| [plans/embedui-theme-styleguide.md](plans/embedui-theme-styleguide.md)                       | Theme tokens and static styleguide                                                                                                     | `done`        |
+| [plans/locus-desktop-supervisor-contract.md](plans/locus-desktop-supervisor-contract.md)     | Desktop ↔ supervisor process and readiness contract                                                                                    | `done`        |
 | [plans/vectorstore-broker-wrapper-hard-cut.md](plans/vectorstore-broker-wrapper-hard-cut.md) | **chimera-vectorstore** / **chimera-broker** wrapper binaries and supervisor cutover                                                   | `done`        |
 | [plans/v0-3-naming-migration.md](plans/v0-3-naming-migration.md)                             | Product naming hard-cut execution                                                                                                      | `done`        |
 | [plans/logs-ui-page-data-refreshing.md](plans/logs-ui-page-data-refreshing.md)               | Summarized logs feed: interaction-safe rebuilds, card patches, view model                                                              | `done`        |
-| [plans/embedui-operator-settings-routes.md](plans/embedui-operator-settings-routes.md)         | App shell at `/ui`, settings page rename, single gallery; drop legacy routes and deep links                                          | `done`        |
-| [plans/context-window-admission.md](plans/context-window-admission.md)                     | Context window admission on chat path. Capture provider model context limits to enabled proper model router fallbacks                    | `done`        |
-| [plans/supervisor-info-log-trim.md](plans/supervisor-info-log-trim.md)                     | Refine the logs even further to reduce service start up and vectorstore erroring. Lowering heartbeat logs to DEBUG                       | `done`        |
+| [plans/embedui-operator-settings-routes.md](plans/embedui-operator-settings-routes.md)       | App shell at `/ui`, settings page rename, single gallery; drop legacy routes and deep links                                            | `done`        |
+| [plans/context-window-admission.md](plans/context-window-admission.md)                       | Context window admission on chat path. Capture provider model context limits to enabled proper model router fallbacks                  | `done`        |
+| [plans/supervisor-info-log-trim.md](plans/supervisor-info-log-trim.md)                       | Refine the logs even further to reduce service start up and vectorstore erroring. Lowering heartbeat logs to DEBUG                     | `done`        |
 | [plans/embedui-dynamic-provider-cards.md](plans/embedui-dynamic-provider-cards.md)           | Settings provider cards: catalog, Add provider picker, hide usage/log until configured                                                 | `done`        |
-| [Internal embedding provider (exploration)](#internal-embedding-provider-exploration)      | Optional in-repo or first-install embedding runtime to reduce reliance on Ollama for `/embeddings`                                       | `exploration` |
-| [Logs UI page data refreshing](#logs-ui-page-data-refreshing)                              | Interaction-safe summarized feed; per-card patches and view model (phased)                                                               | `done`        |
-| [Operator-managed virtual models](#operator-managed-virtual-models)                        | Create virtual models from `/ui/settings`; per-model fallback, routing rules, and tool-router; operator SQLite + scoped routing logs     | `done`        |
-| [First-run token handoff](#first-run-token-handoff)                                        | Show, copy, and optionally save the gateway token; restart-friendly                                                                      | `done`        |
-| [Setup wizard](#setup-wizard)                                                              | Guided keys -> local server -> test chat -> indexing                                                                                     | `todo`        |
+| [Internal embedding provider (exploration)](#internal-embedding-provider-exploration)        | Optional in-repo or first-install embedding runtime to reduce reliance on Ollama for `/embeddings`                                     | `exploration` |
+| [Logs UI page data refreshing](#logs-ui-page-data-refreshing)                                | Interaction-safe summarized feed; per-card patches and view model (phased)                                                             | `done`        |
+| [Operator-managed virtual models](#operator-managed-virtual-models)                          | Create virtual models from `/ui/settings`; per-model fallback, routing rules, and tool-router; operator SQLite + scoped routing logs   | `done`        |
+| [First-run token handoff](#first-run-token-handoff)                                          | Show, copy, and optionally save the gateway token; restart-friendly                                                                    | `done`        |
+| [Setup wizard](#setup-wizard)                                                                | Guided keys -> local server -> test chat -> indexing                                                                                   | `todo`        |
 
 
 ---
@@ -70,7 +70,7 @@ These names are **roles**, not four separate shipping binaries unless noted:
 
 
 | Layer         | Role                                                                                                                                                                                                                                                        |
-| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|---------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **Porcelain** | The **creative system** umbrella—the product story that contains workspace tooling, this gateway, and inference/RAG plumbing.                                                                                                                               |
 | **Chimera**   | This repository’s **gateway**: the **intelligent routing and memory layer**—OpenAI-compatible façade in front of **BiFrost**, optional **Qdrant** RAG, indexer REST, routing policy, and admin UI. Bridges workspace-side traffic to inference + retrieval. |
 | **Locus**     | **Workspace-side** context: docs describe **Locus clients** authenticating to Chimera (e.g. `Authorization: Bearer …`). Use where copy previously said “client” vs Chimera without naming the workspace tier.                                               |
@@ -125,7 +125,7 @@ Treat this theme as satisfied when **first-touch** operator docs and UI consiste
 
 
 | Current                                                               | v0.3 target                                                                           |
-| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+|-----------------------------------------------------------------------|---------------------------------------------------------------------------------------|
 | `config/tokens.example.yaml`                                          | `config/api-keys.example.yaml`                                                        |
 | Operator copy / runtime file `tokens.yaml` (path from `gateway.yaml`) | `api-keys.yaml` (recommended default filename; operators may still use a custom path) |
 
@@ -362,34 +362,34 @@ Aim for **~4–6 GB RAM** total, **quantized** execution, **sub‑300 ms** per h
 
 Each row in **operator SQLite** (same store family as workspaces; see [`plans/indexer-workspaces-sqlite-gateway-api.md`](plans/indexer-workspaces-sqlite-gateway-api.md)):
 
-| Field | Default | Notes |
-|-------|---------|-------|
-| **name** | — | Human label |
-| **version** | — | With name forms the OpenAI `model` id sent by clients |
-| **description** | empty | UI + optional `GET /v1/models` metadata |
-| **enabled** | `true` | Disabled models hidden from catalog and rejected on chat |
-| **visibility** | `public` | `private` limits catalog and chat to the creating principal |
+| Field           | Default  | Notes                                                       |
+|-----------------|----------|-------------------------------------------------------------|
+| **name**        | —        | Human label                                                 |
+| **version**     | —        | With name forms the OpenAI `model` id sent by clients       |
+| **description** | empty    | UI + optional `GET /v1/models` metadata                     |
+| **enabled**     | `true`   | Disabled models hidden from catalog and rejected on chat    |
+| **visibility**  | `public` | `private` limits catalog and chat to the creating principal |
 
 **Bootstrap:** on first open of an empty operator DB, import the legacy stack — one public enabled model with id `Chimera-<semver>`, current `routing.fallback_chain`, `routing-policy.yaml`, and global tool-router settings from `gateway.yaml`.
 
 ### Per-model routing stack
 
-| Block | Required | Toggleable | Parity with today |
-|-------|----------|------------|-------------------|
-| **Fallback chain** | yes | no | Ordered upstream model ids; 429/5xx (and virtual-path 413) failover |
-| **Routing rules** | no | yes | `ambiguous_default_model` + ordered `rules[]` (`when.min_message_chars`, …) |
-| **Tool router** | no | yes | `router_models[]`, `enabled`, `confidence_threshold` |
-| **Future routers** | no | yes | Schema placeholder only in v0.3 unless a router ships |
+| Block              | Required | Toggleable | Parity with today                                                           |
+|--------------------|----------|------------|-----------------------------------------------------------------------------|
+| **Fallback chain** | yes      | no         | Ordered upstream model ids; 429/5xx (and virtual-path 413) failover         |
+| **Routing rules**  | no       | yes        | `ambiguous_default_model` + ordered `rules[]` (`when.min_message_chars`, …) |
+| **Tool router**    | no       | yes        | `router_models[]`, `enabled`, `confidence_threshold`                        |
+| **Future routers** | no       | yes        | Schema placeholder only in v0.3 unless a router ships                       |
 
 ### Routing rule catalog
 
 Reusable **routing rule definitions** in the database (not duplicated logic per VM):
 
-| Field | Purpose |
-|-------|---------|
-| **name** | Operator label (e.g. `long-user-turn`) |
-| **routing.slug** | Stable key for logs and metrics (aligns with [`plans/operator-message-registry.md`](plans/operator-message-registry.md)) |
-| **default configuration** | Default `when` + `models` fragment; VM attachment may override |
+| Field                     | Purpose                                                                                                                  |
+|---------------------------|--------------------------------------------------------------------------------------------------------------------------|
+| **name**                  | Operator label (e.g. `long-user-turn`)                                                                                   |
+| **routing.slug**          | Stable key for logs and metrics (aligns with [`plans/operator-message-registry.md`](plans/operator-message-registry.md)) |
+| **default configuration** | Default `when` + `models` fragment; VM attachment may override                                                           |
 
 v1 may store a monolithic **policy YAML** per virtual model for fastest parity with [`config/routing-policy.yaml`](../config/routing-policy.yaml); normalized bindings to the catalog can follow in a later phase (see open questions in the execution plan).
 
@@ -558,14 +558,14 @@ v1 may store a monolithic **policy YAML** per virtual model for fastest parity w
 ## Verification
 
 
-| Area                             | Quick check                                                                                                                                                        |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Product naming                   | README, onboarding, UI copy, and startup logs reflect Porcelain / Chimera / Locus decisions; [`plans/v0-3-naming-migration.md`](plans/v0-3-naming-migration.md) closed. |
-| Credential naming                | `api-keys.yaml`, `api_keys`, `secret`, and `paths.api_keys` are implemented or migration behavior is documented.                                                   |
-| Internal embedding (exploration) | Spike or design note, per-model legal/distribution checklist, and ship / pilot / defer decision; config sketch matches indexer-style opt-in start.                 |
+| Area                             | Quick check                                                                                                                                                              |
+|----------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Product naming                   | README, onboarding, UI copy, and startup logs reflect Porcelain / Chimera / Locus decisions; [`plans/v0-3-naming-migration.md`](plans/v0-3-naming-migration.md) closed.  |
+| Credential naming                | `api-keys.yaml`, `api_keys`, `secret`, and `paths.api_keys` are implemented or migration behavior is documented.                                                         |
+| Internal embedding (exploration) | Spike or design note, per-model legal/distribution checklist, and ship / pilot / defer decision; config sketch matches indexer-style opt-in start.                       |
 | Operator-managed virtual models  | Bootstrap import; multi-model chat + catalog; per-model fallback/policy/tool-router from SQLite; `/ui/settings` CRUD cards; scoped routing logs with `virtual_model_id`. |
-| First-run token handoff          | First launch shows a copyable gateway API key and optional safe dotenv save.                                                                                       |
-| Setup wizard                     | Six steps navigate correctly, support skip/finish, and use shared router regeneration; embedding combobox reflects internal provider when implemented.               |
+| First-run token handoff          | First launch shows a copyable gateway API key and optional safe dotenv save.                                                                                             |
+| Setup wizard                     | Six steps navigate correctly, support skip/finish, and use shared router regeneration; embedding combobox reflects internal provider when implemented.                   |
 
 
 When this plan is implemented, update `[chimera.plan.md](chimera.plan.md)` **Release roadmap** row for v0.3 if the shipped scope differs (e.g. split onboarding vs RAG scope into separate releases).
@@ -574,10 +574,10 @@ When this plan is implemented, update `[chimera.plan.md](chimera.plan.md)` **Rel
 
 ## Related plans
 
-| Document | Role | Status |
-| -------- | ---- | ------ |
-| `[plans/indexer.md](plans/indexer.md)` | Indexer milestones that may cross-link with this release | — |
-| `[plans/_template.md](plans/_template.md)` | Phase-level plan template | — |
+| Document                                   | Role                                                     | Status |
+|--------------------------------------------|----------------------------------------------------------|--------|
+| `[plans/indexer.md](plans/indexer.md)`     | Indexer milestones that may cross-link with this release | —      |
+| `[plans/_template.md](plans/_template.md)` | Phase-level plan template                                | —      |
 
 ---
 
