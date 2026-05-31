@@ -326,7 +326,7 @@ body.logs-summarized #panel-summarized {
 .sum-av-svc-chimera-vectorstore { background: var(--embed-body-tint-svc-qd); color: var(--embed-chev-hover-svc-qd); }
 .sum-av-svc-chimera-indexer { background: var(--embed-body-tint-svc-ix); color: var(--embed-chev-hover-svc-ix); }
 .sum-main { flex: 1 1 auto; min-width: 0; text-align: left; }
-.sum-title { display: block; font-weight: 600; font-size: 0.88rem; color: var(--embed-text-primary); word-break: break-word; }
+.sum-title { display: block; font-weight: 600; font-size: 0.88rem; color: var(--embed-text-primary); word-break: normal; overflow-wrap: normal; }
 .sum-title.sum-title--service-indexer {
   display: flex;
   flex-wrap: wrap;
@@ -338,7 +338,10 @@ body.logs-summarized #panel-summarized {
 }
 .sum-title .sum-mono-id { color: var(--embed-text-secondary); font-weight: 500; }
 .sum-sub { display: block; font-size: 0.76rem; color: var(--embed-semantic-neutral-fg); margin-top: 0.2rem; line-height: 1.35; }
-.sum-metrics { flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: 0.3rem; justify-content: flex-end; max-width: 42%; }
+.sum-metrics { flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: 0.3rem; }
+@media (min-width: 481px) {
+  .sum-metrics { justify-content: flex-end; max-width: 42%; }
+}
 /* Duration / neutral metrics pill (geometry on .sum-card uses --sum-pill-* above) */
 .sum-metric {
   font-size: var(--sum-pill-fs, 0.68rem);

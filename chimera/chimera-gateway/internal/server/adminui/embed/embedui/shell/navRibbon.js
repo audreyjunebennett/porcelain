@@ -7,6 +7,7 @@
   var STORAGE_KEY = "chimera-ribbon-expanded";
   var DEFAULT_ROUTE = "/ui/chat";
   var SETTINGS_ROUTE = "/ui/settings?embed=1";
+  var NARROW_BREAKPOINT = "(max-width: 480px)";
 
   function readExpanded() {
     try {
@@ -78,7 +79,11 @@
     var toggleBtn = ribbon.querySelector("[data-ribbon-action='toggle']");
     var newChatBtn = ribbon.querySelector("[data-ribbon-action='new-chat']");
     var settingsBtn = ribbon.querySelector("[data-ribbon-action='settings']");
-    var expanded = readExpanded();
+    var userExpandedPref = readExpanded();
+    var expanded = userExpandedPref;
+    var narrowForced = false;
+    var narrowMq =
+      typeof window.matchMedia === "function" ? window.matchMedia(NARROW_BREAKPOINT) : null;
     var historyPanel = null;
     var shellReturnRoute = getShellReturnRoute() || DEFAULT_ROUTE;
     var lastActiveConversationId = "";
@@ -139,19 +144,56 @@
       });
     }
 
+    function isNarrowViewport() {
+      return !!(narrowMq && narrowMq.matches);
+    }
+
     function setExpanded(next, persist) {
+      if (narrowForced && next) return;
       expanded = !!next;
       ribbon.classList.toggle("shell-ribbon--expanded", expanded);
       ribbon.setAttribute("aria-expanded", expanded ? "true" : "false");
       var tip = expanded ? "Hide chat history" : "Show chat history";
-      if (toggleBtn) {
+      if (toggleBtn && !narrowForced) {
         toggleBtn.title = tip;
         toggleBtn.setAttribute("aria-label", tip);
       }
-      if (persist !== false) writeExpanded(expanded);
+      if (persist !== false && !narrowForced) {
+        userExpandedPref = expanded;
+        writeExpanded(expanded);
+      }
+    }
+
+    function syncToggleForNarrow() {
+      if (!toggleBtn) return;
+      if (narrowForced) {
+        var narrowTip = "Chat history requires a wider window";
+        toggleBtn.disabled = true;
+        toggleBtn.setAttribute("aria-disabled", "true");
+        toggleBtn.title = narrowTip;
+        toggleBtn.setAttribute("aria-label", narrowTip);
+      } else {
+        toggleBtn.disabled = false;
+        toggleBtn.setAttribute("aria-disabled", "false");
+        var tip = expanded ? "Hide chat history" : "Show chat history";
+        toggleBtn.title = tip;
+        toggleBtn.setAttribute("aria-label", tip);
+      }
+    }
+
+    function applyViewportRibbonLayout() {
+      narrowForced = isNarrowViewport();
+      ribbon.classList.toggle("shell-ribbon--narrow", narrowForced);
+      syncToggleForNarrow();
+      if (narrowForced) {
+        setExpanded(false, false);
+        return;
+      }
+      setExpanded(userExpandedPref, false);
     }
 
     function toggleExpanded() {
+      if (narrowForced) return;
       setExpanded(!expanded);
     }
 
@@ -293,7 +335,15 @@
     }
     onFrameRouteChange();
 
-    setExpanded(expanded, false);
+    setExpanded(userExpandedPref, false);
+    applyViewportRibbonLayout();
+    if (narrowMq) {
+      if (typeof narrowMq.addEventListener === "function") {
+        narrowMq.addEventListener("change", applyViewportRibbonLayout);
+      } else if (typeof narrowMq.addListener === "function") {
+        narrowMq.addListener(applyViewportRibbonLayout);
+      }
+    }
 
     return {
       toggle: toggleExpanded,

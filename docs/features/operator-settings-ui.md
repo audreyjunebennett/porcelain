@@ -7,7 +7,7 @@
 | **Status** | `current` |
 | **Introduced** | Gateway v0.2 unified operator shell; v0.3 settings route rename |
 | **Originated from** | [`plans/unified-logs-operator-shell.md`](../plans/unified-logs-operator-shell.md), [`plans/embedui-operator-settings-routes.md`](../plans/embedui-operator-settings-routes.md), [`plans/log-presentation-layer.md`](../plans/log-presentation-layer.md), [`plans/log-conversations.md`](../plans/log-conversations.md) |
-| **Related features** | [Operator virtual models](operator-virtual-models.md), [Operator provider model availability](operator-provider-model-availability.md), [Indexer workspaces](indexer-workspaces.md), [Indexer health and operator logs](indexer-health-and-operator-logs.md), [Operator log message registry](operator-log-message-registry.md), [Operator left navigation ribbon](operator-left-navigation-ribbon.md) |
+| **Related features** | [Operator virtual models](operator-virtual-models.md), [Operator provider model availability](operator-provider-model-availability.md), [Indexer workspaces](indexer-workspaces.md), [Indexer health and operator logs](indexer-health-and-operator-logs.md), [Operator log message registry](operator-log-message-registry.md), [Operator left navigation ribbon](operator-left-navigation-ribbon.md), [Operator embed UI mobile layout](operator-embed-ui-mobile-layout.md) |
 | **Depends on** | UI session auth, servicelogs ring buffer, `/api/ui/state`, `/api/ui/logs` |
 | **Last updated** | See git history |
 
@@ -25,6 +25,7 @@ Configuration and observability live on **`/ui/settings`**: collapsible **summar
 - **Virtual model cards** — CRUD, enable/disable, fallback/routing/tool-router editors, generate-from-catalog, scoped routing logs.
 - **Indexer section** — Workspace CRUD, supervised YAML tuning, summarized progress cards (see indexer feature docs).
 - **Component gallery** — `/ui/settings/gallery` for design-01 primitives (development aid).
+- **Mobile layout** — Phone-width card headers and scoped event logs follow [Operator embed UI mobile layout](operator-embed-ui-mobile-layout.md) (stacked summary grid, two-column scoped log with inline meta).
 
 ## System behavior and contracts
 

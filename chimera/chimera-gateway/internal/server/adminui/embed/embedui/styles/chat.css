@@ -1,5 +1,6 @@
 /* Chat UI — design-01 aligned (settings glaze cards + bottom composer) */
 @import url("evlog.css");
+@import url("embed-mobile.css");
 
 .chat-page {
   display: flex;
@@ -942,6 +943,11 @@ html[data-theme="design-01"] .chat-viewport::-webkit-scrollbar-thumb {
 .chat-composer__send:hover {
   background: var(--embed-btn-primary-hover, #2b4a60);
   border-color: var(--embed-btn-primary-hover, #2b4a60);
+}
+
+.chat-composer__send .material-symbols-outlined {
+  font-size: 1.15rem;
+  line-height: 1;
 }
 
 .chat-composer__panel:focus-within {

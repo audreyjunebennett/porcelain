@@ -13,8 +13,12 @@ globalThis.ChimeraSettings.Handlers.Evlog.wire = function (ctx) {
   var sumEvlogIsWarnish = ctx.sumEvlogIsWarnish;
   var sumEvlogIsFailish = ctx.sumEvlogIsFailish;
   var formatLogDateTimeLocal = ctx.formatLogDateTimeLocal;
+  var formatLogDateTimeLocalCompact = ctx.formatLogDateTimeLocalCompact;
   var formatLogRelativeAgo = ctx.formatLogRelativeAgo;
   var escapeHtml = ctx.escapeHtml;
+  if (typeof formatLogDateTimeLocalCompact !== "function") {
+    formatLogDateTimeLocalCompact = formatLogDateTimeLocal;
+  }
     var searchTimers = typeof WeakMap !== "undefined" ? new WeakMap() : null;
     /** Pixels from tbody bottom to treat as "stuck to tail" when summarized panel is rebuilt. */
     var SUM_EVLOG_TB_TAIL_SLACK = 6;
@@ -225,13 +229,25 @@ globalThis.ChimeraSettings.Handlers.Evlog.wire = function (ctx) {
       return isNaN(ms) ? NaN : ms;
     }
     function sumEvlogPanelColCount(root) {
-      if (!root) return 3;
+      if (!root) return 2;
       var attr = root.getAttribute("data-sum-evlog-cols");
       if (attr) {
         var n = parseInt(String(attr), 10);
-        if (!isNaN(n) && n >= 3) return n;
+        if (!isNaN(n) && n >= 2) return n;
       }
-      return root.hasAttribute("data-sum-evlog-source") ? 4 : 3;
+      return 2;
+    }
+    function sumEvlogRowMsgText(tr) {
+      if (!tr) return "";
+      var el = tr.querySelector(".sum-evlog__msg-text");
+      if (el) return el.textContent.trim().replace(/\s+/g, " ");
+      var msg = tr.querySelector(".sum-evlog__cell--msg");
+      return msg ? msg.textContent.trim().replace(/\s+/g, " ") : "";
+    }
+    function sumEvlogRowMetaText(tr, selector) {
+      if (!tr) return "";
+      var el = tr.querySelector(selector);
+      return el ? el.textContent.trim().replace(/\s+/g, " ") : "";
     }
     function rowSearchBlob(tr) {
       var blob = "";
@@ -240,12 +256,8 @@ globalThis.ChimeraSettings.Handlers.Evlog.wire = function (ctx) {
         if (t) blob += " " + t.textContent.trim();
         var iso = tr.querySelector("time[datetime]");
         if (iso && iso.getAttribute("datetime")) blob += " " + iso.getAttribute("datetime");
-        var src = tr.querySelector(".sum-evlog__cell--source");
-        if (src) blob += " " + src.textContent.trim();
-        var msg = tr.querySelector(".sum-evlog__cell--msg");
-        if (msg) blob += " " + msg.textContent.trim();
-        var stat = tr.querySelector(".sum-evlog__cell--status");
-        if (stat) blob += " " + stat.textContent.trim();
+        blob += " " + sumEvlogRowMetaText(tr, ".sum-evlog__msg-meta");
+        blob += " " + sumEvlogRowMsgText(tr);
         var lk = (tr.getAttribute("data-evlog-level") || "").trim().toLowerCase();
         blob += " " + lk;
       } catch (e0) {}
@@ -385,7 +397,7 @@ globalThis.ChimeraSettings.Handlers.Evlog.wire = function (ctx) {
         "Oldest <strong>visible</strong> entry: <time title=\"" +
         escapeHtml(formatLogRelativeAgo(oldestMs)) +
         "\">" +
-        escapeHtml(formatLogDateTimeLocal(isFinite(oldestMs) ? oldestMs : null)) +
+        escapeHtml(formatLogDateTimeLocalCompact(isFinite(oldestMs) ? oldestMs : null)) +
         "</time>";
     }
     function sumEvlogRebuildRoot(root) {
@@ -440,17 +452,11 @@ globalThis.ChimeraSettings.Handlers.Evlog.wire = function (ctx) {
       for (var i = 0; i < picked.length; i++) {
         var tr = picked[i];
         var t = tr.querySelector("time");
-        var timeStr = t ? t.textContent.trim() : "";
-        var src = tr.querySelector(".sum-evlog__cell--source");
-        var srcStr = src ? src.textContent.trim().replace(/\s+/g, " ") : "";
-        var msg = tr.querySelector(".sum-evlog__cell--msg");
-        var msgStr = msg ? msg.textContent.trim().replace(/\s+/g, " ") : "";
-        var stat = tr.querySelector(".sum-evlog__cell--status");
-        var statStr = stat ? stat.textContent.trim().replace(/\s+/g, " ") : "";
-        var cols = [timeStr, msgStr];
-        if (src) cols.push(srcStr);
-        cols.push(statStr);
-        lines.push(cols.join("\t"));
+        var timeStr = t ? t.textContent.trim().replace(/\s+/g, " ") : "";
+        var srcStr = sumEvlogRowMetaText(tr, ".sum-evlog-meta-source, .sum-evlog-workspace-source");
+        var msgStr = sumEvlogRowMsgText(tr);
+        var statStr = sumEvlogRowMetaText(tr, ".sum-evlog-meta-status");
+        lines.push([timeStr, srcStr, msgStr, statStr].join("\t"));
       }
       var text = lines.join("\n");
       function showToast(ok, msg) {

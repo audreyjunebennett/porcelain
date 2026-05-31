@@ -48,6 +48,14 @@ These plans are complete. Read the linked feature record for as-built behavior.
 
 ---
 
+## Active
+
+| Plan | Feature record(s) |
+|------|-------------------|
+| [operator-embed-ui-mobile-layout.md](operator-embed-ui-mobile-layout.md) | [operator-embed-ui-mobile-layout](../features/operator-embed-ui-mobile-layout.md) (`active` — Phases 1–3 shipped) |
+
+---
+
 ## Draft — future work (no feature record yet)
 
 Create a feature record when implementation ships.

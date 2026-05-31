@@ -5136,7 +5136,7 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       if (qdrCardModel) {
         var vm = qdrCardModel;
         metrics =
-          '<span class="sum-metrics" style="display:flex;flex-wrap:wrap;gap:0.35rem;justify-content:flex-end">' +
+          '<span class="sum-metrics">' +
           sgOpInsetWellOkFailHtml(vm.upsertOk || 0, vm.upsertFail || 0, "", {
             leadIcon: "database_upload",
             title: "Upserts · success / fail (not HTTP 200)",

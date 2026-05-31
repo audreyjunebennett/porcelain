@@ -1,0 +1,115 @@
+/* Embed UI — shared mobile baseline (≤480px / iPhone 12 class viewports) */
+
+@media (max-width: 480px) {
+  :root,
+  html[data-theme="design-01"] {
+    --embed-mobile-breakpoint-max: 480px;
+    --embed-space-gutter: 0.65rem;
+    --embed-space-card-pad-x: 0.85rem;
+    --embed-space-card-pad-y: 0.75rem;
+  }
+
+  /* —— Chat (/ui/chat) —— */
+  .chat-title-host {
+    padding-block: 0.65rem 0.25rem;
+    padding-inline: var(--embed-space-gutter, 0.65rem);
+  }
+
+  .chat-title {
+    font-size: 1.05rem;
+  }
+
+  .chat-title__input {
+    font-size: 1.05rem;
+  }
+
+  .chat-viewport {
+    padding: 0.75rem var(--embed-space-gutter, 0.65rem) 0.5rem;
+  }
+
+  .chat-msg {
+    padding: var(--embed-space-card-pad-y, 0.75rem) var(--embed-space-card-pad-x, 0.85rem);
+  }
+
+  .chat-msg--assistant {
+    margin-right: 0.35rem;
+  }
+
+  .chat-msg--user {
+    margin-left: 0.35rem;
+  }
+
+  .chat-composer {
+    padding: 0  var(--embed-space-gutter, 0.65rem) 0.65rem;
+  }
+
+  .chat-composer__footer {
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  .chat-composer__selectors {
+    flex: 1 1 auto;
+    flex-wrap: nowrap;
+    min-width: 0;
+    width: auto;
+  }
+
+  .chat-composer__select-wrap {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .chat-composer__selectors select {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    box-sizing: border-box;
+    font-size: 0.7rem;
+    padding: 0.26rem 1.35rem 0.26rem 0.5rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .chat-composer__send {
+    flex-shrink: 0;
+    margin-left: auto;
+  }
+
+  .chat-embed-item__snippet--code,
+  .chat-embed-item__snippet--plain,
+  .chat-embed-item__snippet--md {
+    max-width: 100%;
+    overflow-x: auto;
+    word-break: break-word;
+    white-space: pre-wrap;
+  }
+
+  /* —— App shell ribbon (index.html) —— */
+  .shell-ribbon--narrow .shell-ribbon__toggle:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .shell-ribbon--narrow.shell-ribbon--expanded {
+    width: 3rem;
+  }
+
+  .shell-ribbon--narrow .shell-ribbon__filters,
+  .shell-ribbon--narrow .shell-ribbon__rule,
+  .shell-ribbon--narrow .shell-ribbon__history-wrap {
+    display: none !important;
+  }
+
+  .shell-ribbon--narrow .shell-ribbon__new-chat .shell-ribbon__label,
+  .shell-ribbon--narrow .shell-ribbon__settings .shell-ribbon__label,
+  .shell-ribbon--narrow .shell-ribbon__brand {
+    display: none;
+  }
+
+  .shell-ribbon--narrow .shell-ribbon__btn {
+    min-width: 2.25rem;
+    min-height: 2.25rem;
+  }
+}

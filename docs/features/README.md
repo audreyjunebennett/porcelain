@@ -33,6 +33,7 @@ Durable contracts for new binaries, wrappers, and cross-cutting integration — 
 | [Operator chat UI](operator-chat-ui.md) | Streaming chat, model/workspace selectors, RAG snippets, Markdown render | Gateway embed UI, chat/RAG | `current` |
 | [Operator conversation history](operator-conversation-history.md) | Durable chat threads in operator SQLite; history panel with title, flag, delete | Gateway embed UI, operator SQLite, session | `current` |
 | [Operator settings UI](operator-settings-ui.md) | `/ui/settings` cards + event log; unified admin/observability surface | Gateway embed UI, servicelogs | `current` |
+| [Operator embed UI mobile layout](operator-embed-ui-mobile-layout.md) | Phone-width settings cards, scoped event log, VM toggles; site-wide mobile baseline; gallery fixtures | Gateway embed UI | `active` |
 | [Operator virtual models](operator-virtual-models.md) | Per-VM routing stacks in SQLite; catalog + chat resolution | Gateway runtime, operator SQLite, settings UI | `current` |
 | [Operator provider model availability](operator-provider-model-availability.md) | Tenant-scoped upstream model enable/disable; catalog filter | Operator SQLite, settings provider cards | `current` |
 | [Operator log message registry](operator-log-message-registry.md) | Canonical log slugs + operator copy in YAML; generated JS/Go constants | `internal/operatorcopy`, settings UI | `current` |

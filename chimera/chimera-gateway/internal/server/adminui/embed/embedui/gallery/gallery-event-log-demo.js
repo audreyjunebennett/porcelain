@@ -1,16 +1,21 @@
 /**
- * Gallery-only: event log demos — formatLogDateTimeLocal, status + search filters,
- * click/multi-select rows, clipboard copy, search-no-results row in the table. Phase 2 lives in logs.js.
+ * Gallery-only: event log demos — stacked datetime, status + search filters,
+ * click/multi-select rows, clipboard copy, search-no-results row in the table.
  */
 (function () {
   "use strict";
+
+  var Markup = globalThis.GalleryEvlogMarkup || {};
 
   function pad2(n) {
     return n < 10 ? "0" + n : String(n);
   }
 
-  /** Same semantics as ChimeraSettings.Main formatLogDateTimeLocal (UTC instant → viewer-local wall time). */
-  function formatLogDateTimeLocal(ms) {
+  /** Footer/search single-line local time (matches production formatLogDateTimeLocalCompact). */
+  function formatLogDateTimeLocalCompact(ms) {
+    if (typeof Markup.formatLogDateTimeLocalCompact === "function") {
+      return Markup.formatLogDateTimeLocalCompact(ms);
+    }
     if (ms == null || !isFinite(Number(ms))) return "—";
     var d = new Date(Number(ms));
     if (isNaN(d.getTime())) return "—";
@@ -68,7 +73,11 @@
       for (var i = 0; i < els.length; i++) {
         var iso = els[i].getAttribute("datetime");
         var parsed = iso ? Date.parse(iso) : NaN;
-        els[i].textContent = formatLogDateTimeLocal(parsed);
+        if (typeof Markup.formatLogDateTimeLocalHtml === "function") {
+          els[i].innerHTML = Markup.formatLogDateTimeLocalHtml(parsed);
+        } else {
+          els[i].textContent = formatLogDateTimeLocalCompact(parsed);
+        }
         els[i].title = formatRelativeAgo(parsed);
       }
     } catch (e0) {}
@@ -84,7 +93,7 @@
     );
     if (picked) {
       var msSel = rowTimespec(picked);
-      var absSel = formatLogDateTimeLocal(msSel);
+      var absSel = formatLogDateTimeLocalCompact(msSel);
       var relSel = formatRelativeAgo(msSel);
       var tEl = picked.querySelector("time[datetime]");
       var dtAttr = tEl && tEl.getAttribute("datetime") ? tEl.getAttribute("datetime") : "";
@@ -114,7 +123,7 @@
       "Oldest <strong>visible</strong> entry: <time title=\"" +
       escapeAttr(relOld) +
       "\">" +
-      formatLogDateTimeLocal(oldestMs) +
+      formatLogDateTimeLocalCompact(oldestMs) +
       "</time>";
   }
 
@@ -158,6 +167,27 @@
     return true;
   }
 
+  function rowMetaText(tr, selector) {
+    try {
+      var el = tr.querySelector(selector);
+      if (!el) return "";
+      return el.textContent.trim().replace(/\s+/g, " ");
+    } catch (eMeta) {
+      return "";
+    }
+  }
+
+  function rowMsgText(tr) {
+    try {
+      var el = tr.querySelector(".sum-evlog__msg-text");
+      if (el) return el.textContent.trim().replace(/\s+/g, " ");
+      var legacy = tr.querySelector(".sum-evlog__cell--msg");
+      return legacy ? legacy.textContent.trim().replace(/\s+/g, " ") : "";
+    } catch (eMsg) {
+      return "";
+    }
+  }
+
   function rowSearchBlob(tr) {
     var blob = "";
     try {
@@ -165,12 +195,9 @@
       if (t) blob += " " + t.textContent.trim();
       var iso = tr.querySelector("time[datetime]");
       if (iso && iso.getAttribute("datetime")) blob += " " + iso.getAttribute("datetime");
-      var src = tr.querySelector(".sum-evlog__cell--source");
-      if (src) blob += " " + src.textContent.trim();
-      var msg = tr.querySelector(".sum-evlog__cell--msg");
-      if (msg) blob += " " + msg.textContent.trim();
-      var stat = tr.querySelector(".sum-evlog__cell--status");
-      if (stat) blob += " " + stat.textContent.trim();
+      blob += " " + rowMetaText(tr, ".sum-evlog-meta-source, .sum-evlog-workspace-source");
+      blob += " " + rowMsgText(tr);
+      blob += " " + rowMetaText(tr, ".sum-evlog-meta-status");
       var lk = levelKey(tr.dataset.evlogLevel);
       blob += " " + lk.toLowerCase();
     } catch (e2) {}
@@ -224,7 +251,7 @@
     tr.setAttribute("aria-live", "polite");
     var td = document.createElement("td");
     td.className = "sum-gallery-evlog__search-empty-cell";
-    td.colSpan = 3;
+    td.colSpan = 2;
     td.appendChild(document.createTextNode("No matching entries for your search. "));
     var btn = document.createElement("button");
     btn.type = "button";
@@ -294,17 +321,11 @@
     for (var i = 0; i < picked.length; i++) {
       var tr = picked[i];
       var t = tr.querySelector("time");
-      var timeStr = t ? t.textContent.trim() : "";
-      var src = tr.querySelector(".sum-evlog__cell--source");
-      var srcStr = src ? src.textContent.trim().replace(/\s+/g, " ") : "";
-      var msg = tr.querySelector(".sum-evlog__cell--msg");
-      var msgStr = msg ? msg.textContent.trim().replace(/\s+/g, " ") : "";
-      var stat = tr.querySelector(".sum-evlog__cell--status");
-      var statStr = stat ? stat.textContent.trim().replace(/\s+/g, " ") : "";
-      var cols = [timeStr];
-      if (src) cols.push(srcStr);
-      cols.push(msgStr, statStr);
-      lines.push(cols.join("\t"));
+      var timeStr = t ? t.textContent.trim().replace(/\s+/g, " ") : "";
+      var srcStr = rowMetaText(tr, ".sum-evlog-meta-source, .sum-evlog-workspace-source");
+      var msgStr = rowMsgText(tr);
+      var statStr = rowMetaText(tr, ".sum-evlog-meta-status");
+      lines.push([timeStr, srcStr, msgStr, statStr].join("\t"));
     }
     var text = lines.join("\n");
     function showToast(ok, msg) {
@@ -319,9 +340,7 @@
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(
         function () {
-          var suffix = allVisible
-            ? " visible line(s)."
-            : " line(s).";
+          var suffix = allVisible ? " visible line(s)." : " line(s).";
           showToast(true, "Copied " + lines.length + suffix);
         },
         function () {

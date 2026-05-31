@@ -523,6 +523,60 @@ globalThis.ChimeraSettings.Main = function () {
     );
   }
 
+  /** Scoped event-log time column: stacked time (no year) + short date for narrow layouts. */
+  function formatLogDateTimeLocalHtml(ts) {
+    if (ts === null || ts === undefined || ts === "") {
+      return '<div class="dt-stack"><span class="dt-line muted">—</span></div>';
+    }
+    var d = ts instanceof Date ? ts : new Date(ts);
+    if (isNaN(d.getTime())) {
+      var raw = String(ts).replace("T", " ").slice(0, 23);
+      return (
+        '<div class="dt-stack dt-fallback"><span class="dt-line dt-time">' +
+        escapeHtml(raw) +
+        "</span></div>"
+      );
+    }
+    var timeStr = new Intl.DateTimeFormat("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false
+    }).format(d);
+    var dateStr = new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric"
+    }).format(d);
+    return (
+      '<div class="dt-stack">' +
+      '<span class="dt-line dt-time">' +
+      escapeHtml(timeStr) +
+      '</span><span class="dt-line dt-date">' +
+      escapeHtml(dateStr) +
+      "</span></div>"
+    );
+  }
+
+  /** Plain compact timestamp for footers and search (no year). */
+  function formatLogDateTimeLocalCompact(ts) {
+    if (ts === null || ts === undefined || ts === "") return "—";
+    var d = ts instanceof Date ? ts : new Date(ts);
+    if (isNaN(d.getTime())) return String(ts).replace("T", " ").slice(0, 23);
+    var dateStr = new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric"
+    }).format(d);
+    return (
+      dateStr +
+      " " +
+      pad2(d.getHours()) +
+      ":" +
+      pad2(d.getMinutes()) +
+      ":" +
+      pad2(d.getSeconds())
+    );
+  }
+
   function toIsoDatetimeAttr(ts) {
     if (ts === null || ts === undefined || ts === "") return "";
     var d = ts instanceof Date ? ts : new Date(ts);
@@ -850,6 +904,8 @@ globalThis.ChimeraSettings.Main = function () {
     logSummaryHtml: logSummaryHtml,
     primaryLogMessage: primaryLogMessage,
     formatLogDateTimeLocal: formatLogDateTimeLocal,
+    formatLogDateTimeLocalHtml: formatLogDateTimeLocalHtml,
+    formatLogDateTimeLocalCompact: formatLogDateTimeLocalCompact,
     formatLogRelativeAgo: formatLogRelativeAgo,
     toIsoDatetimeAttr: toIsoDatetimeAttr,
     operatorFriendlyGatewayMsg: operatorFriendlyGatewayMsg,

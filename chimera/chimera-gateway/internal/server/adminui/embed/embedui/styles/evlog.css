@@ -193,11 +193,10 @@
   border-radius: 0;
   overflow: visible;
   table-layout: fixed;
-  --sum-evlog-status-col-w: 4.75rem;
-  --sum-evlog-source-col-w: 4.75rem;
+  --sum-evlog-time-col-w: 5.25rem;
 }
 .sum-evlog[data-sum-evlog-source-indexer-workspace] .sum-metrics-table.sum-evlog__table {
-  --sum-evlog-source-col-w: 13.5rem;
+  --sum-evlog-time-col-w: 5.25rem;
 }
 .sum-metrics-table.sum-evlog__table thead,
 .sum-metrics-table.sum-evlog__table tbody {
@@ -255,63 +254,42 @@
   display: none;
 }
 .sum-metrics-table.sum-evlog__table col.sum-evlog__col-time {
-  width: 21ch;
-}
-.sum-metrics-table.sum-evlog__table col.sum-evlog__col-source {
-  width: var(--sum-evlog-source-col-w);
-  min-width: 0;
+  width: var(--sum-evlog-time-col-w);
 }
 .sum-metrics-table.sum-evlog__table col.sum-evlog__col-msg {
   min-width: 0;
-}
-.sum-metrics-table.sum-evlog__table col.sum-evlog__col-status {
-  width: var(--sum-evlog-status-col-w);
-  min-width: 0;
-}
-.sum-metrics-table.sum-evlog__table th.sum-evlog__th-status,
-.sum-metrics-table.sum-evlog__table td.sum-evlog__cell--status,
-.sum-metrics-table.sum-evlog__table th.sum-evlog__th-source,
-.sum-metrics-table.sum-evlog__table td.sum-evlog__cell--source {
-  text-align: right;
-}
-.sum-metrics-table.sum-evlog__table thead th.sum-evlog__th-status,
-.sum-metrics-table.sum-evlog__table thead th.sum-evlog__th-source {
-  vertical-align: middle;
-}
-.sum-metrics-table.sum-evlog__table td.sum-evlog__cell--status,
-.sum-metrics-table.sum-evlog__table td.sum-evlog__cell--source {
-  vertical-align: top;
+  width: auto;
 }
 .sum-metrics-table.sum-evlog__table .sum-evlog__cell--time,
 .sum-metrics-table.sum-evlog__table thead th.sum-evlog__cell--time {
-  width: 21ch;
-  max-width: 21ch;
+  width: var(--sum-evlog-time-col-w);
+  max-width: var(--sum-evlog-time-col-w);
   box-sizing: border-box;
+  vertical-align: top;
 }
 .sum-metrics-table.sum-evlog__table .sum-evlog__cell--time time {
-  display: inline-block;
+  display: block;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   font-weight: 600;
   color: var(--embed-text-mono-dt);
   font-variant-numeric: tabular-nums;
+  line-height: 1.35;
 }
-.sum-metrics-table.sum-evlog__table thead th.sum-evlog__th-source,
-.sum-metrics-table.sum-evlog__table .sum-evlog__cell--source {
-  width: var(--sum-evlog-source-col-w);
-  max-width: var(--sum-evlog-source-col-w);
-  box-sizing: border-box;
+.sum-metrics-table.sum-evlog__table .sum-evlog__cell--time .dt-stack {
+  line-height: 1.35;
 }
-/* Status rail: fixed width; body badges may wrap */
-.sum-metrics-table.sum-evlog__table thead th.sum-evlog__th-status,
-.sum-metrics-table.sum-evlog__table .sum-evlog__cell--status {
-  width: var(--sum-evlog-status-col-w);
-  max-width: var(--sum-evlog-status-col-w);
-  box-sizing: border-box;
+.sum-metrics-table.sum-evlog__table .sum-evlog__cell--time .dt-stack .dt-line {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.sum-metrics-table.sum-evlog__table td.sum-evlog__cell--status .sum-evlog-status {
-  flex-wrap: wrap;
-  row-gap: 0.2rem;
+.sum-metrics-table.sum-evlog__table .sum-evlog__cell--time .dt-stack .dt-date {
+  margin-top: 0.12rem;
+  font-size: 0.62rem;
+  font-weight: 500;
+  color: var(--embed-text-secondary);
 }
 .sum-metrics-table.sum-evlog__table thead th.sum-evlog__th-msg,
 .sum-metrics-table.sum-evlog__table thead tr > th:nth-child(2),
@@ -336,10 +314,91 @@
   filter: brightness(0.995);
 }
 .sum-evlog__cell--msg {
-  word-break: break-word;
-  overflow-wrap: anywhere;
+  word-break: normal;
+  overflow-wrap: break-word;
   line-height: 1.42;
   color: var(--embed-text-heading);
+  min-width: 0;
+}
+.sum-evlog__msg-wrap {
+  display: grid;
+  grid-template-rows: minmax(1.45rem, auto) minmax(0, auto);
+  grid-template-columns: 1fr;
+  gap: 0.12rem;
+  width: 100%;
+  min-width: 0;
+}
+.sum-evlog__msg-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 0.28rem;
+  min-height: 1.45rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+.sum-evlog__msg-text {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  word-break: normal;
+  overflow-wrap: break-word;
+  line-height: 1.42;
+  text-align: left;
+  color: inherit;
+}
+.sum-evlog-meta-status {
+  display: inline-flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  flex: 0 0 auto;
+  max-width: 100%;
+}
+.sum-evlog-meta-source,
+.sum-evlog-meta-tier {
+  flex: 0 0 auto;
+  max-width: 100%;
+}
+.sum-metrics-table.sum-evlog__table .sum-evlog__msg-meta .sum-evlog-workspace-source {
+  display: inline-block;
+  max-width: min(100%, 10rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--embed-text-secondary);
+}
+.sum-metrics-table.sum-evlog__table .sum-evlog__msg-meta .sum-svc-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 0;
+  margin: 0;
+  padding: 0.12rem 0.45rem;
+  border-radius: 4px;
+  font-family: ui-monospace, monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.25;
+  text-align: center;
+  white-space: nowrap;
+  vertical-align: baseline;
+}
+.sum-metrics-table.sum-evlog__table .sum-evlog__msg-meta .sum-evlog-status {
+  display: inline-flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.28rem;
+  max-width: 100%;
+  box-sizing: border-box;
+  min-height: 0;
 }
 /* Source rail: same flex alignment as status column */
 .sum-metrics-table.sum-evlog__table .sum-evlog-source {

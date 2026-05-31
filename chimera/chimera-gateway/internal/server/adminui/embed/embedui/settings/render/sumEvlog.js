@@ -12,6 +12,7 @@ globalThis.ChimeraSettings.Render.mountSumEvlog = function (ctx) {
   var logSummaryHtml = ctx.logSummaryHtml;
   var primaryLogMessage = ctx.primaryLogMessage;
   var formatLogDateTimeLocal = ctx.formatLogDateTimeLocal;
+  var formatLogDateTimeLocalHtml = ctx.formatLogDateTimeLocalHtml;
   var formatLogRelativeAgo = ctx.formatLogRelativeAgo;
   var toIsoDatetimeAttr = ctx.toIsoDatetimeAttr;
   if (typeof primaryLogMessage !== "function") {
@@ -23,6 +24,16 @@ globalThis.ChimeraSettings.Render.mountSumEvlog = function (ctx) {
   if (typeof formatLogDateTimeLocal !== "function") {
     formatLogDateTimeLocal = function () {
       return "—";
+    };
+  }
+  if (typeof formatLogDateTimeLocalHtml !== "function") {
+    formatLogDateTimeLocalHtml = function (ts) {
+      var dt = formatLogDateTimeLocal(ts);
+      return (
+        '<div class="dt-stack"><span class="dt-line dt-time">' +
+        escapeHtml(dt) +
+        "</span></div>"
+      );
     };
   }
   if (typeof formatLogRelativeAgo !== "function") {
@@ -42,8 +53,8 @@ globalThis.ChimeraSettings.Render.mountSumEvlog = function (ctx) {
     return { cls: "", lab: "" };
   }
 
-  function sumEvlogColCount(opts) {
-    return opts && opts.showSourceColumn === true ? 4 : 3;
+  function sumEvlogColCount() {
+    return 2;
   }
 
   function sumEvlogShouldHideBadge(badgeOpt, opts) {
@@ -216,29 +227,33 @@ globalThis.ChimeraSettings.Render.mountSumEvlog = function (ctx) {
     return parts.join("");
   }
 
-  function sumEvlogSourceCellInnerHtml(badgeOpt, opts) {
+  function sumEvlogSourceMetaHtml(badgeOpt, opts) {
     opts = opts || {};
-    if (!opts.showSourceColumn) return "";
     if (sumEvlogShouldHideBadge(badgeOpt, opts)) return "";
     if (badgeOpt && badgeOpt.kind === "indexer-workspace" && badgeOpt.lab) {
       return (
-        '<span class="sum-evlog-workspace-source" title="' +
+        '<span class="sum-evlog-meta-source sum-evlog-workspace-source" title="' +
         escapeHtml(String(badgeOpt.lab)) +
         '">' +
         escapeHtml(String(badgeOpt.lab)) +
         "</span>"
       );
     }
-    return sumEvlogBadgeHtml(badgeOpt);
+    var badgeHtml = sumEvlogBadgeHtml(badgeOpt);
+    if (!badgeHtml) return "";
+    if (badgeHtml.indexOf('class="sum-svc-badge') >= 0) {
+      return badgeHtml.replace('class="sum-svc-badge', 'class="sum-evlog-meta-source sum-svc-badge');
+    }
+    return '<span class="sum-evlog-meta-source">' + badgeHtml + "</span>";
+  }
+
+  function sumEvlogSourceCellInnerHtml(badgeOpt, opts) {
+    return sumEvlogSourceMetaHtml(badgeOpt, opts);
   }
 
   function sumEvlogMsgCellInnerHtml(ev, badgeOpt, opts) {
     opts = opts || {};
     var parsed = ev.parsed;
-    var badgeHtml = "";
-    if (!opts.showSourceColumn && !sumEvlogShouldHideBadge(badgeOpt, opts)) {
-      badgeHtml = sumEvlogBadgeHtml(badgeOpt);
-    }
     var tierHtml = "";
     if (opts.convJoinTier && opts.convJoinTier !== "direct") {
       var tl = String(opts.convJoinTier);
@@ -252,7 +267,7 @@ globalThis.ChimeraSettings.Render.mountSumEvlog = function (ctx) {
         tierTitle += " · turn " + String(opts.vectorstoreTurnIndex);
       }
       tierHtml =
-        '<span class="sum-conv-tier sum-conv-tier--' +
+        '<span class="sum-evlog-meta-tier sum-conv-tier sum-conv-tier--' +
         safeTl +
         '" title="' +
         escapeHtml(tierTitle) +
@@ -263,7 +278,23 @@ globalThis.ChimeraSettings.Render.mountSumEvlog = function (ctx) {
     var msgOpts = { forEventLog: true };
     if (opts.convEvlogMeta) msgOpts.convEvlogMeta = opts.convEvlogMeta;
     var msg = escapeHtml(primaryLogMessage(parsed, ev.text, msgOpts));
-    return badgeHtml + tierHtml + msg;
+    var sourceMeta = sumEvlogSourceMetaHtml(badgeOpt, opts);
+    var statusInner = sumEvlogStatusInnerHtml(parsed);
+    var statusMeta =
+      '<span class="sum-evlog-meta-status"><span class="sum-evlog-status">' +
+      statusInner +
+      "</span></span>";
+    return (
+      '<div class="sum-evlog__msg-wrap">' +
+      '<div class="sum-evlog__msg-meta">' +
+      sourceMeta +
+      tierHtml +
+      statusMeta +
+      "</div>" +
+      '<div class="sum-evlog__msg-text">' +
+      msg +
+      "</div></div>"
+    );
   }
 
   function sumEvlogRowTrHtml(entLike, cardScope, rowIndex, badgeOpt, summaryOpts) {
@@ -278,14 +309,9 @@ globalThis.ChimeraSettings.Render.mountSumEvlog = function (ctx) {
       statusModel.http == null ? "" : ' data-evlog-http="' + escapeHtml(String(statusModel.http)) + '"';
     var rowId = escapeHtml(sumEvlogStableRowId(cardScope, entLike, rowIndex));
     var iso = toIsoDatetimeAttr(entLike.ts);
-    var dt = formatLogDateTimeLocal(entLike.ts);
+    var dtHtml = formatLogDateTimeLocalHtml(entLike.ts);
     var rel = formatLogRelativeAgo(entLike.ts);
-    var sourceInner = sumEvlogSourceCellInnerHtml(badgeOpt, summaryOpts);
     var msgInner = sumEvlogMsgCellInnerHtml(entLike, badgeOpt, summaryOpts);
-    var statusInner = sumEvlogStatusInnerHtml(parsed);
-    var sourceTd = summaryOpts.showSourceColumn
-      ? '<td class="sum-evlog__cell--source"><div class="sum-evlog-source">' + sourceInner + "</div></td>"
-      : "";
     return (
       '<tr class="sum-evlog__row" data-evlog-id="' +
       rowId +
@@ -299,15 +325,11 @@ globalThis.ChimeraSettings.Render.mountSumEvlog = function (ctx) {
       ' title="' +
       escapeHtml(rel) +
       '">' +
-      escapeHtml(dt) +
+      dtHtml +
       "</time></td>" +
       '<td class="sum-evlog__cell--msg">' +
       msgInner +
-      "</td>" +
-      sourceTd +
-      '<td class="sum-evlog__cell--status"><div class="sum-evlog-status">' +
-      statusInner +
-      "</div></td></tr>"
+      "</td></tr>"
     );
   }
 
@@ -317,7 +339,7 @@ globalThis.ChimeraSettings.Render.mountSumEvlog = function (ctx) {
   }
 
   function sumEvlogDataEmptyRowHtml(colspanOpt) {
-    var colspan = colspanOpt != null ? colspanOpt : 3;
+    var colspan = colspanOpt != null ? colspanOpt : 2;
     return (
       '<tr class="sum-evlog__row sum-evlog__search-empty-row" data-sum-evlog-data-empty role="status">' +
       '<td class="sum-evlog__search-empty-cell" colspan="' +
@@ -355,8 +377,7 @@ globalThis.ChimeraSettings.Render.mountSumEvlog = function (ctx) {
 
   function sumEvlogPanelHtml(o) {
     o = o || {};
-    var showSource = o.showSourceColumn === true;
-    var cols = showSource ? 4 : 3;
+    var cols = 2;
     var scrollTbodyId = o.scrollTbodyId || "sum-evlog-tb";
     var warnN = o.warnN != null ? o.warnN : 0;
     var failN = o.failN != null ? o.failN : 0;
@@ -372,18 +393,11 @@ globalThis.ChimeraSettings.Render.mountSumEvlog = function (ctx) {
       typeof globalThis.ChimeraUI.StatusIndicator.evlogFooterMetrics === "function"
         ? globalThis.ChimeraUI.StatusIndicator.evlogFooterMetrics({ warn: warnN, fail: failN })
         : "";
-    var colgroup = showSource
-      ? '<colgroup><col class="sum-evlog__col-time" /><col class="sum-evlog__col-msg" /><col class="sum-evlog__col-source" /><col class="sum-evlog__col-status" /></colgroup>'
-      : '<colgroup><col class="sum-evlog__col-time" /><col class="sum-evlog__col-msg" /><col class="sum-evlog__col-status" /></colgroup>';
-    var sourceTh = showSource ? '<th class="sum-evlog__th-source" scope="col">Source</th>' : "";
-    var statusTh =
-      '<th class="sum-evlog__th-status" scope="col">' +
-      '<div class="sum-evlog__th-status-head" role="group" aria-label="Status">' +
-      '<span class="sum-evlog__th-status-label">Status</span>' +
-      "</div></th>";
-    var rootAttrs =
-      ' data-sum-evlog-root data-sum-evlog-cols="' + escapeHtml(String(cols)) + '"' + (showSource ? ' data-sum-evlog-source' : "");
-    if (showSource && o.sourceColumnKind === "indexer-workspace") {
+    var colgroup =
+      '<colgroup><col class="sum-evlog__col-time" /><col class="sum-evlog__col-msg" /></colgroup>';
+    var statusTh = "";
+    var rootAttrs = ' data-sum-evlog-root data-sum-evlog-cols="' + escapeHtml(String(cols)) + '"';
+    if (o.sourceColumnKind === "indexer-workspace") {
       rootAttrs += ' data-sum-evlog-source-indexer-workspace';
     }
     return (
@@ -397,7 +411,6 @@ globalThis.ChimeraSettings.Render.mountSumEvlog = function (ctx) {
       colgroup +
       '<thead><tr><th class="sum-evlog__cell--time" scope="col">Time</th>' +
       '<th class="sum-evlog__th-msg" scope="col">Message</th>' +
-      sourceTh +
       statusTh +
       "</tr></thead>" +
       '<tbody id="' +
@@ -423,7 +436,6 @@ globalThis.ChimeraSettings.Render.mountSumEvlog = function (ctx) {
   function sumEvlogBuildTbodyFromConvEvents(evs, turnGroups, cardScope, buildOpts) {
     buildOpts = buildOpts || {};
     var rowBase = {};
-    if (buildOpts.showSourceColumn === true) rowBase.showSourceColumn = true;
     var sectionColspan = sumEvlogColCount(rowBase);
     var parts = [];
     var rowIdx = 0;

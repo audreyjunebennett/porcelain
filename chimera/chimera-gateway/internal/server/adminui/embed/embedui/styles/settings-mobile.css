@@ -1,0 +1,244 @@
+/* Embed UI — operator settings responsive layout (mobile-first baseline + narrow overrides) */
+
+@media (max-width: 480px) {
+  html[data-theme="design-01"] #panel-summarized .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary,
+  html[data-theme="design-01"] #panel-summarized .sum-card.sum-card--collapsible:not(.sum-card--conversation):not(.sg-op-user-saved) > .sum-card__hdr,
+  html[data-theme="design-01"] .sg-op-rail .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary,
+  html[data-theme="design-01"] .sg-op-rail .sum-card.sum-card--collapsible:not(.sum-card--conversation):not(.sg-op-user-saved) > .sum-card__hdr {
+    display: grid;
+    grid-template-columns: 1.75rem minmax(0, 1fr);
+    grid-template-areas:
+      "avatar title"
+      ".      subtitle"
+      ".      metrics";
+    align-items: start;
+    gap: 0.35rem 0.5rem;
+    padding: 0.75rem 2rem 0.75rem 0.85rem;
+    min-height: 0;
+    position: relative;
+  }
+
+  html[data-theme="design-01"] #panel-summarized .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary > .sum-avatar,
+  html[data-theme="design-01"] #panel-summarized .sum-card.sum-card--collapsible:not(.sum-card--conversation):not(.sg-op-user-saved) > .sum-card__hdr > .sum-avatar,
+  html[data-theme="design-01"] .sg-op-rail .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary > .sum-avatar,
+  html[data-theme="design-01"] .sg-op-rail .sum-card.sum-card--collapsible:not(.sum-card--conversation):not(.sg-op-user-saved) > .sum-card__hdr > .sum-avatar {
+    grid-area: avatar;
+    width: 1.75rem;
+    height: 1.75rem;
+    font-size: 0.55rem;
+    border-radius: 0.35rem;
+    align-self: start;
+    box-shadow: none;
+  }
+
+  html[data-theme="design-01"] #panel-summarized .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary > .sum-main,
+  html[data-theme="design-01"] #panel-summarized .sum-card.sum-card--collapsible:not(.sum-card--conversation):not(.sg-op-user-saved) > .sum-card__hdr > .sum-main,
+  html[data-theme="design-01"] .sg-op-rail .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary > .sum-main,
+  html[data-theme="design-01"] .sg-op-rail .sum-card.sum-card--collapsible:not(.sum-card--conversation):not(.sg-op-user-saved) > .sum-card__hdr > .sum-main,
+  html[data-theme="design-01"] #panel-summarized .sum-card--indexer-operator-workspace:not(.sg-op-user-saved) > summary > .sum-main,
+  html[data-theme="design-01"] #panel-summarized .sum-card--indexer-operator-workspace:not(.sg-op-user-saved) > .sum-card__hdr > .sum-main,
+  html[data-theme="design-01"] .sg-op-rail .sum-card--indexer-operator-workspace:not(.sg-op-user-saved) > summary > .sum-main,
+  html[data-theme="design-01"] .sg-op-rail .sum-card--indexer-operator-workspace:not(.sg-op-user-saved) > .sum-card__hdr > .sum-main {
+    display: contents;
+  }
+
+  html[data-theme="design-01"] #panel-summarized .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary .sum-title,
+  html[data-theme="design-01"] #panel-summarized .sum-card.sum-card--collapsible:not(.sum-card--conversation):not(.sg-op-user-saved) > .sum-card__hdr .sum-title,
+  html[data-theme="design-01"] .sg-op-rail .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary .sum-title,
+  html[data-theme="design-01"] .sg-op-rail .sum-card.sum-card--collapsible:not(.sum-card--conversation):not(.sg-op-user-saved) > .sum-card__hdr .sum-title {
+    grid-area: title;
+    white-space: normal;
+    word-break: normal;
+    overflow-wrap: anywhere;
+    font-size: 0.92rem;
+    line-height: 1.3;
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  html[data-theme="design-01"] #panel-summarized .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary .sum-sub,
+  html[data-theme="design-01"] #panel-summarized .sum-card.sum-card--collapsible:not(.sum-card--conversation):not(.sg-op-user-saved) > .sum-card__hdr .sum-sub,
+  html[data-theme="design-01"] .sg-op-rail .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary .sum-sub,
+  html[data-theme="design-01"] .sg-op-rail .sum-card.sum-card--collapsible:not(.sum-card--conversation):not(.sg-op-user-saved) > .sum-card__hdr .sum-sub {
+    grid-area: subtitle;
+    -webkit-line-clamp: 3;
+    margin-top: 0;
+    line-height: 1.35;
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* Metrics row: full content-column width; pills left-aligned, inline when space allows. */
+  html[data-theme="design-01"] #panel-summarized .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary > .sum-metrics,
+  html[data-theme="design-01"] #panel-summarized .sum-card.sum-card--collapsible:not(.sum-card--conversation):not(.sg-op-user-saved) > .sum-card__hdr > .sum-metrics,
+  html[data-theme="design-01"] .sg-op-rail .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary > .sum-metrics,
+  html[data-theme="design-01"] .sg-op-rail .sum-card.sum-card--collapsible:not(.sum-card--conversation):not(.sg-op-user-saved) > .sum-card__hdr > .sum-metrics {
+    grid-area: metrics;
+    grid-column: 2;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    align-items: center;
+    align-content: flex-start;
+    align-self: start;
+    justify-self: start;
+    gap: 0.35rem;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    margin: 0;
+    flex: none;
+    box-sizing: border-box;
+  }
+
+  html[data-theme="design-01"] #panel-summarized .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary > .sg-op-health-pill,
+  html[data-theme="design-01"] #panel-summarized .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary > .sum-status,
+  html[data-theme="design-01"] #panel-summarized .sum-card.sum-card--collapsible:not(.sum-card--conversation):not(.sg-op-user-saved) > .sum-card__hdr > .sg-op-health-pill,
+  html[data-theme="design-01"] #panel-summarized .sum-card.sum-card--collapsible:not(.sum-card--conversation):not(.sg-op-user-saved) > .sum-card__hdr > .sum-status,
+  html[data-theme="design-01"] .sg-op-rail .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary > .sg-op-health-pill,
+  html[data-theme="design-01"] .sg-op-rail .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary > .sum-status,
+  html[data-theme="design-01"] .sg-op-rail .sum-card.sum-card--collapsible:not(.sum-card--conversation):not(.sg-op-user-saved) > .sum-card__hdr > .sg-op-health-pill,
+  html[data-theme="design-01"] .sg-op-rail .sum-card.sum-card--collapsible:not(.sum-card--conversation):not(.sg-op-user-saved) > .sum-card__hdr > .sum-status {
+    grid-area: metrics;
+    grid-column: 2;
+    justify-self: start;
+    align-self: start;
+    margin-left: 0;
+    width: auto;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  html[data-theme="design-01"] #panel-summarized .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary > .sum-metrics > .sg-op-health-pill,
+  html[data-theme="design-01"] #panel-summarized .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary > .sum-metrics > .sg-op-inset-well,
+  html[data-theme="design-01"] #panel-summarized .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary > .sum-metrics > .sg-op-usage-rollup-tag,
+  html[data-theme="design-01"] #panel-summarized .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary > .sum-metrics > .sum-metric,
+  html[data-theme="design-01"] #panel-summarized .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary > .sum-metrics > .chip,
+  html[data-theme="design-01"] #panel-summarized .sum-card.sum-card--collapsible:not(.sum-card--conversation):not(.sg-op-user-saved) > .sum-card__hdr > .sum-metrics > .sg-op-health-pill,
+  html[data-theme="design-01"] #panel-summarized .sum-card.sum-card--collapsible:not(.sum-card--conversation):not(.sg-op-user-saved) > .sum-card__hdr > .sum-metrics > .sg-op-inset-well,
+  html[data-theme="design-01"] #panel-summarized .sum-card.sum-card--collapsible:not(.sum-card--conversation):not(.sg-op-user-saved) > .sum-card__hdr > .sum-metrics > .sg-op-usage-rollup-tag,
+  html[data-theme="design-01"] #panel-summarized .sum-card.sum-card--collapsible:not(.sum-card--conversation):not(.sg-op-user-saved) > .sum-card__hdr > .sum-metrics > .sum-metric,
+  html[data-theme="design-01"] #panel-summarized .sum-card.sum-card--collapsible:not(.sum-card--conversation):not(.sg-op-user-saved) > .sum-card__hdr > .sum-metrics > .chip,
+  html[data-theme="design-01"] .sg-op-rail .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary > .sum-metrics > .sg-op-health-pill,
+  html[data-theme="design-01"] .sg-op-rail .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary > .sum-metrics > .sg-op-inset-well,
+  html[data-theme="design-01"] .sg-op-rail .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary > .sum-metrics > .sg-op-usage-rollup-tag,
+  html[data-theme="design-01"] .sg-op-rail .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary > .sum-metrics > .sum-metric,
+  html[data-theme="design-01"] .sg-op-rail .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary > .sum-metrics > .chip,
+  html[data-theme="design-01"] .sg-op-rail .sum-card.sum-card--collapsible:not(.sum-card--conversation):not(.sg-op-user-saved) > .sum-card__hdr > .sum-metrics > .sg-op-health-pill,
+  html[data-theme="design-01"] .sg-op-rail .sum-card.sum-card--collapsible:not(.sum-card--conversation):not(.sg-op-user-saved) > .sum-card__hdr > .sum-metrics > .sg-op-inset-well,
+  html[data-theme="design-01"] .sg-op-rail .sum-card.sum-card--collapsible:not(.sum-card--conversation):not(.sg-op-user-saved) > .sum-card__hdr > .sum-metrics > .sg-op-usage-rollup-tag,
+  html[data-theme="design-01"] .sg-op-rail .sum-card.sum-card--collapsible:not(.sum-card--conversation):not(.sg-op-user-saved) > .sum-card__hdr > .sum-metrics > .sum-metric,
+  html[data-theme="design-01"] .sg-op-rail .sum-card.sum-card--collapsible:not(.sum-card--conversation):not(.sg-op-user-saved) > .sum-card__hdr > .sum-metrics > .chip {
+    flex: 0 0 auto;
+    margin-left: 0;
+    width: auto;
+    max-width: 100%;
+  }
+
+  html[data-theme="design-01"] #panel-summarized .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary > .sum-metrics .sum-bf-prov-health-root--compact,
+  html[data-theme="design-01"] #panel-summarized .sum-card.sum-card--collapsible:not(.sum-card--conversation):not(.sg-op-user-saved) > .sum-card__hdr > .sum-metrics .sum-bf-prov-health-root--compact,
+  html[data-theme="design-01"] .sg-op-rail .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary > .sum-metrics .sum-bf-prov-health-root--compact,
+  html[data-theme="design-01"] .sg-op-rail .sum-card.sum-card--collapsible:not(.sum-card--conversation):not(.sg-op-user-saved) > .sum-card__hdr > .sum-metrics .sum-bf-prov-health-root--compact {
+    flex: 0 0 auto;
+    margin-left: 0;
+    align-self: center;
+  }
+
+  html[data-theme="design-01"] #panel-summarized .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary > .sum-metrics.sum-metrics--indexer-scope,
+  html[data-theme="design-01"] #panel-summarized .sum-card.sum-card--collapsible:not(.sum-card--conversation):not(.sg-op-user-saved) > .sum-card__hdr > .sum-metrics.sum-metrics--indexer-scope,
+  html[data-theme="design-01"] .sg-op-rail .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary > .sum-metrics.sum-metrics--indexer-scope,
+  html[data-theme="design-01"] .sg-op-rail .sum-card.sum-card--collapsible:not(.sum-card--conversation):not(.sg-op-user-saved) > .sum-card__hdr > .sum-metrics.sum-metrics--indexer-scope {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  html[data-theme="design-01"] #panel-summarized .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary > .sum-metrics.sum-metrics--indexer-scope .indexer-scope-progress,
+  html[data-theme="design-01"] #panel-summarized .sum-card.sum-card--collapsible:not(.sum-card--conversation):not(.sg-op-user-saved) > .sum-card__hdr > .sum-metrics.sum-metrics--indexer-scope .indexer-scope-progress,
+  html[data-theme="design-01"] .sg-op-rail .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary > .sum-metrics.sum-metrics--indexer-scope .indexer-scope-progress,
+  html[data-theme="design-01"] .sg-op-rail .sum-card.sum-card--collapsible:not(.sum-card--conversation):not(.sg-op-user-saved) > .sum-card__hdr > .sum-metrics.sum-metrics--indexer-scope .indexer-scope-progress {
+    flex: 1 1 100%;
+    max-width: 100%;
+  }
+
+  html[data-theme="design-01"] #panel-summarized .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary > .sum-metrics[style],
+  html[data-theme="design-01"] .sg-op-rail .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary > .sum-metrics[style] {
+    justify-content: flex-start !important;
+  }
+
+  html[data-theme="design-01"] #panel-summarized .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary > .sg-op-chev-icon,
+  html[data-theme="design-01"] #panel-summarized .sum-card.sum-card--collapsible:not(.sum-card--conversation):not(.sg-op-user-saved) > .sum-card__hdr > .sg-op-chev-icon,
+  html[data-theme="design-01"] .sg-op-rail .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary > .sg-op-chev-icon,
+  html[data-theme="design-01"] .sg-op-rail .sum-card.sum-card--collapsible:not(.sum-card--conversation):not(.sg-op-user-saved) > .sum-card__hdr > .sg-op-chev-icon {
+    position: absolute;
+    right: 0.65rem;
+    top: 50%;
+    grid-column: auto;
+    transform: translateY(-50%);
+    margin-left: 0;
+    z-index: 1;
+  }
+
+  html[data-theme="design-01"] #panel-summarized .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved)[open] > summary > .sg-op-chev-icon,
+  html[data-theme="design-01"] #panel-summarized .sum-card.sum-card--collapsible:not(.sum-card--conversation):not(.sg-op-user-saved)[open] > .sum-card__hdr > .sg-op-chev-icon,
+  html[data-theme="design-01"] .sg-op-rail .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved)[open] > summary > .sg-op-chev-icon,
+  html[data-theme="design-01"] .sg-op-rail .sum-card.sum-card--collapsible:not(.sum-card--conversation):not(.sg-op-user-saved)[open] > .sum-card__hdr > .sg-op-chev-icon {
+    transform: translateY(-50%) rotate(90deg);
+  }
+
+  html[data-theme="design-01"] #panel-summarized .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary > .sum-chev,
+  html[data-theme="design-01"] #panel-summarized .sum-card.sum-card--collapsible:not(.sum-card--conversation):not(.sg-op-user-saved) > .sum-card__hdr > .sum-chev,
+  html[data-theme="design-01"] .sg-op-rail .sum-card:not(.sum-card--conversation):not(.sg-op-user-saved) > summary > .sum-chev,
+  html[data-theme="design-01"] .sg-op-rail .sum-card.sum-card--collapsible:not(.sum-card--conversation):not(.sg-op-user-saved) > .sum-card__hdr > .sum-chev {
+    position: absolute;
+    right: 0.65rem;
+    top: 50%;
+    transform: translateY(-50%);
+  }
+
+  /* Virtual model identity toggles — stack instead of clipping at card edge. */
+  .sum-vm-section--bar > .sum-vm-section__hdr--bar .sum-vm-section__trail {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+  .sum-vm-card-toggles {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    gap: 0.5rem;
+  }
+  .sum-vm-hdr-toggle {
+    width: 100%;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+  .sg-op-kv--vm-identity {
+    grid-template-columns: 1fr;
+  }
+  .sg-op-kv--vm-identity dt {
+    margin-top: 0.35rem;
+  }
+  .sg-op-kv--vm-identity dt:first-child {
+    margin-top: 0;
+  }
+
+  /* Event log footer: allow wrap on narrow screens. */
+  .sum-evlog__footer-row {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 0.35rem 0.5rem;
+  }
+  .sum-evlog__footer-right {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    margin-left: 0;
+    width: 100%;
+  }
+}

@@ -9,9 +9,12 @@ Do not add duplicate assets under `settings/gallery/` — this directory is the 
 | URL | Source |
 |-----|--------|
 | `/ui/assets/gallery/gallery-shell.css` | `embedui/gallery/gallery-shell.css` |
+| `/ui/assets/gallery/gallery-evlog-markup.js` | `embedui/gallery/gallery-evlog-markup.js` |
 | `/ui/assets/gallery/gallery-*.js` | `embedui/gallery/gallery-*.js` |
 
 Edit under `embedui/gallery/`, then refresh `/ui/settings/gallery`. With **`CHIMERA_ADMINUI_ROOT`** set to `adminui/embed`, changes apply without rebuilding the gateway.
+
+**Mobile layout review:** use Chrome DevTools device preset **iPhone 12 (390×844)** on `/ui/settings/gallery` — scoped logs should match production two-column markup (`data-sum-evlog-cols="2"`, inline source/status in `.sum-evlog__msg-meta`). Shared row builders live in `gallery-evlog-markup.js`.
 
 ## Related
 

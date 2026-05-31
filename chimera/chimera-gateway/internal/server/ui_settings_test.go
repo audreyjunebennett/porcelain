@@ -825,7 +825,10 @@ func TestUISettingsGallery_servesWhenAuthed(t *testing.T) {
 	for _, w := range []string{
 		"Settings gallery",
 		`/ui/assets/gallery/gallery-shell.css`,
+		`/ui/assets/gallery/gallery-evlog-markup.js`,
 		`/ui/assets/gallery/gallery-event-log-demo.js`,
+		`data-sum-evlog-cols="2"`,
+		`sum-evlog__msg-meta`,
 		`material-symbols-outlined`,
 	} {
 		if !strings.Contains(page, w) {

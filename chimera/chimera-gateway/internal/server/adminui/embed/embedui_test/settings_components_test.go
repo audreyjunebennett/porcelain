@@ -2641,7 +2641,7 @@ func TestLogsRender_sumEvlog_workspaceScopedLogOmitsVectorstoreBadge(t *testing.
 	}
 }
 
-func TestLogsRender_sumEvlog_convSourceColumnSeparatesBadgeFromMessage(t *testing.T) {
+func TestLogsRender_sumEvlog_inlineMetaConsistentLayout(t *testing.T) {
 	vm := goja.New()
 	evalJS(t, vm, settingsUIPath(t, "testing", "loader.js"))
 	evalJS(t, vm, settingsUIPath(t, "util", "escape.js"))
@@ -2653,6 +2653,7 @@ func TestLogsRender_sumEvlog_convSourceColumnSeparatesBadgeFromMessage(t *testin
 			escapeHtml: ChimeraSettings.escapeHtml,
 			primaryLogMessage: function () { return "Provider responded · llama-3."; },
 			formatLogDateTimeLocal: function () { return "12:00:00"; },
+			formatLogDateTimeLocalHtml: function () { return '<div class="dt-stack"><span class="dt-line dt-time">12:00:00</span><span class="dt-line dt-date">May 22</span></div>'; },
 			formatLogRelativeAgo: function () { return "just now"; },
 			toIsoDatetimeAttr: function () { return "2026-05-22T12:00:00"; },
 			strHash: function (s) { return String(s); },
@@ -2689,20 +2690,26 @@ func TestLogsRender_sumEvlog_convSourceColumnSeparatesBadgeFromMessage(t *testin
 		t.Fatal(err)
 	}
 	row := rowV.String()
-	if !strings.Contains(row, `class="sum-evlog__cell--source"`) {
-		t.Fatalf("expected source cell, got %q", row)
+	if strings.Contains(row, `class="sum-evlog__cell--source"`) {
+		t.Fatalf("source column removed; got %q", row)
 	}
-	if !strings.Contains(row, `sum-evlog__cell--source`) || !strings.Contains(row, `sum-svc-badge sum-svc-broker">broker</span>`) {
-		t.Fatalf("expected broker badge in source cell, got %q", row)
+	if strings.Contains(row, `class="sum-evlog__cell--status"`) {
+		t.Fatalf("status column removed; got %q", row)
 	}
-	if strings.Contains(row, `cell--msg"><span class="sum-svc-badge`) {
-		t.Fatalf("badge should not appear in message cell, got %q", row)
+	if !strings.Contains(row, `class="sum-evlog__msg-wrap"`) {
+		t.Fatalf("expected msg wrap, got %q", row)
 	}
-	if !strings.Contains(row, "Provider responded") {
-		t.Fatalf("expected message body, got %q", row)
+	if !strings.Contains(row, `class="sum-evlog__msg-meta"`) || !strings.Contains(row, `sum-evlog-meta-source sum-svc-badge`) {
+		t.Fatalf("expected broker badge in msg meta row, got %q", row)
 	}
-	if strings.Contains(row, "chimera-broker") {
-		t.Fatalf("should not show chimera- prefix in row html, got %q", row)
+	if !strings.Contains(row, `class="sum-evlog__msg-text"`) || !strings.Contains(row, "Provider responded") {
+		t.Fatalf("expected message body in msg-text row, got %q", row)
+	}
+	if strings.Contains(row, `class="sum-evlog__msg-text"><span class="sum-svc-badge`) {
+		t.Fatalf("badge must not prefix message text, got %q", row)
+	}
+	if !strings.Contains(row, `class="dt-stack"`) {
+		t.Fatalf("expected stacked datetime in time cell, got %q", row)
 	}
 
 	panelFn, ok := goja.AssertFunction(vm.Get("__sumEvlogPanel"))
@@ -2714,11 +2721,14 @@ func TestLogsRender_sumEvlog_convSourceColumnSeparatesBadgeFromMessage(t *testin
 		t.Fatal(err)
 	}
 	panel := panelV.String()
-	if !strings.Contains(panel, ">Source</th>") {
-		t.Fatalf("expected Source column header, got %q", panel)
+	if strings.Contains(panel, ">Source</th>") {
+		t.Fatalf("expected no Source column header, got %q", panel)
 	}
-	if !strings.Contains(panel, `data-sum-evlog-cols="4"`) {
-		t.Fatalf("expected 4 columns, got %q", panel)
+	if strings.Contains(panel, ">Status</th>") {
+		t.Fatalf("expected no Status column header, got %q", panel)
+	}
+	if !strings.Contains(panel, `data-sum-evlog-cols="2"`) {
+		t.Fatalf("expected 2 columns, got %q", panel)
 	}
 }
 

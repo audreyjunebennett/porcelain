@@ -5,17 +5,18 @@
 (function () {
   "use strict";
 
-  var COPY_SVG =
-    '<svg class="sum-evlog__copy-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
-
-  var userSeq = 100;
-
-  function esc(s) {
+  var Markup = globalThis.GalleryEvlogMarkup || {};
+  var esc = Markup.escapeHtml || function (s) {
     return String(s)
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/"/g, "&quot;");
-  }
+  };
+
+  var COPY_SVG =
+    '<svg class="sum-evlog__copy-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
+
+  var userSeq = 100;
 
   function randHex(n) {
     var a = [];
@@ -68,52 +69,60 @@
     });
   }
 
+  function evlogRow(opts) {
+    if (typeof Markup.rowHtml === "function") return Markup.rowHtml(opts);
+    return "";
+  }
+
   function evlogTableRows(uid, name, prefix) {
-    var t0 = "2026-05-11T09:15:01.100Z";
-    var t1 = "2026-05-11T09:16:22.040Z";
-    var t2 = "2026-05-11T09:18:44.881Z";
     return (
-      '<tr class="sum-evlog__row" data-evlog-id="' +
-      esc(prefix + "-1") +
-      '" data-evlog-level="INFO" data-evlog-http="200">' +
-      '<td class="sum-evlog__cell--time"><time datetime="' +
-      t0 +
-      '"></time></td>' +
-      '<td class="sum-evlog__cell--msg">Auth OK · principal <code class="sum-mono-id">' +
-      esc(uid) +
-      "</code> · label <strong>" +
-      esc(name) +
-      "</strong></td>" +
-      '<td class="sum-evlog__cell--source"><span class="sum-svc-badge sum-svc-gateway">gateway</span></td>' +
-      '<td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="pill-2xx">200</span></div></td></tr>' +
-      '<tr class="sum-evlog__row" data-evlog-id="' +
-      esc(prefix + "-2") +
-      '" data-evlog-level="INFO">' +
-      '<td class="sum-evlog__cell--time"><time datetime="' +
-      t1 +
-      '"></time></td>' +
-      '<td class="sum-evlog__cell--msg">Workspace sync scheduled for tenant slice owned by <code class="sum-mono-id">' +
-      esc(uid) +
-      "</code>.</td>" +
-      '<td class="sum-evlog__cell--source"><span class="sum-svc-badge sum-svc-indexer">indexer</span></td>' +
-      '<td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="sum-evlog-status__empty" aria-hidden="true"></span></div></td></tr>' +
-      '<tr class="sum-evlog__row" data-evlog-id="' +
-      esc(prefix + "-3") +
-      '" data-evlog-level="WARN">' +
-      '<td class="sum-evlog__cell--time"><time datetime="' +
-      t2 +
-      '"></time></td>' +
-      '<td class="sum-evlog__cell--msg">Rate advisory for <code class="sum-mono-id">' +
-      esc(uid) +
-      "</code> — soft quota on embeddings.</td>" +
-      '<td class="sum-evlog__cell--source"><span class="sum-svc-badge sum-svc-gateway">gateway</span></td>' +
-      '<td class="sum-evlog__cell--status"><div class="sum-evlog-status"><span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN">WARN</span></div></td></tr>'
+      evlogRow({
+        id: prefix + "-1",
+        level: "INFO",
+        http: 200,
+        datetime: "2026-05-11T09:15:01.100Z",
+        sourceBadgeClass: "sum-svc-gateway",
+        sourceLabel: "gateway",
+        statusInner: '<span class="pill-2xx">200</span>',
+        textHtml:
+          "Auth OK · principal <code class=\"sum-mono-id\">" +
+          esc(uid) +
+          "</code> · label <strong>" +
+          esc(name) +
+          "</strong>"
+      }) +
+      evlogRow({
+        id: prefix + "-2",
+        level: "INFO",
+        datetime: "2026-05-11T09:16:22.040Z",
+        sourceBadgeClass: "sum-svc-indexer",
+        sourceLabel: "indexer",
+        statusInner: '<span class="sum-evlog-status__empty" aria-hidden="true"></span>',
+        textHtml:
+          "Workspace sync scheduled for tenant slice owned by <code class=\"sum-mono-id\">" +
+          esc(uid) +
+          "</code>."
+      }) +
+      evlogRow({
+        id: prefix + "-3",
+        level: "WARN",
+        datetime: "2026-05-11T09:18:44.881Z",
+        sourceBadgeClass: "sum-svc-gateway",
+        sourceLabel: "gateway",
+        statusInner: '<span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN">WARN</span>',
+        textHtml:
+          "Rate advisory for <code class=\"sum-mono-id\">" +
+          esc(uid) +
+          "</code> — soft quota on embeddings."
+      })
     );
   }
 
   function buildEvlogHtml(uid, name, prefix) {
+    var tableHead = Markup.tableHead2Col || "";
+    var footer = Markup.panelFooterHtml || "";
     return (
-      '<div class="sum-evlog sum-evlog--in-card" style="max-height:12rem;margin:0.35rem 0 0;padding:0.5rem 0.55rem 0.35rem" data-gallery-evlog-root data-sum-evlog-root data-sum-evlog-cols="4" data-sum-evlog-source>' +
+      '<div class="sum-evlog sum-evlog--in-card" style="max-height:12rem;margin:0.35rem 0 0;padding:0.5rem 0.55rem 0.35rem" data-gallery-evlog-root data-sum-evlog-root data-sum-evlog-cols="2">' +
       '<div class="sum-section-label">User activity</div>' +
       '<div class="sum-evlog__toolbar">' +
       '<input class="sum-evlog__search" type="search" placeholder="Search message or time…" aria-label="Search log entries" autocomplete="off" />' +
@@ -127,22 +136,12 @@
       '<span class="sr-only">Copy</span></button></div>' +
       '<div class="sum-metrics-table-wrap sum-evlog__table-scroll">' +
       '<table class="sum-metrics-table sum-evlog__table">' +
-      "<colgroup><col class=\"sum-evlog__col-time\" /><col class=\"sum-evlog__col-msg\" /><col class=\"sum-evlog__col-source\" /><col class=\"sum-evlog__col-status\" /></colgroup>" +
-      "<thead><tr><th class=\"sum-evlog__cell--time\" scope=\"col\">Time</th><th class=\"sum-evlog__th-msg\" scope=\"col\">Message</th><th class=\"sum-evlog__th-source\" scope=\"col\">Source</th><th class=\"sum-evlog__th-status\" scope=\"col\">" +
-      '<div class="sum-evlog__th-status-head" role="group" aria-label="Status counts">' +
-      '<span class="sum-evlog__th-status-label">Status</span>' +
-      '<span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN sum-evlog-metric-num" data-sum-evlog-metric-warn>—</span>' +
-      '<span class="sum-evlog-status__pill sum-evlog-status__lvl--WARN sum-evlog__metric-icon" aria-hidden="true">⚠</span>' +
-      '<span class="sum-evlog-status__pill sum-evlog-status__lvl--ERROR sum-evlog-metric-num" data-sum-evlog-metric-fail>—</span>' +
-      '<span class="sum-evlog-status__pill sum-evlog-status__lvl--ERROR sum-evlog__metric-icon" aria-hidden="true">✖</span>' +
-      "</div></th></tr></thead>" +
+      tableHead +
       '<tbody data-gallery-evlog-tbody>' +
       evlogTableRows(uid, name, prefix) +
       "</tbody></table></div>" +
-      '<div class="sum-evlog__footer-row">' +
-      '<div class="sum-evlog__footer-left"><p class="sum-evlog__footer" data-gallery-evlog-oldest></p></div>' +
-      '<p class="sum-evlog__toast sum-gallery-evlog__toast-align" data-gallery-evlog-toast role="status" aria-live="polite"></p>' +
-      "</div></div>"
+      footer +
+      "</div>"
     );
   }
 
