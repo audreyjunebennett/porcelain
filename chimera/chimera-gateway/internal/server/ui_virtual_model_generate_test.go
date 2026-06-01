@@ -47,6 +47,7 @@ func TestUIVirtualModelGenerate_filtersBySessionTenantAvailability(t *testing.T)
 	}
 
 	rt := mustRuntime(t, gwPath)
+	seedChimeraTestVM(t, rt, "0.1.0", []string{"groq/free"})
 	rt.SetCatalogSnapshot(catalog.NewTestSnapshotWithModels(time.Now(), []string{"groq/free", "groq/paid"}))
 	st := rt.OperatorStore()
 	if st == nil {
@@ -111,6 +112,7 @@ func TestUIVirtualModelGet_reportsFallbackUnavailable(t *testing.T) {
 	}
 
 	rt := mustRuntime(t, gwPath)
+	seedChimeraTestVM(t, rt, "0.1.0", []string{"groq/free", "groq/paid"})
 	st := rt.OperatorStore()
 	if st == nil {
 		t.Fatal("operator store required")

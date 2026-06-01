@@ -31,7 +31,7 @@ func handleStatus(w http.ResponseWriter, r *http.Request, rt *Runtime, log *slog
 		return
 	}
 	rt.Sync()
-	res, _, _ := rt.Snapshot()
+	res, _ := rt.Snapshot()
 	apiKey := rt.UpstreamAPIKey()
 	ctx := r.Context()
 	ok, st, detail := brokerclient.ProbeHealth(ctx, res.HealthUpstreamURL, apiKey, healthTimeout(res), log)
@@ -58,7 +58,7 @@ func handleStatus(w http.ResponseWriter, r *http.Request, rt *Runtime, log *slog
 		"supervisor": sup,
 		"gateway": map[string]any{
 			"listen":          listen,
-			"virtual_model":   res.VirtualModelID,
+			"virtual_model":   rt.PrimaryVirtualModelID(),
 			"semver":          res.Semver,
 			"broker_base_url": res.UpstreamBaseURL,
 		},

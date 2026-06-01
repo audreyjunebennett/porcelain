@@ -26,7 +26,7 @@ import (
 // from headers (with token / config defaults).
 func HandleV1(w http.ResponseWriter, r *http.Request, rt *gruntime.Runtime, log *slog.Logger) {
 	rt.Sync()
-	res, tokStore, _ := rt.Snapshot()
+	res, tokStore := rt.Snapshot()
 	token := gwhttp.BearerToken(r.Header.Get("Authorization"))
 	sess := tokStore.Validate(token)
 	if token == "" || sess == nil {

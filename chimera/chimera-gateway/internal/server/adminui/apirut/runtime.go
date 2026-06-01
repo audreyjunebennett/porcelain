@@ -30,7 +30,7 @@ func BrokerProviderNamesForHealth(ctx context.Context, client *brokeradmin.Clien
 // BrokerAdminClient returns a chimera-broker management API client from runtime config.
 func BrokerAdminClient(rt *gruntime.Runtime) *brokeradmin.Client {
 	rt.Sync()
-	res, _, _ := rt.Snapshot()
+	res, _ := rt.Snapshot()
 	if res == nil {
 		return &brokeradmin.Client{}
 	}

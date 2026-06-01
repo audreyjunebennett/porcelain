@@ -10,8 +10,7 @@ func TestLoadGatewayYAML_IndexerSupervised(t *testing.T) {
 	dir := t.TempDir()
 	gw := filepath.Join(dir, "gateway.yaml")
 	raw := []byte(`gateway: { listen_port: 3000 }
-paths: { tokens: "./t.yaml", routing_policy: "./r.yaml" }
-routing: { fallback_chain: ["a/b"] }
+paths: { tokens: "./t.yaml" }
 vectorstore:
   url: "http://127.0.0.1:6333"
 rag:
@@ -51,8 +50,7 @@ func TestLoadGatewayYAML_IndexerSupervised_logJSONDefaultTrue(t *testing.T) {
 	dir := t.TempDir()
 	gw := filepath.Join(dir, "gateway.yaml")
 	raw := []byte(`gateway: { listen_port: 3000 }
-paths: { tokens: "./t.yaml", routing_policy: "./r.yaml" }
-routing: { fallback_chain: ["a/b"] }
+paths: { tokens: "./t.yaml" }
 indexer:
   supervised:
     enabled: true
@@ -73,8 +71,7 @@ func TestLoadGatewayYAML_IndexerSupervised_logJSONOptOut(t *testing.T) {
 	dir := t.TempDir()
 	gw := filepath.Join(dir, "gateway.yaml")
 	raw := []byte(`gateway: { listen_port: 3000 }
-paths: { tokens: "./t.yaml", routing_policy: "./r.yaml" }
-routing: { fallback_chain: ["a/b"] }
+paths: { tokens: "./t.yaml" }
 indexer:
   supervised:
     enabled: true

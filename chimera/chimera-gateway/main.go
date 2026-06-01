@@ -363,7 +363,7 @@ func runGatewayBackend(args []string) error {
 	if err != nil {
 		return err
 	}
-	res, _, _ := rt.Snapshot()
+	res, _ := rt.Snapshot()
 	addr := netaddr.ListenAddrOverride(res, listen)
 	overlay := &server.StatusOverlay{EffectiveListen: addr}
 	rootCtx, stopRoot := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -391,7 +391,7 @@ func runGatewayBackend(args []string) error {
 	uiOpts := server.NewUIOptions()
 	if logfmt.SupervisedMode() {
 		logStore := servicelogs.New(servicelogs.DefaultMaxLines)
-		if rtRes, _, _ := rt.Snapshot(); rtRes != nil && rtRes.OperatorLogsIndexerPinnedLinesMax > 0 {
+		if rtRes, _ := rt.Snapshot(); rtRes != nil && rtRes.OperatorLogsIndexerPinnedLinesMax > 0 {
 			logStore.SetIndexerPinnedLinesMax(rtRes.OperatorLogsIndexerPinnedLinesMax)
 		}
 		uiOpts.LogStore = logStore
@@ -412,7 +412,7 @@ func runGatewayBackend(args []string) error {
 		return err
 	}
 	var pollInterval time.Duration
-	if rtRes, _, _ := rt.Snapshot(); rtRes != nil {
+	if rtRes, _ := rt.Snapshot(); rtRes != nil {
 		pollInterval = time.Duration(rtRes.AvailableModelsPollMs) * time.Millisecond
 	}
 	go func() {
@@ -421,7 +421,7 @@ func runGatewayBackend(args []string) error {
 	}()
 	brokerclient.RunGatewayUpstreamHealthMonitor(rootCtx, log, 15*time.Second, 30*time.Second,
 		func(pctx context.Context) (string, string, time.Duration, bool) {
-			r, _, _ := rt.Snapshot()
+			r, _ := rt.Snapshot()
 			if r == nil || strings.TrimSpace(r.HealthUpstreamURL) == "" {
 				return "", "", 0, false
 			}

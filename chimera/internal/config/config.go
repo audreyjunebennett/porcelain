@@ -16,7 +16,6 @@ import (
 // Resolved matches TypeScript ResolvedGatewayConfig (src/config.ts).
 type Resolved struct {
 	Semver            string
-	VirtualModelID    string
 	ListenPort        int
 	ListenHost        string
 	LogLevel          string
@@ -33,13 +32,9 @@ type Resolved struct {
 	// 0 disables polling (one-shot startup refresh only). See internal/server/availablemodels.go.
 	AvailableModelsPollMs int
 	TokensPath            string
-	RoutingPolicyPath     string
-	FallbackChain         []string
 	GatewayYAMLPath       string
 	// ProviderFreeTierPath is the resolved filesystem path to provider-free-tier.yaml.
 	ProviderFreeTierPath string
-	// FilterFreeTierModels requests intersecting merged /v1/models with the allowlist when spec loaded.
-	FilterFreeTierModels bool
 	ProviderFreeTierSpec *providerfreetier.Spec
 	// Metrics (G6): SQLite under data/gateway; see docs/plans/version-v0.1.1.md §3.6.
 	MetricsEnabled       bool
@@ -52,14 +47,6 @@ type Resolved struct {
 	// file is missing or blank).
 	ProviderLimitsPath string
 	ProviderLimitsSpec *providerlimits.Config
-	// RouterModels is an ordered list of upstream model ids used for the tool-router transformer
-	// (see docs/plans/version-v0.1.1.md). Empty disables router calls.
-	RouterModels []string
-	// ToolRouterEnabled gates the tool-slimming transformer when RouterModels is non-empty.
-	// When RouterModels is empty, the transformer never runs regardless of this flag.
-	ToolRouterEnabled bool
-	// ToolRouterConfidenceThreshold keeps tools with confidence >= threshold (0–1).
-	ToolRouterConfidenceThreshold float64
 	// RAG holds gateway v0.2 retrieval-augmented-generation settings; RAG.Enabled
 	// gates ingest, indexer REST, retrieval, and the /health Qdrant probe.
 	RAG RAG
@@ -136,19 +123,9 @@ type gatewayDoc struct {
 	} `yaml:"health"`
 	Paths struct {
 		APIKeys             string `yaml:"api_keys"`
-		RoutingPolicy       string `yaml:"routing_policy"`
 		ProviderFreeTier    string `yaml:"provider_free_tier"`
 		ProviderModelLimits string `yaml:"provider_model_limits"`
 	} `yaml:"paths"`
-	Routing struct {
-		FallbackChain        []string `yaml:"fallback_chain"`
-		FilterFreeTierModels *bool    `yaml:"filter_free_tier_models"`
-		RouterModels         []string `yaml:"router_models"`
-		ToolRouter           struct {
-			Enabled             *bool    `yaml:"enabled"`
-			ConfidenceThreshold *float64 `yaml:"confidence_threshold"`
-		} `yaml:"tool_router"`
-	} `yaml:"routing"`
 	Metrics struct {
 		Enabled       *bool  `yaml:"enabled"`
 		SQLitePath    string `yaml:"sqlite_path"`
@@ -229,17 +206,9 @@ func LoadGatewayYAML(filePath string, log *slog.Logger) (*Resolved, error) {
 	if apiKeysRel == "" {
 		apiKeysRel = "./" + naming.APIKeysFileTarget
 	}
-	routeRel := doc.Paths.RoutingPolicy
-	if routeRel == "" {
-		routeRel = "./routing-policy.yaml"
-	}
 	tokensPath := filepath.Join(baseDir, apiKeysRel)
 	if filepath.IsAbs(apiKeysRel) {
 		tokensPath = apiKeysRel
-	}
-	routingPath := filepath.Join(baseDir, routeRel)
-	if filepath.IsAbs(routeRel) {
-		routingPath = routeRel
 	}
 
 	ftRel := strings.TrimSpace(doc.Paths.ProviderFreeTier)
@@ -280,14 +249,6 @@ func LoadGatewayYAML(filePath string, log *slog.Logger) (*Resolved, error) {
 		limitsSpec = &providerlimits.Config{}
 	}
 
-	filterFT := true
-	if doc.Routing.FilterFreeTierModels != nil {
-		filterFT = *doc.Routing.FilterFreeTierModels
-	}
-	if filterFT && ftSpec == nil && log != nil {
-		log.Warn("routing.filter_free_tier_models is true but provider-free-tier.yaml missing or invalid; skipping catalog filter", "msg", "chat.provider_limits.config_missing")
-	}
-
 	listenPort := doc.Gateway.ListenPort
 	if listenPort == 0 {
 		listenPort = defaultListenPort
@@ -313,27 +274,6 @@ func LoadGatewayYAML(filePath string, log *slog.Logger) (*Resolved, error) {
 	}
 	if availPoll < 0 {
 		availPoll = 0
-	}
-
-	chain := doc.Routing.FallbackChain
-	if chain == nil {
-		chain = []string{}
-	}
-	if len(chain) == 0 && log != nil {
-		log.Warn("routing.fallback_chain is empty or missing; virtual model requests will fail until configured", "msg", "routing.fallback_chain.empty")
-	}
-
-	routerModels := doc.Routing.RouterModels
-	if routerModels == nil {
-		routerModels = []string{}
-	}
-	toolRouterOn := len(routerModels) > 0
-	if doc.Routing.ToolRouter.Enabled != nil {
-		toolRouterOn = *doc.Routing.ToolRouter.Enabled && len(routerModels) > 0
-	}
-	toolThresh := 0.5
-	if doc.Routing.ToolRouter.ConfidenceThreshold != nil {
-		toolThresh = *doc.Routing.ToolRouter.ConfidenceThreshold
 	}
 
 	metricsEnabled := true
@@ -420,12 +360,11 @@ func LoadGatewayYAML(filePath string, log *slog.Logger) (*Resolved, error) {
 
 	if log != nil {
 		log.Info("gateway config resolved", "msg", "gateway.startup.config_resolved",
-			"filePath", filePath, "api_keys_path", tokensPath, "routingPolicyPath", routingPath)
+			"filePath", filePath, "api_keys_path", tokensPath)
 	}
 
 	return &Resolved{
 		Semver:                                semver,
-		VirtualModelID:                        "Chimera-" + semver,
 		ListenPort:                            listenPort,
 		ListenHost:                            listenHost,
 		LogLevel:                              logLevel,
@@ -438,11 +377,8 @@ func LoadGatewayYAML(filePath string, log *slog.Logger) (*Resolved, error) {
 		ChatTimeoutMs:                         ct,
 		AvailableModelsPollMs:                 availPoll,
 		TokensPath:                            tokensPath,
-		RoutingPolicyPath:                     routingPath,
-		FallbackChain:                         chain,
 		GatewayYAMLPath:                       filePath,
 		ProviderFreeTierPath:                  ftPath,
-		FilterFreeTierModels:                  filterFT,
 		ProviderFreeTierSpec:                  ftSpec,
 		MetricsEnabled:                        metricsEnabled,
 		MetricsSQLitePath:                     metricsSQLite,
@@ -451,9 +387,6 @@ func LoadGatewayYAML(filePath string, log *slog.Logger) (*Resolved, error) {
 		OperatorMigrationsDir:                 operatorMig,
 		ProviderLimitsPath:                    limitsPath,
 		ProviderLimitsSpec:                    limitsSpec,
-		RouterModels:                          routerModels,
-		ToolRouterEnabled:                     toolRouterOn,
-		ToolRouterConfidenceThreshold:         toolThresh,
 		RAG:                                   rag,
 		WitnessSampleMaxChars:                 witnessMax,
 		WitnessSampleForceAtDebug:             witnessForceDebug,
@@ -481,9 +414,4 @@ func ResolveGatewayConfigPath() (string, error) {
 // ListenAddr returns "host:port" for net.Listen.
 func (r *Resolved) ListenAddr() string {
 	return fmt.Sprintf("%s:%d", r.ListenHost, r.ListenPort)
-}
-
-// ShouldApplyFreeTierCatalogFilter reports whether merged /v1/models should list only allowlisted upstream ids.
-func (r *Resolved) ShouldApplyFreeTierCatalogFilter() bool {
-	return r != nil && r.FilterFreeTierModels && r.ProviderFreeTierSpec != nil && !r.ProviderFreeTierSpec.Empty()
 }

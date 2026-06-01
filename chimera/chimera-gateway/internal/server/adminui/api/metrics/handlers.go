@@ -25,7 +25,7 @@ func handleMetricsGET(h *handler.Handler, w http.ResponseWriter, r *http.Request
 	}
 
 	h.RT.Sync()
-	res, _, _ := h.RT.Snapshot()
+	res, _ := h.RT.Snapshot()
 	now := time.Now().UTC()
 	minute := now.Format("2006-01-02T15:04")
 	day := now.Format("2006-01-02")

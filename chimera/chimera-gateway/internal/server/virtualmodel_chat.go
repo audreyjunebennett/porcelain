@@ -13,7 +13,6 @@ import (
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/conversationhistory"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/operatorstore"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/rag"
-	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/routing"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/transform"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/vectorstore"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/virtualmodel"
@@ -42,19 +41,16 @@ func openAIModelEntry(id, description string) map[string]any {
 	return entry
 }
 
-func prependVirtualModelsToCatalog(data []any, rt *Runtime, principalID string, legacy *config.Resolved) []any {
+func prependVirtualModelsToCatalog(data []any, rt *Runtime, principalID string) []any {
 	vms := virtualModelsForCatalog(rt, principalID)
-	if len(vms) > 0 {
-		out := make([]any, 0, len(vms)+len(data))
-		for _, vm := range vms {
-			out = append(out, openAIModelEntry(vm.ModelID, vm.Description))
-		}
-		return append(out, data...)
+	if len(vms) == 0 {
+		return data
 	}
-	if legacy != nil && legacy.VirtualModelID != "" {
-		return append([]any{openAIModelEntry(legacy.VirtualModelID, "")}, data...)
+	out := make([]any, 0, len(vms)+len(data))
+	for _, vm := range vms {
+		out = append(out, openAIModelEntry(vm.ModelID, vm.Description))
 	}
-	return data
+	return append(out, data...)
 }
 
 type virtualModelChatContext struct {
@@ -63,59 +59,43 @@ type virtualModelChatContext struct {
 	toolEnabled  bool
 	routerModels []string
 	toolThresh   float64
-	useLegacyPol bool
 }
 
-func resolveVirtualModelChat(rt *Runtime, clientModel, principalID string, res *config.Resolved) (*virtualModelChatContext, int, map[string]any) {
+func resolveVirtualModelChat(rt *Runtime, clientModel, principalID string) (*virtualModelChatContext, int, map[string]any) {
 	reg := rt.VirtualModels()
-	if reg != nil {
-		vm, err := reg.Resolve(clientModel, principalID)
-		if err == nil {
-			return &virtualModelChatContext{
-				vm:           vm,
-				fallback:     vm.FallbackChain,
-				toolEnabled:  vm.ToolRouterEnabled,
-				routerModels: vm.RouterModels,
-				toolThresh:   vm.ToolRouterConfidence,
-			}, 0, nil
-		}
-		if errors.Is(err, virtualmodel.ErrForbidden) {
-			return nil, http.StatusForbidden, map[string]any{
-				"error": map[string]any{"message": "Virtual model not accessible", "type": "invalid_request"},
-			}
-		}
-		if store := rt.OperatorStore(); store != nil && errors.Is(err, virtualmodel.ErrNotFound) {
-			row, dbErr := store.GetVirtualModelByModelID(context.Background(), clientModel)
-			if dbErr == nil && row != nil {
-				if !row.Enabled {
-					return nil, http.StatusNotFound, map[string]any{
-						"error": map[string]any{"message": "Virtual model is disabled", "type": "invalid_request"},
-					}
-				}
-				if row.Visibility == operatorstore.VisibilityPrivate &&
-					row.CreatedByPrincipalID != "" && row.CreatedByPrincipalID != principalID {
-					return nil, http.StatusForbidden, map[string]any{
-						"error": map[string]any{"message": "Virtual model not accessible", "type": "invalid_request"},
-					}
-				}
-			}
+	if reg == nil {
+		return nil, 0, nil
+	}
+	vm, err := reg.Resolve(clientModel, principalID)
+	if err == nil {
+		return &virtualModelChatContext{
+			vm:           vm,
+			fallback:     vm.FallbackChain,
+			toolEnabled:  vm.ToolRouterEnabled,
+			routerModels: vm.RouterModels,
+			toolThresh:   vm.ToolRouterConfidence,
+		}, 0, nil
+	}
+	if errors.Is(err, virtualmodel.ErrForbidden) {
+		return nil, http.StatusForbidden, map[string]any{
+			"error": map[string]any{"message": "Virtual model not accessible", "type": "invalid_request"},
 		}
 	}
-	if res != nil && clientModel == res.VirtualModelID {
-		return &virtualModelChatContext{
-			vm: &virtualmodel.Resolved{
-				ModelID:              res.VirtualModelID,
-				FallbackChain:        res.FallbackChain,
-				ToolRouterEnabled:    res.ToolRouterEnabled,
-				RouterModels:         res.RouterModels,
-				ToolRouterConfidence: res.ToolRouterConfidenceThreshold,
-			},
-			fallback:     res.FallbackChain,
-			toolEnabled:  res.ToolRouterEnabled,
-			routerModels: res.RouterModels,
-			toolThresh:   res.ToolRouterConfidenceThreshold,
-			useLegacyPol: true,
-		}, 0, nil
+	if store := rt.OperatorStore(); store != nil && errors.Is(err, virtualmodel.ErrNotFound) {
+		row, dbErr := store.GetVirtualModelByModelID(context.Background(), clientModel)
+		if dbErr == nil && row != nil {
+			if !row.Enabled {
+				return nil, http.StatusNotFound, map[string]any{
+					"error": map[string]any{"message": "Virtual model is disabled", "type": "invalid_request"},
+				}
+			}
+			if row.Visibility == operatorstore.VisibilityPrivate &&
+				row.CreatedByPrincipalID != "" && row.CreatedByPrincipalID != principalID {
+				return nil, http.StatusForbidden, map[string]any{
+					"error": map[string]any{"message": "Virtual model not accessible", "type": "invalid_request"},
+				}
+			}
+		}
 	}
 	return nil, 0, nil
 }
@@ -132,7 +112,6 @@ func handleVirtualModelChat(
 	w http.ResponseWriter,
 	rt *Runtime,
 	res *config.Resolved,
-	pol *routing.Policy,
 	vmCtx *virtualModelChatContext,
 	raw map[string]json.RawMessage,
 	stream bool,
@@ -226,12 +205,7 @@ func handleVirtualModelChat(
 	tenantSnap := rt.ProviderModelAvailability(sessTenant)
 	modelAvailable := func(id string) bool { return tenantSnap.IsAvailable(id) }
 
-	var initial string
-	if vmCtx.useLegacyPol && pol != nil {
-		initial, _ = pol.PickInitialModelWithAvailability(raw, vmCtx.fallback, virtualID, modelAvailable)
-	} else {
-		initial, _ = virtualmodel.PickInitialModelWithAvailability(vm, raw, routeLog, modelAvailable)
-	}
+	initial, _ := virtualmodel.PickInitialModelWithAvailability(vm, raw, routeLog, modelAvailable)
 	if initial == "" {
 		if routeLog != nil {
 			routeLog.Warn("conversation errored", "msg", naming.MsgConversationErrored,

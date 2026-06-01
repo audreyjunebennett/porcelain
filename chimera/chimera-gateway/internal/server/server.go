@@ -154,7 +154,7 @@ func NewMux(rt *Runtime, log *slog.Logger, overlay *StatusOverlay, ui *UIOptions
 			return
 		}
 		rt.Sync()
-		res, tokStore, _ := rt.Snapshot()
+		res, tokStore := rt.Snapshot()
 		ctx := r.Context()
 		apiKey := rt.UpstreamAPIKey()
 
@@ -238,7 +238,7 @@ func NewMux(rt *Runtime, log *slog.Logger, overlay *StatusOverlay, ui *UIOptions
 			ModelCount           string
 		}{
 			Semver:             res.Semver,
-			VirtualModel:       res.VirtualModelID,
+			VirtualModel:       rt.PrimaryVirtualModelID(),
 			GatewayURL:         gwURL,
 			BrokerURL:          chimeraBrokerURL,
 			BrokerOK:           chimeraBrokerOK,
@@ -276,7 +276,7 @@ func NewMux(rt *Runtime, log *slog.Logger, overlay *StatusOverlay, ui *UIOptions
 			return
 		}
 		rt.Sync()
-		res, _, _ := rt.Snapshot()
+		res, _ := rt.Snapshot()
 		apiKey := rt.UpstreamAPIKey()
 		ctx := r.Context()
 		ok, st, detail := brokerclient.ProbeHealth(ctx, res.HealthUpstreamURL, apiKey, healthTimeout(res), log)
@@ -327,7 +327,7 @@ func NewMux(rt *Runtime, log *slog.Logger, overlay *StatusOverlay, ui *UIOptions
 			return
 		}
 		rt.Sync()
-		res, _, _ := rt.Snapshot()
+		res, _ := rt.Snapshot()
 		writeMergedModelsResponse(w, r.Context(), rt, res, "", rt.UpstreamAPIKey(), healthTimeout(res), log)
 	})
 
@@ -404,7 +404,7 @@ func NewMux(rt *Runtime, log *slog.Logger, overlay *StatusOverlay, ui *UIOptions
 
 func handleV1Models(w http.ResponseWriter, r *http.Request, rt *Runtime, log *slog.Logger) {
 	rt.Sync()
-	res, tokStore, _ := rt.Snapshot()
+	res, tokStore := rt.Snapshot()
 	token := gwhttp.BearerToken(r.Header.Get("Authorization"))
 	sess := tokStore.Validate(token)
 	if token == "" || sess == nil {
@@ -478,7 +478,7 @@ func writeMergedModelsResponse(w http.ResponseWriter, ctx context.Context, rt *R
 	}
 	ensureOpenAIModelListItems(data)
 	data = catalog.FilterOpenAIModelDataByAvailability(data, rt.ProviderModelAvailability(principalID))
-	out := prependVirtualModelsToCatalog(data, rt, principalID, res)
+	out := prependVirtualModelsToCatalog(data, rt, principalID)
 	_ = json.NewEncoder(w).Encode(map[string]any{"object": "list", "data": out})
 }
 
@@ -582,7 +582,7 @@ func newHistoryRecorder(rt *Runtime, log *slog.Logger, ctx context.Context, r *h
 
 func handleV1Chat(w http.ResponseWriter, r *http.Request, rt *Runtime, log *slog.Logger) {
 	rt.Sync()
-	res, tokStore, pol := rt.Snapshot()
+	res, tokStore := rt.Snapshot()
 	token := gwhttp.BearerToken(r.Header.Get("Authorization"))
 	sess := tokStore.Validate(token)
 	if token == "" || sess == nil {
@@ -631,10 +631,10 @@ func handleV1Chat(w http.ResponseWriter, r *http.Request, rt *Runtime, log *slog
 
 	ctx := r.Context()
 	skipToolRouter := strings.EqualFold(strings.TrimSpace(r.Header.Get(naming.HeaderToolRouterTarget)), "skip")
-	th := res.ToolRouterConfidenceThreshold
+	var headerToolThresh float64
 	if h := strings.TrimSpace(r.Header.Get(naming.HeaderToolConfidenceThresholdTarget)); h != "" {
 		if v, err := strconv.ParseFloat(h, 64); err == nil {
-			th = v
+			headerToolThresh = v
 		}
 	}
 	rtDur := time.Duration(res.ChatTimeoutMs) * time.Millisecond
@@ -686,7 +686,7 @@ func handleV1Chat(w http.ResponseWriter, r *http.Request, rt *Runtime, log *slog
 		histRec.Attach(&chatOpts)
 	}
 
-	vmCtx, vmStatus, vmErrBody := resolveVirtualModelChat(rt, clientModel, sess.TenantID, res)
+	vmCtx, vmStatus, vmErrBody := resolveVirtualModelChat(rt, clientModel, sess.TenantID)
 	if vmErrBody != nil {
 		if histRec != nil {
 			histRec.PersistGatewayError(vmStatus, vmErrBody)
@@ -697,7 +697,7 @@ func handleV1Chat(w http.ResponseWriter, r *http.Request, rt *Runtime, log *slog
 		return
 	}
 	if vmCtx != nil {
-		if handleVirtualModelChat(ctx, w, rt, res, pol, vmCtx, raw, stream, skipToolRouter, th, routeLog,
+		if handleVirtualModelChat(ctx, w, rt, res, vmCtx, raw, stream, skipToolRouter, headerToolThresh, routeLog,
 			cid, turnIdx, rid, sess.TenantID, proj, flav, apiKey, rtDur, chatOpts, histRec) {
 			return
 		}

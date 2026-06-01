@@ -12,8 +12,7 @@ func TestRAG_Defaults_WhenDisabled(t *testing.T) {
 	dir := t.TempDir()
 	gw := filepath.Join(dir, "gateway.yaml")
 	raw := `gateway: { listen_port: 3000 }
-paths: { tokens: "./t.yaml", routing_policy: "./r.yaml" }
-routing: { fallback_chain: ["a/b"] }
+paths: { tokens: "./t.yaml" }
 `
 	if err := os.WriteFile(gw, []byte(raw), 0o644); err != nil {
 		t.Fatal(err)
@@ -33,8 +32,7 @@ func TestRAG_EnabledFillsDefaults(t *testing.T) {
 	gw := filepath.Join(dir, "gateway.yaml")
 	raw := `
 gateway: { listen_port: 3000 }
-paths: { tokens: "./t.yaml", routing_policy: "./r.yaml" }
-routing: { fallback_chain: ["a/b"] }
+paths: { tokens: "./t.yaml" }
 vectorstore:
   url: "http://127.0.0.1:6333"
 rag:
@@ -77,8 +75,7 @@ func TestRAG_InvalidConfigDisables(t *testing.T) {
 	gw := filepath.Join(dir, "gateway.yaml")
 	raw := `
 gateway: { listen_port: 3000 }
-paths: { tokens: "./t.yaml", routing_policy: "./r.yaml" }
-routing: { fallback_chain: ["a/b"] }
+paths: { tokens: "./t.yaml" }
 vectorstore:
   url: "ftp://nope"
 rag:

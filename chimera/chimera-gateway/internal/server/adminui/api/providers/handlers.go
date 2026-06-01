@@ -202,7 +202,7 @@ func handleChimeraBrokerProviderHealth(h *handler.Handler, w http.ResponseWriter
 		return
 	}
 	h.RT.Sync()
-	res, _, _ := h.RT.Snapshot()
+	res, _ := h.RT.Snapshot()
 	if res == nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)

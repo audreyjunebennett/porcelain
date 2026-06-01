@@ -40,6 +40,7 @@ func TestModelsList_VirtualModelFirst(t *testing.T) {
 	}
 
 	rt := mustRuntime(t, gwPath)
+	seedChimeraTestVM(t, rt, "0.1.0", []string{"groq/x"})
 	front := httptest.NewServer(NewMux(rt, testLog(), nil, nil))
 	t.Cleanup(front.Close)
 
@@ -102,6 +103,7 @@ func TestModelsList_NormalizesMissingOpenAIFields(t *testing.T) {
 	}
 
 	rt := mustRuntime(t, gwPath)
+	seedChimeraTestVM(t, rt, "0.1.0", []string{"gemini/x"})
 	front := httptest.NewServer(NewMux(rt, testLog(), nil, nil))
 	t.Cleanup(front.Close)
 
@@ -161,6 +163,7 @@ func TestUIModels_NoGatewayToken(t *testing.T) {
 	}
 
 	rt := mustRuntime(t, gwPath)
+	seedChimeraTestVM(t, rt, "0.1.0", []string{"ollama/qwen"})
 	front := httptest.NewServer(NewMux(rt, testLog(), nil, nil))
 	t.Cleanup(front.Close)
 
@@ -238,6 +241,7 @@ func TestModelsList_AvailabilityFilter(t *testing.T) {
 	if err := rt.ReloadProviderModelAvailability(ctx); err != nil {
 		t.Fatal(err)
 	}
+	seedChimeraTestVM(t, rt, "0.1.0", []string{"groq/x"})
 
 	front := httptest.NewServer(NewMux(rt, testLog(), nil, nil))
 	t.Cleanup(front.Close)

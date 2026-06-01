@@ -10,7 +10,7 @@ func BootstrapMode(rt *Runtime) bool {
 	if rt == nil {
 		return true
 	}
-	_, tokStore, _ := rt.Snapshot()
+	_, tokStore := rt.Snapshot()
 	if tokStore == nil {
 		return true
 	}

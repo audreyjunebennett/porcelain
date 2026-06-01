@@ -2,7 +2,6 @@ package operatorstore
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -68,40 +67,28 @@ func TestVirtualModel_CRUDAndCascade(t *testing.T) {
 	}
 }
 
-func TestBootstrapVirtualModels_importsLegacy(t *testing.T) {
+func TestBootstrapVirtualModels_seedsRuleCatalogOnly(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
-	dir := t.TempDir()
-	routePath := filepath.Join(dir, "routing-policy.yaml")
-	pol := []byte("ambiguous_default_model: groq/x\nrules:\n  - name: default\n    when: {}\n    models:\n      - groq/x\n")
-	if err := os.WriteFile(routePath, pol, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	res := &config.Resolved{
-		Semver:                        "0.2.0",
-		VirtualModelID:                "Chimera-0.2.0",
-		FallbackChain:                 []string{"groq/x", "gemini/y"},
-		RoutingPolicyPath:             routePath,
-		ToolRouterEnabled:             false,
-		ToolRouterConfidenceThreshold: 0.5,
-	}
+	res := &config.Resolved{Semver: "0.2.0"}
 	if err := BootstrapVirtualModels(ctx, s, res, nil); err != nil {
 		t.Fatal(err)
 	}
 	vm, err := s.GetVirtualModelByModelID(ctx, "Chimera-0.2.0")
-	if err != nil || vm == nil {
-		t.Fatalf("bootstrap vm: %+v err=%v", vm, err)
+	if err != nil || vm != nil {
+		t.Fatalf("expected no bootstrap vm, got %+v err=%v", vm, err)
 	}
-	if len(vm.FallbackChain) != 2 || vm.RoutingPolicyYAML == "" {
-		t.Fatalf("vm=%+v", vm)
+	rules, err := s.ListRoutingRuleDefinitions(ctx)
+	if err != nil || len(rules) < 2 {
+		t.Fatalf("routing rule catalog: count=%d err=%v", len(rules), err)
 	}
 	// idempotent
 	if err := BootstrapVirtualModels(ctx, s, res, nil); err != nil {
 		t.Fatal(err)
 	}
 	all, err := s.ListVirtualModels(ctx, "", "")
-	if err != nil || len(all) != 1 {
-		t.Fatalf("count=%d err=%v", len(all), err)
+	if err != nil || len(all) != 0 {
+		t.Fatalf("virtual model count=%d err=%v", len(all), err)
 	}
 }
 

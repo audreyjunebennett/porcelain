@@ -99,7 +99,7 @@ These appeared in older versions of this plan; the product moved to **webview + 
 | Run stack | `chimera-supervisor-run`, `chimera-serve`, `chimera-start` / `stop` / `status`, `logs` |
 | Local gate before commit | `make precommit` |
 
-- `make catalog-limits` — patches `config/provider-model-limits.yaml` with `context_window` from `config/catalog-available.snapshot.yaml` (`context_length`); applies static Ollama defaults when the catalog omits context; preserves RPM/TPM/RPD/TPD. Optional `CATALOG=`, `LIMITS=`, `GATEWAY=` paths; `FORCE=1` overwrites existing `context_window`. Run `make catalog-available` first to refresh the snapshot.
+- `make catalog-limits` — patches `config/provider-model-limits.yaml` with `context_window` from `config/catalog-available.snapshot.yaml` (`context_length`); applies static Ollama defaults when the catalog omits context; preserves RPM/TPM/RPD/TPD. Ensures models from the catalog snapshot (`-ensure-from-catalog`); optional `OPERATOR_SQLITE=` adds enabled virtual model fallback chains. Optional `CATALOG=`, `LIMITS=` paths; `FORCE=1` overwrites existing `context_window`. Run `make catalog-available` first to refresh the snapshot.
 
 ---
 

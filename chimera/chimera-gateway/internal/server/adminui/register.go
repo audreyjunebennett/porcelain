@@ -11,7 +11,6 @@ import (
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/adminui/api/metrics"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/adminui/api/providers"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/adminui/api/rag"
-	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/adminui/api/routing"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/adminui/api/save"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/adminui/api/state"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/adminui/api/tokens"
@@ -35,7 +34,6 @@ func Register(mux *http.ServeMux, rt *gruntime.Runtime, log *slog.Logger, ui *se
 	providers.Register(mux, h)
 	save.Register(mux, h)
 	tokens.Register(mux, h)
-	routing.Register(mux, h)
 	indexer.Register(mux, h)
 	rag.Register(mux, h)
 	virtualmodels.Register(mux, h)

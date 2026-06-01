@@ -109,7 +109,7 @@ func handleIndexerConfigGET(h *handler.Handler, w http.ResponseWriter, r *http.R
 		return
 	}
 	h.RT.Sync()
-	res, _, _ := h.RT.Snapshot()
+	res, _ := h.RT.Snapshot()
 	if res == nil {
 		http.Error(w, "no config", http.StatusInternalServerError)
 		return
@@ -165,7 +165,7 @@ func handleIndexerConfigPUT(h *handler.Handler, w http.ResponseWriter, r *http.R
 		return
 	}
 	h.RT.Sync()
-	res, _, _ := h.RT.Snapshot()
+	res, _ := h.RT.Snapshot()
 	if res == nil {
 		http.Error(w, "no config", http.StatusInternalServerError)
 		return

@@ -2,21 +2,12 @@ package config
 
 import "strings"
 
-// CloneResolved returns a deep-enough copy for safe mutation (fallback chain slice).
+// CloneResolved returns a deep-enough copy for safe mutation.
 func CloneResolved(r *Resolved) *Resolved {
 	if r == nil {
 		return nil
 	}
 	n := *r
-	if r.FallbackChain != nil {
-		n.FallbackChain = append([]string(nil), r.FallbackChain...)
-	}
-	if r.RouterModels != nil {
-		n.RouterModels = append([]string(nil), r.RouterModels...)
-	}
-	n.ToolRouterEnabled = r.ToolRouterEnabled
-	n.ToolRouterConfidenceThreshold = r.ToolRouterConfidenceThreshold
-	n.FilterFreeTierModels = r.FilterFreeTierModels
 	n.ProviderFreeTierPath = r.ProviderFreeTierPath
 	n.ProviderFreeTierSpec = r.ProviderFreeTierSpec
 	n.WitnessSampleMaxChars = r.WitnessSampleMaxChars

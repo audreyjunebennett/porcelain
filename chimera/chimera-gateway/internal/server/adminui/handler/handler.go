@@ -75,7 +75,7 @@ func (h *Handler) AuthTenantID(r *http.Request) (tenantID string, ok bool) {
 		return "", false
 	}
 	h.RT.Sync()
-	_, tokStore, _ := h.RT.Snapshot()
+	_, tokStore := h.RT.Snapshot()
 	if tokStore == nil {
 		return "", false
 	}
@@ -138,7 +138,7 @@ func (h *Handler) SetSessionCookie(w http.ResponseWriter, token string) (ok bool
 		return false, false
 	}
 	h.RT.Sync()
-	_, tokStore, _ := h.RT.Snapshot()
+	_, tokStore := h.RT.Snapshot()
 	rec := tokStore.Validate(token)
 	if tokStore == nil || rec == nil {
 		return false, false

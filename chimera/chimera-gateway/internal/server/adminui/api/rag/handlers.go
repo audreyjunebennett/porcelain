@@ -21,7 +21,7 @@ func handleSearch(h *handler.Handler, w http.ResponseWriter, r *http.Request, te
 		return
 	}
 	h.RT.Sync()
-	res, _, _ := h.RT.Snapshot()
+	res, _ := h.RT.Snapshot()
 	if res == nil || !res.RAG.Enabled || h.RT.RAG() == nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusServiceUnavailable)

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/operatorstore"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/testsupport"
 	"github.com/lynn/porcelain/chimera/internal/config"
 )
@@ -28,10 +29,10 @@ func TestAuditConfiguredFallbackAvailability_warnsOnUnavailableChainModel(t *tes
 	if err := rt.ReloadProviderModelAvailability(ctx); err != nil {
 		t.Fatal(err)
 	}
+	seedTestVMFallbackChain(t, rt, []string{"groq/free", "groq/paid"})
 
-	res, _, _ := rt.Snapshot()
+	res, _ := rt.Snapshot()
 	res = config.CloneResolved(res)
-	res.FallbackChain = []string{"groq/free", "groq/paid"}
 
 	var buf bytes.Buffer
 	log := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
@@ -63,9 +64,9 @@ func TestAuditConfiguredFallbackAvailability_logsAgainAfterTransition(t *testing
 	var buf bytes.Buffer
 	log := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
-	res, _, _ := rt.Snapshot()
+	res, _ := rt.Snapshot()
 	res = config.CloneResolved(res)
-	res.FallbackChain = []string{"groq/free", "groq/paid"}
+	seedTestVMFallbackChain(t, rt, []string{"groq/free", "groq/paid"})
 
 	if err := st.ReplaceProviderModelAvailability(ctx, "tenant-a", "groq", map[string]bool{
 		"groq/free": true,
@@ -112,10 +113,10 @@ func TestAuditConfiguredFallbackAvailability_skipsWhenAllAvailable(t *testing.T)
 	if err := rt.ReloadProviderModelAvailability(ctx); err != nil {
 		t.Fatal(err)
 	}
+	seedTestVMFallbackChain(t, rt, []string{"groq/free", "groq/paid"})
 
-	res, _, _ := rt.Snapshot()
+	res, _ := rt.Snapshot()
 	res = config.CloneResolved(res)
-	res.FallbackChain = []string{"groq/free", "groq/paid"}
 
 	var buf bytes.Buffer
 	log := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
@@ -135,16 +136,12 @@ func testRuntimeWithProviderAvailability(t *testing.T) *Runtime {
 	raw := "gateway:\n  semver: \"0.1.0\"\n  listen_port: 0\n  listen_host: \"127.0.0.1\"\n" +
 		"broker:\n  base_url: \"http://127.0.0.1:9\"\n  api_key_env: \"CHIMERA_BROKER_API_KEY\"\n" +
 		"health:\n  timeout_ms: 2000\n  chat_timeout_ms: 60000\n" +
-		"paths:\n  tokens: \"./api-keys.yaml\"\n  routing_policy: \"./routing-policy.yaml\"\n" +
-		"routing:\n  fallback_chain:\n    - \"groq/free\"\n" +
+		"paths:\n  tokens: \"./api-keys.yaml\"\n" +
 		"operator:\n  sqlite_path: \"./operator.sqlite\"\n  migrations_dir: \"" + opMigSlash + "\"\n"
 	if err := os.WriteFile(gwPath, []byte(raw), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "api-keys.yaml"), []byte("api_keys:\n  - secret: tok\n    tenant_id: tenant-a\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "routing-policy.yaml"), []byte("rules: []\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	rt, err := NewRuntime(gwPath, slog.New(slog.NewTextHandler(ioDiscard{}, &slog.HandlerOptions{Level: slog.LevelError + 1})))
@@ -160,3 +157,19 @@ func testRuntimeWithProviderAvailability(t *testing.T) *Runtime {
 type ioDiscard struct{}
 
 func (ioDiscard) Write(p []byte) (int, error) { return len(p), nil }
+
+func seedTestVMFallbackChain(t *testing.T, rt *Runtime, chain []string) {
+	t.Helper()
+	st := rt.OperatorStore()
+	if st == nil {
+		t.Fatal("operator store required")
+	}
+	ctx := context.Background()
+	vm := operatorstore.ChimeraSeed("0.1.0", chain, chain[0])
+	if _, err := st.InsertVirtualModelFull(ctx, vm); err != nil {
+		t.Fatal(err)
+	}
+	if err := rt.ReloadVirtualModels(ctx); err != nil {
+		t.Fatal(err)
+	}
+}

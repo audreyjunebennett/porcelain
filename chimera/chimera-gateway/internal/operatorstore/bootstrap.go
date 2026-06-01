@@ -5,13 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"os"
 	"regexp"
 	"strings"
 
-	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/routing"
 	"github.com/lynn/porcelain/chimera/internal/config"
-	"gopkg.in/yaml.v3"
 )
 
 var nonSlugRE = regexp.MustCompile(`[^a-z0-9]+`)
@@ -44,36 +41,10 @@ func seedRoutingRuleCatalog(ctx context.Context, s *Store) error {
 		"Route long user turns via min_message_chars")
 }
 
-func seedRulesFromPolicyYAML(ctx context.Context, s *Store, policyYAML []byte) error {
-	var doc struct {
-		Rules []struct {
-			Name   string   `yaml:"name"`
-			When   any      `yaml:"when"`
-			Models []string `yaml:"models"`
-		} `yaml:"rules"`
-	}
-	if err := yaml.Unmarshal(policyYAML, &doc); err != nil {
-		return err
-	}
-	for _, r := range doc.Rules {
-		if strings.TrimSpace(r.Name) == "" {
-			continue
-		}
-		cfg, err := json.Marshal(map[string]any{"when": r.When, "models": r.Models})
-		if err != nil {
-			return err
-		}
-		slug := RuleNameToSlug(r.Name)
-		if err := s.UpsertRoutingRuleDefinition(ctx, r.Name, slug, string(cfg), ""); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// BootstrapVirtualModels imports legacy gateway config into operator SQLite when empty.
+// BootstrapVirtualModels seeds operator SQLite on first open. Legacy gateway.yaml routing
+// import was removed; operators create virtual models in settings (or tests seed rows explicitly).
 func BootstrapVirtualModels(ctx context.Context, s *Store, res *config.Resolved, log *slog.Logger) error {
-	if s == nil || res == nil {
+	if s == nil {
 		return nil
 	}
 	has, err := s.HasVirtualModels(ctx)
@@ -86,47 +57,41 @@ func BootstrapVirtualModels(ctx context.Context, s *Store, res *config.Resolved,
 	if err := seedRoutingRuleCatalog(ctx, s); err != nil {
 		return fmt.Errorf("bootstrap routing rule catalog: %w", err)
 	}
+	return nil
+}
 
-	policyYAML := []byte("")
-	if p := strings.TrimSpace(res.RoutingPolicyPath); p != "" {
-		if b, err := os.ReadFile(p); err == nil {
-			policyYAML = b
-		}
+// ChimeraSeed returns a Chimera-<semver> virtual model definition for tests and explicit seeding.
+func ChimeraSeed(semver string, fallbackChain []string, policyDefaultModel string) VirtualModel {
+	if semver == "" {
+		semver = "0.1.0"
 	}
-	if len(policyYAML) > 0 {
-		if err := seedRulesFromPolicyYAML(ctx, s, policyYAML); err != nil && log != nil {
-			log.Warn("bootstrap: seed rules from policy yaml failed", "err", err)
-		}
+	if len(fallbackChain) == 0 {
+		fallbackChain = []string{"groq/a", "groq/b"}
 	}
-
-	policyEnabled := false
-	if len(strings.TrimSpace(string(policyYAML))) > 0 {
-		policyEnabled = routing.ValidatePolicyYAML(policyYAML) == nil
+	if policyDefaultModel == "" {
+		policyDefaultModel = fallbackChain[0]
 	}
-	chimera := VirtualModel{
-		ModelID:              res.VirtualModelID,
+	policyYAML := fmt.Sprintf(`ambiguous_default_model: %s
+rules:
+  - name: default
+    when: {}
+    models:
+      - %s
+`, policyDefaultModel, policyDefaultModel)
+	return VirtualModel{
+		ModelID:              "Chimera-" + semver,
 		Name:                 "Chimera",
-		Version:              res.Semver,
-		Description:          "Bootstrap virtual model imported from gateway.yaml and routing-policy.yaml",
+		Version:              semver,
+		Description:          "Test Chimera virtual model",
 		Enabled:              true,
 		Visibility:           VisibilityPublic,
-		CreatedByPrincipalID: "",
-		TenantID:             "",
-		FallbackChain:        append([]string(nil), res.FallbackChain...),
-		RoutingPolicyYAML:    string(policyYAML),
-		RoutingPolicyEnabled: policyEnabled,
-		ToolRouterEnabled:    res.ToolRouterEnabled,
-		RouterModels:         append([]string(nil), res.RouterModels...),
-		ToolRouterConfidence: res.ToolRouterConfidenceThreshold,
+		FallbackChain:        append([]string(nil), fallbackChain...),
+		RoutingPolicyYAML:    policyYAML,
+		RoutingPolicyEnabled: true,
+		ToolRouterEnabled:    false,
+		RouterModels:         nil,
+		ToolRouterConfidence: 0.5,
 	}
-	if _, err := s.InsertVirtualModelFull(ctx, chimera); err != nil {
-		return fmt.Errorf("bootstrap chimera virtual model: %w", err)
-	}
-	if log != nil {
-		log.Info("bootstrap virtual model imported", "msg", "gateway.virtual_model.bootstrap_imported",
-			"model_id", chimera.ModelID, "fallback_depth", len(chimera.FallbackChain))
-	}
-	return nil
 }
 
 // Gemini010Seed returns the Gemini-0.1.0 virtual model definition (gemini provider only).

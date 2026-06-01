@@ -13,18 +13,11 @@ func TestPatchResolvedUpstream(t *testing.T) {
 	}
 }
 
-func TestCloneResolved_Slice(t *testing.T) {
-	a := &Resolved{
-		FallbackChain: []string{"x", "y"},
-		RouterModels:  []string{"groq/a"},
-	}
+func TestCloneResolved_isolatedCopy(t *testing.T) {
+	a := &Resolved{Semver: "0.1.0", WitnessSampleMaxChars: 128}
 	b := CloneResolved(a)
-	b.FallbackChain[0] = "z"
-	b.RouterModels[0] = "gemini/b"
-	if a.FallbackChain[0] != "x" {
-		t.Fatal("aliased slice")
-	}
-	if a.RouterModels[0] != "groq/a" {
-		t.Fatal("aliased router_models slice")
+	b.WitnessSampleMaxChars = 256
+	if a.WitnessSampleMaxChars != 128 {
+		t.Fatal("aliased scalar")
 	}
 }

@@ -7,9 +7,9 @@
 
 # chimera-gateway: client-facing API, operator UI, routing, and RAG orchestration.
 #
-# Binds HTTP (listen_host / listen_port) and defines the virtual model id (Chimera-<semver>).
+# Binds HTTP (listen_host / listen_port). Virtual models are configured in operator settings (SQLite).
 gateway:
-  # Semantic version for the virtual model id (Chimera-<semver>).
+  # Gateway release semver (display / diagnostics).
   semver: "0.2.0"
   # HTTP listen address for chimera-gateway.
   listen_host: "127.0.0.1"
@@ -68,46 +68,8 @@ health:
 # Reloaded when the file mtime changes (gateway.yaml also reloads when provider-free-tier changes).
 paths:
   api_keys: "./api-keys.yaml"
-  routing_policy: "./routing-policy.yaml"
   provider_free_tier: "./provider-free-tier.yaml"
   provider_model_limits: "./provider-model-limits.yaml"
-
-# Virtual-model routing: which chimera-broker models to call and how to filter the catalog.
-#
-# Clients may request the Chimera-<semver> virtual id; the gateway maps that to fallback_chain
-# models and optional tool-router slimming before the main completion.
-routing:
-  # When true, intersect GET /v1/models with provider_free_tier allowlist.
-  filter_free_tier_models: true
-  # Ordered chimera-broker model ids for virtual-model chat; try next on 429 / selected 5xx.
-  fallback_chain:
-    - "groq/llama-3.3-70b-versatile"
-    - "gemini/gemini-2.5-flash"
-    - "gemini/gemini-2.5-flash-lite"
-    - "gemini/gemini-2.5-flash-preview-tts"
-    - "gemini/gemini-3-flash-preview"
-    - "gemini/gemini-3.1-flash-lite"
-    - "gemini/gemini-3.1-flash-lite-preview"
-    - "gemini/gemini-3.1-flash-live-preview"
-    - "groq/openai/gpt-oss-120b"
-    - "groq/qwen/qwen3-32b"
-    - "groq/meta-llama/llama-4-scout-17b-16e-instruct"
-    - "groq/openai/gpt-oss-20b"
-    - "groq/llama-3.1-8b-instant"
-    - "groq/allam-2-7b"
-    - "groq/groq/compound"
-    - "groq/groq/compound-mini"
-    - "ollama/llama3.2:3b"
-    - "ollama/qwen3.5:9b"
-  # chimera-broker models for tool-router scoring before the main completion. Empty = disabled.
-  router_models: []
-  # - "ollama/llama3.2:3b"
-  # - "groq/groq/compound-mini"
-  tool_router:
-    # Requires non-empty router_models.
-    enabled: false
-    # Keep tools with router score >= threshold (0–1).
-    confidence_threshold: 0.5
 
 # Gateway metrics: SQLite usage and chat outcomes for quotas and operator views.
 #

@@ -13,10 +13,6 @@ broker:
   base_url: "http://127.0.0.1:8080"
 paths:
   api_keys: "./api-keys.yaml"
-  routing_policy: "./routing-policy.yaml"
-routing:
-  fallback_chain:
-    - gpt-4o-mini
 `)
 	f.Add(seed)
 	f.Fuzz(func(t *testing.T, data []byte) {

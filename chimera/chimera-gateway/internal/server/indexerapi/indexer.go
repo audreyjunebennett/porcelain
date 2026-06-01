@@ -19,7 +19,7 @@ import (
 // (GET /v1/indexer/workspaces). Same auth and RAG gating as HandleConfig.
 func HandleWorkspaces(w http.ResponseWriter, r *http.Request, rt *gruntime.Runtime, _ *slog.Logger) {
 	rt.Sync()
-	res, tokStore, _ := rt.Snapshot()
+	res, tokStore := rt.Snapshot()
 	token := gwhttp.BearerToken(r.Header.Get("Authorization"))
 	sess := tokStore.Validate(token)
 	if token == "" || sess == nil {
@@ -80,7 +80,7 @@ func HandleWorkspaces(w http.ResponseWriter, r *http.Request, rt *gruntime.Runti
 // HandleConfig returns the effective RAG / indexer settings for the authenticated tenant.
 func HandleConfig(w http.ResponseWriter, r *http.Request, rt *gruntime.Runtime, _ *slog.Logger) {
 	rt.Sync()
-	res, tokStore, _ := rt.Snapshot()
+	res, tokStore := rt.Snapshot()
 	token := gwhttp.BearerToken(r.Header.Get("Authorization"))
 	sess := tokStore.Validate(token)
 	if token == "" || sess == nil {
@@ -135,7 +135,7 @@ func HandleConfig(w http.ResponseWriter, r *http.Request, rt *gruntime.Runtime, 
 // treating the JSON body as a transport error; auth and RAG-disabled errors remain 503.
 func HandleHealth(w http.ResponseWriter, r *http.Request, rt *gruntime.Runtime, log *slog.Logger) {
 	rt.Sync()
-	res, tokStore, _ := rt.Snapshot()
+	res, tokStore := rt.Snapshot()
 	token := gwhttp.BearerToken(r.Header.Get("Authorization"))
 	sess := tokStore.Validate(token)
 	if token == "" || sess == nil {
@@ -155,7 +155,7 @@ func HandleHealth(w http.ResponseWriter, r *http.Request, rt *gruntime.Runtime, 
 // HandleStats returns live vectorstore stats for the scoped collection.
 func HandleStats(w http.ResponseWriter, r *http.Request, rt *gruntime.Runtime, _ *slog.Logger) {
 	rt.Sync()
-	res, tokStore, _ := rt.Snapshot()
+	res, tokStore := rt.Snapshot()
 	token := gwhttp.BearerToken(r.Header.Get("Authorization"))
 	sess := tokStore.Validate(token)
 	if token == "" || sess == nil {
@@ -203,7 +203,7 @@ func HandleStats(w http.ResponseWriter, r *http.Request, rt *gruntime.Runtime, _
 // HandleCorpusInventory returns a paginated list of unique sources in the scoped corpus.
 func HandleCorpusInventory(w http.ResponseWriter, r *http.Request, rt *gruntime.Runtime, _ *slog.Logger) {
 	rt.Sync()
-	res, tokStore, _ := rt.Snapshot()
+	res, tokStore := rt.Snapshot()
 	token := gwhttp.BearerToken(r.Header.Get("Authorization"))
 	sess := tokStore.Validate(token)
 	if token == "" || sess == nil {

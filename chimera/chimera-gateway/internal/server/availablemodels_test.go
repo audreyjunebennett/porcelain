@@ -17,11 +17,9 @@ import (
 
 func newTestResolved(upstreamURL string) *config.Resolved {
 	return &config.Resolved{
-		Semver:               "0.1.0",
-		VirtualModelID:       "Chimera-0.1.0",
-		UpstreamBaseURL:      upstreamURL,
-		HealthTimeoutMs:      2000,
-		FilterFreeTierModels: false,
+		Semver:          "0.1.0",
+		UpstreamBaseURL: upstreamURL,
+		HealthTimeoutMs: 2000,
 	}
 }
 

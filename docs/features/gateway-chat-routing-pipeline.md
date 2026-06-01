@@ -8,12 +8,12 @@
 | **Introduced** | v0.1 routing + v0.1.1 tool router; virtual-model stacks v0.2+ |
 | **Originated from** | [`plans/virtual-models-operator.md`](../plans/virtual-models-operator.md), [`plans/context-window-admission.md`](../plans/context-window-admission.md), [`docs/version-v0.1.1.md`](../version-v0.1.1.md) |
 | **Related features** | [Operator virtual models](operator-virtual-models.md), [Gateway RAG ingest and retrieval](gateway-rag-ingest-and-retrieval.md), [Context window admission](context-window-admission.md), [Operator provider model availability](operator-provider-model-availability.md) |
-| **Depends on** | Virtual model registry or legacy `gateway.yaml` stack, broker upstream |
+| **Depends on** | Virtual model registry, broker upstream |
 | **Last updated** | See git history |
 
 ## At a glance
 
-Every `POST /v1/chat/completions` request that resolves to a **virtual model** passes through a fixed **routing pipeline** before and during upstream proxying: optional **body transforms** (tool router today), **retrieval augmentation** (RAG), **initial upstream selection** (routing policy + fallback chain), then an **attempt loop** that walks the chain with admission guards and retriable error handling. Configuration lives primarily on the [virtual model routing stack](operator-virtual-models.md) (fallback chain, policy YAML, tool-router block). The pipeline is the integration surface for future **pluggable routers** that manipulate tooling, retrieval, model choice, and fallback—today those stages are hard-coded in Go with a small set of hooks, not a formal plugin registry.
+Every `POST /v1/chat/completions` request that resolves to a **virtual model** passes through a fixed **routing pipeline** before and during upstream proxying: optional **body transforms** (tool router today), **retrieval augmentation** (RAG), **initial upstream selection** (routing policy + fallback chain), then an **attempt loop** that walks the chain with admission guards and retriable error handling. Configuration lives on the [virtual model routing stack](operator-virtual-models.md) (fallback chain, policy YAML, tool-router block). Requests whose `model` is a direct upstream id skip the pipeline and proxy to chimera-broker unchanged.
 
 ## Operator-visible behavior
 
@@ -41,7 +41,7 @@ flowchart TD
 
 | Stage | Purpose | Shipped implementation |
 |-------|---------|------------------------|
-| **1. Stack resolve** | Load fallback, policy, tool-router config | `virtualmodel.Registry.Resolve` or legacy `gateway.yaml` |
+| **1. Stack resolve** | Load fallback, policy, tool-router config | `virtualmodel.Registry.Resolve` |
 | **2. Body transform** | Mutate proxied JSON before upstream | `transform.ApplyToolRouter` only |
 | **3. Retrieval augment** | Inject context into messages | `rag.Service.Retrieve` + `InjectSystemMessage` |
 | **4. Initial pick** | Choose first upstream id in chain walk | `virtualmodel.PickInitialModelWithAvailability` → `routing.InMemoryPolicy` |
@@ -112,7 +112,7 @@ Until a registry lands, add stages by extending the ordered calls in `handleVirt
 | RAG scope | Headers `X-Chimera-Project`, `X-Chimera-Flavor-Id` |
 | Response metadata | `X-Chimera-Upstream-Model`, `X-Chimera-RAG-Hits`, `X-Chimera-Conversation-Id` |
 | Settings APIs | VM fallback, policy, tool-router, evaluate — see [virtual models](operator-virtual-models.md) |
-| Legacy global stack | `gateway.yaml` + `routing-policy.yaml` when client model matches legacy `Chimera-<semver>` id |
+| Direct upstream | `body.model` = `provider/model` → `chat.ProxyChatCompletion` (no VM stack) |
 
 ## Code map
 
@@ -146,7 +146,6 @@ Manual: configure VM with short-context + long-context models in fallback; send 
 - **Formal `ChatRouter` plugin registry** — not implemented; pipeline is sequential Go calls.
 - **Per-VM RAG / retrieval routers** — RAG config is gateway-global ([gateway RAG feature](gateway-rag-ingest-and-retrieval.md)).
 - **LLM-generated routing policy** — exploration only ([`docs/version-v0.1.md`](../version-v0.1.md)).
-- **Legacy global `/api/ui/routing/*`** — coexists during migration; new routers attach to VM stack ([virtual models](operator-virtual-models.md)).
 - **Additional transform stages** (prompt compression, tool format normalizers) — add via future Transform router slot.
 - **Shared routing-rule catalog** across VMs — policy YAML is per-VM today.
 

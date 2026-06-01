@@ -52,6 +52,7 @@ func setupRAGChatServer(t *testing.T) (string, *capturedReqs, *Runtime) {
 		t.Fatal(err)
 	}
 	rt := mustRuntime(t, gwPath)
+	seedChimeraTestVM(t, rt, "0.2.0", []string{"groq/m"})
 	store := newMemStore()
 	svc, err := rag.New(rag.Options{
 		Store:        store,
@@ -199,6 +200,7 @@ func TestVirtualModelChat_NoContextWhenRAGDisabled(t *testing.T) {
 	routePath := filepath.Join(dir, "routing-policy.yaml")
 	_ = os.WriteFile(routePath, []byte("rules: []\n"), 0o644)
 	rt := mustRuntime(t, gwPath)
+	seedChimeraTestVM(t, rt, "0.1.0", []string{"groq/m"})
 	srv := httptest.NewServer(NewMux(rt, testLog(), nil, nil))
 	t.Cleanup(srv.Close)
 

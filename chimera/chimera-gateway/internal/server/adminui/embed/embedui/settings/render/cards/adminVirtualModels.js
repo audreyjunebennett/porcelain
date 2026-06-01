@@ -439,7 +439,6 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminVirtualModels = function (ctx)
 
   function buildFallbackSection(vm, ui, pfx, gw, loading) {
     var chain = Array.isArray(vm.fallback_chain) ? vm.fallback_chain : [];
-    var freeTierOnly = !!(gw && gw.filter_free_tier_models);
     var fallbackYAML = fallbackChainToYAML(chain);
     if (ui.fallbackDraft != null) {
       fallbackYAML = String(ui.fallbackDraft);

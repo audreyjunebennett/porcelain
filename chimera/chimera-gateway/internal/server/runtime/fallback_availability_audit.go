@@ -83,9 +83,6 @@ func collectFallbackViolations(rt *Runtime, res *config.Resolved) map[string]fal
 		chain  []string
 	}
 	var chains []chainRef
-	if fc := res.FallbackChain; len(fc) > 0 {
-		chains = append(chains, chainRef{source: "gateway.fallback_chain", chain: fc})
-	}
 	if vmReg := rt.VirtualModels(); vmReg != nil {
 		for _, vm := range vmReg.AllEnabled() {
 			if vm == nil || len(vm.FallbackChain) == 0 {

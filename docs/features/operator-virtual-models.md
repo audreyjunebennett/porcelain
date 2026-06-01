@@ -13,7 +13,7 @@
 
 ## At a glance
 
-Operators create **virtual models** in operator SQLite—each with a client-facing `model_id` (name + version), description, enable flag, and visibility—and attach a **routing stack**: required ordered fallback chain, optional routing-policy rules, and optional tool-router block. The gateway loads enabled models into an in-memory registry, exposes them on `GET /v1/models`, and resolves `POST /v1/chat/completions` per model. Bootstrap imports the legacy single `Chimera-<semver>` stack from `gateway.yaml` on first run. Settings cards support full CRUD, generate-from-catalog, dry-run evaluate, and scoped routing-decision logs carrying `virtual_model_id`.
+Operators create **virtual models** in operator SQLite—each with a client-facing `model_id` (name + version), description, enable flag, and visibility—and attach a **routing stack**: required ordered fallback chain, optional routing-policy rules, and optional tool-router block. The gateway loads enabled models into an in-memory registry, exposes them on `GET /v1/models`, and resolves `POST /v1/chat/completions` per model. Fresh installs start with **zero** virtual models (only a routing-rule definition catalog is seeded); operators create VMs in settings. Settings cards support full CRUD, generate-from-catalog, dry-run evaluate, and scoped routing-decision logs carrying `virtual_model_id`.
 
 ## Operator-visible behavior
 
@@ -41,12 +41,12 @@ Operators create **virtual models** in operator SQLite—each with a client-faci
 | Topic | Decision |
 |-------|----------|
 | Model id format | `{Name}-{Version}` stored unique per tenant |
-| Bootstrap | Import legacy `Chimera-<semver>` when SQLite empty |
+| Bootstrap | Seed routing-rule catalog only; **no** YAML import into SQLite |
 | Fallback | Required non-empty chain; generate uses available catalog only |
 | Routing rules | Shared policy YAML body per VM; first matching `when.min_message_chars` wins |
 | Tool router | Optional; `router_models[]`, `confidence_threshold`, enable flag |
 | Reload | Registry refresh after CRUD via `ReloadVirtualModels` |
-| Legacy YAML | Global routing cards/API remain for migration; VM is source of truth for new work |
+| Direct upstream | Clients may send any upstream `provider/model` id when not using a VM |
 
 **Identity / auth / scoping**
 
@@ -105,7 +105,6 @@ Manual: create two VMs with different fallback chains; chat with each; confirm d
 - Per-virtual-model RAG / workspace scope.
 - Shared routing-rule definition catalog (reusable named rules across VMs) — VM stores policy YAML directly today.
 - Rate-limit policy per VM.
-- Deprecation/removal of legacy global `/api/ui/routing/*` YAML writers (still present).
 
 ## References
 

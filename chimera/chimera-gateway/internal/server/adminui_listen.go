@@ -10,7 +10,7 @@ func configureAdminUIListenForEmbed(rt *Runtime, overlay *StatusOverlay) {
 	listen := ""
 	if overlay != nil && overlay.EffectiveListen != "" {
 		listen = overlay.EffectiveListen
-	} else if res, _, _ := rt.Snapshot(); res != nil {
+	} else if res, _ := rt.Snapshot(); res != nil {
 		listen = res.ListenAddr()
 	}
 	if listen != "" {

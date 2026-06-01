@@ -20,10 +20,6 @@ broker:
   api_key_env: "CHIMERA_BROKER_API_KEY"
 paths:
   api_keys: "./api-keys.yaml"
-  routing_policy: "./routing-policy.yaml"
-routing:
-  fallback_chain:
-    - "groq/x"
 `
 	if err := os.WriteFile(p, []byte(raw), 0o644); err != nil {
 		t.Fatal(err)
@@ -66,10 +62,6 @@ broker:
   api_key_env: "CHIMERA_BROKER_API_KEY"
 paths:
   api_keys: "./api-keys.yaml"
-  routing_policy: "./routing-policy.yaml"
-routing:
-  fallback_chain:
-    - "groq/x"
 `
 	if err := os.WriteFile(p, []byte(raw), 0o644); err != nil {
 		t.Fatal(err)
@@ -101,9 +93,6 @@ broker:
   api_key: "yaml-secret"
 paths:
   api_keys: "./api-keys.yaml"
-  routing_policy: "./routing-policy.yaml"
-routing:
-  fallback_chain: []
 `
 	if err := os.WriteFile(p, []byte(raw), 0o644); err != nil {
 		t.Fatal(err)

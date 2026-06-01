@@ -33,6 +33,7 @@ These plans are complete. Read the linked feature record for as-built behavior.
 | [log-conversations.md](log-conversations.md) | [operator-settings-ui](../features/operator-settings-ui.md) |
 | [operator-message-registry.md](operator-message-registry.md) | [operator-log-message-registry](../features/operator-log-message-registry.md) |
 | [virtual-models-operator.md](virtual-models-operator.md) | [operator-virtual-models](../features/operator-virtual-models.md), [gateway chat routing pipeline](../features/gateway-chat-routing-pipeline.md) |
+| [remove-legacy-gateway-routing.md](remove-legacy-gateway-routing.md) | [operator-virtual-models](../features/operator-virtual-models.md), [gateway chat routing pipeline](../features/gateway-chat-routing-pipeline.md) |
 | [provider-model-availability.md](provider-model-availability.md) | [operator-provider-model-availability](../features/operator-provider-model-availability.md) |
 | [context-window-admission.md](context-window-admission.md) | [context-window-admission](../features/context-window-admission.md) (`partial`) |
 | [adminui-filesystem-dev-mode.md](adminui-filesystem-dev-mode.md) | [operator-ui-filesystem-dev-mode](../features/operator-ui-filesystem-dev-mode.md) |

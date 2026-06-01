@@ -14,7 +14,6 @@ import (
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/providermodels"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/rag"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/rag/ragembed"
-	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/routing"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/catalog"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/vectorstore/qdrant"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/virtualmodel"
@@ -35,7 +34,6 @@ type Runtime struct {
 	freeTierMtime         time.Time
 	resolved              *config.Resolved
 	tokens                *tokens.Store
-	routing               *routing.Policy
 	metrics               *gatewaymetrics.Store // optional; nil when disabled or init failed
 	operator              *operatorstore.Store  // optional; nil when init failed
 	virtualModels         *virtualmodel.Registry
@@ -105,7 +103,6 @@ func NewRuntimeWithBrokerOverride(gatewayPath string, log *slog.Logger, brokerBa
 		brokerBaseURLOverride: brokerBaseURLOverride,
 		resolved:              res,
 		tokens:                tokens.NewStore(res.TokensPath, log),
-		routing:               routing.NewPolicy(res.RoutingPolicyPath, log),
 		ingestSessions:        newIngestSessionStore(),
 	}
 	if res.MetricsEnabled {
@@ -202,8 +199,7 @@ func (rt *Runtime) Sync() {
 		}
 		return
 	}
-	pathsChanged := next.TokensPath != rt.resolved.TokensPath ||
-		next.RoutingPolicyPath != rt.resolved.RoutingPolicyPath
+	pathsChanged := next.TokensPath != rt.resolved.TokensPath
 	rt.resolved = rt.applyBrokerBaseURLOverride(next)
 	rt.gatewayMtime = gst.ModTime()
 	if next.ProviderFreeTierPath != "" {
@@ -215,17 +211,16 @@ func (rt *Runtime) Sync() {
 	}
 	if pathsChanged {
 		rt.tokens = tokens.NewStore(next.TokensPath, rt.log)
-		rt.routing = routing.NewPolicy(next.RoutingPolicyPath, rt.log)
 	}
 	if rt.log != nil {
 		rt.log.Info("reloaded gateway config", "msg", "gateway.config.reloaded", "path", rt.gatewayPath, "config_file", naming.GatewayConfigFileTarget)
 	}
 }
 
-func (rt *Runtime) Snapshot() (*config.Resolved, *tokens.Store, *routing.Policy) {
+func (rt *Runtime) Snapshot() (*config.Resolved, *tokens.Store) {
 	rt.mu.RLock()
 	defer rt.mu.RUnlock()
-	return rt.resolved, rt.tokens, rt.routing
+	return rt.resolved, rt.tokens
 }
 
 // NextChatTurnIndex returns the next 1-based turn index for this conversation_id (in-process only).
@@ -271,6 +266,17 @@ func (rt *Runtime) SetOperatorStoreForTest(store *operatorstore.Store) {
 }
 
 // VirtualModels returns the in-memory virtual model registry, or nil when operator store is unavailable.
+// PrimaryVirtualModelID returns the first enabled virtual model id from operator SQLite, or "".
+func (rt *Runtime) PrimaryVirtualModelID() string {
+	if rt == nil {
+		return ""
+	}
+	if reg := rt.VirtualModels(); reg != nil {
+		return reg.BootstrapModelID()
+	}
+	return ""
+}
+
 func (rt *Runtime) VirtualModels() *virtualmodel.Registry {
 	rt.mu.RLock()
 	defer rt.mu.RUnlock()

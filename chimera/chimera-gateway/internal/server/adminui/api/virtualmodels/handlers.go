@@ -376,7 +376,7 @@ func handleGeneratePOST(h *handler.Handler, w http.ResponseWriter, r *http.Reque
 	_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&body)
 
 	h.RT.Sync()
-	res, _, _ := h.RT.Snapshot()
+	res, _ := h.RT.Snapshot()
 	apiKey := h.RT.UpstreamAPIKey()
 	if apiKey == "" {
 		http.Error(w, "missing chimera-broker API key", http.StatusServiceUnavailable)

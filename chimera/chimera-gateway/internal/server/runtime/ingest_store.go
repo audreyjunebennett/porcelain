@@ -89,7 +89,7 @@ func HandleIngestSessionStart(w http.ResponseWriter, r *http.Request, rt *Runtim
 		return
 	}
 	rt.Sync()
-	res, tokStore, _ := rt.Snapshot()
+	res, tokStore := rt.Snapshot()
 	token := gwhttp.BearerToken(r.Header.Get("Authorization"))
 	sess := tokStore.Validate(token)
 	if token == "" || sess == nil {
@@ -189,7 +189,7 @@ func HandleIngestSessionTail(w http.ResponseWriter, r *http.Request, rt *Runtime
 
 func handleIngestSessionChunk(w http.ResponseWriter, r *http.Request, rt *Runtime, log *slog.Logger, id string) {
 	rt.Sync()
-	res, tokStore, _ := rt.Snapshot()
+	res, tokStore := rt.Snapshot()
 	token := gwhttp.BearerToken(r.Header.Get("Authorization"))
 	sess := tokStore.Validate(token)
 	if token == "" || sess == nil {
@@ -273,7 +273,7 @@ func handleIngestSessionChunk(w http.ResponseWriter, r *http.Request, rt *Runtim
 
 func handleIngestSessionComplete(w http.ResponseWriter, r *http.Request, rt *Runtime, log *slog.Logger, id string) {
 	rt.Sync()
-	res, tokStore, _ := rt.Snapshot()
+	res, tokStore := rt.Snapshot()
 	token := gwhttp.BearerToken(r.Header.Get("Authorization"))
 	sess := tokStore.Validate(token)
 	if token == "" || sess == nil {

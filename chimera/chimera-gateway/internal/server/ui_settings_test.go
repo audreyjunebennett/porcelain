@@ -806,7 +806,6 @@ func TestUISettingsGallery_servesWhenAuthed(t *testing.T) {
 		`gallery-fixture-virtual-model`,
 		`data-sum-evlog-cols="2"`,
 		`sum-evlog__msg-meta`,
-		`material-symbols-outlined`,
 	} {
 		if !strings.Contains(page, w) {
 			t.Fatalf("missing %q in gallery HTML", w)

@@ -581,12 +581,13 @@ catalog-available: catalog-fetch-available
 catalog-free: catalog-fetch-free
 
 # Patch provider-model-limits.yaml with context_window from catalog-available.snapshot.yaml.
-# Optional: CATALOG=, LIMITS=, GATEWAY= paths; FORCE=1 to overwrite existing context_window.
+# Optional: CATALOG=, LIMITS= paths; OPERATOR_SQLITE= for VM fallback chains; FORCE=1 to overwrite context_window.
 catalog-limits:
 	go run ./chimera/cmd/catalog-write-limits \
 		-catalog "$(if $(CATALOG),$(CATALOG),config/catalog-available.snapshot.yaml)" \
 		-limits "$(if $(LIMITS),$(LIMITS),config/provider-model-limits.yaml)" \
-		-gateway "$(if $(GATEWAY),$(GATEWAY),config/gateway.yaml)" \
+		-ensure-from-catalog \
+		$(if $(OPERATOR_SQLITE),-operator-sqlite $(OPERATOR_SQLITE),) \
 		$(if $(FORCE),-force,)
 
 # Runs catalog-available first, then catalog-free: provider-free-tier YAML (groq/gemini ∩ catalog + patterns ollama/*).

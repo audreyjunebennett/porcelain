@@ -92,7 +92,7 @@ func handleProviderModelsApplyFreeTierPOST(h *handler.Handler, w http.ResponseWr
 	}
 	tenantID := h.SessionTenantID(r)
 	h.RT.Sync()
-	res, _, _ := h.RT.Snapshot()
+	res, _ := h.RT.Snapshot()
 
 	var draft map[string]bool
 	note := ""

@@ -125,7 +125,7 @@ func handleBootstrapStatus(w http.ResponseWriter, r *http.Request, rt *Runtime, 
 		return
 	}
 	rt.Sync()
-	res, _, _ := rt.Snapshot()
+	res, _ := rt.Snapshot()
 	listen := res.ListenAddr()
 	if overlay != nil && overlay.EffectiveListen != "" {
 		listen = overlay.EffectiveListen
@@ -137,7 +137,7 @@ func handleBootstrapStatus(w http.ResponseWriter, r *http.Request, rt *Runtime, 
 		},
 		"gateway": map[string]any{
 			"listen":          listen,
-			"virtual_model":   res.VirtualModelID,
+			"virtual_model":   rt.PrimaryVirtualModelID(),
 			"semver":          res.Semver,
 			"broker_base_url": res.UpstreamBaseURL,
 		},
@@ -180,7 +180,7 @@ func handleSetupTokenPOST(rt *Runtime, log *slog.Logger) http.HandlerFunc {
 		if label == "" {
 			label = "default"
 		}
-		_, tokStore, _ := rt.Snapshot()
+		_, tokStore := rt.Snapshot()
 		if tokStore == nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
@@ -230,7 +230,7 @@ func handleSetupCompletePOST(rt *Runtime, log *slog.Logger) http.HandlerFunc {
 			_ = json.NewEncoder(w).Encode(map[string]any{"error": "invalid json"})
 			return
 		}
-		_, tokStore, _ := rt.Snapshot()
+		_, tokStore := rt.Snapshot()
 		if tokStore == nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
