@@ -76,7 +76,7 @@ Configuration and observability live on **`/ui/settings`**: collapsible **summar
 | Routes | `internal/server/adminui/embed/routes.go` |
 | Settings shell | `embed/embedui/settings.html`, `settings_app.js`, `settings_entry.js` |
 | Summarized feed | `embed/embedui/settings/app/summarizedFeed.js`, `summarizedDirtyRouting.js` |
-| Card renderers | `embed/embedui/settings/render/cards/` — `adminVirtualModels.js`, `adminRouting.js`, provider cards, gateway overview |
+| Card renderers | `embed/embedui/settings/render/cards/` — `adminVirtualModels.js`, provider cards, gateway overview |
 | Derive / classify | `embed/embedui/settings/derive/` |
 | Operator copy | `embed/embedui/settings/render/operatorMessage*.js`, generated `operator_copy.js` |
 | Log API | `internal/server/adminui/api/logs/` |

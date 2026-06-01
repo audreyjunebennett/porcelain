@@ -322,7 +322,7 @@
 }
 .sum-evlog__msg-wrap {
   display: grid;
-  grid-template-rows: minmax(1.45rem, auto) minmax(0, auto);
+  grid-template-rows: minmax(0, auto) minmax(1.45rem, auto);
   grid-template-columns: 1fr;
   gap: 0.12rem;
   width: 100%;

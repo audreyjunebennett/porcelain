@@ -29,15 +29,6 @@ globalThis.ChimeraSettings.Main = function () {
   var stickPx = 160;
   var es = null;
   var pollTimer = null;
-  var routingPolicyTouched = false;
-  var routingPolicyDraft = null;
-  var fallbackTouched = false;
-  var routerModelsTouched = false;
-  var routerModelsDraft = null;
-  var routerThresholdTouched = false;
-  var routerThresholdDraft = null;
-  var routerEnabledTouched = false;
-  var routerEnabledDraft = null;
   var adminUserDrafts = [];
   var nextAdminUserDraftId = 1;
   var virtualModelDrafts = [];
@@ -51,9 +42,6 @@ globalThis.ChimeraSettings.Main = function () {
   var adminVisibleProviderIdsSeeded = false;
   /** In-flight Ollama base URL; null = use adminStateCache value on render. */
   var adminOllamaUrlDraft = null;
-  var adminRoutingEditing = false;
-  var adminFallbackEditing = false;
-  var adminRouterEditing = false;
   /** Provider id whose model availability table is in edit mode, or null. */
   var adminProviderModelsEditingId = null;
   /** Draft availability maps keyed by provider id: { models: { modelId: bool }, saving?: bool }. */
@@ -955,18 +943,6 @@ globalThis.ChimeraSettings.Main = function () {
     adminVisibleProviderIdsSeeded: adminVisibleProviderIdsSeeded,
     adminOllamaUrlDraft: adminOllamaUrlDraft,
     adminCreatedTokenByTenant: adminCreatedTokenByTenant,
-    routingPolicyTouched: routingPolicyTouched,
-    routingPolicyDraft: routingPolicyDraft,
-    fallbackTouched: fallbackTouched,
-    routerModelsTouched: routerModelsTouched,
-    routerModelsDraft: routerModelsDraft,
-    routerThresholdTouched: routerThresholdTouched,
-    routerThresholdDraft: routerThresholdDraft,
-    routerEnabledTouched: routerEnabledTouched,
-    routerEnabledDraft: routerEnabledDraft,
-    adminRoutingEditing: adminRoutingEditing,
-    adminFallbackEditing: adminFallbackEditing,
-    adminRouterEditing: adminRouterEditing,
     adminProviderModelsEditingId: adminProviderModelsEditingId,
     adminProviderModelsDraft: adminProviderModelsDraft,
     adminProviderModelsCache: adminProviderModelsCache,

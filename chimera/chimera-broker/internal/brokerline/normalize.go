@@ -28,6 +28,7 @@ var (
 	catalogListingModelsRE = regexp.MustCompile(`(?i)listing\s+(\d+)\s+models?\b`)
 	catalogPoolModelsRE    = regexp.MustCompile(`(?i)populated\s+model\s+pool[^\n\d]{0,160}(\d+)\s+models?\b`)
 	modelDiscoveryFailRE   = regexp.MustCompile(`(?i)model discovery failed for provider\s+([a-z0-9_.-]+)`)
+	modelListFailRE        = regexp.MustCompile(`(?i)failed to list models for provider\s+([a-z0-9_.-]+)`)
 	providerHealthOkRE     = regexp.MustCompile(`(?i)(?:provider\s+([a-z0-9_.-]+)\s+health(?:y|\s+check\s+(?:passed|ok|succeeded))|health(?:\s+check)?\s+(?:passed|ok|succeeded)\s+for\s+provider\s+([a-z0-9_.-]+))`)
 	providerHealthFailRE   = regexp.MustCompile(`(?i)(?:provider\s+([a-z0-9_.-]+)\s+health(?:\s+check)?\s+failed|health(?:\s+check)?\s+failed\s+for\s+provider\s+([a-z0-9_.-]+))`)
 	providerKeyLoadedRE    = regexp.MustCompile(`(?i)key loaded for provider\s+([a-z0-9_.-]+)`)
@@ -202,6 +203,12 @@ func normalizeJSON(raw string) []byte {
 		if sm := modelDiscoveryFailRE.FindStringSubmatch(message); len(sm) == 2 {
 			out.ProviderID = strings.TrimSpace(sm[1])
 		}
+	case modelListFailRE.MatchString(message):
+		out.Msg = naming.MsgBrokerProviderModelDiscoveryFail
+		if sm := modelListFailRE.FindStringSubmatch(message); len(sm) == 2 {
+			out.ProviderID = strings.TrimSpace(sm[1])
+		}
+		out.ProgressDetail = wline.TrimRunes(message, 2048)
 	case providerKeyMissingRE.MatchString(message):
 		out.Msg = naming.MsgBrokerProviderKeyMissing
 		if sm := providerKeyMissingRE.FindStringSubmatch(message); len(sm) >= 2 {

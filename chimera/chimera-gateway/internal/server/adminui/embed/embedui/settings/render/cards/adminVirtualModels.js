@@ -60,25 +60,20 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminVirtualModels = function (ctx)
     return "";
   }
 
+  var ET = globalThis.ChimeraShared && globalThis.ChimeraShared.EditToolbar;
+  var YE = globalThis.ChimeraShared && globalThis.ChimeraShared.YamlEditor;
+
   function vmToolbarIconBtn(action, vmId, title, iconName, extraClass) {
-    var tit = title != null ? String(title) : "";
-    var cls = "sg-op-yaml-ov-btn";
-    if (extraClass) cls += " " + String(extraClass);
-    return (
-      '<button type="button" class="' +
-      cls +
-      '" data-admin-action="' +
-      escapeHtml(String(action || "")) +
-      '" data-vm-id="' +
-      escapeHtml(String(vmId)) +
-      '" title="' +
-      escapeHtml(tit) +
-      '" aria-label="' +
-      escapeHtml(tit) +
-      '"><span class="material-symbols-outlined" aria-hidden="true">' +
-      escapeHtml(String(iconName || "")) +
-      "</span></button>"
-    );
+    if (ET && typeof ET.iconBtnHtml === "function") {
+      return ET.iconBtnHtml(escapeHtml, {
+        action: action,
+        title: title,
+        icon: iconName,
+        extraClass: extraClass,
+        dataAttrs: { "vm-id": String(vmId) }
+      });
+    }
+    return "";
   }
 
   function vmAttrHidden(isHidden) {
@@ -86,19 +81,17 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminVirtualModels = function (ctx)
   }
 
   function vmYamlTextareaHtml(pfx, taId, yaml, touched, rows, readonly) {
-    return (
-      '<div class="sg-op-yaml-wrap sg-op-yaml-wrap--full' +
-      (touched ? " sg-op-yaml-wrap--dirty" : "") +
-      '"><textarea id="' +
-      escapeHtml(pfx + taId) +
-      '" class="sg-op-yaml-textarea" rows="' +
-      escapeHtml(String(rows != null ? rows : 8)) +
-      '" spellcheck="false"' +
-      (readonly ? " readonly" : "") +
-      ">" +
-      escapeHtml(String(yaml != null ? yaml : "")) +
-      "</textarea></div>"
-    );
+    if (YE && typeof YE.textareaWrapHtml === "function") {
+      return YE.textareaWrapHtml(escapeHtml, {
+        id: pfx + taId,
+        yaml: yaml,
+        touched: touched,
+        rows: rows != null ? rows : 8,
+        readonly: readonly,
+        spellcheck: false
+      });
+    }
+    return "";
   }
 
   function vmSectionToolbarHtml(vm, leadingHtml, editOpts) {
@@ -331,12 +324,12 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminVirtualModels = function (ctx)
   function buildClientUsageBlock(vm, pfx, loading) {
     if (loading) {
       return (
-        '<div class="sum-vm-section sum-vm-section--bar">' +
+        '<div class="sum-vm-section sum-vm-section--bar" data-ui-part="virtual-model.client-usage">' +
         '<div class="sum-vm-section__hdr sum-vm-section__hdr--bar"><p class="muted">Loading…</p></div></div>'
       );
     }
     return (
-      '<div class="sum-vm-section sum-vm-section--bar">' +
+      '<div class="sum-vm-section sum-vm-section--bar" data-ui-part="virtual-model.client-usage">' +
       '<div class="sum-vm-section__hdr sum-vm-section__hdr--bar" aria-label="Model access">' +
       '<span class="sum-vm-section__hdr-row">' +
       '<span class="sum-vm-section__trail">' +
@@ -434,7 +427,7 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminVirtualModels = function (ctx)
         "</div>";
     }
     return (
-      '<details class="sum-vm-section" data-vm-section="identity"' +
+      '<details class="sum-vm-section" data-vm-section="identity" data-ui-part="virtual-model.identity"' +
       vmSectionOpenAttr(ui, "identity") +
       ">" +
       vmSectionHeaderHtml("Identity") +
@@ -535,7 +528,7 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminVirtualModels = function (ctx)
         "</div></div>";
     }
     return (
-      '<details class="sum-vm-section" data-vm-section="fallback"' +
+      '<details class="sum-vm-section" data-vm-section="fallback" data-ui-part="virtual-model.fallback"' +
       vmSectionOpenAttr(ui, "fallback") +
       ">" +
       vmSectionHeaderHtml("Fallback chain", {
@@ -640,7 +633,7 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminVirtualModels = function (ctx)
         "</div></div>";
     }
     return (
-      '<details class="sum-vm-section" data-vm-section="routing"' +
+      '<details class="sum-vm-section" data-vm-section="routing" data-ui-part="virtual-model.routing"' +
       vmSectionOpenAttr(ui, "routing") +
       ">" +
       vmSectionHeaderHtml("Routing policy", {
@@ -752,7 +745,7 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminVirtualModels = function (ctx)
         "</div>";
     }
     return (
-      '<details class="sum-vm-section" data-vm-section="router"' +
+      '<details class="sum-vm-section" data-vm-section="router" data-ui-part="virtual-model.tool-router"' +
       vmSectionOpenAttr(ui, "router") +
       ">" +
       vmSectionHeaderHtml("Tool router", {
@@ -794,7 +787,8 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminVirtualModels = function (ctx)
       adminScopedEvlogPanelFromEvents(
         "Scoped log — " + modelId,
         "vm-" + rowId + "-routing",
-        adminScopedEventsForVirtualModel(modelId)
+        adminScopedEventsForVirtualModel(modelId),
+        { uiPart: "virtual-model.scoped-evlog" }
       );
 
     return (
@@ -803,7 +797,7 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminVirtualModels = function (ctx)
       '" data-virtual-model-id="' +
       escapeHtml(rowId) +
       '">' +
-      "<summary>" +
+      '<summary data-ui-part="virtual-model.summary">' +
       '<span class="sum-avatar sum-av-svc-chimera-gateway">Vm</span>' +
       '<span class="sum-main"><span class="sum-title">' +
       escapeHtml(title) +
@@ -902,7 +896,7 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminVirtualModels = function (ctx)
       '"' +
       (draft.saving ? " disabled" : "") +
       ">Save</button></span></header>" +
-      '<div class="sum-body sum-body--virtual-model">' +
+      '<div class="sum-body sum-body--virtual-model" data-ui-part="virtual-model-draft.form">' +
       '<div class="sg-op-card-note sg-op-card-note--tight">Save to create the model, then configure fallback (required), routing, and tool-router on the new card.</div>' +
       '<div class="ws-draft-fields">' +
       '<div class="ws-draft-field"><label class="ws-draft-field-label">Name</label>' +

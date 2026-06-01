@@ -33,23 +33,10 @@ globalThis.ChimeraSettings.Render.Cards.mountGatewayOverview = function (ctx) {
     return k;
   }
 
+  var SH = globalThis.ChimeraShared && globalThis.ChimeraShared.ServiceHealth;
+
   function gatewayServiceHealthTone(raw) {
-    var s = String(raw || "").trim().toLowerCase();
-    if (
-      s === "up" ||
-      s === "ok" ||
-      s === "healthy" ||
-      s === "ready" ||
-      s === "running" ||
-      s === "enabled" ||
-      s === "supervised" ||
-      s === "starting"
-    ) {
-      return "up";
-    }
-    if (s === "down" || s === "degraded" || s === "unavailable" || s === "error" || s === "failed" || s === "disabled") {
-      return "down";
-    }
+    if (SH && typeof SH.normalizeHealthTone === "function") return SH.normalizeHealthTone(raw);
     return "unknown";
   }
 
@@ -74,17 +61,21 @@ globalThis.ChimeraSettings.Render.Cards.mountGatewayOverview = function (ctx) {
     var list = gatewayServiceHealthEntries(ov);
     var stateLabel = { up: "up", down: "down", unknown: "unknown" };
     var healthSeg =
-      globalThis.ChimeraUI && typeof globalThis.ChimeraUI.healthSegSpan === "function"
-        ? globalThis.ChimeraUI.healthSegSpan
-        : function (title, tone) {
-            return (
-              '<span class="sum-bf-prov-health-seg sum-bf-prov-health-seg--' +
-              (tone === "up" || tone === "down" ? tone : "unknown") +
-              '" title="' +
-              escapeHtml(title) +
-              '"></span>'
-            );
-          };
+      SH && typeof SH.healthSegSpan === "function"
+        ? function (title, tone, extraClass) {
+            return SH.healthSegSpan(escapeHtml, title, tone, extraClass);
+          }
+        : globalThis.ChimeraUI && typeof globalThis.ChimeraUI.healthSegSpan === "function"
+          ? globalThis.ChimeraUI.healthSegSpan
+          : function (title, tone) {
+              return (
+                '<span class="sum-bf-prov-health-seg sum-bf-prov-health-seg--' +
+                (tone === "up" || tone === "down" ? tone : "unknown") +
+                '" title="' +
+                escapeHtml(title) +
+                '"></span>'
+              );
+            };
     var segs = [];
     var labels = [];
     for (var i = 0; i < list.length; i++) {
@@ -106,15 +97,15 @@ globalThis.ChimeraSettings.Render.Cards.mountGatewayOverview = function (ctx) {
     }
     if (compact) {
       var compactTitle = "gateway, broker, vectorstore, indexer";
-      return (
-        '<span class="sum-metrics">' +
+      var stripInner =
         '<span class="sum-bf-prov-health-root sum-bf-prov-health-root--compact" role="img" aria-label="service health">' +
         '<span class="sum-bf-prov-health-track sum-bf-prov-health-track--compact" title="' +
         escapeHtml(compactTitle) +
         '">' +
         segs.join("") +
-        "</span></span></span>"
-      );
+        "</span></span>";
+      if (SH && typeof SH.metricsWrapHtml === "function") return SH.metricsWrapHtml(stripInner);
+      return '<span class="sum-metrics">' + stripInner + "</span>";
     }
     return (
       '<div class="sum-bf-prov-health-root" id="gateway-service-health-strip">' +
@@ -151,8 +142,10 @@ globalThis.ChimeraSettings.Render.Cards.mountGatewayOverview = function (ctx) {
       var refAt = ov && ov.refreshed_at ? formatUtcLikeLogTimestamp(ov.refreshed_at) : "—";
       body =
         '<div class="sum-section-label">Service health</div>' +
+        '<div data-ui-part="gateway-overview.health-strip">' +
         gatewayServiceHealthStripHtml(ov) +
-        '<dl class="indexer-run-kv indexer-run-kv--gateway-summary">' +
+        "</div>" +
+        '<dl class="indexer-run-kv indexer-run-kv--gateway-summary" data-ui-part="gateway-overview.kv">' +
         "<dt>version</dt><dd><code class=\"sum-mono-id\">" + escapeHtml(semver) + "</code></dd>" +
         "<dt>virtual model</dt><dd><code class=\"sum-mono-id\">" + escapeHtml(virtualModel) + "</code></dd>" +
         "<dt>updated</dt><dd>" + escapeHtml(refAt) + "</dd>" +
@@ -160,7 +153,7 @@ globalThis.ChimeraSettings.Render.Cards.mountGatewayOverview = function (ctx) {
     }
     return (
       '<details class="sum-card" id="gw-overview">' +
-      "<summary>" +
+      '<summary data-ui-part="gateway-overview.summary">' +
       '<span class="sum-avatar sum-av-svc-chimera-gateway">GW</span>' +
       '<span class="sum-main"><span class="sum-title">Overview</span>' +
       sub +

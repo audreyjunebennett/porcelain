@@ -196,6 +196,11 @@ func TestNormalizePayloadProviderHealthAndDiscovery(t *testing.T) {
 			wantPID: "ollama",
 		},
 		{
+			raw:     `{"level":"warn","time":"t","message":"failed to list models for provider ollama: network error occurred while connecting to provider API (DNS lookup, connection refused, etc.)"}`,
+			wantMsg: "broker.provider.model_discovery.fail",
+			wantPID: "ollama",
+		},
+		{
 			raw:     `{"level":"info","time":"t","message":"key loaded for provider groq"}`,
 			wantMsg: "broker.provider.key_loaded",
 			wantPID: "groq",

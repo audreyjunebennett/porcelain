@@ -22,6 +22,22 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminShared = function (ctx) {
   var sumEvlogIsWarnish = ctx.sumEvlogIsWarnish;
   var sumEvlogIsFailish = ctx.sumEvlogIsFailish;
 
+  if (globalThis.ChimeraShared && ChimeraShared.ScopedEvlog && typeof ChimeraShared.ScopedEvlog.setDeps === "function") {
+    ChimeraShared.ScopedEvlog.setDeps({
+      escapeHtml: escapeHtml,
+      getFlat: getFlat,
+      sumEvlogRowTrHtml: sumEvlogRowTrHtml,
+      sumEvlogPanelHtml: sumEvlogPanelHtml,
+      sumEvlogHttpCode: sumEvlogHttpCode,
+      sumEvlogIsWarnish: sumEvlogIsWarnish,
+      sumEvlogIsFailish: sumEvlogIsFailish,
+      inferServiceBadge: function (ev) {
+        if (typeof ctx.inferServiceBadge === "function") return ctx.inferServiceBadge(ev);
+        return { cls: "", lab: "" };
+      }
+    });
+  }
+
   function fallbackChainToYAML(ids) {
     if (!ids || !ids.length) return "";
     return ids
@@ -119,33 +135,10 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminShared = function (ctx) {
   }
 
   function providerKeyAddBlockHtml(providerId) {
-    var keyDrafts = ctx.adminProviderKeyDraft || {};
-    var keyDraftVal = keyDrafts[providerId] != null ? String(keyDrafts[providerId]) : "";
-    var keyPlaceholder = "API key";
-    if (
-      globalThis.ChimeraSettings &&
-      ChimeraSettings.Providers &&
-      ChimeraSettings.Providers.Catalog &&
-      typeof ChimeraSettings.Providers.Catalog.lookupProviderSpec === "function"
-    ) {
-      var catSpec = ChimeraSettings.Providers.Catalog.lookupProviderSpec(providerId);
-      if (catSpec && catSpec.key_placeholder) keyPlaceholder = String(catSpec.key_placeholder);
+    if (globalThis.ChimeraShared && ChimeraShared.ProviderCredentials && typeof ChimeraShared.ProviderCredentials.keyAddBlockHtml === "function") {
+      return ChimeraShared.ProviderCredentials.keyAddBlockHtml(escapeHtml, ctx, providerId);
     }
-    return (
-      '<div class="sg-op-provider-key-add">' +
-      '<div class="sg-op-provider-key-add__label sum-section-label">Add new key</div>' +
-      '<div class="sg-op-provider-key-add__row">' +
-      '<input id="admin-' +
-      escapeHtml(providerId) +
-      '-key" class="sg-op-input sg-op-provider-key-add__input" type="password" placeholder="' +
-      escapeHtml(keyPlaceholder) +
-      '" value="' +
-      escapeHtml(keyDraftVal) +
-      '"/>' +
-      '<button type="button" class="sg-op-provider-key-add-btn" data-admin-action="provider-key-add" data-provider="' +
-      escapeHtml(providerId) +
-      '">Add</button></div></div>'
-    );
+    return "";
   }
 
   function adminProviderIntro(providerId, subtitle) {
@@ -155,7 +148,9 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminShared = function (ctx) {
       ollama: { href: "https://ollama.com/", label: "ollama.com" }
     };
     var meta = links[providerId] || null;
-    var out = '<p class="sg-op-provider-intro">' + escapeHtml(subtitle || "");
+    var out =
+      '<p class="sg-op-provider-intro" data-ui-part="admin-provider.intro">' +
+      escapeHtml(subtitle || "");
     if (meta) {
       out += ' Public reference: <a href="' + escapeHtml(meta.href) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(meta.label) + "</a>.";
     }
@@ -274,17 +269,10 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminShared = function (ctx) {
   }
 
   function operatorConfigureBtnInline(action, ariaLabel, title) {
-    var lab = ariaLabel != null ? String(ariaLabel) : "Configure";
-    var tit = title != null ? String(title) : "Configure";
-    return (
-      '<button type="button" class="sg-op-configure-btn sg-op-configure-btn--inline" data-admin-action="' +
-      escapeHtml(String(action || "")) +
-      '" aria-label="' +
-      escapeHtml(lab) +
-      '" title="' +
-      escapeHtml(tit) +
-      '"><span class="material-symbols-outlined" aria-hidden="true">settings</span></button>'
-    );
+    if (globalThis.ChimeraShared && ChimeraShared.ConfigureEdit && typeof ChimeraShared.ConfigureEdit.configureBtnInline === "function") {
+      return ChimeraShared.ConfigureEdit.configureBtnInline(escapeHtml, action, ariaLabel, title);
+    }
+    return "";
   }
 
   function sgOpHealthPillHtml(label, variant, opts) {
@@ -759,6 +747,24 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminShared = function (ctx) {
     return map;
   }
 
+  function adminProviderEventMatches(f, providerId) {
+    var pid = String(providerId || "").trim().toLowerCase();
+    if (!pid) return false;
+    var prov = String(f.provider_id || f.provider || f.upstream_provider || "")
+      .trim()
+      .toLowerCase();
+    if (prov === pid) return true;
+    var model = String(f.upstreamModel || f.model || "")
+      .trim()
+      .toLowerCase();
+    if (model.indexOf(pid + "/") === 0) return true;
+    var msgEv = String(f.msg || f.message || "").toLowerCase();
+    if (msgEv.indexOf(pid) >= 0) return true;
+    var det = String(f.progress_detail || f.progressDetail || "").toLowerCase();
+    if (det.indexOf(pid) >= 0) return true;
+    return false;
+  }
+
   function adminScopedEventsForRouting(kind) {
     var out = [];
     var want = String(kind || "").toLowerCase();
@@ -780,30 +786,10 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminShared = function (ctx) {
   }
 
   function adminScopedEvlogPanelFromEvents(title, scopeId, evs, opts) {
-    opts = opts || {};
-    var showSource = opts.showSourceColumn === true;
-    var rowOpts = {};
-    if (showSource) rowOpts.showSourceColumn = true;
-    var parts = [];
-    var warnN = 0;
-    var failN = 0;
-    for (var i = 0; i < evs.length; i++) {
-      var ev = evs[i];
-      var flat = getFlat(ev.parsed);
-      var http = sumEvlogHttpCode(ev.parsed, flat);
-      var lvl = String(ev.parsed.levelCanon || ev.parsed.levelLabel || "").trim();
-      if (sumEvlogIsWarnish(lvl, http)) warnN++;
-      if (sumEvlogIsFailish(lvl, http)) failN++;
-      parts.push(sumEvlogRowTrHtml(ev, scopeId, i, inferServiceBadge(ev), rowOpts));
+    if (globalThis.ChimeraShared && ChimeraShared.ScopedEvlog && typeof ChimeraShared.ScopedEvlog.panelFromEvents === "function") {
+      return ChimeraShared.ScopedEvlog.panelFromEvents(title, scopeId, evs, opts);
     }
-    return sumEvlogPanelHtml({
-      title: title,
-      scrollTbodyId: "sum-evlog-" + escapeHtml(scopeId),
-      warnN: warnN,
-      failN: failN,
-      showSourceColumn: showSource,
-      tbodyInnerHtml: parts.join("")
-    });
+    return "";
   }
 
   ctx.operatorSectionHeadHtml = operatorSectionHeadHtml;
@@ -834,6 +820,7 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminShared = function (ctx) {
   ctx.adminProviderSupportsFreeTierAssist = adminProviderSupportsFreeTierAssist;
   ctx.adminModelUsageById = adminModelUsageById;
   ctx.adminProviderTierSpan = adminProviderTierSpan;
+  ctx.adminProviderEventMatches = adminProviderEventMatches;
   ctx.adminScopedEventsForPrincipal = adminScopedEventsForPrincipal;
   ctx.adminUserStatsByPrincipal = adminUserStatsByPrincipal;
   ctx.adminScopedEventsForRouting = adminScopedEventsForRouting;

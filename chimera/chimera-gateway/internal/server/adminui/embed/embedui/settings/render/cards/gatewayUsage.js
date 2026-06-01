@@ -24,8 +24,15 @@ globalThis.ChimeraSettings.Render.Cards.mountGatewayUsage = function (ctx) {
   var aggregateRollupRows = ctx.aggregateRollupRows;
   var metricsRollupTableHtml = ctx.metricsRollupTableHtml;
   var metricsEventsTableHtml = ctx.metricsEventsTableHtml;
-  var chimeraBrokerShortModelLabel = ctx.chimeraBrokerShortModelLabel;
   var sgOpHealthPillHtml = ctx.sgOpHealthPillHtml;
+
+  function chimeraBrokerShortModelLabel(model) {
+    if (typeof ctx.chimeraBrokerShortModelLabel === "function") {
+      return ctx.chimeraBrokerShortModelLabel(model);
+    }
+    if (!model || model === "—") return "—";
+    return String(model);
+  }
 
   function gatewayUsageRollupStatHtml(value, icon, title) {
     return (

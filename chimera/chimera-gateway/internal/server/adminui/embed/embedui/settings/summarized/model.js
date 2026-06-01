@@ -389,7 +389,7 @@ globalThis.ChimeraSettings.Summarized.Model = globalThis.ChimeraSettings.Summari
 
   /**
    * @param {object} deps helpers from summarizedFeed mount
-   * @param {{ agg: object, gatewayOverviewCache, metricsCache, adminStateCache, tokenListCache, workspaceDrafts, adminProviderSpecs, adminRoutingEditing, adminFallbackEditing, adminRouterEditing, lastIndexerOperatorWorkspacesNested }} state
+   * @param {{ agg: object, gatewayOverviewCache, metricsCache, adminStateCache, tokenListCache, workspaceDrafts, adminProviderSpecs, lastIndexerOperatorWorkspacesNested }} state
    * @returns {{ cards: object[], meta: object }}
    */
   function buildSummarizedModel(deps, state) {

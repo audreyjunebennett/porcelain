@@ -784,6 +784,20 @@ func TestLogsDerive_chimeraBrokerOperatorLine(t *testing.T) {
 			flat: map[string]any{"msg": "chat.chimera-broker.response", "statusCode": 200, "usageTotalTokens": 50, "responseBytes": 1200, "finish_reason": "stop"},
 			want: "Provider responded · 50 tokens used (prompt + completion) · finish: stop",
 		},
+		{
+			flat: map[string]any{
+				"service": "chimera-broker", "msg": "broker.log.zerolog",
+				"progress_detail": "failed to list models for provider ollama: network error occurred while connecting to provider API",
+			},
+			want: "failed to list models for provider ollama: network error occurred while connecting to provider API",
+		},
+		{
+			flat: map[string]any{
+				"service": "chimera-broker", "msg": "broker.provider.model_discovery.fail", "provider_id": "ollama",
+				"progress_detail": "failed to list models for provider ollama: network error occurred while connecting to provider API",
+			},
+			want: "failed to list models for provider ollama: network error occurred while connecting to provider API",
+		},
 	}
 	opts := map[string]any{"forEventLog": true}
 	for i, tc := range evCases {

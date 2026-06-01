@@ -9,7 +9,6 @@ globalThis.ChimeraSettings.Render.Cards = globalThis.ChimeraSettings.Render.Card
 globalThis.ChimeraSettings.Render.Cards.mountAdminUsers = function (ctx) {
   var escapeHtml = ctx.escapeHtml;
   var strHash = ctx.strHash;
-  var avatarInitials = ctx.avatarInitials;
   var formatInt = ctx.formatInt;
   var adminScopedEventsForPrincipal = ctx.adminScopedEventsForPrincipal;
   var adminScopedEvlogPanelFromEvents = ctx.adminScopedEvlogPanelFromEvents;
@@ -19,7 +18,8 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminUsers = function (ctx) {
 
   function adminBuildUserCardHtml(principalId, tokensForUser, stats) {
     var label = ctx.tokenLabelByTenant[principalId] || (tokensForUser[0] && tokensForUser[0].label) || principalId;
-    var initials = avatarInitials(label);
+    var initials =
+      typeof ctx.avatarInitials === "function" ? ctx.avatarInitials(label) : String(label || "??").slice(0, 2);
     var convN = 0;
     var wsN = 0;
     if (stats) {

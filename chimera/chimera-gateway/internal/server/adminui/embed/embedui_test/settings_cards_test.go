@@ -217,43 +217,6 @@ func TestLogsCards_adminProvider_keyChipReflectsState(t *testing.T) {
 	}
 }
 
-func TestLogsCards_adminRoutingCards_stableIds(t *testing.T) {
-	vm := goja.New()
-	loadCardTestCtx(t, vm)
-
-	_, err := vm.RunString(`
-		ctx.adminStateCache = {
-			gateway: {
-				routing_policy_yaml: "rules: []\n",
-				fallback_chain: ["groq/llama"],
-				router_models: ["groq/llama"],
-				tool_router_enabled: true,
-				tool_router_confidence_threshold: 0.5
-			}
-		};
-	`)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	for _, spec := range []struct {
-		fn   string
-		want string
-	}{
-		{`ctx.buildAdminRoutingRulesCardHtml()`, `id="admin-routing-rules"`},
-		{`ctx.buildAdminFallbackCardHtml()`, `id="admin-fallback-chain"`},
-		{`ctx.buildAdminRouterModelCardHtml()`, `id="admin-router-model"`},
-	} {
-		v, err := vm.RunString(spec.fn)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !strings.Contains(v.String(), spec.want) {
-			t.Fatalf("%s: missing %q", spec.fn, spec.want)
-		}
-	}
-}
-
 func TestLogsCards_virtualModelCard_fallbackUnavailableBadge(t *testing.T) {
 	vm := goja.New()
 	loadCardTestCtx(t, vm)
@@ -322,7 +285,7 @@ func TestLogsCards_virtualModelCard_detailsLayout(t *testing.T) {
 		`<details class="sum-card sum-card--virtual-model"`,
 		`id="virtual-model-42"`,
 		`data-virtual-model-id="42"`,
-		`<summary>`,
+		`<summary data-ui-part="virtual-model.summary">`,
 		`sum-avatar sum-av-svc-chimera-gateway">Vm</span>`,
 		`Chimera · 0.2.0`,
 		`Bootstrap`,
@@ -606,5 +569,188 @@ func TestLogsCards_formatMergedConversationSubtitle(t *testing.T) {
 	}
 	if v2.String() != "" {
 		t.Fatalf("expected empty for single id, got %q", v2.String())
+	}
+}
+
+func TestLogsCards_gatewayOverview_serviceHealthStrip(t *testing.T) {
+	vm := goja.New()
+	loadCardTestCtx(t, vm)
+
+	v, err := vm.RunString(`ctx.buildGatewayOverviewCardHtml()`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := v.String()
+	for _, want := range []string{
+		`id="gw-overview"`,
+		"sum-bf-prov-health",
+		"9.9.9-test",
+		"virtual/test",
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("missing %q in %q", want, html)
+		}
+	}
+}
+
+func TestLogsCards_workspaceDraftCardHtml(t *testing.T) {
+	vm := goja.New()
+	loadCardTestCtx(t, vm)
+
+	v, err := vm.RunString(`
+		ctx.buildWorkspaceDraftCardHtml({
+			id: 1,
+			projectId: "proj-a",
+			flavorId: "flavor-b",
+			paths: [{ path: "C:\\\\data\\\\watch" }]
+		});
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := v.String()
+	for _, want := range []string{
+		`id="ws-draft-1"`,
+		"sum-card--workspace-draft",
+		"proj-a",
+		"flavor-b",
+		"data-workspace-draft",
+		"data-workspace-draft=",
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("missing %q in %q", want, html)
+		}
+	}
+}
+
+func TestLogsCards_indexerStaleSnapshotCard(t *testing.T) {
+	vm := goja.New()
+	loadCardTestCtx(t, vm)
+
+	v, err := vm.RunString(`
+		ctx.buildIndexerStaleSnapshotCard("bucket-x", {
+			userLabel: "Ops",
+			projectId: "p1",
+			flavorId: "f1",
+			paths: ["/watch/a"]
+		});
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := v.String()
+	for _, want := range []string{
+		"sum-card--indexer-stale",
+		"ix-stale-",
+		"Waiting on status update",
+		"Watched paths",
+		"/watch/a",
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("missing %q in %q", want, html)
+		}
+	}
+}
+
+func TestLogsCards_indexerCardTitleSortLabel(t *testing.T) {
+	vm := goja.New()
+	loadCardTestCtx(t, vm)
+
+	v, err := vm.RunString(`
+		ctx.indexerCardTitleSortLabel({
+			userLabel: "Alice",
+			projectId: "acme",
+			flavorId: "main"
+		});
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.String() != "Alice:acme:main" {
+		t.Fatalf("got %q", v.String())
+	}
+}
+
+func TestLogsCards_cardUiPartAttributes(t *testing.T) {
+	vm := goja.New()
+	loadCardTestCtx(t, vm)
+
+	_, err := vm.RunString(`
+		var ov = ctx.buildGatewayOverviewCardHtml();
+		if (ov.indexOf('data-ui-part="gateway-overview.summary"') < 0) {
+			throw new Error("gateway overview missing summary part");
+		}
+		if (ov.indexOf('data-ui-part="gateway-overview.kv"') < 0) {
+			throw new Error("gateway overview missing kv part");
+		}
+		ctx.adminOllamaUrlDraft = "http://127.0.0.1:11434";
+		var pr = ctx.buildAdminProviderCardHtml("ollama", "Ollama", "Ol", "fixture");
+		var parts = [
+			"admin-provider.summary",
+			"admin-provider.intro",
+			"admin-provider.models-toolbar",
+			"admin-provider.models-list",
+			"admin-provider.keys"
+		];
+		for (var i = 0; i < parts.length; i++) {
+			if (pr.indexOf('data-ui-part="' + parts[i] + '"') < 0) {
+				throw new Error("provider card missing " + parts[i]);
+			}
+		}
+		ctx.virtualModelUi = { "7": { panelOpen: true, hydrated: true } };
+		ctx.virtualModelDetails = {
+			"7": {
+				fallback_chain: ["groq/free"],
+				routing_policy: "ambiguous_default_model: groq/free\nrules: []\n",
+				router_models: []
+			}
+		};
+		var vmHtml = ctx.buildVirtualModelCardHtml({
+			id: 7,
+			model_id: "test/model",
+			name: "Test",
+			version: "1",
+			enabled: true,
+			visibility: "public",
+			fallback_depth: 1,
+			routing_policy_enabled: true,
+			tool_router_enabled: false
+		});
+		if (vmHtml.indexOf('data-ui-part="virtual-model.routing"') < 0) {
+			throw new Error("virtual model missing routing part");
+		}
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLogsCards_adminProviderEventMatches_progressDetail(t *testing.T) {
+	vm := goja.New()
+	loadCardTestCtx(t, vm)
+
+	_, err := vm.RunString(`
+		var flat = {
+			msg: "broker.log.zerolog",
+			service: "chimera-broker",
+			progress_detail: "failed to list models for provider ollama: network error occurred while connecting to provider API"
+		};
+		if (!ctx.adminProviderEventMatches(flat, "ollama")) {
+			throw new Error("progress_detail should match ollama provider");
+		}
+		if (ctx.adminProviderEventMatches(flat, "groq")) {
+			throw new Error("progress_detail must not match groq");
+		}
+		var slugFlat = {
+			msg: "broker.provider.model_discovery.fail",
+			service: "chimera-broker",
+			provider_id: "ollama"
+		};
+		if (!ctx.adminProviderEventMatches(slugFlat, "ollama")) {
+			throw new Error("provider_id slug should match ollama");
+		}
+	`)
+	if err != nil {
+		t.Fatal(err)
 	}
 }

@@ -1,5 +1,5 @@
 /**
- * Conversation card helpers (full buildConvCard remains in summarizedFeed.js).
+ * Conversation card helpers; full buildConvCard is in feedLogConv.js.
  */
 globalThis.ChimeraSettings = globalThis.ChimeraSettings || {};
 globalThis.ChimeraSettings.Render = globalThis.ChimeraSettings.Render || {};

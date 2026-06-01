@@ -447,6 +447,19 @@ html[data-theme="design-01"] .sg-op-provider-panel {
   outline-offset: 2px;
 }
 
+.sg-op-provider-key-add-btn:disabled,
+.sg-op-provider-key-add-btn[aria-disabled="true"] {
+  opacity: 0.55;
+  cursor: not-allowed;
+  filter: none;
+}
+
+.sg-op-yaml-ov-btn:disabled,
+.sg-op-yaml-ov-btn[aria-disabled="true"] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .sg-op-provider-panel .sg-op-provider-edit-row--panel {
   margin-top: 0;
 }

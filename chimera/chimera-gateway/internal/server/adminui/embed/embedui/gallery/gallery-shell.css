@@ -141,6 +141,62 @@ body.styleguide-body {
   font-weight: 600;
 }
 
+.styleguide-toolbar button.gallery-parts-toggle[aria-pressed="true"] {
+  border-color: #6a1b9a;
+  color: #6a1b9a;
+  font-weight: 600;
+}
+
+/* Phase 6: part slug overlay (gallery only — toggled via body.gallery-show-parts) */
+body.gallery-show-parts [data-ui-part] {
+  position: relative;
+  outline: 1px dashed rgba(106, 27, 154, 0.55);
+  outline-offset: 2px;
+}
+
+body.gallery-show-parts [data-ui-part]::after {
+  content: attr(data-ui-part);
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 12;
+  max-width: min(100%, 22rem);
+  padding: 0.1rem 0.35rem;
+  font: 600 0.62rem/1.25 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: #fff;
+  background: rgba(106, 27, 154, 0.92);
+  border-radius: 0 0 4px 0;
+  pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+body.gallery-show-parts summary[data-ui-part]::after,
+body.gallery-show-parts header[data-ui-part]::after {
+  top: auto;
+  bottom: 0;
+  border-radius: 4px 0 0 0;
+}
+
+.styleguide-part-slugs {
+  margin: 0.15rem 0 0.75rem;
+  padding: 0;
+  list-style: none;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: #666;
+}
+
+.styleguide-part-slugs li {
+  margin: 0.12rem 0;
+}
+
+.styleguide-part-slugs code {
+  font-size: 0.7rem;
+  color: #4a148c;
+}
+
 #panel-summarized.styleguide-panel {
   max-width: 88rem;
   margin: 0 auto;

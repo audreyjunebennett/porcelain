@@ -11,6 +11,12 @@ Do not add duplicate assets under `settings/gallery/` — this directory is the 
 | `/ui/assets/gallery/gallery-shell.css` | `embedui/gallery/gallery-shell.css` |
 | `/ui/assets/gallery/gallery-evlog-markup.js` | `embedui/gallery/gallery-evlog-markup.js` |
 | `/ui/assets/gallery/gallery-*.js` | `embedui/gallery/gallery-*.js` |
+| `/ui/assets/gallery/gallery-card-fixtures.js` | Renders production card HTML into `#gallery-fixture-*` mount points |
+| `/ui/assets/gallery/gallery-parts.js` | “Show part names” toggle + `?parts=1` (sets `body.gallery-show-parts`) |
+
+**Card parity:** `gallery-card-fixtures.js` loads the same `settings/render/cards/*` and `shared/*` modules as `/ui/settings`, then fills fixture containers for gateway overview, providers, workspace draft, managed workspace, virtual model (per-VM routing), and indexer-stale cards.
+
+**Part overlay:** Enable **Show part names** on the gallery toolbar (or open with `?parts=1`). Labels come from production `data-ui-part` attributes documented in [`../settings/card-parts-registry.md`](../settings/card-parts-registry.md). Overlay styles live in `gallery-shell.css` only.
 
 Edit under `embedui/gallery/`, then refresh `/ui/settings/gallery`. With **`CHIMERA_ADMINUI_ROOT`** set to `adminui/embed`, changes apply without rebuilding the gateway.
 

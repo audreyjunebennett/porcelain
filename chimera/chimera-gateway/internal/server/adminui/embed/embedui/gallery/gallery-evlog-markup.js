@@ -111,11 +111,11 @@
 
   function msgCellHtml(sourceMetaHtml, statusInnerHtml, textHtml) {
     return (
-      '<td class="sum-evlog__cell--msg"><div class="sum-evlog__msg-wrap"><div class="sum-evlog__msg-meta">' +
+      '<td class="sum-evlog__cell--msg"><div class="sum-evlog__msg-wrap"><div class="sum-evlog__msg-text">' +
+      textHtml +
+      '</div><div class="sum-evlog__msg-meta">' +
       (sourceMetaHtml || "") +
       statusMetaInner(statusInnerHtml) +
-      '</div><div class="sum-evlog__msg-text">' +
-      textHtml +
       "</div></div></td>"
     );
   }
