@@ -12,6 +12,8 @@ globalThis.ChimeraSettings.Render.Cards.mountFeedLogIndexerRun = function (ctx) 
   var strHash = ctx.strHash;
   var entryInstant = ctx.entryInstant;
   var formatInt = ctx.formatInt;
+  var getViewMode = ctx.getViewMode;
+  var primaryLogMessage = ctx.primaryLogMessage;
   var sumEvlogPanelHtml = ctx.sumEvlogPanelHtml;
   var sumEvlogBuildTbodyFromServiceEntries = ctx.sumEvlogBuildTbodyFromServiceEntries;
   var sumEvlogCountWarnFailFromEntries = ctx.sumEvlogCountWarnFailFromEntries;
@@ -19,21 +21,785 @@ globalThis.ChimeraSettings.Render.Cards.mountFeedLogIndexerRun = function (ctx) 
   var RECENT_CARD_STATUS_N = ctx.RECENT_CARD_STATUS_N;
   var sliceRecent = ctx.sliceRecent;
   var countErrorSignalsInEntries = ctx.countErrorSignalsInEntries;
-  var collectIndexerRunMeta = ctx.collectIndexerRunMeta;
-  var indexerBuildCardSubtitle = ctx.indexerBuildCardSubtitle;
-  var indexerWorkspaceCollapsedMetricsHtml = ctx.indexerWorkspaceCollapsedMetricsHtml;
+  var filterEventsForIndexerScopeFullLog = ctx.filterEventsForIndexerScopeFullLog;
   var operatorCardChevronHtml = ctx.operatorCardChevronHtml;
   var serviceSummaryStatusPillHtml = ctx.serviceSummaryStatusPillHtml;
-  var buildIndexerRecentEvaluatedFilesHtml = ctx.buildIndexerRecentEvaluatedFilesHtml;
-  var indexerCardDomIdFromMeta = ctx.indexerCardDomIdFromMeta;
-  var workspaceCardTitleFromIndexerMeta = ctx.workspaceCardTitleFromIndexerMeta;
-  var resolveLogsOperatorUserLabel = ctx.resolveLogsOperatorUserLabel;
-  var canonicalWorkspaceRowIdKey = ctx.canonicalWorkspaceRowIdKey;
-  var applyOperatorWorkspacePathsToMeta = ctx.applyOperatorWorkspacePathsToMeta;
-  var operatorWorkspacePaths = ctx.operatorWorkspacePaths;
-  var pathsSetEqualForIndexerRoots = ctx.pathsSetEqualForIndexerRoots;
-  var normalizeFlavorMatch = ctx.normalizeFlavorMatch;
-  var filterEventsForIndexerScopeFullLog = ctx.filterEventsForIndexerScopeFullLog;
+
+  var indexerEvlogWorkspaceLabelMapCacheKey = null;
+  var indexerEvlogWorkspaceLabelMapCache = null;
+
+  function indexerEvlogWorkspaceLabelMapFingerprint() {
+    return [
+      ctx.lastIndexerSummarizeByRun,
+      ctx.lastIndexerSummarizePartitionRegistry,
+      ctx.lastIndexerOperatorWorkspacesFingerprint || "",
+      typeof ctx.resolveLogsOperatorUserLabel === "function" ? ctx.resolveLogsOperatorUserLabel() : "—"
+    ].join("\u0000");
+  }
+
+  function indexerEvlogRegisterWorkspaceLabel(map, label, keys) {
+    if (!map || !label || label === "—" || label === "—:—" || label.indexOf("—:") === 0) return;
+    for (var i = 0; i < keys.length; i++) {
+      var k = String(keys[i] != null ? keys[i] : "").trim();
+      if (k) map.byKey[k] = label;
+    }
+  }
+
+  function buildIndexerEvlogWorkspaceLabelMap() {
+    var byKey = Object.create(null);
+    var byWorkspaceId = Object.create(null);
+    var byProjectFlavor = Object.create(null);
+    var map = { byKey: byKey, byWorkspaceId: byWorkspaceId, byProjectFlavor: byProjectFlavor };
+    var igFn =
+      globalThis.ChimeraSettings &&
+      ChimeraSettings.Derive &&
+      typeof ChimeraSettings.Derive.indexerIgSyntheticGid === "function"
+        ? ChimeraSettings.Derive.indexerIgSyntheticGid
+        : null;
+
+    var byRun = ctx.lastIndexerSummarizeByRun;
+    var preg = ctx.lastIndexerSummarizePartitionRegistry;
+    if (byRun && typeof byRun === "object") {
+      var runKeys = Object.keys(byRun);
+      for (var ri = 0; ri < runKeys.length; ri++) {
+        var bucketId = runKeys[ri];
+        var run = byRun[bucketId];
+        if (!run || !run.events || !run.events.length) continue;
+        var pmeta = null;
+        if (
+          preg &&
+          globalThis.ChimeraSettings &&
+          ChimeraSettings.Derive &&
+          typeof ChimeraSettings.Derive.indexerPartitionMetaForRun === "function"
+        ) {
+          pmeta = ChimeraSettings.Derive.indexerPartitionMetaForRun(
+            preg,
+            run.id,
+            run.events,
+            getFlat
+          );
+        }
+        var meta = collectIndexerRunMeta(run.id, run.events, pmeta);
+        if (typeof ctx.mergePersistedIndexerWatchRoots === "function") {
+          meta = ctx.mergePersistedIndexerWatchRoots(meta, run.events, run.id);
+        }
+        var label =
+          indexerCardTitleSortLabel(meta);
+        indexerEvlogRegisterWorkspaceLabel(map, label, [
+          bucketId,
+          meta.indexerKey,
+          meta.runId,
+          meta.workspaceId && meta.workspaceId !== "—" ? meta.workspaceId : ""
+        ]);
+        var tid = meta.tenantId != null ? String(meta.tenantId).trim() : "";
+        var proj = meta.projectId && meta.projectId !== "—" ? String(meta.projectId).trim() : "";
+        var flav = meta.flavorId && meta.flavorId !== "—" ? String(meta.flavorId).trim() : "";
+        if (proj) {
+          byProjectFlavor[
+            proj +
+              "\u0000" +
+              (typeof ctx.normalizeFlavorMatch === "function"
+                ? ctx.normalizeFlavorMatch(flav)
+                : String(flav || "").trim())
+          ] = label;
+          if (igFn) indexerEvlogRegisterWorkspaceLabel(map, label, [igFn(tid, proj, flav)]);
+        }
+        if (meta.workspaceId && meta.workspaceId !== "—") {
+          byWorkspaceId[String(meta.workspaceId).trim()] = label;
+        }
+      }
+    }
+
+    var nested = ctx.lastIndexerOperatorWorkspacesNested || [];
+    for (var wi = 0; wi < nested.length; wi++) {
+      var ws = nested[wi];
+      var wsLabel =
+        typeof ctx.operatorManagedWorkspaceTitleText === "function"
+          ? ctx.operatorManagedWorkspaceTitleText(ws)
+          : "—";
+      var wsId =
+        typeof ctx.canonicalWorkspaceRowIdKey === "function"
+          ? ctx.canonicalWorkspaceRowIdKey(ws.id)
+          : "";
+      var wsNumFn = ctx.operatorWorkspaceNumericId;
+      var wsNum = typeof wsNumFn === "function" ? String(wsNumFn(ws)) : "";
+      indexerEvlogRegisterWorkspaceLabel(map, wsLabel, [wsId, wsNum]);
+      if (wsId) byWorkspaceId[wsId] = wsLabel;
+      var wp = String(ws.project_id || "").trim();
+      var wf =
+        typeof ctx.normalizeFlavorMatch === "function"
+          ? ctx.normalizeFlavorMatch(ws.flavor_id)
+          : String(ws.flavor_id || "").trim();
+      if (wp) byProjectFlavor[wp + "\u0000" + wf] = wsLabel;
+    }
+
+    return map;
+  }
+
+  function getIndexerEvlogWorkspaceLabelMap() {
+    var fp = indexerEvlogWorkspaceLabelMapFingerprint();
+    if (fp !== indexerEvlogWorkspaceLabelMapCacheKey) {
+      indexerEvlogWorkspaceLabelMapCacheKey = fp;
+      indexerEvlogWorkspaceLabelMapCache = buildIndexerEvlogWorkspaceLabelMap();
+    }
+    return indexerEvlogWorkspaceLabelMapCache;
+  }
+
+  function indexerEvlogFlatForEntry(ent) {
+    var raw = getFlat(ent.parsed);
+    if (
+      globalThis.ChimeraSettings &&
+      ChimeraSettings.Derive &&
+      typeof ChimeraSettings.Derive.indexerAugmentFlat === "function"
+    ) {
+      return ChimeraSettings.Derive.indexerAugmentFlat(ent, raw);
+    }
+    return raw;
+  }
+
+  function indexerEvlogLineIsProcessWide(f) {
+    if (
+      globalThis.ChimeraSettings &&
+      ChimeraSettings.Derive &&
+      typeof ChimeraSettings.Derive.indexerFlatIsServiceGlobalOnly === "function" &&
+      ChimeraSettings.Derive.indexerFlatIsServiceGlobalOnly(f)
+    ) {
+      return true;
+    }
+    var msg = indexerFlatMsg(f);
+    if (msg === "indexer.state") return true;
+    if (msg === "gateway.indexer.config") return true;
+    if (flatLooksLikeIndexerRunStart(f) || flatLooksLikeIndexerRunProgress(f) || flatLooksLikeIndexerRunDone(f))
+      return true;
+    if (msg.indexOf("indexer.supervised.") === 0) return true;
+    return false;
+  }
+
+  function indexerEvlogUserLabelFromFlat(f) {
+    if (f.user_label && String(f.user_label).trim() !== "") return String(f.user_label).trim();
+    var tid = String(f.tenant_id || f.principal_id || f.tenant || "").trim();
+    if (tid && ctx.tokenLabelByTenant[tid]) return String(ctx.tokenLabelByTenant[tid]).trim();
+    return typeof ctx.resolveLogsOperatorUserLabel === "function" ? ctx.resolveLogsOperatorUserLabel() : "—";
+  }
+
+  function indexerEvlogWorkspaceSourceLabel(ent) {
+    var f = indexerEvlogFlatForEntry(ent);
+    if (!f || typeof f !== "object") return "";
+    if (indexerEvlogLineIsProcessWide(f)) return "";
+
+    var map = getIndexerEvlogWorkspaceLabelMap();
+    var itk = String(f.indexer_target_key || "").trim();
+    if (itk && map.byKey[itk]) return map.byKey[itk];
+
+    var ik = String(f.indexer_key || "").trim();
+    if (ik && map.byKey[ik]) return map.byKey[ik];
+
+    var rid = String(f.index_run_id || "").trim();
+    if (rid && map.byKey[rid]) return map.byKey[rid];
+
+    var preg = ctx.lastIndexerSummarizePartitionRegistry;
+    if (
+      rid &&
+      preg &&
+      preg[rid] &&
+      globalThis.ChimeraSettings &&
+      ChimeraSettings.Derive &&
+      typeof ChimeraSettings.Derive.indexerBucketGidsForLine === "function"
+    ) {
+      var gids = ChimeraSettings.Derive.indexerBucketGidsForLine(f, preg[rid]);
+      if (gids && gids.length === 1) {
+        var gidLab = map.byKey[String(gids[0]).trim()];
+        if (gidLab) return gidLab;
+      }
+    }
+
+    var sws = String(f.scope_workspace_id || "").trim();
+    if (sws && map.byWorkspaceId[sws]) return map.byWorkspaceId[sws];
+
+    var proj = String(
+      f.scope_project_id || f.project_id || f.ingest_project || ""
+    ).trim();
+    var flav =
+      typeof ctx.normalizeFlavorMatch === "function"
+        ? ctx.normalizeFlavorMatch(f.flavor_id)
+        : String(f.flavor_id || "").trim();
+    if (proj) {
+      var pfLab = map.byProjectFlavor[proj + "\u0000" + flav];
+      if (pfLab) return pfLab;
+      var title = indexerCardTitleSortLabel({
+        userLabel: indexerEvlogUserLabelFromFlat(f),
+        projectId: proj,
+        flavorId: flav || "—"
+      });
+      if (title && title !== "—" && title.indexOf("—:") !== 0) return title;
+    }
+
+    return "";
+  }
+
+  /** How long file-level indexer activity stays “fresh” for UI subtitle hints. */
+  var INDEXER_IDLE_RECENCY_MS = 120000;
+
+  /** Human label for indexer.state code — canonical mapping lives in derive/indexerPresent.js (goja-tested). */
+  function indexerHumanDeclaredState(code) {
+    if (
+      globalThis.ChimeraSettings &&
+      ChimeraSettings.Derive &&
+      typeof ChimeraSettings.Derive.indexerDeclaredStateLabel === "function"
+    ) {
+      return ChimeraSettings.Derive.indexerDeclaredStateLabel(code);
+    }
+    return code ? String(code) : "";
+  }
+
+  function indexerLastFileEventTime(evs) {
+    for (var i = evs.length - 1; i >= 0; i--) {
+      var f = getFlat(evs[i].parsed);
+      var m = indexerFlatMsg(f);
+      if (m === "indexer.scope.active_file") {
+        var insA = entryInstant(evs[i]);
+        if (insA) return insA.getTime();
+      }
+      if (
+        m === "indexer.job.upload" ||
+        m === "indexer.job.ingested" ||
+        m === "indexer.job.skipped" ||
+        m.indexOf("indexer.retry") === 0 ||
+        m.indexOf("indexer.job.failed") === 0
+      ) {
+        var ins = entryInstant(evs[i]);
+        if (ins) return ins.getTime();
+      }
+    }
+    return 0;
+  }
+
+  function indexerRelFromLatestFileLine(evs) {
+    for (var i = evs.length - 1; i >= 0; i--) {
+      var f = getFlat(evs[i].parsed);
+      var mEarly = indexerFlatMsg(f);
+      if (mEarly === "indexer.scope.active_file" && f.rel) return String(f.rel);
+      if (!f.rel) continue;
+      var m = indexerFlatMsg(f);
+      if (
+        m === "indexer.job.upload" ||
+        m === "indexer.job.ingested" ||
+        m === "indexer.job.skipped" ||
+        m.indexOf("indexer.retry") === 0 ||
+        m.indexOf("indexer.job.failed") === 0
+      ) {
+        return String(f.rel);
+      }
+    }
+    return "";
+  }
+
+  function indexerBuildCardSubtitle(meta, evs) {
+    if (meta && meta.lastRecoveryPollFlat && meta.lastRecoveryPollFlat.embed_ok === false) {
+      var reason =
+        meta.lastRecoveryPollFlat.embed_reason_code ||
+        meta.lastRecoveryPollFlat.embed_detail ||
+        "indexing unavailable";
+      return "Waiting for indexing — " + String(reason).replace(/_/g, " ");
+    }
+    if (meta && meta.scopeStatusEdgeFlat) {
+      var renderGate = globalThis.ChimeraSettings && ChimeraSettings.Render;
+      if (renderGate && typeof renderGate.operatorMessage === "function") {
+        var gateLine = renderGate.operatorMessage(meta.scopeStatusEdgeFlat, { slug: "indexer.scope.status" });
+        if (gateLine && String(gateLine).trim() !== "") return String(gateLine).trim();
+      }
+    }
+    if (meta && meta.lastIngestSummaryFlat) {
+      var renderIngest = globalThis.ChimeraSettings && ChimeraSettings.Render;
+      if (renderIngest && typeof renderIngest.operatorMessage === "function") {
+        var ingestLine = renderIngest.operatorMessage(meta.lastIngestSummaryFlat, {
+          slug: "indexer.job.ingested.summary"
+        });
+        if (ingestLine && String(ingestLine).trim() !== "") return String(ingestLine).trim();
+      }
+    }
+    if (meta && meta.lastSkipSummaryFlat) {
+      var render = globalThis.ChimeraSettings && ChimeraSettings.Render;
+      if (render && typeof render.operatorMessage === "function") {
+        var sumLine = render.operatorMessage(meta.lastSkipSummaryFlat, {
+          slug: "indexer.job.skipped.summary"
+        });
+        if (sumLine && String(sumLine).trim() !== "") return String(sumLine).trim();
+      }
+    }
+    var stateLine = indexerHumanDeclaredState(meta.lastDeclaredState);
+    var ft = indexerLastFileEventTime(evs);
+    if (!stateLine) {
+      var cand =
+        meta.lastProg && meta.lastProg.candidates_enqueued != null
+          ? String(meta.lastProg.candidates_enqueued)
+          : "—";
+      stateLine = indexerRunProgressSubtitle(meta.lastProg, meta.doneSeen, cand);
+    }
+
+    var rp = meta && meta.scopeLatestRel ? String(meta.scopeLatestRel).trim() : "";
+    if (!rp) rp = indexerRelFromLatestFileLine(evs);
+    if (rp) {
+      var recent = ft && Date.now() - ft <= INDEXER_IDLE_RECENCY_MS;
+      var pathShow = recent ? rp : "last file: " + rp;
+      return stateLine ? stateLine + " — " + pathShow : pathShow;
+    }
+    return stateLine || "—";
+  }
+
+  function indexerWorkspaceFileCountFromMeta(meta) {
+    if (
+      meta &&
+      meta.scopeWorkspaceTotal != null &&
+      !isNaN(Number(meta.scopeWorkspaceTotal))
+    ) {
+      return Math.round(Number(meta.scopeWorkspaceTotal));
+    }
+    return null;
+  }
+
+  /** Latest qdrant_points for this workspace from scoped logs, then rollup meta. */
+  function indexerWorkspaceEmbeddedChunksFromMeta(meta, evs) {
+    if (Array.isArray(evs) && evs.length) {
+      for (var i = evs.length - 1; i >= 0; i--) {
+        var f = getFlat(evs[i].parsed);
+        var m = indexerFlatMsg(f);
+        if (m !== "indexer.storage.stats" && m.indexOf("indexer.storage.stats") !== 0) continue;
+        if (f.qdrant_points != null && f.qdrant_points !== "") {
+          var qp = Number(f.qdrant_points);
+          if (!isNaN(qp)) return Math.round(qp);
+        }
+      }
+    }
+    if (meta && meta.qdrantPointsLive != null && !isNaN(Number(meta.qdrantPointsLive))) {
+      return Math.round(Number(meta.qdrantPointsLive));
+    }
+    if (meta && meta.vectorsStored != null && !isNaN(Number(meta.vectorsStored))) {
+      return Math.round(Number(meta.vectorsStored));
+    }
+    return null;
+  }
+
+  function indexerWorkspaceMetricWellHtml(count, icon, title) {
+    var lab = count != null && !isNaN(Number(count)) ? formatInt(Math.round(Number(count))) : "—";
+    var titleAttr =
+      title != null && String(title).trim() !== ""
+        ? ' title="' + escapeHtml(String(title)) + '"'
+        : "";
+    return (
+      '<span class="sg-op-inset-well"' +
+      titleAttr +
+      ">" +
+      escapeHtml(lab) +
+      ' <span class="material-symbols-outlined material-symbols-outlined--sm" aria-hidden="true">' +
+      escapeHtml(icon) +
+      "</span></span>"
+    );
+  }
+
+  function indexerWorkspaceCollapsedMetricsHtml(meta, evs) {
+    var files = indexerWorkspaceFileCountFromMeta(meta);
+    var chunks = indexerWorkspaceEmbeddedChunksFromMeta(meta, evs);
+    return (
+      indexerWorkspaceMetricWellHtml(
+        files,
+        "note_stack",
+        "Workspace files tracked by the indexer"
+      ) +
+      indexerWorkspaceMetricWellHtml(
+        chunks,
+        "text_snippet",
+        "Embedded text chunks stored for search retrieval"
+      )
+    );
+  }
+
+  function badgeForIndexerRunLine(ent) {
+    var src = (ent.source || "").toLowerCase();
+    var f = getFlat(ent.parsed);
+    var msg = String(f.msg || "").toLowerCase();
+    if (src === "chimera-vectorstore" || src === "chimera-vectorstore" || msg.indexOf("chimera-vectorstore") >= 0)
+      return { cls: "sum-svc-chimera-vectorstore sum-svc-badge-filled sum-svc-chimera-vectorstore-filled", lab: "chimera-vectorstore" };
+    return { cls: "sum-svc-chimera-indexer sum-svc-badge-filled sum-svc-chimera-indexer-filled", lab: "chimera-indexer" };
+  }
+
+  function indexerRunProgressSubtitle(lastProg, doneSeen, candStr) {
+    var lp = lastProg || {};
+    var cur =
+      lp.chunks_embedded != null
+        ? Number(lp.chunks_embedded)
+        : lp.chunks_done != null
+          ? Number(lp.chunks_done)
+          : lp.embedded_chunks != null
+            ? Number(lp.embedded_chunks)
+            : null;
+    var tot =
+      lp.chunks_total != null
+        ? Number(lp.chunks_total)
+        : lp.total_chunks != null
+          ? Number(lp.total_chunks)
+          : null;
+    if (cur != null && tot != null && !isNaN(cur) && !isNaN(tot))
+      return "Indexer uploading batch — " + cur + " of " + tot + " chunks indexed";
+    if (candStr && candStr !== "—")
+      return "Indexer uploading batch — latest counters: " + candStr + " candidates / chunks";
+    return doneSeen ? "Indexer run completed" : "Indexer uploading batch — in progress";
+  }
+
+  /** Primary log `msg` / `message` (slog may put the human title in one and the slug in the other, or duplicate keys). */
+  function indexerFlatMsg(fl) {
+    if (
+      globalThis.ChimeraSettings &&
+      ChimeraSettings.Derive &&
+      typeof ChimeraSettings.Derive.indexerFlatMsgForPresent === "function"
+    )
+      return ChimeraSettings.Derive.indexerFlatMsgForPresent(fl);
+    return String(fl.msg != null ? fl.msg : fl.message != null ? fl.message : "")
+      .toLowerCase()
+      .trim();
+  }
+
+  function isIndexerStateFlat(f) {
+    if (!f || typeof f !== "object") return false;
+    if (indexerFlatMsg(f) === "indexer.state") return true;
+    var raw = String(f.msg != null ? f.msg : f.message != null ? f.message : "")
+      .toLowerCase()
+      .trim();
+    if (
+      (raw === "indexer state" || raw === "indexer.state") &&
+      (f.queue_depth != null || f.ingest_inflight != null || f.state != null || typeof f.watch_mode === "boolean")
+    )
+      return true;
+    return false;
+  }
+
+  /** Latest process-wide queue depth / ingest inflight from the newest indexer.state in the log window. */
+  function flatLooksLikeIndexerRunStart(fl) {
+    var m = indexerFlatMsg(fl);
+    if (m === "indexer.run.start" || m === "chimera-indexer run start") return true;
+    if (String(fl.service || "").toLowerCase() !== "indexer") return false;
+    return fl.root_ids != null && (fl.roots != null || Array.isArray(fl.watch_root_paths));
+  }
+
+  function flatLooksLikeIndexerRunDone(fl) {
+    var m = indexerFlatMsg(fl);
+    if (m.indexOf("indexer.run.done") === 0) return true;
+    if (m === "indexer run done" || m === "indexer run stopped") return true;
+    return (
+      String(fl.service || "").toLowerCase() === "chimera-indexer" &&
+      fl.ingest_completed != null &&
+      fl.mode != null &&
+      String(fl.mode).trim() !== ""
+    );
+  }
+
+  function flatLooksLikeIndexerRunProgress(fl) {
+    var m = indexerFlatMsg(fl);
+    if (m.indexOf("indexer.run.progress") === 0 || m === "indexer.run.progress") return true;
+    if (m === "initial scan complete") return true;
+    return fl.phase != null && String(fl.phase).trim() !== "" && fl.candidates_enqueued != null;
+  }
+
+  function flatLooksLikeIndexerJobIngested(fl) {
+    var m = indexerFlatMsg(fl);
+    if (String(fl.service || "").toLowerCase() !== "chimera-indexer") return false;
+    if (m !== "indexer.job.ingested" && m !== "ingested") return false;
+    return fl.chunks != null;
+  }
+
+  function indexerRecentEvalStatusForFlat(f) {
+    var m = indexerFlatMsg(f);
+    var rel = f && f.rel != null ? String(f.rel).trim() : "";
+    if (!rel) return null;
+
+    if (m === "indexer.scope.active_file") {
+      return { rel: rel, st: "evaluating", cls: "sum-st-indexing", detail: "" };
+    }
+    if (m === "indexer.job.upload") {
+      return { rel: rel, st: "uploading", cls: "sum-st-indexing", detail: "" };
+    }
+    if (m === "indexer.job.ingested" || m === "ingested") {
+      var chunks = f && f.chunks != null && !isNaN(Number(f.chunks)) ? Math.round(Number(f.chunks)) : null;
+      return {
+        rel: rel,
+        st: "ingested",
+        cls: "sum-st-complete",
+        detail: chunks != null ? formatInt(chunks) + " chunks" : ""
+      };
+    }
+    if (m === "indexer.job.skipped") {
+      var why = f && f.reason != null ? String(f.reason).replace(/\s+/g, " ").trim() : "";
+      if (why.length > 80) why = why.slice(0, 78) + "…";
+      return { rel: rel, st: "skipped", cls: "sum-st-complete", detail: why };
+    }
+    if (m.indexOf("indexer.job.failed") === 0) {
+      var errFlat = f && typeof f === "object" ? f : {};
+      var detailFn =
+        globalThis.ChimeraSettings &&
+        ChimeraSettings.Derive &&
+        typeof ChimeraSettings.Derive.shortIngestFailureDetail === "function"
+          ? ChimeraSettings.Derive.shortIngestFailureDetail
+          : globalThis.ChimeraSettings &&
+              ChimeraSettings.Render &&
+              typeof ChimeraSettings.Render.shortIngestFailureDetail === "function"
+            ? ChimeraSettings.Render.shortIngestFailureDetail
+            : null;
+      var es = detailFn ? detailFn(errFlat) : "";
+      if (!es) {
+        var err = f && (f.err != null ? f.err : f.error != null ? f.error : "");
+        es = err != null ? String(err).replace(/\s+/g, " ").trim() : "";
+        if (es.length > 80) es = es.slice(0, 78) + "…";
+      }
+      return { rel: rel, st: "failed", cls: "sum-st-error", detail: es };
+    }
+    if (m.indexOf("indexer.retry") === 0) {
+      return { rel: rel, st: "retrying", cls: "sum-st-monitor", detail: "" };
+    }
+    if (m === "rag.retrieve.source") {
+      var srcHits =
+        f && f.source_hits != null && !isNaN(Number(f.source_hits))
+          ? Math.round(Number(f.source_hits))
+          : null;
+      return {
+        rel: rel,
+        st: "retrieved",
+        cls: "sum-st-retrieved",
+        detail: srcHits != null ? formatInt(srcHits) + " hits" : ""
+      };
+    }
+    return null;
+  }
+
+  function buildIndexerRecentEvaluatedFilesHtml(evsScope, bucketId, maxItems, recentOpts) {
+    recentOpts = recentOpts || {};
+    var evs = Array.isArray(evsScope) ? evsScope : [];
+    var seen = {};
+    var rows = [];
+    var want = maxItems != null && !isNaN(Number(maxItems)) ? Math.max(3, Math.min(60, Math.round(Number(maxItems)))) : 10;
+    for (var i = evs.length - 1; i >= 0; i--) {
+      var f = getFlat(evs[i].parsed);
+      var st = indexerRecentEvalStatusForFlat(f);
+      if (!st) continue;
+      if (seen[st.rel]) continue;
+      seen[st.rel] = true;
+      if (st.st === "failed" && (f.bytes == null || f.bytes === undefined)) {
+        for (var j = i - 1; j >= 0; j--) {
+          var fj = getFlat(evs[j].parsed);
+          if (String(fj.rel || "").trim() !== st.rel) continue;
+          if (indexerFlatMsg(fj) !== "indexer.job.upload" || fj.bytes == null) continue;
+          var detailFnBytes =
+            globalThis.ChimeraSettings &&
+            ChimeraSettings.Derive &&
+            typeof ChimeraSettings.Derive.shortIngestFailureDetail === "function"
+              ? ChimeraSettings.Derive.shortIngestFailureDetail
+              : globalThis.ChimeraSettings &&
+                  ChimeraSettings.Render &&
+                  typeof ChimeraSettings.Render.shortIngestFailureDetail === "function"
+                ? ChimeraSettings.Render.shortIngestFailureDetail
+                : null;
+          if (detailFnBytes) {
+            st = Object.assign({}, st, {
+              detail: detailFnBytes(Object.assign({}, f, { bytes: fj.bytes }))
+            });
+          }
+          break;
+        }
+      }
+      var t = formatLogDateTimeLocal(evs[i].ts);
+      rows.push({
+        ts: evs[i].ts,
+        t: t || "—",
+        rel: st.rel,
+        st: st.st,
+        cls: st.cls,
+        detail: st.detail || ""
+      });
+      if (rows.length >= want) break;
+    }
+
+    if (recentOpts.omitWhenEmpty && !rows.length) {
+      return "";
+    }
+
+    var sid = "ix-recent-" + strHash(String(bucketId || ""));
+    var html =
+      '<div class="sum-metrics-table-wrap indexer-recent-files sg-op-indexer-recent-scroll" id="' +
+      escapeHtml(sid) +
+      '">' +
+      '<table class="sum-metrics-table sum-metrics-table--indexer-recent">' +
+      "<colgroup>" +
+      '<col class="indexer-recent-col-time">' +
+      '<col class="indexer-recent-col-path">' +
+      '<col class="indexer-recent-col-detail">' +
+      '<col class="indexer-recent-col-status">' +
+      "</colgroup>" +
+      "<thead><tr><th class=\"indexer-recent-cell-time\">Time</th><th class=\"indexer-recent-cell-path\">Path</th><th class=\"indexer-recent-cell-detail\">Detail</th><th class=\"indexer-recent-cell-status\">Status</th></tr></thead><tbody>";
+    if (!rows.length) {
+      html +=
+        '<tr><td colspan="4" class="muted">No file-level activity in the loaded window yet. Scroll up to load older lines.</td></tr>';
+    } else {
+      for (var r = 0; r < rows.length; r++) {
+        var it = rows[r];
+        var lvlClass = "lvl-INFO";
+        if (it.st === "failed") lvlClass = "lvl-ERROR";
+        else if (it.st === "retrying" || it.st === "skipped") lvlClass = "lvl-WARN";
+        else if (it.st === "evaluating" || it.st === "uploading") lvlClass = "lvl-DEBUG";
+        else if (it.st === "retrieved") lvlClass = "lvl-INFO";
+        var iso = typeof toIsoDatetimeAttr === "function" ? toIsoDatetimeAttr(it.ts) : "";
+        var relAgo = typeof formatLogRelativeAgo === "function" ? formatLogRelativeAgo(it.ts) : "";
+        html +=
+          "<tr>" +
+          '<td class="indexer-recent-cell-time sum-evlog__cell--time">' +
+          "<time" +
+          (iso ? ' datetime="' + escapeHtml(iso) + '"' : "") +
+          (relAgo ? ' title="' + escapeHtml(relAgo) + '"' : "") +
+          ">" +
+          escapeHtml(it.t) +
+          "</time></td>" +
+          '<td class="indexer-recent-cell-path"><code class="sum-mono-id">' +
+          escapeHtml(it.rel) +
+          "</code></td>" +
+          '<td class="indexer-recent-cell-detail muted">' +
+          (it.detail ? escapeHtml(it.detail) : "") +
+          "</td>" +
+          '<td class="indexer-recent-cell-status"><span class="log-line-sum__lvl ' +
+          escapeHtml(lvlClass) +
+          '">' +
+          escapeHtml(it.st) +
+          "</span></td></tr>";
+      }
+    }
+    html += "</tbody></table></div>";
+    return html;
+  }
+
+  /** Rolls up indexer.run.start / progress / done / job lines for summarized cards. */
+  function collectIndexerRunMeta(runId, evs, partitionMeta) {
+    if (globalThis.ChimeraSettings && globalThis.ChimeraSettings.Derive && globalThis.ChimeraSettings.Derive.collectIndexerRunMeta) {
+      return globalThis.ChimeraSettings.Derive.collectIndexerRunMeta(runId, evs, {
+        getFlat: function (p) { return getFlat(p); },
+        tokenLabelByTenant: ctx.tokenLabelByTenant,
+        indexerFlatMsg: function (fl) { return indexerFlatMsg(fl); },
+        flatLooksLikeIndexerRunStart: function (fl) { return flatLooksLikeIndexerRunStart(fl); },
+        flatLooksLikeIndexerRunDone: function (fl) { return flatLooksLikeIndexerRunDone(fl); },
+        flatLooksLikeIndexerRunProgress: function (fl) { return flatLooksLikeIndexerRunProgress(fl); },
+        flatLooksLikeIndexerJobIngested: function (fl) { return flatLooksLikeIndexerJobIngested(fl); },
+        partitionMeta: partitionMeta || undefined
+      });
+    }
+
+    var start = null;
+    for (var i = 0; i < evs.length; i++) {
+      var fi = getFlat(evs[i].parsed);
+      if (flatLooksLikeIndexerRunStart(fi)) {
+        start = fi;
+        break;
+      }
+    }
+    var lastProg = null;
+    var doneFlat = null;
+    var doneSeen = false;
+    var tenantId = "";
+    for (var u = evs.length - 1; u >= 0; u--) {
+      var fR = getFlat(evs[u].parsed);
+      if (!tenantId && (fR.tenant_id || fR.tenant || fR.principal_id))
+        tenantId = String(fR.tenant_id || fR.tenant || fR.principal_id || "").trim();
+      if (!lastProg && flatLooksLikeIndexerRunProgress(fR)) lastProg = fR;
+      if (flatLooksLikeIndexerRunDone(fR)) {
+        doneSeen = true;
+        if (!doneFlat) doneFlat = fR;
+      }
+    }
+    var vectorsSum = 0;
+    for (var j = 0; j < evs.length; j++) {
+      var fj = getFlat(evs[j].parsed);
+      if (flatLooksLikeIndexerJobIngested(fj)) {
+        var cj = Number(fj.chunks);
+        if (!isNaN(cj)) vectorsSum += cj;
+      }
+    }
+    var lpEmb =
+      lastProg &&
+      (lastProg.chunks_embedded != null
+        ? Number(lastProg.chunks_embedded)
+        : lastProg.embedded_chunks != null
+          ? Number(lastProg.embedded_chunks)
+          : NaN);
+    var vectorsStored = null;
+    if (vectorsSum > 0) vectorsStored = vectorsSum;
+    else if (!isNaN(lpEmb) && lpEmb > 0) vectorsStored = Math.round(lpEmb);
+
+    var ok = 0;
+    var fail = 0;
+    if (doneFlat) {
+      var oc = Number(doneFlat.ingest_completed);
+      var fc = Number(doneFlat.ingest_failed_dropped);
+      ok = !isNaN(oc) ? oc : 0;
+      fail = !isNaN(fc) ? fc : 0;
+    } else {
+      for (var k = 0; k < evs.length; k++) {
+        var fk = getFlat(evs[k].parsed);
+        var mk = indexerFlatMsg(fk);
+        if (mk === "indexer.job.ingested" || mk === "ingested") ok++;
+        else if (mk === "indexer.job.failed" || mk.indexOf("ingest failed (dropped)") === 0) fail++;
+      }
+    }
+
+    var ws = start && start.scope_workspace_id ? String(start.scope_workspace_id).trim() : "";
+    var sp = start && start.scope_project_id ? String(start.scope_project_id).trim() : "";
+    var ip = start && start.ingest_project ? String(start.ingest_project).trim() : "";
+    var flavor = start && start.flavor_id ? String(start.flavor_id).trim() : "";
+
+    for (var bx = 0; bx < evs.length; bx++) {
+      var fb = getFlat(evs[bx].parsed);
+      if (String(fb.service || "").toLowerCase() !== "indexer") continue;
+      if (!ws && fb.scope_workspace_id) ws = String(fb.scope_workspace_id).trim();
+      if (!sp && fb.scope_project_id) sp = String(fb.scope_project_id).trim();
+      if (!ip && fb.ingest_project) ip = String(fb.ingest_project).trim();
+      if (!flavor && fb.flavor_id) flavor = String(fb.flavor_id).trim();
+    }
+
+    var projectId = sp || ip || "—";
+    var watchRootPathsFb = [];
+    if (start && Array.isArray(start.watch_root_paths) && start.watch_root_paths.length) {
+      watchRootPathsFb = start.watch_root_paths.map(function (p) {
+        return String(p);
+      });
+    }
+    var filepath = watchRootPathsFb.length ? watchRootPathsFb.join("\n") : "—";
+
+    var userLab = tenantId ? ctx.tokenLabelByTenant[tenantId] || tenantId : "—";
+
+    return {
+      runId: runId,
+      start: start,
+      userLabel: userLab,
+      tenantId: tenantId,
+      workspaceId: ws || "—",
+      projectId: projectId,
+      flavorId: flavor || "—",
+      filepath: filepath,
+      watchRootPaths: watchRootPathsFb,
+      doneSeen: doneSeen,
+      doneFlat: doneFlat,
+      lastProg: lastProg,
+      vectorsStored: vectorsStored,
+      okCount: ok,
+      failCount: fail
+    };
+  }
+  /** Same title line as IX / stale / managed WS cards (USER:PROJECT[:FLAVOR]). */
+  function workspaceCardTitleFromIndexerMeta(meta) {
+    return indexerCardTitleSortLabel(meta);
+  }
+
+  function indexerCardDomIdFromMeta(meta, bucketId) {
+    var dedupeKey =
+      typeof indexerRunTimelineDedupeKey === "function"
+        ? indexerRunTimelineDedupeKey(meta, bucketId)
+        : String(bucketId || "");
+    return "ix-" + strHash(dedupeKey);
+  }
 
   function indexerScopeProgressTimelineBarHtml(pRem, qTot, doneSeen) {
     var timelineSegmentsHtml = ctx.timelineSegmentsHtml;
@@ -576,7 +1342,10 @@ globalThis.ChimeraSettings.Render.Cards.mountFeedLogIndexerRun = function (ctx) 
     if (!roots || !roots.length) return meta;
     var mp = meta.projectId && meta.projectId !== "—" ? String(meta.projectId).trim() : "";
     if (!mp) return meta;
-    var mf = normalizeFlavorMatch(meta.flavorId);
+    var mf =
+      typeof ctx.normalizeFlavorMatch === "function"
+        ? ctx.normalizeFlavorMatch(meta.flavorId)
+        : String(meta.flavorId || "").trim();
     var mw =
       meta.workspaceId && meta.workspaceId !== "—" ? String(meta.workspaceId).trim() : "";
     var out = [];
@@ -585,7 +1354,10 @@ globalThis.ChimeraSettings.Render.Cards.mountFeedLogIndexerRun = function (ctx) 
       var row = roots[ri] || {};
       var rp = row.project_id != null ? String(row.project_id).trim() : "";
       if (rp !== mp) continue;
-      var rf = normalizeFlavorMatch(row.flavor_id);
+      var rf =
+        typeof ctx.normalizeFlavorMatch === "function"
+          ? ctx.normalizeFlavorMatch(row.flavor_id)
+          : String(row.flavor_id || "").trim();
       if (rf !== mf) continue;
       var rw = row.workspace_id != null ? String(row.workspace_id).trim() : "";
       if (mw !== "" && rw !== mw) continue;
@@ -599,7 +1371,8 @@ globalThis.ChimeraSettings.Render.Cards.mountFeedLogIndexerRun = function (ctx) 
     }
     var wsMatchFn = ctx.findOperatorWorkspaceMatchingIndexerMeta;
     var wsMatch = typeof wsMatchFn === "function" ? wsMatchFn(meta) : null;
-    if (wsMatch) applyOperatorWorkspacePathsToMeta(meta, wsMatch);
+    if (wsMatch && typeof ctx.applyOperatorWorkspacePathsToMeta === "function")
+      ctx.applyOperatorWorkspacePathsToMeta(meta, wsMatch);
     return meta;
   }
 
@@ -653,15 +1426,20 @@ globalThis.ChimeraSettings.Render.Cards.mountFeedLogIndexerRun = function (ctx) 
     var wsNumIx =
       opWsForIx && typeof wsNumFn === "function" ? wsNumFn(opWsForIx) : 0;
     if (opWsForIx) {
-      meta.userLabel = resolveLogsOperatorUserLabel();
+      meta.userLabel =
+        typeof ctx.resolveLogsOperatorUserLabel === "function" ? ctx.resolveLogsOperatorUserLabel() : "—";
       meta.projectId =
         opWsForIx.project_id != null ? String(opWsForIx.project_id).trim() : meta.projectId;
       meta.flavorId =
         opWsForIx.flavor_id != null && String(opWsForIx.flavor_id).trim() !== ""
           ? String(opWsForIx.flavor_id).trim()
           : "—";
-      meta.workspaceId = canonicalWorkspaceRowIdKey(opWsForIx.id) || meta.workspaceId;
-      applyOperatorWorkspacePathsToMeta(meta, opWsForIx);
+      meta.workspaceId =
+        (typeof ctx.canonicalWorkspaceRowIdKey === "function"
+          ? ctx.canonicalWorkspaceRowIdKey(opWsForIx.id)
+          : "") || meta.workspaceId;
+      if (typeof ctx.applyOperatorWorkspacePathsToMeta === "function")
+        ctx.applyOperatorWorkspacePathsToMeta(meta, opWsForIx);
     }
     var isIxEdit =
       wsNumIx > 0 &&
@@ -679,7 +1457,10 @@ globalThis.ChimeraSettings.Render.Cards.mountFeedLogIndexerRun = function (ctx) 
     var expOptsIx = {
       kvOpts: {
         omitFileCountIfZero: true,
-        workspaceRowId: wsNumIx > 0 ? canonicalWorkspaceRowIdKey(opWsForIx.id) : undefined
+        workspaceRowId:
+          wsNumIx > 0 && typeof ctx.canonicalWorkspaceRowIdKey === "function"
+            ? ctx.canonicalWorkspaceRowIdKey(opWsForIx.id)
+            : undefined
       },
       recentOpts: wsNumIx > 0 ? { omitWhenEmpty: true } : undefined,
       pathsBlockHtml: pathsBlockIx,
@@ -823,5 +1604,32 @@ globalThis.ChimeraSettings.Render.Cards.mountFeedLogIndexerRun = function (ctx) 
   ctx.indexerScopeProgressTimelineBarHtml = indexerScopeProgressTimelineBarHtml;
   ctx.buildIndexerCard = buildIndexerCard;
   ctx.ragCollectionLabelForUi = ragCollectionLabelForUi;
+  ctx.buildIndexerEvlogWorkspaceLabelMap = buildIndexerEvlogWorkspaceLabelMap;
+  ctx.getIndexerEvlogWorkspaceLabelMap = getIndexerEvlogWorkspaceLabelMap;
+  ctx.indexerEvlogFlatForEntry = indexerEvlogFlatForEntry;
+  ctx.indexerEvlogLineIsProcessWide = indexerEvlogLineIsProcessWide;
+  ctx.indexerEvlogUserLabelFromFlat = indexerEvlogUserLabelFromFlat;
+  ctx.indexerEvlogWorkspaceSourceLabel = indexerEvlogWorkspaceSourceLabel;
+  ctx.indexerHumanDeclaredState = indexerHumanDeclaredState;
+  ctx.indexerLastFileEventTime = indexerLastFileEventTime;
+  ctx.indexerRelFromLatestFileLine = indexerRelFromLatestFileLine;
+  ctx.indexerBuildCardSubtitle = indexerBuildCardSubtitle;
+  ctx.indexerWorkspaceFileCountFromMeta = indexerWorkspaceFileCountFromMeta;
+  ctx.indexerWorkspaceEmbeddedChunksFromMeta = indexerWorkspaceEmbeddedChunksFromMeta;
+  ctx.indexerWorkspaceMetricWellHtml = indexerWorkspaceMetricWellHtml;
+  ctx.indexerWorkspaceCollapsedMetricsHtml = indexerWorkspaceCollapsedMetricsHtml;
+  ctx.badgeForIndexerRunLine = badgeForIndexerRunLine;
+  ctx.indexerRunProgressSubtitle = indexerRunProgressSubtitle;
+  ctx.indexerFlatMsg = indexerFlatMsg;
+  ctx.isIndexerStateFlat = isIndexerStateFlat;
+  ctx.flatLooksLikeIndexerRunStart = flatLooksLikeIndexerRunStart;
+  ctx.flatLooksLikeIndexerRunDone = flatLooksLikeIndexerRunDone;
+  ctx.flatLooksLikeIndexerRunProgress = flatLooksLikeIndexerRunProgress;
+  ctx.flatLooksLikeIndexerJobIngested = flatLooksLikeIndexerJobIngested;
+  ctx.indexerRecentEvalStatusForFlat = indexerRecentEvalStatusForFlat;
+  ctx.buildIndexerRecentEvaluatedFilesHtml = buildIndexerRecentEvaluatedFilesHtml;
+  ctx.collectIndexerRunMeta = collectIndexerRunMeta;
+  ctx.indexerCardDomIdFromMeta = indexerCardDomIdFromMeta;
+  ctx.workspaceCardTitleFromIndexerMeta = workspaceCardTitleFromIndexerMeta;
   ctx.vectorstoreCollectionScopeLabelForLogs = vectorstoreCollectionScopeLabelForLogs;
 };

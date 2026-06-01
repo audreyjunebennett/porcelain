@@ -364,6 +364,37 @@ globalThis.ChimeraSettings.Render.Cards.mountWorkspaceDraft = function (ctx) {
     });
   }
 
+  var WORKSPACE_SECTION_CREATE_UNAVAILABLE_TITLE =
+    "Not available through the web. Use the desktop app.";
+
+  function summarizedWorkspacesSectionHead() {
+    if (typeof ctx.operatorSectionHeadHtml !== "function") {
+      return (
+        '<div class="sum-feed-section-head">' +
+        '<span class="sum-feed-section-title sum-section-label">Workspaces</span>' +
+        buildWorkspacesCreateBtnHtml("Create") +
+        "</div>"
+      );
+    }
+    var webOnly = !workspaceDesktopFeaturesAvailable();
+    return ctx.operatorSectionHeadHtml("Workspaces", "database", {
+      actionHtml:
+        typeof ctx.operatorSectionAddBtn === "function"
+          ? ctx.operatorSectionAddBtn(
+              { "data-sum-workspaces-create": "1" },
+              "Create workspace",
+              webOnly
+                ? {
+                    disabled: true,
+                    title: WORKSPACE_SECTION_CREATE_UNAVAILABLE_TITLE,
+                    desktopLocked: true
+                  }
+                : undefined
+            )
+          : buildWorkspacesCreateBtnHtml("Create workspace"),
+    });
+  }
+
   /** Intro copy for the summarized-feed Workspaces section (replaces per-card blurbs). */
   function buildWorkspacesSectionIntroHtml() {
     return (
@@ -387,4 +418,5 @@ globalThis.ChimeraSettings.Render.Cards.mountWorkspaceDraft = function (ctx) {
   ctx.buildManagedWorkspaceToolbarHtml = buildManagedWorkspaceToolbarHtml;
   ctx.buildWorkspacesCreateBtnHtml = buildWorkspacesCreateBtnHtml;
   ctx.buildWorkspacesSectionIntroHtml = buildWorkspacesSectionIntroHtml;
+  ctx.summarizedWorkspacesSectionHead = summarizedWorkspacesSectionHead;
 };

@@ -22,7 +22,7 @@ Stable part slugs for operator settings cards: docs, agents, gallery overlays, a
 | Indexer stale snapshot | `ix-stale-{hash}` | `indexerRun.js` |
 | Indexer run | `ix-{hash}` | `indexerRun.js` |
 | Conversation | `conv-{hash}` | `feedLogConv.js` |
-| Service | service name slug | `feedLogService.js` |
+| Service | service name slug | `serviceFeed.js` |
 
 Summarized feed `kind` values align with these families (`admin-provider`, `virtual-model`, `workspace-draft`, `indexer`, …) — see [`summarized/model.js`](summarized/model.js).
 
@@ -91,8 +91,8 @@ Summarized feed `kind` values align with these families (`admin-provider`, `virt
 | `conversation.summary` | Conversation card header | `feedLogConv.js` |
 | `conversation.timeline` | Lifecycle timeline | `feedLogConv.js` |
 | `conversation.scoped-evlog` | Scoped log | `feedLogConv.js` |
-| `service.summary` | Service card header | `feedLogService.js` |
-| `service.scoped-evlog` | Service scoped log | `feedLogService.js` |
+| `service.summary` | Service card header | `serviceFeed.js` |
+| `service.scoped-evlog` | Service scoped log | `serviceFeed.js` |
 | `indexer.summary` | Indexer run card header | `indexerRun.js` |
 | `indexer.scoped-evlog` | Indexer run scoped log | `indexerRun.js` |
 

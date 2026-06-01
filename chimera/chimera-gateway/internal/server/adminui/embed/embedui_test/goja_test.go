@@ -96,6 +96,8 @@ func loadCardTestCtx(t *testing.T, vm *goja.Runtime) {
 	evalJS(t, vm, settingsUIPath(t, "util", "hash.js"))
 	evalJS(t, vm, settingsUIPath(t, "util", "time.js"))
 	evalJS(t, vm, settingsUIPath(t, "derive", "chimeraBrokerMetrics.js"))
+	evalJS(t, vm, settingsUIPath(t, "derive", "logLineClassification.js"))
+	evalJS(t, vm, settingsUIPath(t, "derive", "conversationAggregate.js"))
 	evalJS(t, vm, settingsUIPath(t, "render", "sumEvlog.js"))
 	for _, f := range []string{
 		"operatorFeedback.js", "configureEdit.js", "yamlEditor.js", "draftInput.js",
@@ -104,10 +106,11 @@ func loadCardTestCtx(t *testing.T, vm *goja.Runtime) {
 	} {
 		evalJS(t, vm, sharedUIPath(t, f))
 	}
+	evalJS(t, vm, settingsUIPath(t, "render", "cardChrome.js"))
 	for _, f := range []string{
 		"sharedFormat.js", "convCard.js", "serviceCard.js", "gatewayOverview.js", "gatewayUsage.js",
 		"adminShared.js", "adminUsers.js", "adminProvider.js", "adminVirtualModels.js", "workspaceDraft.js",
-		"feedLogConv.js", "feedLogService.js", "indexerRun.js", "indexerWorkspace.js", "mount.js",
+		"feedLogConv.js", "serviceFeed.js", "indexerRun.js", "indexerWorkspace.js", "mount.js",
 	} {
 		evalJS(t, vm, cardsUIPath(t, f))
 	}
@@ -160,10 +163,7 @@ func loadCardTestCtx(t *testing.T, vm *goja.Runtime) {
 		ChimeraSettings.Render.mountSumEvlog(ctx);
 		ChimeraSettings.Render.Cards.mountAll(ctx);
 		var C = ChimeraSettings.Render.Cards;
-		if (typeof C.mountFeedLogConv === "function") C.mountFeedLogConv(ctx);
-		if (typeof C.mountFeedLogService === "function") C.mountFeedLogService(ctx);
-		if (typeof C.mountFeedLogIndexerRun === "function") C.mountFeedLogIndexerRun(ctx);
-		if (typeof C.mountFeedLogIndexerWorkspace === "function") C.mountFeedLogIndexerWorkspace(ctx);
+		if (typeof C.mountSummarizedFeedCards === "function") C.mountSummarizedFeedCards(ctx);
 		if (typeof ctx.pickFolderForWorkspaceDraft !== "function") throw new Error("pickFolderForWorkspaceDraft missing on ctx");
 		if (typeof ctx.findWorkspaceDraft !== "function") throw new Error("findWorkspaceDraft missing on ctx");
 		globalThis.__cardTestCtx = ctx;

@@ -1,25 +1,25 @@
 # Plan: Operator workspace search
 
-| Field | Value |
-|-------|-------|
-| **Doc kind** | `feature-plan` |
-| **Owners / areas** | Gateway RAG, operator UI app shell, embed UI |
-| **Status** | `draft` |
-| **Targets** | Gateway v0.3 setup wizard step 6, gateway v0.5 navigation |
-| **Last updated** | See git history |
+| Field                          | Value                                                                                              |
+|--------------------------------|----------------------------------------------------------------------------------------------------|
+| **Doc kind**                   | `feature-plan`                                                                                     |
+| **Owners / areas**             | Gateway RAG, operator UI app shell, embed UI                                                       |
+| **Status**                     | `draft`                                                                                            |
+| **Targets**                    | Gateway v0.3 setup wizard step 6, gateway v0.5 navigation                                          |
+| **Last updated**               | See git history                                                                                    |
 | **Supersedes / superseded by** | Complements [`operator-chat-ui.md`](operator-chat-ui.md); distinct from v0.4 settings search theme |
-| **As-built** | None — link to [`docs/features/`](../features/README.md) when shipped |
+| **As-built**                   | None — link to [`docs/features/`](../features/README.md) when shipped                              |
 
 ## At a glance
 
 Operators should **search indexed workspace content directly** — without sending a chat completion — and see ranked hits (path, score, excerpt). Today retrieval runs only on the chat path with results injected when scores pass the gateway floor. This plan adds a **search API**, a **`/ui/search` page**, and a **left-nav entry** in the app shell; the v0.3 setup wizard reuses the same search component for “test indexing” step 6.
 
-| Phase | Outcome | Status |
-|-------|---------|--------|
-| [Phase 1 — RAG search API](#phase-1--rag-search-api) | Session-authenticated query endpoint returns raw retrieval hits for a workspace scope | `todo` |
-| [Phase 2 — Search UI page](#phase-2--search-ui-page) | Workspace selector + query input + results list; design-01 styling | `todo` |
-| [Phase 3 — App shell navigation](#phase-3--app-shell-navigation) | Ribbon item switches iframe to `/ui/search`; state persists like chat/settings | `todo` |
-| [Phase 4 — Wizard and empty states](#phase-4--wizard-and-empty-states) | Setup wizard embeds search with workspace locked; zero-hit and indexer-idle copy | `todo` |
+| Phase                                                                  | Outcome                                                                               | Status |
+|------------------------------------------------------------------------|---------------------------------------------------------------------------------------|--------|
+| [Phase 1 — RAG search API](#phase-1--rag-search-api)                   | Session-authenticated query endpoint returns raw retrieval hits for a workspace scope | `todo` |
+| [Phase 2 — Search UI page](#phase-2--search-ui-page)                   | Workspace selector + query input + results list; design-01 styling                    | `todo` |
+| [Phase 3 — App shell navigation](#phase-3--app-shell-navigation)       | Ribbon item switches iframe to `/ui/search`; state persists like chat/settings        | `todo` |
+| [Phase 4 — Wizard and empty states](#phase-4--wizard-and-empty-states) | Setup wizard embeds search with workspace locked; zero-hit and indexer-idle copy      | `todo` |
 
 ---
 

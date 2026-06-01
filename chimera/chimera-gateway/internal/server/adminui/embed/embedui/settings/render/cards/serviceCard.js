@@ -1,5 +1,5 @@
 /**
- * Service card avatar helpers; full buildServiceCard is in feedLogService.js.
+ * Service card avatar helpers; full buildServiceCard is in serviceFeed.js.
  */
 globalThis.ChimeraSettings = globalThis.ChimeraSettings || {};
 globalThis.ChimeraSettings.Render = globalThis.ChimeraSettings.Render || {};

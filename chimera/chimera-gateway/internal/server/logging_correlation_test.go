@@ -25,7 +25,6 @@ func TestHTTPAccessLogLevel_probesAndErrors(t *testing.T) {
 		{"/api/ui/logs/stream", 200, slog.LevelDebug},
 		{"/ui/assets/theme-tokens.css", 200, slog.LevelDebug},
 		{"/ui/assets/settings/main.js", 200, slog.LevelDebug},
-		{"/assets/icon.png", 200, slog.LevelDebug},
 		{"/ui/login", 200, slog.LevelInfo},
 		{"/v1/indexer/workspaces", 200, slog.LevelDebug},
 		{"/v1/indexer/workspaces", 503, slog.LevelInfo},

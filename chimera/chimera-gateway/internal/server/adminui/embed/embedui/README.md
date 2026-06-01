@@ -6,8 +6,8 @@ Static HTML/CSS/JS served by the gateway admin UI (`adminui/embed`). Session aut
 
 | HTTP route | File | Role |
 |------------|------|------|
-| `GET /ui` | `index.html` | App shell (iframe: PWA default, settings via gear) |
-| `GET /ui/pwa` | `pwa.html` | PWA placeholder |
+| `GET /ui` | `index.html` | App shell (iframe: chat default, settings via ribbon) |
+| `GET /ui/chat` | `chat.html` | Chat |
 | `GET /ui/settings` | `settings.html` | Operator settings + summarized log feed |
 | `GET /ui/settings/gallery` | `settings/gallery.html` | Component gallery (styleguide) |
 | `GET /ui/login` | `login.html` | Login (registered in `api/auth`) |
@@ -41,7 +41,7 @@ Legacy routes (`/ui/logs`, `/ui/desktop`, `/ui/gallery`, …) are **not** regist
 
 ```
 embedui/
-  index.html, pwa.html, settings.html    # top-level pages
+  index.html, chat.html, settings.html   # top-level pages
   settings_entry.js, settings_app.js     # served as settings.js + settings/main.js
   settings.css                           # @imports styles/*
   settings/                              # ChimeraSettings modules (see settings/README.md)

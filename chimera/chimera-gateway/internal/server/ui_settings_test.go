@@ -717,43 +717,6 @@ func TestUIShellPage_servesWhenAuthed(t *testing.T) {
 	}
 }
 
-func TestUIPWAPage_servesWhenAuthed(t *testing.T) {
-	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
-	up := chimeraBrokerStubForUILogs(t)
-	t.Cleanup(up.Close)
-
-	rt := runtimeForUILogs(t, up.URL)
-	ui := NewUIOptions()
-	ui.LogStore = servicelogs.New(10)
-	front := httptest.NewServer(NewMux(rt, testLog(), nil, ui))
-	t.Cleanup(front.Close)
-
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar}
-	if _, err := client.Post(front.URL+"/api/ui/login", "application/json", strings.NewReader(`{"token":"gw-ui-secret"}`)); err != nil {
-		t.Fatal(err)
-	}
-	res, err := client.Get(front.URL + "/ui/pwa")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer res.Body.Close()
-	if res.StatusCode != http.StatusOK {
-		t.Fatalf("status %d", res.StatusCode)
-	}
-	b, err := io.ReadAll(res.Body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	page := string(b)
-	if !strings.Contains(page, ">PWA<") {
-		t.Fatal("expected PWA landing content")
-	}
-}
-
 func TestUILegacyRoutes_notFoundWhenAuthed(t *testing.T) {
 	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	up := chimeraBrokerStubForUILogs(t)
@@ -774,7 +737,7 @@ func TestUILegacyRoutes_notFoundWhenAuthed(t *testing.T) {
 		t.Fatal(err)
 	}
 	legacy := []string{
-		"/ui/desktop", "/ui/logs", "/ui/panel", "/ui/metrics", "/ui/indexer",
+		"/ui/desktop", "/ui/logs", "/ui/panel", "/ui/metrics", "/ui/indexer", "/ui/pwa",
 		"/ui/gallery", "/ui/gallery/operator", "/ui/gallery/tokens",
 		"/ui/assets/reload.svg",
 	}
@@ -876,7 +839,7 @@ func TestUIOperatorPages_serveWithoutLogStore(t *testing.T) {
 	if _, err := client.Post(front.URL+"/api/ui/login", "application/json", strings.NewReader(`{"token":"gw-ui-secret"}`)); err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{"/ui", "/ui/chat", "/ui/pwa", "/ui/settings", "/ui/settings/gallery"} {
+	for _, path := range []string{"/ui", "/ui/chat", "/ui/settings", "/ui/settings/gallery"} {
 		res, err := client.Get(front.URL + path)
 		if err != nil {
 			t.Fatal(err)

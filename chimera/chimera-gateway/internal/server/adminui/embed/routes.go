@@ -24,7 +24,6 @@ func Register(mux *http.ServeMux, h *handler.Handler) {
 		http.Redirect(w, r, "/ui/login", http.StatusFound)
 	})
 
-	mux.HandleFunc("GET /ui/pwa", h.RequireAuthPage(ServeHTML("embedui/pwa.html")))
 	mux.HandleFunc("GET /ui/chat", h.RequireAuthPage(ServeHTML("embedui/chat.html")))
 	mux.HandleFunc("GET /ui/settings", h.RequireAuthPage(ServeHTML("embedui/settings.html")))
 	mux.HandleFunc("GET /ui/settings/gallery", h.RequireAuthPage(ServeHTML("embedui/settings/gallery.html")))

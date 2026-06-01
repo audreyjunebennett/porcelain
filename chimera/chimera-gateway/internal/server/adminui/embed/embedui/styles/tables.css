@@ -1,21 +1,4 @@
-/* Embed UI — Tables (raw event log grid, props inner table) */
-#log-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; table-layout: fixed; }
-/* Fixed outer column widths so the Details column keeps the same width regardless of which rows are currently visible (filter toggles). */
-#log-table col.outer-col-app { width: 10rem; }
-#log-table col.outer-col-dt { width: 12.5rem; }
-#log-table col.outer-col-dt-local { width: 12.5rem; }
-#log-table col.outer-col-lvl { width: 5.5rem; }
-#log-table col.outer-col-details { width: auto; }
-#log-table thead th { position: sticky; top: 0; z-index: 1; background: var(--embed-surface-table-header); color: var(--embed-text-heading); text-align: left; font-weight: 600; padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--embed-border-strong); white-space: nowrap; vertical-align: top; }
-#log-table tbody td { vertical-align: top; padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--embed-border-medium); word-break: break-word; overflow-wrap: anywhere; }
-#log-table tbody tr:nth-child(odd) { background: var(--embed-surface-page); }
-#log-table tbody tr:nth-child(even) { background: var(--embed-surface-row-alt); }
-#log-table tbody tr:hover { background: var(--embed-surface-row-hover); }
-.col-app { font-family: ui-monospace, monospace; color: var(--embed-text-link); white-space: nowrap; font-size: 1rem; }
-/* Datetime cells must wrap: nowrap on the td is inherited and was overflowing into Level / adjacent cols. */
-.col-dt { font-family: ui-monospace, monospace; color: var(--embed-text-mono-dt); font-size: 1rem; white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
-.col-dt-local { font-weight: 700; }
-.col-lvl { font-family: ui-monospace, monospace; white-space: nowrap; font-size: 1rem; overflow-wrap: normal; }
+/* Embed UI — Tables (props inner table, datetime/level helpers for cards) */
 .dt-stack { line-height: 1.45; white-space: normal; }
 .dt-stack .dt-line { display: block; white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
 .dt-stack .dt-date { margin-top: 0.2rem; }
@@ -25,10 +8,6 @@
 .lvl-ERROR { color: var(--embed-semantic-error-fg); }
 .lvl-TRACE { color: var(--embed-text-faint); }
 .lvl-none { color: var(--embed-text-muted); }
-.col-details { min-width: 24rem; }
-/* Inner "Details" table: every row uses the same 4-column key | value | key | value layout
-   (with the second pair empty on odd rows) so the Details cell looks the same regardless of
-   how many extras a row has and which filter is currently applied. */
 .props-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; margin: 0; table-layout: fixed; }
 .props-table col.col-k { width: 24%; }
 .props-table col.col-v { width: 26%; }

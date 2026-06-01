@@ -1,25 +1,25 @@
 # Plan: Unified environment precedence contract
 
-| Field | Value |
-|-------|-------|
-| **Doc kind** | `feature-plan` |
-| **Owners / areas** | Gateway, supervisor, indexer, desktop launcher, docs |
-| **Status** | `draft` |
-| **Targets** | v0.4 runtime contract consistency |
-| **Last updated** | See git history |
-| **Supersedes / superseded by** | None |
+| Field                          | Value                                                |
+|--------------------------------|------------------------------------------------------|
+| **Doc kind**                   | `feature-plan`                                       |
+| **Owners / areas**             | Gateway, supervisor, indexer, desktop launcher, docs |
+| **Status**                     | `draft`                                              |
+| **Targets**                    | v0.4 runtime contract consistency                    |
+| **Last updated**               | See git history                                      |
+| **Supersedes / superseded by** | None                                                 |
 
 ## At a glance
 
 This plan defines one operator-facing environment/config precedence contract shared by all first-party binaries so startup behavior is predictable. It introduces explicit runtime profiles (secure, team dev, personal/private), including a personal/private flow where the product can generate a gateway key, persist it, and log where it was written without ever logging the key value. The contract is designed to become a reusable startup requirement for portable service wrappers in [`vectorstore-broker-wrapper-hard-cut.md`](vectorstore-broker-wrapper-hard-cut.md).
 
-| Phase | Outcome | Status |
-|-------|---------|--------|
-| [Phase 1 — Contract definition](#phase-1--contract-definition) | One canonical precedence and profile contract is published for operators and implementers | `todo` |
-| [Phase 2 — Single-binary implementation](#phase-2--single-binary-implementation) | One binary implements the contract end-to-end as reference behavior | `todo` |
-| [Phase 3 — Contract-based validation](#phase-3--contract-based-validation) | Tests validate the contract itself (behavioral outcomes), not implementation details | `todo` |
-| [Phase 4 — Remediation and portability refactor](#phase-4--remediation-and-portability-refactor) | Gaps are fixed and startup logic is refactored into portable components | `todo` |
-| [Phase 5 — Rollout to remaining binaries](#phase-5--rollout-to-remaining-binaries) | Remaining binaries adopt and verify the same contract and profile behavior | `todo` |
+| Phase                                                                                            | Outcome                                                                                   | Status |
+|--------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------|--------|
+| [Phase 1 — Contract definition](#phase-1--contract-definition)                                   | One canonical precedence and profile contract is published for operators and implementers | `todo` |
+| [Phase 2 — Single-binary implementation](#phase-2--single-binary-implementation)                 | One binary implements the contract end-to-end as reference behavior                       | `todo` |
+| [Phase 3 — Contract-based validation](#phase-3--contract-based-validation)                       | Tests validate the contract itself (behavioral outcomes), not implementation details      | `todo` |
+| [Phase 4 — Remediation and portability refactor](#phase-4--remediation-and-portability-refactor) | Gaps are fixed and startup logic is refactored into portable components                   | `todo` |
+| [Phase 5 — Rollout to remaining binaries](#phase-5--rollout-to-remaining-binaries)               | Remaining binaries adopt and verify the same contract and profile behavior                | `todo` |
 
 ---
 

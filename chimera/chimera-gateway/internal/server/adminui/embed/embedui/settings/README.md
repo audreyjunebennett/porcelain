@@ -17,7 +17,6 @@ See `settings.html`: `contracts.js` → `ChimeraUI` (`ui/`) → util/parse → d
 | `summarized/` | Diff/patch model for incremental card updates |
 | `transport/` | Log poll/SSE (`/api/ui/logs`, `/api/ui/logs/stream`) |
 | `parse/` | Log line text → flat field map |
-| `filters/` | Client-side filter state |
 | `components/` | Settings-local widgets (also uses `ui/components/`) |
 | `util/` | hash, time, escape re-exports |
 | `testing/` | Test harness loader (not used in production HTML) |
@@ -44,8 +43,8 @@ Card renderers live under `render/cards/`. Each module follows the same registra
 
 ### Mount order and `ctx` (Phase 4 feed-log)
 
-1. **`mountAll`** (`mount.js`) runs first: `serviceCard` → shared labels/avatars → `feedLogService` → gateway/admin cards.
-2. **`summarizedFeed.js`** then runs `mountFeedLogConv`, `mountFeedLogIndexerRun`, `mountFeedLogIndexerWorkspace` (may re-assign `ctx` exports).
+1. **`mountAll`** (`mount.js`) runs first: `sharedFormat` → admin/gateway cards (`serviceCard` avatars only; no log-feed mounts).
+2. **`mountSummarizedFeedCards`** (`mount.js`, called from `summarizedFeed.js` or setup wizard): `cardChrome` → `indexerRun` → `indexerWorkspace` → `feedLogConv` → `serviceFeed`.
 3. **`summarizedFeed.js`** orchestration calls **`ctx.*` only** — never bare symbols moved into card modules.
 4. **Do not** write `var fn = ctx.fn` at the top of a `mount*` closure when `function fn` is defined in the same closure; the `var` assignment overwrites the hoisted function with `undefined` (common extraction bug). Export the local function on `ctx` once at the end of mount instead.
 5. Cross-module helpers: resolve from **`ctx` at call time** (or a thin local wrapper that delegates to `ctx`), not a stale capture at mount when the exporter mounts later.
@@ -101,9 +100,6 @@ Convention tables: [`CARD_INVENTORY.md` § Draft and edit-state](CARD_INVENTORY.
 4. **Defer** — `summarizedPanelInteractionBlocksRebuild` or `summarizedAdminEditingActive` → `scheduleDeferredSummarizedRefresh` (300ms retry) instead of clobbering focus.
 5. **Dirty storm** — many cards dirty → coalesced full rebuild (`SUMMARIZED_DIRTY_FULL_REBUILD_*` in feed); live settle defers patches briefly after tail ingest.
 
-## Maintainer scripts
+## Maintainer docs
 
-- `../scripts/extract-cards-phase3.py` — admin card extraction from `app/summarizedFeed.js`.
-- `../scripts/extract-feed-phase4.py` — conv/service helpers into `feedLogConv.js` / `feedLogService.js`.
-- `../scripts/extract-feed-phase4b.py` — indexer cards into `indexerRun.js` / `indexerWorkspace.js`.
-- [`CARD_INVENTORY.md`](CARD_INVENTORY.md) — Phase 1 card file → API → handler map, monolithic extraction targets, Phase 6 part slug seeds.
+- [`CARD_INVENTORY.md`](CARD_INVENTORY.md) — card file → API → handler map and part slug seeds.

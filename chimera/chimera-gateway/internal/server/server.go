@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/assets"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/chat"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/conversationhistory"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/conversationmerge"
@@ -89,26 +88,7 @@ var gatewayIndexTmpl = template.Must(template.New("gatewayIndex").Parse(`<!DOCTY
     body {
       font-family: system-ui, sans-serif; max-width: 48rem; margin: 1.5rem auto 2.5rem; padding: 0 1rem;
       line-height: 1.55; color: #1a1a1a;
-      position: relative;
-      min-height: 100vh;
     }
-    /* Large faint brand mark — behind content, fixed to the right */
-    body::before {
-      content: "";
-      position: fixed;
-      right: -4%;
-      top: 50%;
-      transform: translateY(-50%);
-      width: min(52vw, 24rem);
-      height: min(52vw, 24rem);
-      max-height: 85vh;
-      background: url("/assets/icon.png") no-repeat center right;
-      background-size: contain;
-      opacity: 0.07;
-      pointer-events: none;
-      z-index: 0;
-    }
-    body > * { position: relative; z-index: 1; }
     h1 { font-size: 1.45rem; margin-bottom: 0.25rem; }
     h2 { font-size: 1.05rem; margin-top: 1.75rem; margin-bottom: 0.65rem; color: #222; }
     .subtitle { color: #555; margin-top: 0; font-size: 0.95rem; }
@@ -162,15 +142,6 @@ var gatewayIndexTmpl = template.Must(template.New("gatewayIndex").Parse(`<!DOCTY
 func NewMux(rt *Runtime, log *slog.Logger, overlay *StatusOverlay, ui *UIOptions) http.Handler {
 	configureAdminUIListenForEmbed(rt, overlay)
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /assets/icon.png", func(w http.ResponseWriter, r *http.Request) {
-		if len(assets.IconPNG) == 0 {
-			http.NotFound(w, r)
-			return
-		}
-		w.Header().Set("Content-Type", "image/png")
-		w.Header().Set("Cache-Control", "public, max-age=86400")
-		_, _ = w.Write(assets.IconPNG)
-	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
 			http.NotFound(w, r)
@@ -908,7 +879,7 @@ func httpAccessLogLevel(path string, status int) slog.Level {
 	if status < 200 || status >= 300 {
 		return slog.LevelInfo
 	}
-	if strings.HasPrefix(path, "/ui/assets/") || strings.HasPrefix(path, "/assets/") {
+	if strings.HasPrefix(path, "/ui/assets/") {
 		return slog.LevelDebug
 	}
 	if path == "/v1/indexer/workspaces" {

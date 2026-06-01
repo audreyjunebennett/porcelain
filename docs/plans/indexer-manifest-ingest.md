@@ -1,29 +1,29 @@
 # Plan: Indexer manifest ingest with line metadata
 
-| Field | Value |
-|-------|-------|
-| **Doc kind** | `feature-plan` |
-| **Owners / areas** | Gateway, `chimera-indexer`, operator SQLite, embed UI (`/ui/chat`), Qdrant payload |
-| **Status** | `draft` |
-| **Targets** | Gateway v0.4 ([`version-v0.4.md`](../version-v0.4.md)) |
-| **Last updated** | See git history |
+| Field                          | Value                                                                                                                                                                     |
+|--------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Doc kind**                   | `feature-plan`                                                                                                                                                            |
+| **Owners / areas**             | Gateway, `chimera-indexer`, operator SQLite, embed UI (`/ui/chat`), Qdrant payload                                                                                        |
+| **Status**                     | `draft`                                                                                                                                                                   |
+| **Targets**                    | Gateway v0.4 ([`version-v0.4.md`](../version-v0.4.md))                                                                                                                    |
+| **Last updated**               | See git history                                                                                                                                                           |
 | **Supersedes / superseded by** | Replaces gateway-only chunking at ingest (v0.2 baseline). Complements [`indexer-sync-state-sqlite-and-force-reindex.md`](indexer-sync-state-sqlite-and-force-reindex.md). |
-| **As-built** | None — link to [`docs/features/`](../features/README.md) when shipped |
+| **As-built**                   | None — link to [`docs/features/`](../features/README.md) when shipped                                                                                                     |
 
 ## At a glance
 
 Operators see **workspace snippets in chat with file paths and line ranges** (e.g. `src/foo.go · L42–58`), a **gutter-style line-number column** beside snippet text, and **mid-line chunk starts** marked with `…` before the visible code. The indexer **pre-chunks every file**, builds a **manifest** with line and byte spans, and sends it to the gateway; the gateway **embeds and stores** rich metadata in Qdrant and a **segment index** in operator SQLite. Retrieval, injected system context, conversation history, **revision coherence**, and **tooling/expansion** APIs all use the same manifest contract. **No legacy ingest path** — manifest is required. A one-time **full re-index of all workspaces** ships the feature.
 
-| Phase | Outcome | Status |
-|-------|---------|--------|
-| [Phase 1 — Shared chunk library](#phase-1--shared-chunk-library) | `chimera/internal/chunk` splits text and annotates line/byte spans; golden tests | `todo` |
-| [Phase 2 — Indexer manifest build and ingest](#phase-2--indexer-manifest-build-and-ingest) | Indexer builds manifest per file and uploads via manifest-first ingest API | `todo` |
-| [Phase 3 — Gateway manifest ingest and segment index](#phase-3--gateway-manifest-ingest-and-segment-index) | Gateway accepts manifest, embeds, upserts Qdrant + operator SQLite segment rows | `todo` |
-| [Phase 4 — Retrieval, history, and injected context](#phase-4--retrieval-history-and-injected-context) | Virtual-model RAG returns metadata; history persists lines; system block includes ranges | `todo` |
-| [Phase 5 — Chat snippet gutter UI](#phase-5--chat-snippet-gutter-ui) | `/ui/chat` renders L42–58 header and left gutter with mid-line `…` | `todo` |
-| [Phase 6 — Revision coherence](#phase-6--revision-coherence) | Staleness detection vs live files; operator-visible warn/strict behavior | `todo` |
-| [Phase 7 — Tooling and expansion](#phase-7--tooling-and-expansion) | Segment read / context-around tools; indexer or gateway file-serving (see open questions) | `todo` |
-| [Phase 8 — Re-index and ship](#phase-8--re-index-and-ship) | Full workspace re-index; sync-state integration; docs and feature record | `todo` |
+| Phase                                                                                                      | Outcome                                                                                   | Status |
+|------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------|--------|
+| [Phase 1 — Shared chunk library](#phase-1--shared-chunk-library)                                           | `chimera/internal/chunk` splits text and annotates line/byte spans; golden tests          | `todo` |
+| [Phase 2 — Indexer manifest build and ingest](#phase-2--indexer-manifest-build-and-ingest)                 | Indexer builds manifest per file and uploads via manifest-first ingest API                | `todo` |
+| [Phase 3 — Gateway manifest ingest and segment index](#phase-3--gateway-manifest-ingest-and-segment-index) | Gateway accepts manifest, embeds, upserts Qdrant + operator SQLite segment rows           | `todo` |
+| [Phase 4 — Retrieval, history, and injected context](#phase-4--retrieval-history-and-injected-context)     | Virtual-model RAG returns metadata; history persists lines; system block includes ranges  | `todo` |
+| [Phase 5 — Chat snippet gutter UI](#phase-5--chat-snippet-gutter-ui)                                       | `/ui/chat` renders L42–58 header and left gutter with mid-line `…`                        | `todo` |
+| [Phase 6 — Revision coherence](#phase-6--revision-coherence)                                               | Staleness detection vs live files; operator-visible warn/strict behavior                  | `todo` |
+| [Phase 7 — Tooling and expansion](#phase-7--tooling-and-expansion)                                         | Segment read / context-around tools; indexer or gateway file-serving (see open questions) | `todo` |
+| [Phase 8 — Re-index and ship](#phase-8--re-index-and-ship)                                                 | Full workspace re-index; sync-state integration; docs and feature record                  | `todo` |
 
 ---
 
@@ -113,21 +113,21 @@ Gateway reassembles transport bytes only if the compatibility whole-file path is
 
 Add to `vectorstore.Payload` (all required for new points):
 
-| Field | Type | Notes |
-|-------|------|-------|
-| `chunk_index` | int | 0-based within file |
-| `chunk_count` | int | Total chunks at ingest |
-| `start_line` | int | 1-based display start |
-| `end_line` | int | 1-based display end |
-| `start_byte` | int | UTF-8 byte offset in normalized file |
-| `end_byte` | int | Exclusive |
-| `start_ch` | int | Rune offset inclusive |
-| `end_ch` | int | Rune offset exclusive |
-| `starts_mid_line` | bool | Mid-line start marker |
-| `line_count` | int | File line count at ingest |
-| `file_bytes` | int | Normalized file size |
-| `chunk_schema` | int | `2` for this plan |
-| `language` | string | From extension when known |
+| Field             | Type   | Notes                                |
+|-------------------|--------|--------------------------------------|
+| `chunk_index`     | int    | 0-based within file                  |
+| `chunk_count`     | int    | Total chunks at ingest               |
+| `start_line`      | int    | 1-based display start                |
+| `end_line`        | int    | 1-based display end                  |
+| `start_byte`      | int    | UTF-8 byte offset in normalized file |
+| `end_byte`        | int    | Exclusive                            |
+| `start_ch`        | int    | Rune offset inclusive                |
+| `end_ch`          | int    | Rune offset exclusive                |
+| `starts_mid_line` | bool   | Mid-line start marker                |
+| `line_count`      | int    | File line count at ingest            |
+| `file_bytes`      | int    | Normalized file size                 |
+| `chunk_schema`    | int    | `2` for this plan                    |
+| `language`        | string | From extension when known            |
 
 Existing fields (`tenant_id`, `project_id`, `flavor_id`, `text`, `source`, `content_sha256`, `client_content_hash`, `created_at`) unchanged.
 
@@ -171,11 +171,11 @@ CREATE INDEX idx_corpus_segments_line
 
 **Overlap with sync-state plan**
 
-| Store | Owner | Purpose |
-|-------|-------|---------|
-| `sync-state.sqlite` (indexer) | Indexer | Per-file **skip/re-ingest** checkpoints (`client_sha256`, `server_sha256`, optional `chunk_count`, `chunk_schema`) — see [`indexer-sync-state-sqlite-and-force-reindex.md`](indexer-sync-state-sqlite-and-force-reindex.md) |
-| `corpus_segments` (operator.sqlite) | Gateway | **Tooling / line lookup** and neighbor queries by `(source, content_sha256, chunk_index)` |
-| Qdrant | Gateway | Vector search + payload copy for retrieval |
+| Store                               | Owner   | Purpose                                                                                                                                                                                                                     |
+|-------------------------------------|---------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `sync-state.sqlite` (indexer)       | Indexer | Per-file **skip/re-ingest** checkpoints (`client_sha256`, `server_sha256`, optional `chunk_count`, `chunk_schema`) — see [`indexer-sync-state-sqlite-and-force-reindex.md`](indexer-sync-state-sqlite-and-force-reindex.md) |
+| `corpus_segments` (operator.sqlite) | Gateway | **Tooling / line lookup** and neighbor queries by `(source, content_sha256, chunk_index)`                                                                                                                                   |
+| Qdrant                              | Gateway | Vector search + payload copy for retrieval                                                                                                                                                                                  |
 
 Implement **Phase 1 of the sync-state SQLite plan** before or in parallel with Phase 8 so re-index and skip logic scale; bump `chunk_schema` in sync entry when manifest format changes to force re-upload.
 

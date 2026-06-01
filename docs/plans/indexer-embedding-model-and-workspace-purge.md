@@ -1,25 +1,25 @@
 # Plan: Indexer embedding model and workspace purge
 
-| Field | Value |
-|-------|-------|
-| **Doc kind** | `feature-plan` |
-| **Owners / areas** | Gateway RAG, operator UI (`/ui/settings`), indexer service card, vector store, operator SQLite |
-| **Status** | `draft` |
-| **Targets** | Gateway v0.3 setup wizard step 5, gateway v0.5 indexer lifecycle |
-| **Last updated** | See git history |
+| Field                          | Value                                                                                                                                                                          |
+|--------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Doc kind**                   | `feature-plan`                                                                                                                                                                 |
+| **Owners / areas**             | Gateway RAG, operator UI (`/ui/settings`), indexer service card, vector store, operator SQLite                                                                                 |
+| **Status**                     | `draft`                                                                                                                                                                        |
+| **Targets**                    | Gateway v0.3 setup wizard step 5, gateway v0.5 indexer lifecycle                                                                                                               |
+| **Last updated**               | See git history                                                                                                                                                                |
 | **Supersedes / superseded by** | Extends [`indexer-workspaces-sqlite-gateway-api.md`](indexer-workspaces-sqlite-gateway-api.md); aligns with v0.4 purge theme — may ship earlier for delete-on-workspace-remove |
-| **As-built** | None — link to [`docs/features/`](../features/README.md) when shipped |
+| **As-built**                   | None — link to [`docs/features/`](../features/README.md) when shipped                                                                                                          |
 
 ## At a glance
 
 Operators need to **choose the embedding model** used for ingest and retrieval from the **live broker catalog**, not only via hand-edited `gateway.yaml`. The **indexer / RAG service card** on `/ui/settings` should expose a catalog combobox, persist the choice through a gateway API, and show a clear **re-embed warning** when the model changes. When an operator **deletes a workspace**, the gateway should **drop the scoped vector collection** so orphaned vectors do not linger in Qdrant.
 
-| Phase | Outcome | Status |
-|-------|---------|--------|
-| [Phase 1 — Embedding config API and runtime reload](#phase-1--embedding-config-api-and-runtime-reload) | Authenticated API writes `rag.embedding.model` (and `dim` when known); gateway reloads RAG embedder | `todo` |
-| [Phase 2 — Indexer card embedding selector](#phase-2--indexer-card-embedding-selector) | Service card or workspace section: catalog combobox, warning copy, health reflects new model | `todo` |
-| [Phase 3 — Workspace delete collection purge](#phase-3--workspace-delete-collection-purge) | Deleting a workspace drops its Qdrant collection (tenant + project + flavor scope) | `todo` |
-| [Phase 4 — Re-embed operator guidance](#phase-4--re-embed-operator-guidance) | After embedding change, UI explains full re-index requirement; optional force re-index link when that plan ships | `todo` |
+| Phase                                                                                                  | Outcome                                                                                                          | Status |
+|--------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------|--------|
+| [Phase 1 — Embedding config API and runtime reload](#phase-1--embedding-config-api-and-runtime-reload) | Authenticated API writes `rag.embedding.model` (and `dim` when known); gateway reloads RAG embedder              | `todo` |
+| [Phase 2 — Indexer card embedding selector](#phase-2--indexer-card-embedding-selector)                 | Service card or workspace section: catalog combobox, warning copy, health reflects new model                     | `todo` |
+| [Phase 3 — Workspace delete collection purge](#phase-3--workspace-delete-collection-purge)             | Deleting a workspace drops its Qdrant collection (tenant + project + flavor scope)                               | `todo` |
+| [Phase 4 — Re-embed operator guidance](#phase-4--re-embed-operator-guidance)                           | After embedding change, UI explains full re-index requirement; optional force re-index link when that plan ships | `todo` |
 
 ---
 

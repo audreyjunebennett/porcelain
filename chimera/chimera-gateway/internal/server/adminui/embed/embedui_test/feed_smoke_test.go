@@ -19,7 +19,10 @@ func loadFeedSmokeStack(t *testing.T, vm *goja.Runtime) {
 	evalJS(t, vm, settingsUIPath(t, "derive", "gatewayCardModel.js"))
 	evalJS(t, vm, settingsUIPath(t, "derive", "vectorstoreRagMetrics.js"))
 	evalJS(t, vm, settingsUIPath(t, "derive", "conversationCardModel.js"))
+	evalJS(t, vm, settingsUIPath(t, "derive", "logLineClassification.js"))
+	evalJS(t, vm, settingsUIPath(t, "derive", "conversationAggregate.js"))
 	evalJS(t, vm, settingsUIPath(t, "render", "sumEvlog.js"))
+	evalJS(t, vm, settingsUIPath(t, "render", "cardChrome.js"))
 	for _, f := range []string{
 		"operatorFeedback.js", "configureEdit.js", "yamlEditor.js", "draftInput.js",
 		"providerCredentials.js", "scopedEvlog.js", "adminAction.js", "editToolbar.js",
@@ -30,11 +33,11 @@ func loadFeedSmokeStack(t *testing.T, vm *goja.Runtime) {
 	for _, f := range []string{
 		"sharedFormat.js", "convCard.js", "serviceCard.js", "gatewayOverview.js", "gatewayUsage.js",
 		"adminShared.js", "adminUsers.js", "adminProvider.js", "adminVirtualModels.js", "workspaceDraft.js",
-		"feedLogConv.js", "feedLogService.js", "indexerRun.js", "indexerWorkspace.js", "mount.js",
+		"feedLogConv.js", "serviceFeed.js", "indexerRun.js", "indexerWorkspace.js", "mount.js",
 	} {
 		evalJS(t, vm, cardsUIPath(t, f))
 	}
-	for _, f := range []string{"hash.js", "model.js", "renderHtml.js"} {
+	for _, f := range []string{"hash.js", "model.js", "aggregate.js", "renderHtml.js"} {
 		evalJS(t, vm, settingsUIPath(t, "summarized", f))
 	}
 	evalJS(t, vm, settingsUIPath(t, "summarized", "rebuildPolicy.js"))
@@ -94,10 +97,7 @@ func loadFeedSmokeStack(t *testing.T, vm *goja.Runtime) {
 		ChimeraSettings.Render.mountSumEvlog(ctx);
 		ChimeraSettings.Render.Cards.mountAll(ctx);
 		var C = ChimeraSettings.Render.Cards;
-		C.mountFeedLogConv(ctx);
-		C.mountFeedLogService(ctx);
-		C.mountFeedLogIndexerRun(ctx);
-		C.mountFeedLogIndexerWorkspace(ctx);
+		if (typeof C.mountSummarizedFeedCards === "function") C.mountSummarizedFeedCards(ctx);
 		globalThis.__feedSmokeCtx = ctx;
 	`)
 	if err != nil {

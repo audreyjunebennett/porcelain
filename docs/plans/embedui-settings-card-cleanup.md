@@ -1,27 +1,27 @@
 # Plan: Embed UI settings card cleanup
 
-| Field | Value |
-|-------|-------|
-| **Doc kind** | `refactor-plan` |
-| **Owners / areas** | Gateway embed UI (`/ui/settings`), summarized feed, card renderers |
-| **Status** | `active` |
-| **Targets** | Gateway operator UI maintainability; shared card modules in `embedui/shared/` for later setup wizard reuse |
-| **Last updated** | See git history |
+| Field                          | Value                                                                                                                                                                                                                       |
+|--------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Doc kind**                   | `refactor-plan`                                                                                                                                                                                                             |
+| **Owners / areas**             | Gateway embed UI (`/ui/settings`), summarized feed, card renderers                                                                                                                                                          |
+| **Status**                     | `shipped`                                                                                                                                                                                                                   |
+| **Targets**                    | Gateway operator UI maintainability; shared card modules in `embedui/shared/` for later setup wizard reuse                                                                                                                  |
+| **Last updated**               | See git history                                                                                                                                                                                                             |
 | **Supersedes / superseded by** | Builds on [`logs-ui-page-data-refreshing.md`](logs-ui-page-data-refreshing.md), [`embedui-component-system.md`](embedui-component-system.md); supersedes ad-hoc card patterns in `summarizedFeed.js` where still monolithic |
-| **As-built** | None — update [`operator-settings-ui.md`](../features/operator-settings-ui.md) when shipped |
+| **As-built**                   | None — update [`operator-settings-ui.md`](../features/operator-settings-ui.md) when shipped                                                                                                                                 |
 
 ## At a glance
 
 The settings page grew through phased extraction of card renderers from a monolithic feed. Operators depend on stable, focus-safe cards; maintainers need **consistent structure, styling, and handler patterns** across provider, workspace, virtual model, routing, and service cards. This plan refactors JavaScript modules for **uniform card contracts**, reduces duplication in `summarizedFeed.js`, and aligns UX primitives (edit mode, save/cancel, warnings, evlog panels). Shared card controllers land in **`embedui/shared/`**; the setup wizard ships **after** this work and imports from there.
 
-| Phase | Outcome | Status |
-|-------|---------|--------|
-| [Phase 1 — Card contract and inventory](#phase-1--card-contract-and-inventory) | Documented card module interface; audit of all `render/cards/*` and feed registration | `done` |
-| [Phase 2 — Shared admin primitives](#phase-2--shared-admin-primitives) | Consolidate save/cancel, edit mode, drafts, and icon buttons in `adminShared.js` / `ChimeraUI` | `done` |
-| [Phase 3 — Per-card refactors](#phase-3--per-card-refactors) | Provider, workspace, virtual model, routing trio, service cards match contract | `done` |
-| [Phase 4 — Feed orchestration trim](#phase-4--feed-orchestration-trim) | `summarizedFeed.js` delegates rendering; feed refresh paths stay interaction-safe | `done` |
-| [Phase 5 — Tests and gallery parity](#phase-5--tests-and-gallery-parity) | embedui tests + gallery fixtures cover refactored cards; no visual regressions on mobile | `done` |
-| [Phase 6 — Gallery part taxonomy and overlay](#phase-6--gallery-part-taxonomy-and-overlay) | Textual part registry + `data-ui-part` labels with CSS overlay on `/ui/settings/gallery` | `done` |
+| Phase                                                                                      | Outcome                                                                                        | Status |
+|--------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------|--------|
+| [Phase 1 — Card contract and inventory](#phase-1--card-contract-and-inventory)             | Documented card module interface; audit of all `render/cards/*` and feed registration          | `done` |
+| [Phase 2 — Shared admin primitives](#phase-2--shared-admin-primitives)                     | Consolidate save/cancel, edit mode, drafts, and icon buttons in `adminShared.js` / `ChimeraUI` | `done` |
+| [Phase 3 — Per-card refactors](#phase-3--per-card-refactors)                               | Provider, workspace, virtual model, routing trio, service cards match contract                 | `done` |
+| [Phase 4 — Feed orchestration trim](#phase-4--feed-orchestration-trim)                     | `summarizedFeed.js` delegates rendering; feed refresh paths stay interaction-safe              | `done` |
+| [Phase 5 — Tests and gallery parity](#phase-5--tests-and-gallery-parity)                   | embedui tests + gallery fixtures cover refactored cards; no visual regressions on mobile       | `done` |
+| [Phase 6 — Gallery part taxonomy and overlay](#phase-6--gallery-part-taxonomy-and-overlay) | Textual part registry + `data-ui-part` labels with CSS overlay on `/ui/settings/gallery`       | `done` |
 
 ---
 

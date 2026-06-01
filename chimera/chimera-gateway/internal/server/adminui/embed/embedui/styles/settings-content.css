@@ -71,7 +71,7 @@
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
   word-break: break-word; font-size: 0.78rem; color: var(--embed-text-heading); line-height: 1.35;
 }
-/* Bifrost service card: full log uses buildDetailsColumn + room for long upstream lines */
+/* Broker service card: full log field grid + room for long upstream lines */
 .sum-full-log.sum-full-log--chimera-broker .log-line-sum__msg {
   -webkit-line-clamp: 12;
   max-height: none;
@@ -81,7 +81,6 @@
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
   word-break: break-word;
 }
-.log-fields-block { margin-top: 0.35rem; font-size: 0.78rem; }
 /* Gateway metrics tables (same data as GET /api/ui/metrics) inside summarized card */
 .sum-metrics-table-wrap { overflow-x: auto; margin: 0.35rem 0 0.75rem; }
 /* Recent upstream calls: cap height like .sum-full-log on other summary cards */

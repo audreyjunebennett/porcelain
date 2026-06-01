@@ -41,60 +41,36 @@ globalThis.ChimeraSettings.Summarized = globalThis.ChimeraSettings.Summarized ||
     return String(f.timeline_kind != null ? f.timeline_kind : "").trim().toLowerCase();
   }
 
-  /** Gateway upstream relay lines bucket under chimera-broker (mirrors summarizedFeed). */
+  function flatMsgLower(f) {
+    return flatMsg(f).toLowerCase();
+  }
+
+  function classify(ent, getFlat) {
+    var D = globalThis.ChimeraSettings && ChimeraSettings.Derive ? ChimeraSettings.Derive : null;
+    if (!D) return { relay: false, broker: false, vectorstore: false, indexer: false };
+    return {
+      relay: typeof D.entryIsGatewayUpstreamRelay === "function" ? D.entryIsGatewayUpstreamRelay(ent, getFlat) : false,
+      broker: typeof D.entryRoutesToChimeraBrokerBucket === "function" ? D.entryRoutesToChimeraBrokerBucket(ent, getFlat) : false,
+      vectorstore: typeof D.entryIsVectorstoreLine === "function" ? D.entryIsVectorstoreLine(ent, getFlat) : false,
+      indexer: typeof D.entryIsIndexerLine === "function" ? D.entryIsIndexerLine(ent, getFlat) : false
+    };
+  }
+
+  /** Gateway upstream relay lines bucket under chimera-broker (see derive/logLineClassification.js). */
   function entryIsGatewayUpstreamRelay(ent, getFlat) {
-    var f = getFlat(ent.parsed);
-    var msg = flatMsg(f);
-    if (
-      msg === "chat.chimera-broker.request" ||
-      msg === "upstream chat response" ||
-      msg === "chat.chimera-broker.response" ||
-      msg === "chat.chimera-broker.error" ||
-      msg.indexOf("chimera-broker.error") >= 0
-    ) {
-      return true;
-    }
-    var sh = ent.parsed && ent.parsed.shape ? String(ent.parsed.shape) : "";
-    if (sh === "chat.chimera-broker" || sh.indexOf("chat.chimera-broker.") === 0) return true;
-    return false;
+    return classify(ent, getFlat).relay;
   }
 
   function entryRoutesToChimeraBrokerBucket(ent, getFlat) {
-    if (entryIsGatewayUpstreamRelay(ent, getFlat)) return true;
-    var f = getFlat(ent.parsed);
-    var msg = flatMsg(f);
-    if (msg === "chat.chimera-broker.available_models") return true;
-    if (msg === "chat.routing.fallback") return true;
-    if (msg === "chat.routing.attempt") return true;
-    if (msg === "chat.routing.resolved") return true;
-    if (msg === "chat.provider_limits.blocked") return true;
-    if (msg.indexOf("virtual model fallback attempt") >= 0) return true;
-    if (msg.indexOf("virtual model routing resolved") >= 0) return true;
-    return false;
+    return classify(ent, getFlat).broker;
   }
 
   function entryIsVectorstoreLine(ent, getFlat) {
-    var f = getFlat(ent.parsed);
-    var svcL = String(f.service || "").toLowerCase();
-    if (svcL === "vectorstore" || svcL === "chimera-vectorstore") return true;
-    var srcL = ent && String(ent.source || "").toLowerCase();
-    if (srcL === "vectorstore" || srcL === "chimera-vectorstore") return true;
-    var msg = flatMsgLower(f);
-    if (msg.indexOf("vectorstore.") === 0) return true;
-    if (msg.indexOf("chimera-vectorstore.") === 0) return true;
-    return false;
+    return classify(ent, getFlat).vectorstore;
   }
 
   function entryIsIndexerLine(ent, getFlat) {
-    var f = getFlat(ent.parsed);
-    var svcL = String(f.service || "").toLowerCase();
-    if (svcL === "indexer" || svcL === "chimera-indexer") return true;
-    var srcL = ent && String(ent.source || "").toLowerCase();
-    if (srcL === "indexer" || srcL === "chimera-indexer") return true;
-    var msg = flatMsgLower(f);
-    if (msg.indexOf("indexer.") === 0) return true;
-    if (msg.indexOf("gateway.indexer") === 0) return true;
-    return false;
+    return classify(ent, getFlat).indexer;
   }
 
   /** Gateway/broker/vectorstore lines that belong to an indexer run, not operator service cards. */

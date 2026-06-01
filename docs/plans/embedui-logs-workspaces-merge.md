@@ -1,23 +1,23 @@
 # Plan: Unify logs and workspace indexers in embed UI
 
-| Field | Value |
-|-------|-------|
-| **Doc kind** | `feature-plan` |
-| **Owners / areas** | Gateway embed UI (`embedui`), operator logs, indexer configuration |
-| **Status** | `done` |
-| **Targets** | Gateway embed UI; aligns with workspace / project / flavor model in indexer docs |
-| **Last updated** | See git history |
-| **Supersedes / superseded by** | None |
+| Field                          | Value                                                                            |
+|--------------------------------|----------------------------------------------------------------------------------|
+| **Doc kind**                   | `feature-plan`                                                                   |
+| **Owners / areas**             | Gateway embed UI (`embedui`), operator logs, indexer configuration               |
+| **Status**                     | `done`                                                                           |
+| **Targets**                    | Gateway embed UI; aligns with workspace / project / flavor model in indexer docs |
+| **Last updated**               | See git history                                                                  |
+| **Supersedes / superseded by** | None                                                                             |
 
 ## At a glance
 
 Operators manage **workspaces** (who indexes what, under which project and optional flavor) in the same place they watch **logs**, instead of switching tabs. The **Indexers** tab and its dedicated surface go away; the logs view gains a **Workspaces** section with a single, consistent card model for creating, configuring, and monitoring each workspace indexer.
 
-| Phase | Outcome | Status |
-|-------|---------|--------|
-| [Phase 1 — Shell and navigation](#phase-1--shell-and-navigation) | Indexer tab removed; logs view owns workspace management entry points | `done` |
-| [Phase 2 — Workspaces section structure](#phase-2--workspaces-section-structure) | “Workspaces” title, combined description, Create control, no per-card short blurbs | `done` |
-| [Phase 3 — Card UX — create, save, directory picker](#phase-3--card-ux--create-save-directory-picker) | New and unsaved cards: fields, labels, watched paths, Add path / Remove path, Cancel / Save | `done` |
+| Phase                                                                                                       | Outcome                                                                                            | Status |
+|-------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------|--------|
+| [Phase 1 — Shell and navigation](#phase-1--shell-and-navigation)                                            | Indexer tab removed; logs view owns workspace management entry points                              | `done` |
+| [Phase 2 — Workspaces section structure](#phase-2--workspaces-section-structure)                            | “Workspaces” title, combined description, Create control, no per-card short blurbs                 | `done` |
+| [Phase 3 — Card UX — create, save, directory picker](#phase-3--card-ux--create-save-directory-picker)       | New and unsaved cards: fields, labels, watched paths, Add path / Remove path, Cancel / Save        | `done` |
 | [Phase 4 — Saved cards — monitoring, configure, delete](#phase-4--saved-cards--monitoring-configure-delete) | Read-only identity after save; Configure / edit / delete; drop collection status; file count rules | `done` |
 
 ---

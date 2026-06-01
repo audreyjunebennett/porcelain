@@ -6,14 +6,11 @@ globalThis.ChimeraSettings.Main = function () {
     document.documentElement.classList.add("logs-embedded");
     document.body.classList.add("logs-embedded");
   }
-  var tbody = document.getElementById("log-body");
   var statusEl = document.getElementById("status");
   var statusLine =
     globalThis.ChimeraSettings && typeof globalThis.ChimeraSettings.StatusLine === "function"
       ? globalThis.ChimeraSettings.StatusLine(statusEl)
       : null;
-  var fltApp = document.getElementById("flt-app");
-  var fltLevel = document.getElementById("flt-level");
   var C = globalThis.ChimeraSettings && globalThis.ChimeraSettings.Contracts;
   /** Gateway expanded panel: show 2xx HTTP rows for /health, /status, logs poll/stream, etc. */
   var gatewayPanelShowProbes = false;
@@ -90,12 +87,8 @@ globalThis.ChimeraSettings.Main = function () {
   var olderFetchBusy = false;
   var ssePending = [];
   var sseFlushScheduled = false;
-  var levelOptionSet = { "": true, "(none)": true, DEBUG: true, INFO: true, WARN: true, ERROR: true };
-
   // Summarized-only logs UI (structured/raw modes removed).
   var viewMode = "summarized";
-  var viewModeEl = null;
-  var filtersBar = null;
   function inferShape(flat, source, rawText) {
     var oc = globalThis.ChimeraSettings && ChimeraSettings.OperatorCopy;
     if (oc && typeof oc.inferShapeForFlat === "function") {
@@ -198,24 +191,11 @@ globalThis.ChimeraSettings.Main = function () {
     return out;
   }
 
-  function buildDetailsColumn(parsed, entryTs, rawText, badgeOpt, opts) {
-    opts = opts || {};
-    var evLike = { parsed: parsed, text: rawText != null && rawText !== undefined ? rawText : "", ts: entryTs };
-    var top = logSummaryHtml(evLike, badgeOpt !== undefined ? badgeOpt : null, opts);
-    var grid = buildDetailsCell(parsed.extras);
-    return top + '<div class="log-fields-block">' + grid + "</div>";
-  }
-
   function nearBottom() {
     var el = document.documentElement;
     var sh = el.scrollHeight;
     var y = window.scrollY + window.innerHeight;
     return sh - y <= stickPx;
-  }
-
-  function nearBottomTextarea(ta) {
-    if (!ta) return true;
-    return ta.scrollHeight - ta.scrollTop - ta.clientHeight <= stickPx;
   }
 
   var escapeHtml =
@@ -324,53 +304,6 @@ globalThis.ChimeraSettings.Main = function () {
           shape: "generic"
         };
       };
-  var filtersCtx = {
-    fltAppEl: fltApp,
-    fltLevelEl: fltLevel,
-    tbodyEl: tbody,
-    levelOptionSet: levelOptionSet,
-    viewModeGetter: function () { return viewMode; },
-    rebuildRawLogsTextarea: function (opts) { return rebuildRawLogsTextarea(opts); },
-    nearBottomTextarea: nearBottomTextarea
-  };
-
-  function ensureAppOption(app) {
-    if (globalThis.ChimeraSettings && globalThis.ChimeraSettings.Filters) {
-      return globalThis.ChimeraSettings.Filters.ensureAppOption(filtersCtx, app);
-    }
-  }
-  function ensureLevelOption(lvl) {
-    if (globalThis.ChimeraSettings && globalThis.ChimeraSettings.Filters) {
-      return globalThis.ChimeraSettings.Filters.ensureLevelOption(filtersCtx, lvl);
-    }
-  }
-  function entryMatchesFilters(parsed) {
-    if (globalThis.ChimeraSettings && globalThis.ChimeraSettings.Filters) {
-      return globalThis.ChimeraSettings.Filters.entryMatches(filtersCtx, parsed);
-    }
-    return true;
-  }
-
-  function rebuildRawLogsTextarea(opts) {
-    if (globalThis.ChimeraSettings && globalThis.ChimeraSettings.RawLogs) {
-      return globalThis.ChimeraSettings.RawLogs.rebuild({ entryCache: entryCache, entryMatchesFilters: entryMatchesFilters }, opts);
-    }
-  }
-
-  function appendRawLineToTextarea(ent, follow) {
-    if (globalThis.ChimeraSettings && globalThis.ChimeraSettings.RawLogs) {
-      return globalThis.ChimeraSettings.RawLogs.appendRawLine({}, ent, follow);
-    }
-  }
-
-  function copyRawLogsToClipboard() {
-    if (globalThis.ChimeraSettings && globalThis.ChimeraSettings.RawLogs) {
-      return globalThis.ChimeraSettings.RawLogs.copyToClipboard({});
-    }
-  }
-
-  function applyFilters() { }
-
   function applyViewLayout() {
     var psu = document.getElementById("panel-summarized");
     if (!psu) return;
@@ -378,8 +311,6 @@ globalThis.ChimeraSettings.Main = function () {
     if (appCtx.syncUiStatePolling) appCtx.syncUiStatePolling();
     try {
       document.body.classList.toggle("logs-summarized", true);
-      document.body.classList.toggle("logs-raw", false);
-      document.body.classList.toggle("logs-raw-logs", false);
     } catch (x) { }
     viewMode = "summarized";
     if (appCtx.refreshSummarizedPanel) appCtx.refreshSummarizedPanel();
@@ -766,119 +697,8 @@ globalThis.ChimeraSettings.Main = function () {
   }
 
 
-  function rebuildAllRows() {
-    if (!tbody || !fltApp || !fltLevel) return;
-    var rawTa = null;
-    var rawWasAtBottom = false;
-    if (viewMode === "raw_logs") {
-      rawTa = document.getElementById("raw-logs-textarea");
-      rawWasAtBottom = nearBottomTextarea(rawTa);
-    }
-    tbody.innerHTML = "";
-    fltApp.innerHTML = '<option value="">All</option>';
-    levelOptionSet = { "": true, "(none)": true, DEBUG: true, INFO: true, WARN: true, ERROR: true };
-    for (var i = 0; i < entryCache.length; i++) {
-      var ent = entryCache[i];
-      var parsed = ent.parsed;
-      ensureAppOption(parsed.app);
-      if (parsed.levelCanon) ensureLevelOption(parsed.levelCanon);
-      if (viewMode === "raw") {
-        appendTableRow(parsed, false, ent.seq, ent.ts, ent.text);
-      }
-    }
-    if (viewMode === "summarized") refreshSummarizedPanel();
-    else if (viewMode === "raw_logs") rebuildRawLogsTextarea({ scrollBottom: rawWasAtBottom });
-    else applyFilters();
-    if (viewMode === "raw") {
-      window.requestAnimationFrame(function () {
-        window.scrollTo(0, document.documentElement.scrollHeight);
-      });
-    }
-    if (viewMode === "raw_logs" && rawWasAtBottom) {
-      window.requestAnimationFrame(function () {
-        var ta = document.getElementById("raw-logs-textarea");
-        if (ta) ta.scrollTop = ta.scrollHeight;
-      });
-    }
-  }
-
-  function appendTableRow(parsed, follow, seq, entryTs, rawText) {
-    var tr = document.createElement("tr");
-    tr.dataset.app = parsed.app;
-    tr.dataset.level = parsed.levelCanon || "";
-    if (seq !== undefined && seq !== null) tr.dataset.logSeq = String(seq);
-    var lvlClass = "lvl-none";
-    if (parsed.levelCanon) {
-      var safe = String(parsed.levelCanon).replace(/[^A-Z0-9_-]/gi, "");
-      if (safe) lvlClass = "lvl-" + safe;
-    }
-    tr.innerHTML =
-      '<td class="col-app">' +
-      escapeHtml(parsed.app) +
-      "</td>" +
-      '<td class="col-dt col-dt-utc">' +
-      parsed.dtUtcHtml +
-      "</td>" +
-      '<td class="col-dt col-dt-local">' +
-      parsed.dtLocalHtml +
-      "</td>" +
-      '<td class="col-lvl ' +
-      lvlClass +
-      '">' +
-      escapeHtml(parsed.levelLabel) +
-      "</td>" +
-      '<td class="col-details">' +
-      buildDetailsColumn(parsed, entryTs, rawText) +
-      "</td>";
-    if (globalThis.ChimeraSettings && globalThis.ChimeraSettings.Filters && globalThis.ChimeraSettings.Filters.matchesRow) {
-      if (!globalThis.ChimeraSettings.Filters.matchesRow(filtersCtx, tr)) tr.style.display = "none";
-    }
-    tbody.appendChild(tr);
-    while (tbody.children.length > CLIENT_CACHE_MAX) {
-      var first = tbody.firstChild;
-      var removedH = first.offsetHeight;
-      tbody.removeChild(first);
-      if (!follow && removedH) {
-        window.scrollTo(0, Math.max(0, window.scrollY - removedH));
-      }
-    }
-    if (follow) {
-      window.scrollTo(0, document.documentElement.scrollHeight);
-    }
-  }
-
-  function buildDetailsCell(extras) {
-    if (globalThis.ChimeraUI && globalThis.ChimeraUI.KeyValueGrid) {
-      return globalThis.ChimeraUI.KeyValueGrid(extras);
-    }
-    if (globalThis.ChimeraSettings && globalThis.ChimeraSettings.KeyValueGrid) {
-      return globalThis.ChimeraSettings.KeyValueGrid(extras);
-    }
-    if (!extras.length) return '<span class="muted">—</span>';
-    // Fallback keeps legacy behavior if component didn't load for some reason.
-    var s =
-      '<table class="props-table"><colgroup>' +
-      '<col class="col-k" /><col class="col-v" /><col class="col-k" /><col class="col-v" />' +
-      "</colgroup><tbody>";
-    for (var i = 0; i < extras.length; i += 2) {
-      s += "<tr>";
-      s += '<td class="prop-name">' + escapeHtml(extras[i].k) + "</td>";
-      if (i + 1 < extras.length) {
-        s += '<td class="prop-val">' + escapeHtml(extras[i].v) + "</td>";
-        s += '<td class="prop-name">' + escapeHtml(extras[i + 1].k) + "</td>";
-        s += '<td class="prop-val">' + escapeHtml(extras[i + 1].v) + "</td>";
-      } else {
-        s += '<td class="prop-val prop-val-wide" colspan="3">' + escapeHtml(extras[i].v) + "</td>";
-      }
-      s += "</tr>";
-    }
-    s += "</tbody></table>";
-    return s;
-  }
-
   var appCtx = {
     contracts: C,
-    tbody: tbody,
     statusEl: statusEl,
     entryCache: entryCache,
     getViewMode: function () { return viewMode; },
@@ -900,7 +720,6 @@ globalThis.ChimeraSettings.Main = function () {
     contextGrowthStripHtml: contextGrowthStripHtml,
     SHOW_CONV_EXPANDED_CONTEXT_STRIP: SHOW_CONV_EXPANDED_CONTEXT_STRIP,
     buildHeadlineHtml: buildHeadlineHtml,
-    buildDetailsColumn: buildDetailsColumn,
     stickPx: stickPx,
     embedded: embedded,
     metricsCache: null,
@@ -969,11 +788,6 @@ globalThis.ChimeraSettings.Main = function () {
   var fetchTokenLabels = appCtx.fetchTokenLabels;
 
   var transportCtx = {
-    /** When true, ingest into entryCache only; Raw Logs textarea is rebuilt once per batched chunk (initial load). */
-    suppressRawLogsDom: false,
-    /** Raw logs: coalesce DOM refresh to one rAF per frame (see streaming.js scheduleRawLogsDomFlush). */
-    rawLogsRafPending: false,
-    rawLogsFlushFollow: false,
     getViewMode: function () { return "summarized"; },
     setViewMode: function (_next) { viewMode = "summarized"; },
     getEmbedded: function () { return embedded; },
@@ -983,7 +797,6 @@ globalThis.ChimeraSettings.Main = function () {
     statusEl: statusEl,
     statusLine: statusLine,
     nearBottom: nearBottom,
-    nearBottomTextarea: nearBottomTextarea,
     parseLogText: parseLogText,
     entryCache: entryCache,
     seenSeq: seenSeq,
@@ -997,14 +810,6 @@ globalThis.ChimeraSettings.Main = function () {
     BACKFILL_CHUNK: BACKFILL_CHUNK,
     RENDER_CHUNK: RENDER_CHUNK,
     scheduleStoryRebuild: function () { if (scheduleStoryRebuild) scheduleStoryRebuild(); },
-    rebuildAllRows: rebuildAllRows,
-    rebuildRawLogsTextarea: rebuildRawLogsTextarea,
-    appendRawLineToTextarea: appendRawLineToTextarea,
-    appendTableRow: function () { },
-    applyFilters: function () { },
-    ensureAppOption: function () { },
-    ensureLevelOption: function () { },
-    entryMatchesFilters: function () { return true; },
     fetchTokenLabels: fetchTokenLabels,
     startingRef: { value: false },
     esRef: { value: es },

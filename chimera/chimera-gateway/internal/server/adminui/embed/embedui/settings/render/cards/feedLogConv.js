@@ -25,11 +25,6 @@ globalThis.ChimeraSettings.Render.Cards.mountFeedLogConv = function (ctx) {
   var serviceAvatarClass = ctx.serviceAvatarClass;
   var serviceAvatarInitials = ctx.serviceAvatarInitials;
   var RECENT_CARD_STATUS_N = ctx.RECENT_CARD_STATUS_N;
-  function sliceRecent(arr, n) {
-    if (!arr || !arr.length) return [];
-    var take = Math.min(n, arr.length);
-    return arr.slice(-take);
-  }
   function conversationScopedLogSubject(tenantId, convId) {
     var tid = String(tenantId || "").trim();
     if (!tid) tid = "(unknown principal)";
@@ -271,98 +266,8 @@ globalThis.ChimeraSettings.Render.Cards.mountFeedLogConv = function (ctx) {
     return h;
   }
 
-  function convEventDedupeKey(ent) {
-    if (ent.seq != null && ent.seq !== "") return "s:" + String(ent.seq);
-    return "t:" + String(ent.ts) + ":" + String(ent.text || "").slice(0, 80);
-  }
-
-  function pushConversationGroupedEvent(groups, pidUse, cidUse, ent, p, tier, meta) {
-    if (!cidUse) return;
-    if (!pidUse) pidUse = "(unknown principal)";
-    var keyC = pidUse + "\0" + cidUse;
-    if (!groups[keyC]) groups[keyC] = { pid: pidUse, cid: cidUse, events: [] };
-    var g = groups[keyC];
-    var dk = convEventDedupeKey(ent);
-    for (var ei = 0; ei < g.events.length; ei++) {
-      if (convEventDedupeKey(g.events[ei]) === dk) return;
-    }
-    var outEv = {
-      parsed: p,
-      text: ent.text || "",
-      ts: ent.ts,
-      seq: ent.seq,
-      convJoinTier: tier
-    };
-    if (meta && typeof meta === "object") {
-      if (meta.span_id) outEv.vectorstoreSpanID = String(meta.span_id);
-      if (meta.turn_index != null) outEv.vectorstoreTurnIndex = meta.turn_index;
-      if (meta.span_start_ms != null) outEv.vectorstoreSpanStartMs = meta.span_start_ms;
-    }
-    g.events.push(outEv);
-  }
-
-  function entryIsVectorstoreSubprocessForConvJoin(ent) {
-    var f = getFlat(ent.parsed);
-    if (String(f.service || "").toLowerCase() !== "chimera-vectorstore") return false;
-    var msg = String(f.msg != null ? f.msg : "").toLowerCase();
-    return msg.indexOf("chimera-vectorstore.") === 0;
-  }
-
-  function conversationRequestIdTier2EligibleLocal(f) {
-    if (globalThis.ChimeraSettings && ChimeraSettings.Derive && typeof ChimeraSettings.Derive.conversationRequestIdTier2Eligible === "function") {
-      return ChimeraSettings.Derive.conversationRequestIdTier2Eligible(f);
-    }
-    return (
-      globalThis.ChimeraSettings &&
-      ChimeraSettings.Derive &&
-      ChimeraSettings.Derive.conversationChimeraBrokerTimelineFlat &&
-      ChimeraSettings.Derive.conversationChimeraBrokerTimelineFlat(f)
-    );
-  }
-
-  function conversationIndexRunTier3EligibleLocal(f) {
-    if (globalThis.ChimeraSettings && ChimeraSettings.Derive && typeof ChimeraSettings.Derive.conversationIndexRunTier3Eligible === "function") {
-      return ChimeraSettings.Derive.conversationIndexRunTier3Eligible(f);
-    }
-    return false;
-  }
-
-  /**
-   * Register request_id → (principal, conversation_id) only from authoritative gateway rows.
-   * First mapping wins. Primary pass prefers lifecycle / chat.request / chat access so later rows
-   * (or RAG lines that may appear early) cannot re-point a request at another conversation card.
-   */
-  function tryRegisterRequestConversationCorrelationPrimary(reqToConv, f) {
-    if (!f || typeof f !== "object") return;
-    var rid = f.request_id != null ? String(f.request_id).trim() : "";
-    var cid = f.conversation_id != null ? String(f.conversation_id).trim() : "";
-    var pid = f.principal_id != null ? String(f.principal_id).trim() : f.tenant != null ? String(f.tenant).trim() : "";
-    if (!rid || !cid || !pid || reqToConv[rid]) return;
-    var msg = String(f.msg != null ? f.msg : f.message != null ? f.message : "").trim();
-    if (msg === "conversation.received" || msg === "chat.request") {
-      reqToConv[rid] = { pid: pid, cid: cid };
-      return;
-    }
-    var ml = msg.toLowerCase();
-    if (ml === "gateway.http.access" || ml === "http response") {
-      var pth = String(f.path || "").split("?")[0];
-      if (pth.indexOf("/v1/chat/completions") >= 0) {
-        reqToConv[rid] = { pid: pid, cid: cid };
-      }
-    }
-  }
-
-  function tryRegisterRequestConversationCorrelationRagFallback(reqToConv, f) {
-    if (!f || typeof f !== "object") return;
-    var rid = f.request_id != null ? String(f.request_id).trim() : "";
-    var cid = f.conversation_id != null ? String(f.conversation_id).trim() : "";
-    var pid = f.principal_id != null ? String(f.principal_id).trim() : f.tenant != null ? String(f.tenant).trim() : "";
-    if (!rid || !cid || !pid || reqToConv[rid]) return;
-    var msg = String(f.msg != null ? f.msg : f.message != null ? f.message : "").trim();
-    if (msg === "rag.query" || msg === "rag.embed") {
-      reqToConv[rid] = { pid: pid, cid: cid };
-    }
-  }
+  var convAgg =
+    globalThis.ChimeraSettings && ChimeraSettings.Derive ? ChimeraSettings.Derive : {};
 
   function conversationCardStatus(g, t1, cardModel) {
     cardModel = cardModel || conversationCardModelForGroup(g.events);
@@ -429,7 +334,10 @@ globalThis.ChimeraSettings.Render.Cards.mountFeedLogConv = function (ctx) {
   }
 
   function recentConvEventsHaveError(events) {
-    var slice = sliceRecent(events, RECENT_CARD_STATUS_N);
+    var slice =
+      typeof ctx.sliceRecent === "function"
+        ? ctx.sliceRecent(events, RECENT_CARD_STATUS_N)
+        : [];
     for (var i = 0; i < slice.length; i++) {
       var p = slice[i].parsed;
       if (p.levelCanon === "ERROR") return true;
@@ -649,12 +557,35 @@ globalThis.ChimeraSettings.Render.Cards.mountFeedLogConv = function (ctx) {
       "</details>"
     );
   }
-  ctx.pushConversationGroupedEvent = pushConversationGroupedEvent;
-  ctx.entryIsVectorstoreSubprocessForConvJoin = entryIsVectorstoreSubprocessForConvJoin;
-  ctx.conversationRequestIdTier2EligibleLocal = conversationRequestIdTier2EligibleLocal;
-  ctx.conversationIndexRunTier3EligibleLocal = conversationIndexRunTier3EligibleLocal;
-  ctx.tryRegisterRequestConversationCorrelationPrimary = tryRegisterRequestConversationCorrelationPrimary;
-  ctx.tryRegisterRequestConversationCorrelationRagFallback = tryRegisterRequestConversationCorrelationRagFallback;
+  function summarizedConversationsSectionHead() {
+    if (typeof ctx.operatorSectionHeadHtml !== "function") {
+      return (
+        '<div class="sum-feed-section-head">' +
+        '<span class="material-symbols-outlined sum-feed-section-icon" aria-hidden="true">forum</span>' +
+        '<span class="sum-feed-section-title sum-section-label">Conversations</span></div>'
+      );
+    }
+    return ctx.operatorSectionHeadHtml("Conversations", "forum");
+  }
+
+  function summarizedEmptyFeedMessage() {
+    return (
+      '<p class="muted">No conversation / service cards in the <em>loaded</em> window yet. Chat traffic needs <code>conversation_id</code> in structured logs; <strong>scroll to the top</strong> of this feed to load older lines (indexer snapshots often crowd the recent tail).</p>'
+    );
+  }
+
+  ctx.summarizedConversationsSectionHead = summarizedConversationsSectionHead;
+  ctx.summarizedEmptyFeedMessage = summarizedEmptyFeedMessage;
+  ctx.pushConversationGroupedEvent = convAgg.pushConversationGroupedEvent;
+  ctx.entryIsVectorstoreSubprocessForConvJoin = function (ent) {
+    return convAgg.entryIsVectorstoreSubprocessForConvJoin
+      ? convAgg.entryIsVectorstoreSubprocessForConvJoin(ent, getFlat)
+      : false;
+  };
+  ctx.conversationRequestIdTier2EligibleLocal = convAgg.conversationRequestIdTier2EligibleLocal;
+  ctx.conversationIndexRunTier3EligibleLocal = convAgg.conversationIndexRunTier3EligibleLocal;
+  ctx.tryRegisterRequestConversationCorrelationPrimary = convAgg.tryRegisterRequestConversationCorrelationPrimary;
+  ctx.tryRegisterRequestConversationCorrelationRagFallback = convAgg.tryRegisterRequestConversationCorrelationRagFallback;
   ctx.conversationScopedLogSubject = conversationScopedLogSubject;
   ctx.formatConversationCardTitle = formatConversationCardTitle;
   ctx.scrapeConversationMetrics = scrapeConversationMetrics;
@@ -669,7 +600,6 @@ globalThis.ChimeraSettings.Render.Cards.mountFeedLogConv = function (ctx) {
   ctx.renderExpandedConv = renderExpandedConv;
   ctx.buildConvCard = buildConvCard;
   ctx.timelineSegmentsHtml = timelineSegmentsHtml;
-  ctx.sliceRecent = sliceRecent;
   ctx.entryHasErrorStatus = entryHasErrorStatus;
   ctx.chimeraBrokerEntryHasRateLimit = chimeraBrokerEntryHasRateLimit;
   ctx.countErrorSignalsInEntries = countErrorSignalsInEntries;

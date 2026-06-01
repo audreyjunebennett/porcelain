@@ -9,7 +9,7 @@ import (
 
 // cardMountFiles are Phase 4 feed-log card modules using mount*(ctx) IIFEs.
 var cardMountFiles = []string{
-	"feedLogService.js",
+	"serviceFeed.js",
 	"feedLogConv.js",
 	"indexerRun.js",
 	"indexerWorkspace.js",

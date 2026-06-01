@@ -1,22 +1,22 @@
 # Plan: Chimera operator CLI (`chimeractl`)
 
-| Field | Value |
-|-------|-------|
-| **Doc kind** | `feature-plan` |
-| **Owners / areas** | Gateway, operator CLI, BiFrost |
-| **Status** | `draft` |
-| **Targets** | `chimeractl` v0.1/v0.8 |
-| **Last updated** | See git history |
-| **Supersedes / superseded by** | None |
+| Field                          | Value                          |
+|--------------------------------|--------------------------------|
+| **Doc kind**                   | `feature-plan`                 |
+| **Owners / areas**             | Gateway, operator CLI, BiFrost |
+| **Status**                     | `draft`                        |
+| **Targets**                    | `chimeractl` v0.1/v0.8         |
+| **Last updated**               | See git history                |
+| **Supersedes / superseded by** | None                           |
 
 ## At a glance
 
 Give operators a small command-line tool, `chimeractl`, that confirms the gateway is healthy and configures provider keys (Groq, Gemini, Ollama) without hand-editing files or pasting secrets into shell environment variables. Start with sensible defaults; add per-user and per-project config files later.
 
-| Phase | Outcome | Status |
-|-------|---------|--------|
+| Phase                                         | Outcome                                                                                              | Status |
+|-----------------------------------------------|------------------------------------------------------------------------------------------------------|--------|
 | [v0.1 — Health & provider setup](#version-01) | `chimeractl health`, `provider set-key`, `ollama set-url`; BiFrost `config_store` enabled by default | `todo` |
-| [v0.8 — Layered configuration](#version-08) | `~/.chimera/cli.config.yaml`, project-local config, `--host` / `--token` overrides | `todo` |
+| [v0.8 — Layered configuration](#version-08)   | `~/.chimera/cli.config.yaml`, project-local config, `--host` / `--token` overrides                   | `todo` |
 
 ---
 
@@ -73,12 +73,12 @@ All **v0.1** commands remain; they gain configurable endpoints and tokens withou
 
 ## Binary and module layout
 
-| Item | Proposal |
-|------|----------|
-| **Go package** | `cmd/chimeractl` |
-| **Artifact name** | `chimeractl` (Unix), `chimeractl.exe` (Windows) — avoids clashing with `chimera` |
-| **Import path** | `github.com/lynn/porcelain/cmd/chimeractl` (thin `main` only) |
-| **Shared logic** | `internal/clicfg` — v0.8: YAML merge + flags; v0.1: optional thin defaults package or constants in `main`. `internal/cliclient` — gateway HTTP. `internal/bifrostapi` — BiFrost management `/api/*` (v0.1). |
+| Item              | Proposal                                                                                                                                                                                                    |
+|-------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Go package**    | `cmd/chimeractl`                                                                                                                                                                                            |
+| **Artifact name** | `chimeractl` (Unix), `chimeractl.exe` (Windows) — avoids clashing with `chimera`                                                                                                                            |
+| **Import path**   | `github.com/lynn/porcelain/cmd/chimeractl` (thin `main` only)                                                                                                                                               |
+| **Shared logic**  | `internal/clicfg` — v0.8: YAML merge + flags; v0.1: optional thin defaults package or constants in `main`. `internal/cliclient` — gateway HTTP. `internal/bifrostapi` — BiFrost management `/api/*` (v0.1). |
 
 Rationale: one repo, one `go.mod`, no second module unless release packaging later demands it.
 
@@ -88,10 +88,10 @@ Rationale: one repo, one `go.mod`, no second module unless release packaging lat
 
 Add targets alongside existing gateway/GUI rules ([`Makefile`](../Makefile)):
 
-| Target | Behavior |
-|--------|----------|
-| `make cli-build` | `go build -o chimeractl[.exe] ./cmd/chimeractl` (mirror `GUI_BIN` / `OS` pattern for `.exe` on Windows). |
-| `make cli-run` | `go run ./cmd/chimeractl` — pass through extra args, e.g. `make cli-run ARGS='health'`. |
+| Target             | Behavior                                                                                                                                                         |
+|--------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `make cli-build`   | `go build -o chimeractl[.exe] ./cmd/chimeractl` (mirror `GUI_BIN` / `OS` pattern for `.exe` on Windows).                                                         |
+| `make cli-run`     | `go run ./cmd/chimeractl` — pass through extra args, e.g. `make cli-run ARGS='health'`.                                                                          |
 | `make cli-install` | `go install ./cmd/chimeractl` so the binary lands in `$GOBIN` or `$GOPATH/bin` (document that this must be on `PATH`). Optional later: `PREFIX=` install script. |
 
 **Also update** [`scripts/print-make-help.sh`](../scripts/print-make-help.sh) and `.PHONY` list so `make help` documents the new targets.

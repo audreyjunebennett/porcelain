@@ -137,11 +137,9 @@
     };
     ChimeraSettings.Render.mountSumEvlog(ctx);
     ChimeraSettings.Render.Cards.mountAll(ctx);
-    var C = ChimeraSettings.Render.Cards;
-    if (typeof C.mountFeedLogConv === "function") C.mountFeedLogConv(ctx);
-    if (typeof C.mountFeedLogService === "function") C.mountFeedLogService(ctx);
-    if (typeof C.mountFeedLogIndexerRun === "function") C.mountFeedLogIndexerRun(ctx);
-    if (typeof C.mountFeedLogIndexerWorkspace === "function") C.mountFeedLogIndexerWorkspace(ctx);
+    if (typeof ChimeraSettings.Render.Cards.mountSummarizedFeedCards === "function") {
+      ChimeraSettings.Render.Cards.mountSummarizedFeedCards(ctx);
+    }
     return ctx;
   }
 
