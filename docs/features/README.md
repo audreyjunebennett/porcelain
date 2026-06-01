@@ -30,6 +30,7 @@ Durable contracts for new binaries, wrappers, and cross-cutting integration — 
 | [Indexer ingest pipeline](indexer-ingest-pipeline.md) | Scan/fan-out queue, fair-share bulk, priority watch ingest, JSON sync-state skips | `chimera-indexer` queue, gateway ingest | `current` |
 | [Indexer health and operator logs](indexer-health-and-operator-logs.md) | Embed-aware health, ingest gate, structured JSON logs, quiet INFO + pinning | Gateway health API, servicelogs, settings UI | `current` |
 | [Operator left navigation ribbon](operator-left-navigation-ribbon.md) | Persistent collapsed/expanded ribbon on `/ui`; history, new chat, settings | Gateway embed UI (app shell) | `current` |
+| [Operator workspace search](operator-workspace-search.md) | Workspace-scoped vector search page and API; threshold control, hit excerpts | Gateway embed UI, RAG retrieval | `partial` |
 | [Operator chat UI](operator-chat-ui.md) | Streaming chat, model/workspace selectors, RAG snippets, Markdown render | Gateway embed UI, chat/RAG | `current` |
 | [Operator conversation history](operator-conversation-history.md) | Durable chat threads in operator SQLite; history panel with title, flag, delete | Gateway embed UI, operator SQLite, session | `current` |
 | [Operator settings UI](operator-settings-ui.md) | `/ui/settings` cards + event log; unified admin/observability surface | Gateway embed UI, servicelogs | `current` |

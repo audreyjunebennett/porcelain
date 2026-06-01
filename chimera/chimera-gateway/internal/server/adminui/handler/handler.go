@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/gwhttp"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/adminui/session"
 	gruntime "github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/runtime"
 	"github.com/lynn/porcelain/internal/naming"
@@ -58,6 +59,49 @@ func (h *Handler) SessionPrincipal(r *http.Request) string {
 		return ""
 	}
 	return h.Opts.Sessions.PrincipalID(c.Value)
+}
+
+// AuthTenantID returns the operator tenant from a valid UI session or Bearer token.
+func (h *Handler) AuthTenantID(r *http.Request) (tenantID string, ok bool) {
+	if h == nil {
+		return "", false
+	}
+	if h.SessionOK(r) {
+		if tid := strings.TrimSpace(h.SessionPrincipal(r)); tid != "" {
+			return tid, true
+		}
+	}
+	if h.RT == nil {
+		return "", false
+	}
+	h.RT.Sync()
+	_, tokStore, _ := h.RT.Snapshot()
+	if tokStore == nil {
+		return "", false
+	}
+	token := gwhttp.BearerToken(r.Header.Get("Authorization"))
+	if token == "" {
+		return "", false
+	}
+	rec := tokStore.Validate(token)
+	if rec == nil {
+		return "", false
+	}
+	return strings.TrimSpace(rec.TenantID), true
+}
+
+// RequireAuthTenantJSON wraps JSON handlers that accept session cookie or Bearer auth.
+func (h *Handler) RequireAuthTenantJSON(next func(http.ResponseWriter, *http.Request, string)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		tenantID, ok := h.AuthTenantID(r)
+		if !ok {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			_ = json.NewEncoder(w).Encode(map[string]any{"error": "unauthorized"})
+			return
+		}
+		next(w, r, tenantID)
+	}
 }
 
 // RequireAuthJSON wraps JSON API handlers with session auth.

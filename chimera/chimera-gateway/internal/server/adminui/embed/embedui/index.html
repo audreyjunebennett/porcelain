@@ -57,6 +57,10 @@
           <aside id="chat-history" class="chat-history" aria-label="Conversation history"></aside>
         </div>
         <div class="shell-ribbon__footer">
+          <button type="button" class="shell-ribbon__btn shell-ribbon__search" data-ribbon-action="search" title="Search" aria-label="Search">
+            <span class="material-symbols-outlined" aria-hidden="true">manage_search</span>
+            <span class="shell-ribbon__label">Search</span>
+          </button>
           <button type="button" class="shell-ribbon__btn shell-ribbon__settings" data-ribbon-action="settings" title="Settings" aria-label="Settings">
             <span class="material-symbols-outlined" aria-hidden="true">settings</span>
             <span class="shell-ribbon__label">Settings</span>
@@ -76,6 +80,7 @@
 (function () {
   var DEFAULT_ROUTE = "/ui/chat";
   var SETTINGS_ROUTE = "/ui/settings?embed=1";
+  var SEARCH_ROUTE = "/ui/search?embed=1";
   var shellReturnRoute = DEFAULT_ROUTE;
   var shellReturnConversationId = "";
   var origin = window.location.origin;
@@ -106,6 +111,9 @@
   }
   function isSettingsRoute(route) {
     return routePath(route).indexOf("/ui/settings") === 0;
+  }
+  function isSearchRoute(route) {
+    return routePath(route) === "/ui/search";
   }
   function isChatRoute(route) {
     return routePath(route) === "/ui/chat";
@@ -151,6 +159,7 @@
     navigateFrame: navigateFrame,
     currentRouteFromFrame: currentRouteFromFrame,
     isSettingsRoute: isSettingsRoute,
+    isSearchRoute: isSearchRoute,
     isChatRoute: isChatRoute,
     getShellReturnRoute: function () {
       return shellReturnRoute;

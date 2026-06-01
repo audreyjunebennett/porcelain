@@ -4,11 +4,11 @@
 |--------------------------------|----------------------------------------------------------------------------------------------------|
 | **Doc kind**                   | `feature-plan`                                                                                     |
 | **Owners / areas**             | Gateway RAG, operator UI app shell, embed UI                                                       |
-| **Status**                     | `draft`                                                                                            |
+| **Status**                     | `active`                                                                                           |
 | **Targets**                    | Gateway v0.3 setup wizard step 6, gateway v0.5 navigation                                          |
 | **Last updated**               | See git history                                                                                    |
 | **Supersedes / superseded by** | Complements [`operator-chat-ui.md`](operator-chat-ui.md); distinct from v0.4 settings search theme |
-| **As-built**                   | None — link to [`docs/features/`](../features/README.md) when shipped                              |
+| **As-built**                   | [`operator-workspace-search.md`](../features/operator-workspace-search.md) (Phases 1–3)            |
 
 ## At a glance
 
@@ -16,9 +16,9 @@ Operators should **search indexed workspace content directly** — without sendi
 
 | Phase                                                                  | Outcome                                                                               | Status |
 |------------------------------------------------------------------------|---------------------------------------------------------------------------------------|--------|
-| [Phase 1 — RAG search API](#phase-1--rag-search-api)                   | Session-authenticated query endpoint returns raw retrieval hits for a workspace scope | `todo` |
-| [Phase 2 — Search UI page](#phase-2--search-ui-page)                   | Workspace selector + query input + results list; design-01 styling                    | `todo` |
-| [Phase 3 — App shell navigation](#phase-3--app-shell-navigation)       | Ribbon item switches iframe to `/ui/search`; state persists like chat/settings        | `todo` |
+| [Phase 1 — RAG search API](#phase-1--rag-search-api)                   | Session- or Bearer-authenticated query endpoint returns raw retrieval hits for a workspace scope | `shipped` |
+| [Phase 2 — Search UI page](#phase-2--search-ui-page)                   | Workspace selector + query input + results list; design-01 styling                    | `shipped` |
+| [Phase 3 — App shell navigation](#phase-3--app-shell-navigation)       | Ribbon item switches iframe to `/ui/search`; state persists like chat/settings        | `shipped` |
 | [Phase 4 — Wizard and empty states](#phase-4--wizard-and-empty-states) | Setup wizard embeds search with workspace locked; zero-hit and indexer-idle copy      | `todo` |
 
 ---
@@ -39,19 +39,20 @@ Operators should **search indexed workspace content directly** — without sendi
 
 **Deliverables**
 
-- `POST /api/ui/rag/search` — session auth; body `{ "query": "...", "project_id": "...", "flavor_id": "..." }` (tenant from session).
-- Handler calls `rt.RAG().Retrieve()` with session tenant coords; returns JSON:
+- `POST /api/ui/rag/search` — **session cookie or Bearer token** (same gateway token as CLI); body `{ "query": "...", "project_id": "...", "flavor_id": "...", "score_threshold": 0.72?, "top_k": 8? }` (tenant from auth).
+- Handler calls `rt.RAG().Retrieve()` with authenticated tenant coords; optional `score_threshold` / `top_k` override gateway defaults (threshold also returned for UI display).
+- Returns JSON:
   - `hits[]`: `{ source, score, text_excerpt, point_id }` (excerpt length capped).
   - `collection`, `top_k`, `score_threshold` for transparency.
   - `indexer_hint` when storage stats / health suggest empty collection or embed misconfig (optional enrichment from existing health helpers).
 - Rate limit or max body size consistent with other UI APIs.
-- Tests: empty query → empty hits; seeded vectors → ordered hits; wrong scope → empty or 404 per documented behavior.
+- Tests: empty query → empty hits; seeded vectors → ordered hits; wrong scope → empty hits; unauthorized without session or Bearer.
 
 **Acceptance**
 
 - curl/UI client can search a workspace scope and receive the same hits chat would use before system-message formatting.
 
-**Status:** `todo`
+**Status:** `shipped`
 
 ---
 
@@ -62,17 +63,18 @@ Operators should **search indexed workspace content directly** — without sendi
 **Deliverables**
 
 - `GET /ui/search` — `search.html` + modules under `embed/embedui/search/` (or `chat/` sibling): `app.js`, `gatewayClient.js`, minimal state.
-- **Workspace selector** — reuse workspace list fetch from chat (`GET /api/ui/indexer/workspaces`); require selection before search.
+- **Workspace selector** — single `(project_id, flavor_id)` pair from workspace list (`GET /api/ui/indexer/workspaces`); require selection before search (no multi-scope union until v0.4).
+- **Score threshold control** — numeric input bound to `score_threshold` on search requests (gateway default pre-filled).
 - **Query input** — Enter submits; highlight query on submit (wizard spec).
 - **Results panel** — Summary row (hit count); detail rows with path, score, excerpt (reuse snippet highlight helpers from chat where possible).
 - **Zero results** — Explicit empty state + indexer status hints (idle, error, no chunks) from API `indexer_hint` or secondary health poll.
-- Styles in `styles/search.css`; mobile baseline aligned with [`operator-embed-ui-mobile-layout.md`](operator-embed-ui-mobile-layout.md) when practical.
+- Styles in `styles/search.css` (chat-aligned embed cards; **controls pinned top**, results scroll below); mobile baseline aligned with [`operator-embed-ui-mobile-layout.md`](operator-embed-ui-mobile-layout.md) when practical.
 
 **Acceptance**
 
 - Manual: index a file → search page finds it by keyword; score and path visible.
 
-**Status:** `todo`
+**Status:** `shipped`
 
 ---
 
@@ -91,7 +93,7 @@ Operators should **search indexed workspace content directly** — without sendi
 
 - From `/ui`, operator opens search from ribbon; chat and settings navigation unchanged.
 
-**Status:** `todo`
+**Status:** `shipped`
 
 ---
 
@@ -113,15 +115,17 @@ Operators should **search indexed workspace content directly** — without sendi
 
 ---
 
-## Open questions
+## Resolved decisions
 
-1. **Score floor** — Expose threshold in UI vs fixed gateway default only.
-2. **Flavor union** — Single `(project, flavor)` selector until v0.4 multi-scope search ships.
-3. **Auth for search API** — UI session only vs also Bearer for CLI smoke tests.
+| Topic | Decision |
+|-------|----------|
+| **Score floor** | Expose `score_threshold` in the search UI; API accepts optional override and echoes the value used. |
+| **Scope selector** | Single `(project_id, flavor_id)` workspace until v0.4 multi-scope / flavor-union search. |
+| **Auth** | Required for UI **and** CLI: valid session cookie **or** gateway Bearer token on `POST /api/ui/rag/search`. |
 
 ---
 
 ## References
 
-- Code: `internal/rag/service.go` (`Retrieve`), `internal/rag/prompt.go`, `embed/embedui/chat/gatewayClient.js`, `embed/embedui/shell/navRibbon.js`
+- Code: `internal/rag/service.go` (`Retrieve`), `internal/server/adminui/api/rag/` (`POST /api/ui/rag/search`), `embed/embedui/search/` (`GET /ui/search`), `internal/rag/prompt.go`, `embed/embedui/chat/gatewayClient.js`, `embed/embedui/shell/navRibbon.js`
 - Features: [`gateway-rag-ingest-and-retrieval.md`](../features/gateway-rag-ingest-and-retrieval.md)

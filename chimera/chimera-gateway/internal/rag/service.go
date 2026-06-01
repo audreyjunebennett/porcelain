@@ -225,6 +225,8 @@ type RetrieveRequest struct {
 	Coords vectorstore.Coords
 	Query  string
 	TopK   int // <= 0 uses Service default
+	// ScoreThreshold <= 0 uses Service default score floor.
+	ScoreThreshold float32
 	// Optional correlation from the gateway chat handler.
 	RequestID      string
 	ConversationID string
@@ -245,6 +247,10 @@ func (s *Service) Retrieve(ctx context.Context, req RetrieveRequest) ([]vectorst
 	k := req.TopK
 	if k <= 0 {
 		k = s.topK
+	}
+	floor := s.scoreFloor
+	if req.ScoreThreshold > 0 {
+		floor = req.ScoreThreshold
 	}
 	collection := vectorstore.CollectionName(req.Coords)
 	ti := req.TurnIndex
@@ -277,7 +283,7 @@ func (s *Service) Retrieve(ctx context.Context, req RetrieveRequest) ([]vectorst
 			"flavor", req.Coords.FlavorID,
 			"collection", collection,
 			"top_k", k,
-			"score_threshold", s.scoreFloor,
+			"score_threshold", floor,
 			"query_bytes", len(req.Query),
 			"query", previewText(req.Query),
 		}
@@ -305,7 +311,7 @@ func (s *Service) Retrieve(ctx context.Context, req RetrieveRequest) ([]vectorst
 		args = append(args, "timeline_kind", naming.TimelineKindVectorstore)
 		s.log.Debug("rag embedding retrieved", args...)
 	}
-	hits, err := s.store.Search(ctx, collection, vec, k, s.scoreFloor, &req.Coords)
+	hits, err := s.store.Search(ctx, collection, vec, k, floor, &req.Coords)
 	if err != nil {
 		return nil, fmt.Errorf("search: %w", err)
 	}
@@ -321,7 +327,7 @@ func (s *Service) Retrieve(ctx context.Context, req RetrieveRequest) ([]vectorst
 				"hits", len(hits),
 				"top_k", k,
 				"score", h.Score,
-				"score_threshold", s.scoreFloor,
+				"score_threshold", floor,
 				"point_id", h.ID,
 				"source", h.Payload.Source,
 				"text", previewText(h.Payload.Text),
@@ -369,10 +375,11 @@ func previewText(s string) string {
 // EmbedDim is the configured embedding dimension (used by /v1/indexer/config).
 func (s *Service) EmbedDim() int { return s.embedDim }
 
-// ChunkSize / ChunkOverlap accessors for /v1/indexer/config.
-func (s *Service) ChunkSize() int    { return s.chunkSize }
-func (s *Service) ChunkOverlap() int { return s.chunkOverlap }
-func (s *Service) TopK() int         { return s.topK }
+// TopK / ChunkOverlap accessors for /v1/indexer/config.
+func (s *Service) ChunkSize() int          { return s.chunkSize }
+func (s *Service) ChunkOverlap() int       { return s.chunkOverlap }
+func (s *Service) TopK() int               { return s.topK }
+func (s *Service) ScoreThreshold() float32 { return s.scoreFloor }
 
 // StoreHealth is exposed for /v1/indexer/storage/health.
 func (s *Service) StoreHealth(ctx context.Context) error { return s.store.Health(ctx) }

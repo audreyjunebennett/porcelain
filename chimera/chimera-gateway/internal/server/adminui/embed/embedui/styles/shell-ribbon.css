@@ -250,6 +250,7 @@ html[data-theme="design-01"] body.shell-page {
   display: flex;
   flex-direction: column;
   align-items: stretch;
+  gap: 0.15rem;
   padding: 0.45rem;
   margin-top: auto;
   border-top: 1px solid var(--embed-sum-card-border, rgba(115, 120, 125, 0.08));
@@ -258,13 +259,23 @@ html[data-theme="design-01"] body.shell-page {
   z-index: 1;
 }
 
+.shell-ribbon__search,
 .shell-ribbon__settings {
   justify-content: center;
   align-self: stretch;
 }
 
+.shell-ribbon__search:hover,
 .shell-ribbon__settings:hover {
   background: transparent;
+}
+
+.shell-ribbon--expanded .shell-ribbon__search,
+.shell-ribbon--expanded .shell-ribbon__settings {
+  justify-content: flex-start;
+  padding-left: 0.55rem;
+  padding-right: 0.55rem;
+  width: 100%;
 }
 
 .shell-ribbon__settings .material-symbols-outlined {
@@ -274,13 +285,6 @@ html[data-theme="design-01"] body.shell-page {
 
 .shell-ribbon__settings:hover .material-symbols-outlined {
   transform: rotate(45deg);
-}
-
-.shell-ribbon--expanded .shell-ribbon__settings {
-  justify-content: flex-start;
-  padding-left: 0.55rem;
-  padding-right: 0.55rem;
-  width: 100%;
 }
 
 .shell-ribbon .chat-history {

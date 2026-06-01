@@ -7,6 +7,7 @@
   var STORAGE_KEY = "chimera-ribbon-expanded";
   var DEFAULT_ROUTE = "/ui/chat";
   var SETTINGS_ROUTE = "/ui/settings?embed=1";
+  var SEARCH_ROUTE = "/ui/search?embed=1";
   var NARROW_BREAKPOINT = "(max-width: 480px)";
 
   function readExpanded() {
@@ -52,6 +53,12 @@
         : function (route) {
             return String(route || "").indexOf("/ui/settings") === 0;
           };
+    var isSearchRoute =
+      typeof opts.isSearchRoute === "function"
+        ? opts.isSearchRoute
+        : function (route) {
+            return String(route || "").split("?")[0] === "/ui/search";
+          };
     var isChatRoute =
       typeof opts.isChatRoute === "function"
         ? opts.isChatRoute
@@ -78,6 +85,7 @@
 
     var toggleBtn = ribbon.querySelector("[data-ribbon-action='toggle']");
     var newChatBtn = ribbon.querySelector("[data-ribbon-action='new-chat']");
+    var searchBtn = ribbon.querySelector("[data-ribbon-action='search']");
     var settingsBtn = ribbon.querySelector("[data-ribbon-action='settings']");
     var userExpandedPref = readExpanded();
     var expanded = userExpandedPref;
@@ -247,6 +255,24 @@
       navigateFrame(SETTINGS_ROUTE);
     }
 
+    function openSearch() {
+      var route = currentRouteFromFrame();
+      if (isSearchRoute(route)) {
+        var returnRoute = getShellReturnRoute() || DEFAULT_ROUTE;
+        var returnConvId = getShellReturnConversationId();
+        navigateFrame(returnRoute);
+        waitForFrameLoad().then(function () {
+          return restoreChatConversation(returnConvId);
+        });
+        return;
+      }
+      var rememberedConvId = isChatRoute(route) ? lastActiveConversationId : "";
+      setShellReturnRoute(route || DEFAULT_ROUTE);
+      setShellReturnConversationId(rememberedConvId);
+      syncHistoryActive("");
+      navigateFrame(SEARCH_ROUTE);
+    }
+
     function openConversation(id, extra) {
       if (!id) return;
       ensureChatRoute().then(function () {
@@ -280,6 +306,9 @@
     }
     if (newChatBtn) {
       newChatBtn.addEventListener("click", newChat);
+    }
+    if (searchBtn) {
+      searchBtn.addEventListener("click", openSearch);
     }
     if (settingsBtn) {
       settingsBtn.addEventListener("click", openSettings);
@@ -326,8 +355,21 @@
       }
     }
 
+    function updateSearchButton(inSearch) {
+      if (!searchBtn) return;
+      if (inSearch) {
+        searchBtn.title = "Close search";
+        searchBtn.setAttribute("aria-label", "Close search");
+      } else {
+        searchBtn.title = "Search";
+        searchBtn.setAttribute("aria-label", "Search");
+      }
+    }
+
     function onFrameRouteChange() {
-      updateSettingsButton(isSettingsRoute(currentRouteFromFrame()));
+      var route = currentRouteFromFrame();
+      updateSettingsButton(isSettingsRoute(route));
+      updateSearchButton(isSearchRoute(route));
     }
 
     if (frame) {
@@ -349,6 +391,7 @@
       toggle: toggleExpanded,
       setExpanded: setExpanded,
       newChat: newChat,
+      openSearch: openSearch,
       openSettings: openSettings,
       refreshHistory: refreshHistory,
       syncHistoryActive: syncHistoryActive,

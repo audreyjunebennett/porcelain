@@ -121,13 +121,13 @@ func TestSummarizedFeed_noGhostCtxReexports(t *testing.T) {
 // modelDepsBareRHS maps summarizedModelDeps property keys to identifiers that must not
 // appear bare on the RHS (card modules export them on ctx after mount).
 var modelDepsBareRHS = map[string]string{
-	"conversationCardModelForGroup":  "conversationCardModelForGroup",
-	"conversationCardStatus":         "conversationCardStatus",
-	"collectIndexerRunMeta":            "collectIndexerRunMeta",
-	"mergePersistedIndexerWatchRoots":  "mergePersistedIndexerWatchRoots",
+	"conversationCardModelForGroup":         "conversationCardModelForGroup",
+	"conversationCardStatus":                "conversationCardStatus",
+	"collectIndexerRunMeta":                 "collectIndexerRunMeta",
+	"mergePersistedIndexerWatchRoots":       "mergePersistedIndexerWatchRoots",
 	"operatorWorkspaceCoveredByIndexerRuns": "operatorWorkspaceCoveredByIndexerRuns",
-	"operatorWorkspaceNumericId":       "operatorWorkspaceNumericId",
-	"adminProvidersSectionBreakHtml": "buildAdminProvidersSectionBreakHtml",
+	"operatorWorkspaceNumericId":            "operatorWorkspaceNumericId",
+	"adminProvidersSectionBreakHtml":        "buildAdminProvidersSectionBreakHtml",
 }
 
 func TestSummarizedModelDeps_cardRefsUseCtx(t *testing.T) {
@@ -248,7 +248,7 @@ func TestFeedLogService_phase3ServiceOnlyModule(t *testing.T) {
 		"hydrateIndexerServiceSummaryFromApi",
 	}
 	for _, sym := range forbidden {
-		if bytes.Contains(body, []byte("function " + sym)) {
+		if bytes.Contains(body, []byte("function "+sym)) {
 			t.Fatalf("serviceFeed.js must not define %s (belongs in indexerRun/indexerWorkspace)", sym)
 		}
 	}

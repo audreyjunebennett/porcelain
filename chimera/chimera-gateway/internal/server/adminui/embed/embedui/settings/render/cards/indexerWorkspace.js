@@ -18,8 +18,8 @@ globalThis.ChimeraSettings.Render.Cards.mountFeedLogIndexerWorkspace = function 
   var scopedEvlogTitle = ctx.scopedEvlogTitle;
   var RECENT_CARD_STATUS_N = ctx.RECENT_CARD_STATUS_N;
   var sliceRecent = ctx.sliceRecent;
-  var countErrorSignalsInEntries = ctx.countErrorSignalsInEntries;
-  var filterEventsForIndexerScopeFullLog = ctx.filterEventsForIndexerScopeFullLog;
+  var buildManagedWorkspacePathsEditHtml = ctx.buildManagedWorkspacePathsEditHtml;
+  var buildManagedWorkspaceToolbarHtml = ctx.buildManagedWorkspaceToolbarHtml;
   var collectIndexerRunMeta = ctx.collectIndexerRunMeta;
   var indexerBuildCardSubtitle = ctx.indexerBuildCardSubtitle;
   var indexerWorkspaceCollapsedMetricsHtml = ctx.indexerWorkspaceCollapsedMetricsHtml;
@@ -781,10 +781,13 @@ globalThis.ChimeraSettings.Render.Cards.mountFeedLogIndexerWorkspace = function 
       ctx.workspaceManagedStaging != null &&
       ctx.workspaceManagedStaging.wsNum === wsNum;
     var pathsBlockHtml = null;
-    if (isEdit) {
+    if (isEdit && typeof buildManagedWorkspacePathsEditHtml === "function") {
       pathsBlockHtml = buildManagedWorkspacePathsEditHtml(wsNum, ctx.workspaceManagedStaging.paths);
     }
-    var configureBtn = buildManagedWorkspaceToolbarHtml(wsNum, isEdit, titleText);
+    var configureBtn =
+      typeof buildManagedWorkspaceToolbarHtml === "function"
+        ? buildManagedWorkspaceToolbarHtml(wsNum, isEdit, titleText)
+        : "";
     var renderExpanded = ctx.renderExpandedIndexer;
     var expanded =
       typeof renderExpanded === "function"

@@ -395,7 +395,7 @@ function serviceWindowMs(arr) {
     if (!Array.isArray(arr)) return { queueDepth: qd, ingestInflight: inf };
     for (var i = arr.length - 1; i >= 0; i--) {
       var f = getFlat(arr[i].parsed);
-      if (!isIndexerStateFlat(f)) continue;
+      if (typeof ctx.isIndexerStateFlat === "function" && !ctx.isIndexerStateFlat(f)) continue;
       if (f.queue_depth != null) {
         var n = Number(f.queue_depth);
         if (!isNaN(n)) qd = n;

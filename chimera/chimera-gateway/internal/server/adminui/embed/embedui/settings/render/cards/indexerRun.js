@@ -20,8 +20,8 @@ globalThis.ChimeraSettings.Render.Cards.mountFeedLogIndexerRun = function (ctx) 
   var scopedEvlogTitle = ctx.scopedEvlogTitle;
   var RECENT_CARD_STATUS_N = ctx.RECENT_CARD_STATUS_N;
   var sliceRecent = ctx.sliceRecent;
-  var countErrorSignalsInEntries = ctx.countErrorSignalsInEntries;
-  var filterEventsForIndexerScopeFullLog = ctx.filterEventsForIndexerScopeFullLog;
+  var buildManagedWorkspacePathsEditHtml = ctx.buildManagedWorkspacePathsEditHtml;
+  var buildManagedWorkspaceToolbarHtml = ctx.buildManagedWorkspaceToolbarHtml;
   var operatorCardChevronHtml = ctx.operatorCardChevronHtml;
   var serviceSummaryStatusPillHtml = ctx.serviceSummaryStatusPillHtml;
 
@@ -878,7 +878,11 @@ globalThis.ChimeraSettings.Render.Cards.mountFeedLogIndexerRun = function (ctx) 
         ? String(expOpts.pathsBlockHtml)
         : meta.watchRootPaths && meta.watchRootPaths.length
           ? "<pre class=\"indexer-paths-pre\">" +
-          escapeHtml(formatWatchPathsPreHtml(meta.watchRootPaths)) +
+          escapeHtml(
+            typeof ctx.formatWatchPathsPreHtml === "function"
+              ? ctx.formatWatchPathsPreHtml(meta.watchRootPaths)
+              : meta.watchRootPaths.join("\n")
+          ) +
           "</pre>"
           : '<span class="muted">—</span>';
     var summaryRows =
@@ -891,7 +895,10 @@ globalThis.ChimeraSettings.Render.Cards.mountFeedLogIndexerRun = function (ctx) 
       "</dd></dl>";
     var configureBtn = expOpts.configureBtnHtml != null ? String(expOpts.configureBtnHtml) : "";
     var afterSummary = expOpts.extraAfterSummaryHtml != null ? String(expOpts.extraAfterSummaryHtml) : "";
-    var evsFull = filterEventsForIndexerScopeFullLog(evs, run.id, partitionRegistry || {});
+    var evsFull =
+      typeof ctx.filterEventsForIndexerScopeFullLog === "function"
+        ? ctx.filterEventsForIndexerScopeFullLog(evs, run.id, partitionRegistry || {})
+        : evs;
     var recentOpts = expOpts.recentOpts || {};
     var recentFiles = buildIndexerRecentEvaluatedFilesHtml(evsFull, run.id, 10, recentOpts);
     var recentSection = recentFiles
@@ -1149,7 +1156,10 @@ globalThis.ChimeraSettings.Render.Cards.mountFeedLogIndexerRun = function (ctx) 
     var wi;
     for (wi = 0; wi < nested.length; wi++) {
       var ws = nested[wi];
-      var wsLabel = operatorManagedWorkspaceTitleText(ws);
+      var wsLabel =
+        typeof ctx.operatorManagedWorkspaceTitleText === "function"
+          ? ctx.operatorManagedWorkspaceTitleText(ws)
+          : "—";
       var ti;
       for (ti = 0; ti < tenantIds.length; ti++) {
         var wsCn = ChimeraSettings.Derive.vectorstoreCollectionNameFromIndexerMeta({
@@ -1448,12 +1458,14 @@ globalThis.ChimeraSettings.Render.Cards.mountFeedLogIndexerRun = function (ctx) 
       ctx.workspaceManagedStaging != null &&
       ctx.workspaceManagedStaging.wsNum === wsNumIx;
     var pathsBlockIx = null;
-    if (isIxEdit) {
+    if (isIxEdit && typeof buildManagedWorkspacePathsEditHtml === "function") {
       pathsBlockIx = buildManagedWorkspacePathsEditHtml(wsNumIx, ctx.workspaceManagedStaging.paths);
     }
     var titleText = workspaceCardTitleFromIndexerMeta(meta);
     var configureBtnIx =
-      wsNumIx > 0 ? buildManagedWorkspaceToolbarHtml(wsNumIx, isIxEdit, titleText) : "";
+      wsNumIx > 0 && typeof buildManagedWorkspaceToolbarHtml === "function"
+        ? buildManagedWorkspaceToolbarHtml(wsNumIx, isIxEdit, titleText)
+        : "";
     var expOptsIx = {
       kvOpts: {
         omitFileCountIfZero: true,
@@ -1467,7 +1479,10 @@ globalThis.ChimeraSettings.Render.Cards.mountFeedLogIndexerRun = function (ctx) 
       configureBtnHtml: configureBtnIx
     };
     var doneSeen = meta.doneSeen;
-    var errRecent = countErrorSignalsInEntries(sliceRecent(evs, RECENT_CARD_STATUS_N));
+    var errRecent =
+      typeof ctx.countErrorSignalsInEntries === "function"
+        ? ctx.countErrorSignalsInEntries(sliceRecent(evs, RECENT_CARD_STATUS_N))
+        : 0;
     var declared = meta.lastDeclaredState ? String(meta.lastDeclaredState).trim() : "";
 
     var qIng =
