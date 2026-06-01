@@ -62,6 +62,9 @@ Create a feature record when implementation ships.
 
 | Plan | Summary |
 |------|---------|
+| [indexer-embedding-model-and-workspace-purge.md](indexer-embedding-model-and-workspace-purge.md) | Operator embedding model selector on indexer card; workspace delete drops vector collection |
+| [operator-workspace-search.md](operator-workspace-search.md) | Direct workspace search API, `/ui/search`, ribbon nav |
+| [embedui-settings-card-cleanup.md](embedui-settings-card-cleanup.md) | Settings feed and card component refactor for consistency |
 | [indexer-manifest-ingest.md](indexer-manifest-ingest.md) | Manifest-only ingest, line-number snippets |
 | [indexer-sync-state-sqlite-and-force-reindex.md](indexer-sync-state-sqlite-and-force-reindex.md) | SQLite sync checkpoints, force re-index |
 | [operator-cli.md](operator-cli.md) | `chimeractl` operator CLI |

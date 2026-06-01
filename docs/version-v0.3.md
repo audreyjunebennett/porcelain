@@ -42,6 +42,7 @@ Make the gateway easier to set up and clearer about what it is. This plan’s **
 | [Operator-managed virtual models](#operator-managed-virtual-models)                          | Create virtual models from `/ui/settings`; per-model fallback, routing rules, and tool-router; operator SQLite + scoped routing logs   | `done`        |
 | [First-run token handoff](#first-run-token-handoff)                                          | Show, copy, and optionally save the gateway token; restart-friendly                                                                    | `done`        |
 | [Setup wizard](#setup-wizard)                                                                | Guided keys -> local server -> test chat -> indexing                                                                                   | `todo`        |
+| [Deferred: provider probes and operator alerts](#deferred-provider-probes-and-operator-alerts-v05) | Per-model live probes and actionable error alerts deferred to v0.5; v0.3 uses catalog + broker health only                              | `deferred`    |
 
 
 ---
@@ -475,10 +476,12 @@ v1 may store a monolithic **policy YAML** per virtual model for fastest parity w
 ### Step 2 — Provider keys (Groq, Gemini, …)
 
 - Collect **provider API keys** (at minimum the fields used today for Groq and Gemini).
-- **Validation UX:**
-  - When a key is **added** or **removed**, the system **immediately** validates against the upstream/provider and retrieves **model list**.
+- **Validation UX (v0.3 — light touch):**
+  - When a key is **added** or **removed**, poll **chimera-broker provider health** and the live **`/v1/models`** catalog for that provider.
   - Display a **count of models discovered** for that provider configuration.
-  - Whenever the **model count** changes, run **router generator** logic: regenerate **router file** and update the **fallback model list** to match the new union of models.
+  - Optionally apply **free-tier availability** assist (Groq/Gemini) or rely on bootstrap seeding from `provider-free-tier.yaml`.
+  - Whenever the **model count** or availability set changes, regenerate the **virtual model** routing stack (`POST /api/ui/virtual-models/{id}/routing/generate`) — not legacy global `gateway.yaml` routing alone.
+  - **Do not** block setup on per-model live probes (chat/embed ping). Runtime already **skips and logs** unavailable or failing upstream models at use time. Richer validation, operator **alerts**, and **self-healing configuration** are scoped in [`version-v0.5.md`](version-v0.5.md).
 - **Back** → welcome. **Continue** → step 3.
 
 ---
@@ -510,8 +513,9 @@ v1 may store a monolithic **policy YAML** per virtual model for fastest parity w
 - Brief explanation of **why indexing matters** and that users should choose folders they want searchable.
 - **Project and flavor (optional):** each index may be configured with a **project id** and an optional **flavor id**. Full **base + flavor union** retrieval semantics are scoped in [`version-v0.4.md`](version-v0.4.md); the v0.3 wizard collects basic indexer entries.
 - **“Add a Folder”** control: placed **upper-right** (per spec).
-- **Embedding model** panel: **combobox** of **valid embedding models** derived from configured providers + local server (models suitable for `/embeddings` and gateway/Qdrant expectations).
+- **Embedding model** panel: **combobox** of models from the live broker catalog (see [`plans/indexer-embedding-model-and-workspace-purge.md`](plans/indexer-embedding-model-and-workspace-purge.md)).
   - **Default selection:** `ollama/nomic-embed-text:latest` or the project’s agreed default that matches **Qdrant**, **chunking**, and **indexer** settings from config.
+  - **On change:** show re-embed warning — switching models requires re-indexing workspaces.
   - When [Internal embedding provider (exploration)](#internal-embedding-provider-exploration) ships, include entries for the **internal provider name** + configured **embedding model** alongside Ollama/provider-derived options.
 - **No valid embedding models:**
   - Show a clear **message** that no embedding-capable models are available.
@@ -528,7 +532,7 @@ v1 may store a monolithic **policy YAML** per virtual model for fastest parity w
 - **If the user defined no indexes in step 5:** this step is **disabled** or skipped (implementation choice: auto-skip vs greyed step with explanation—product should not pretend indexing can be tested).
 - **When indexes exist:**
   - Explain how **embeddings** are used in practice.
-  - **Query panel:** text box; on **Enter** or **Query** button:
+  - **Query panel:** text box; on **Enter** or **Query** button (reuse [`plans/operator-workspace-search.md`](plans/operator-workspace-search.md)):
     1. **Highlight** the query text (visual feedback).
     2. Run search **across configured indexes** (same semantics as production search for the scopes defined in step 5).
     3. **Zero results:** show that explicitly; add **notes/warnings** based on indexer state (idle, error, no chunks, etc.).
@@ -555,6 +559,22 @@ v1 may store a monolithic **policy YAML** per virtual model for fastest parity w
 
 ---
 
+## Deferred: provider probes and operator alerts (v0.5)
+
+**Goal:** Capture intent for a **stricter provider/model validator** and **actionable operator notifications** without blocking the v0.3 setup wizard.
+
+**v0.3 decision:** Setup and settings rely on **broker health + catalog model counts + operator availability toggles**. When an upstream model fails at chat or embed time, the gateway **skips and logs** (fallback chain, routing warnings). That is sufficient for first-run onboarding.
+
+**Deferred to v0.5** ([`version-v0.5.md`](version-v0.5.md)):
+
+- **Per-model probes** — Optional live validation (minimal chat or embedding call) when an operator explicitly requests it, not as a wizard gate.
+- **Error-driven alerts** — When a provider is in use and multiple model errors accumulate in structured logs, surface **actionable alerts** in the operator UI (re-enter key, mark model unavailable, regenerate fallback, etc.).
+- **Desired-state gateway** — A gateway that can **return itself** (and supervised children) to the **operator’s intended configuration**, guided by page-level self-description and model-assisted remediation — see v0.5 **Operator desired-state and model-assisted configuration**.
+
+**Status:** `deferred`
+
+---
+
 ## Verification
 
 
@@ -566,6 +586,7 @@ v1 may store a monolithic **policy YAML** per virtual model for fastest parity w
 | Operator-managed virtual models  | Bootstrap import; multi-model chat + catalog; per-model fallback/policy/tool-router from SQLite; `/ui/settings` CRUD cards; scoped routing logs with `virtual_model_id`. |
 | First-run token handoff          | First launch shows a copyable gateway API key and optional safe dotenv save.                                                                                             |
 | Setup wizard                     | Six steps navigate correctly, support skip/finish, and use shared router regeneration; embedding combobox reflects internal provider when implemented.                   |
+| Deferred provider probes         | Documented in v0.3 as deferred; v0.5 roadmap covers alerts and optional probes ([`version-v0.5.md`](version-v0.5.md)).                                                  |
 
 
 When this plan is implemented, update `[chimera.plan.md](chimera.plan.md)` **Release roadmap** row for v0.3 if the shipped scope differs (e.g. split onboarding vs RAG scope into separate releases).
@@ -585,6 +606,7 @@ When this plan is implemented, update `[chimera.plan.md](chimera.plan.md)` **Rel
 
 - `[version-v0.2.md](version-v0.2.md)` - previous version
 - `[version-v0.4.md](version-v0.4.md)` - next version (workspace embedding scope, peer backends)
+- `[version-v0.5.md](version-v0.5.md)` - operator desired-state gateway, model-assisted configuration, provider alerts
 - `[chimera.plan.md](chimera.plan.md)` - product roadmap and requirements
 - `[configuration.md](configuration.md)` - configuration reference
 
