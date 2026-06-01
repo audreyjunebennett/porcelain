@@ -1,7 +1,5 @@
 # Phase 3: conversation lifecycle slugs (slog text samples; not live captures).
 time=2026-05-09T12:00:00.000Z level=INFO msg=conversation.received request_id=lc-req-1 conversation_id=lc-conv-1 principal_id=lc-principal-1 turn_index=1
-time=2026-05-09T12:00:00.010Z level=INFO msg=conversation.merged request_id=lc-req-1 conversation_id=lc-conv-1 principal_id=lc-principal-1 turn_index=1
-time=2026-05-09T12:00:00.020Z level=INFO msg=conversation.dedup_hit request_id=lc-req-1 conversation_id=lc-conv-1 principal_id=lc-principal-1 turn_index=1
 time=2026-05-09T12:00:00.030Z level=INFO msg=conversation.routing.resolved request_id=lc-req-1 conversation_id=lc-conv-1 principal_id=lc-principal-1 turn_index=1
 time=2026-05-09T12:00:00.040Z level=INFO msg=conversation.rag.span request_id=lc-req-1 conversation_id=lc-conv-1 principal_id=lc-principal-1 collection=coll-lc span_id=span-lc window_ms=10000 turn_index=1
 time=2026-05-09T12:00:00.050Z level=INFO msg=conversation.rag.skipped request_id=lc-req-1 conversation_id=lc-conv-1 principal_id=lc-principal-1 reason=no_hits turn_index=1

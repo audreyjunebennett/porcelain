@@ -112,7 +112,7 @@ routing:
 # Gateway metrics: SQLite usage and chat outcomes for quotas and operator views.
 #
 # Applied at process start only (changing paths requires a restart). When enabled, supports
-# provider_model_limits enforcement and conversation_merge embedding history.
+# provider_model_limits enforcement.
 metrics:
   enabled: true
   # sqlite_path: "../data/gateway/metrics.sqlite"
@@ -128,25 +128,6 @@ metrics:
 # Operator logs UI: ring-buffer retention for supervised /ui/logs.
 # operator_logs:
 #   indexer_pinned_lines_max: 64  # reserve slots for run.start, scope.status, gate, skip summaries
-
-# Conversation merge: reuse an existing chat session when the client omits a conversation id.
-#
-# Uses rag.embedding (when RAG is on) plus operator SQLite to match recent sessions by similarity.
-# Optional sticky-attach fields link short follow-ups without a full embedding match.
-conversation_merge:
-  enabled: true
-  # Minimum cosine similarity to attach to an existing session.
-  match_threshold: 0.75
-  # Only consider sessions updated within this many minutes.
-  recent_window_minutes: 10
-  # Max candidate sessions to score per request.
-  candidate_limit: 32
-  # Drop idle sessions after this many hours.
-  max_idle_hours: 168
-  # Sticky attach: link short follow-ups to the latest session within a time window.
-  # session_attach_minutes: 45
-  # session_attach_min_cosine: 0.18
-  # session_short_follow_up_runes: 220
 
 # chimera-indexer: file watcher that ingests workspace files into vectorstore via the gateway.
 #

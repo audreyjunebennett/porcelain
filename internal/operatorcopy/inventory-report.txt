@@ -1,9 +1,9 @@
 # operatorcopy inventory report
-ui_operator_slugs: 154
+ui_operator_slugs: 0
 ui_coverage_pct: 100.0
-go_emitter_slugs: 161
-go_coverage_pct: 34.2
-registry_keys: 258
+go_emitter_slugs: 160
+go_coverage_pct: 40.6
+registry_keys: 339
 missing_ui_in_registry: 0
 
 ## Missing Go slugs (Phase 5)
@@ -12,7 +12,6 @@ chat.chimera-broker.outgoing_tokens_count_failed
 chat.provider_limits.config_invalid
 chat.provider_limits.config_missing
 chat.provider_limits.query_failed
-chat.routing.model_not_found
 chat.routing.virtual_model_skipped
 chat.tool_router.applied
 chat.tool_router.model_attempt_failed
@@ -20,6 +19,9 @@ chat.tool_router.skipped
 chimera-supervisor.child.exited
 chimera-supervisor.control.server_error
 chimera-supervisor.indexer.raw_exec
+chimera-supervisor.indexer.skipped
+chimera-supervisor.indexer.start_failed
+chimera-supervisor.indexer.token_missing
 chimera-supervisor.shutdown.child_force_kill
 chimera-supervisor.shutdown.child_force_kill_failed
 chimera-supervisor.shutdown.child_signaling
@@ -29,29 +31,7 @@ chimera-supervisor.shutdown.children_done
 chimera-supervisor.shutdown.graceful_start
 chimera-supervisor.shutdown.signal_received
 chimera-supervisor.startup.seed
-conversation.broker.completed
-conversation.broker.failed
-conversation.dedup_hit
-conversation.fallback.attempted
-conversation.fallback.exhausted
-conversation.fallback.model_not_found
-conversation.merge.dedup_cache_write_failed
-conversation.merge.dedup_read_failed
-conversation.merge.disabled
-conversation.merge.embed_dim_mismatch
-conversation.merge.list_candidates_failed
-conversation.merge.resolve_failed
-conversation.merge.snapshot_upsert_failed
-conversation.merge.upsert_failed
-conversation.merged
-conversation.payload.sample
-conversation.rag.attached
-conversation.rag.skipped
-conversation.response.witness
-conversation.tool.call_completed
-conversation.tool.call_failed
-conversation.tool.call_started
-conversation.tool.router
+component
 gateway.auth.append_failed
 gateway.auth.file_missing
 gateway.auth.parse_failed
@@ -61,6 +41,7 @@ gateway.catalog.auditor_panic
 gateway.config.missing
 gateway.config.reload_failed
 gateway.config.reloaded
+gateway.conversation_history.persist_failed
 gateway.http.server_error
 gateway.listen.skipped
 gateway.metrics.disabled_after_error
@@ -70,27 +51,34 @@ gateway.operator.init_failed
 gateway.operator.migration_applied
 gateway.operator.workspace.created
 gateway.operator.workspace.deleted
-gateway.operator.workspace.path_added
-gateway.operator.workspace.path_deleted
 gateway.operator.workspace.updated
+gateway.provider_models.bootstrap_failed
+gateway.provider_models.bootstrap_free_tier_missing
+gateway.provider_models.bootstrap_seeded
+gateway.provider_models.reload_failed
 gateway.rag.init_failed
+gateway.startup.adminui_filesystem
+gateway.startup.adminui_filesystem_ignored
+gateway.startup.adminui_filesystem_remote_denied
 gateway.supervisor_logs.catchup_failed
 gateway.supervisor_logs.control_url_missing
 gateway.supervisor_logs.stream_disconnected
+gateway.virtual_model.bootstrap_failed
+gateway.virtual_model.bootstrap_imported
+gateway.virtual_model.gemini_seeded
+gateway.virtual_model.reload_failed
 gateway.wrapper.backend.supervisor_ignored
 indexer.job.cancelled
-indexer.supervised.hot_reload
-indexer.supervised.hot_reload_resolve_error
-indexer.supervised.hot_reload_yaml_error
-indexer.supervised.workspaces_changed
 indexer.supervised.workspaces_poll
-indexer.supervised.workspaces_reload
+indexer.supervised.workspaces_reload_session_end
+indexer.supervised.workspaces_reload_session_error
 ingest.failed
 rag.config.invalid
 rag.embed
 rag.hit
 rag.ingest.delete_pre_failed
 rag.ingest.trace
+reason
 routing.fallback_chain.empty
 routing.policy.missing
 routing.policy.parse_failed
@@ -101,6 +89,7 @@ routing.rule.no_match.ambiguous_default
 routing.rule.no_match.first_fallback
 scope.chunked.error
 scope.complete
+state
 ui.session.error
 upstream.health.probe_failed
 upstream.models.fetch_failed

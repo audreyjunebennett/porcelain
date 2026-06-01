@@ -70,19 +70,6 @@ func (r *Recorder) Attach(opts **chat.ProxyOpts) {
 	}
 }
 
-// PersistDedup records a merge dedup-cache response as a completed turn.
-func (r *Recorder) PersistDedup(jsonBody []byte) {
-	if r == nil {
-		return
-	}
-	resolved := ResolvedModelFromJSON(jsonBody)
-	if resolved == "" {
-		resolved = r.turn.SelectedModel
-	}
-	content := AssistantContentFromResponse(false, jsonBody)
-	r.persistSuccess(resolved, content, jsonBody, false)
-}
-
 // PersistGatewayError records user + error rows for inline gateway errors.
 func (r *Recorder) PersistGatewayError(status int, errBody map[string]any) {
 	if r == nil {

@@ -5,17 +5,6 @@ package naming
 // Log message slugs (canonical). Operator copy: internal/operatorcopy/messages.yaml.
 const (
 	MsgGatewayHttpAccess                        = "gateway.http.access"
-	MsgConversationMergeEmbedFailed             = "conversation.merge.embed_failed"
-	MsgConversationMergeDisabled                = "conversation.merge.disabled"
-	MsgConversationMergeEmbedDimMismatch        = "conversation.merge.embed_dim_mismatch"
-	MsgConversationMergeListCandidatesFailed    = "conversation.merge.list_candidates_failed"
-	MsgConversationMergeDedupReadFailed         = "conversation.merge.dedup_read_failed"
-	MsgConversationMergeUpsertFailed            = "conversation.merge.upsert_failed"
-	MsgConversationMergeSnapshotUpsertFailed    = "conversation.merge.snapshot_upsert_failed"
-	MsgConversationMergeDedupCacheWriteFailed   = "conversation.merge.dedup_cache_write_failed"
-	MsgConversationMergeResolveFailed           = "conversation.merge.resolve_failed"
-	MsgConversationMerged                       = "conversation.merged"
-	MsgConversationDedupHit                     = "conversation.dedup_hit"
 	MsgConversationResponseWitness              = "conversation.response.witness"
 	MsgConversationPayloadSample                = "conversation.payload.sample"
 	MsgConversationRagAttached                  = "conversation.rag.attached"

@@ -213,10 +213,6 @@ function lifecycleLabelForMsg(m) {
   switch (m) {
     case "conversation.received":
       return "received";
-    case "conversation.merged":
-      return "matched";
-    case "conversation.dedup_hit":
-      return "dedup";
     case "conversation.routing.resolved":
       return "routed";
     case "conversation.rag.attached":
@@ -281,7 +277,6 @@ function buildConversationCardModel(events, getFlat) {
   };
   var turnCount = 0;
   var lastLifecycleMsg = "";
-  var dedupShort = false;
   var witnessReq = false;
   var witnessResp = false;
   /** Last-wins for RAG step: done | skipped | pending */
@@ -319,13 +314,6 @@ function buildConversationCardModel(events, getFlat) {
       progress.received = "done";
       if (f.stream !== undefined && f.stream !== null) kv.stream = f.stream ? "stream" : "batch";
     }
-    if (m === "conversation.merged") {
-      progress.received = "done";
-    }
-    if (m === "conversation.dedup_hit") {
-      progress.received = "done";
-      dedupShort = true;
-    }
     if (m === "conversation.routing.resolved") {
       progress.routed = "done";
     }
@@ -353,15 +341,9 @@ function buildConversationCardModel(events, getFlat) {
     if (m === "conversation.errored") progress.delivered = "failed";
   }
 
-  if (dedupShort) {
-    progress.routed = progress.routed === "done" ? "done" : "skipped";
-    progress.rag = "skipped";
-    progress.broker = "skipped";
-  } else {
-    progress.rag = ragLast != null ? ragLast : "skipped";
-    if (progress.rag === "pending") progress.rag = "done";
-    progress.broker = brokerLast != null ? brokerLast : "skipped";
-  }
+  progress.rag = ragLast != null ? ragLast : "skipped";
+  if (progress.rag === "pending") progress.rag = "done";
+  progress.broker = brokerLast != null ? brokerLast : "skipped";
 
   var stateLabel = lastLifecycleMsg ? lifecycleLabelForMsg(lastLifecycleMsg) : "—";
   var stateKind = "complete";

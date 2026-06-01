@@ -71,10 +71,6 @@ type Resolved struct {
 	IndexerSupervisedStartWhenRAGDisabled bool
 	IndexerSupervisedLogJSON              bool
 
-	// ConversationMerge joins chat requests into one logical conversation_id per tenant
-	// and RAG scope using embeddings + similarity (requires metrics SQLite + embeddings API).
-	ConversationMerge ConversationMerge
-
 	// WitnessSampleMaxChars caps head/tail runes for conversation.payload.sample (Phase 8).
 	// When zero, defaults to 256 in WitnessSampleMaxRunes().
 	WitnessSampleMaxChars int
@@ -174,8 +170,6 @@ type gatewayDoc struct {
 			LogJSON              *bool  `yaml:"log_json"`
 		} `yaml:"supervised"`
 	} `yaml:"indexer"`
-
-	ConversationMerge conversationMergeDoc `yaml:"conversation_merge"`
 
 	OperatorLogs struct {
 		IndexerPinnedLinesMax int `yaml:"indexer_pinned_lines_max"`
@@ -403,8 +397,6 @@ func LoadGatewayYAML(filePath string, log *slog.Logger) (*Resolved, error) {
 		rag = RAG{Enabled: false}
 	}
 
-	mergeCfg := conversationMergeEffective(doc.ConversationMerge)
-
 	idxSupEnabled := doc.Indexer.Supervised.Enabled != nil && *doc.Indexer.Supervised.Enabled
 	idxStartWhenRAGOff := doc.Indexer.Supervised.StartWhenRAGDisabled != nil && *doc.Indexer.Supervised.StartWhenRAGDisabled
 	idxLogJSON := true
@@ -463,7 +455,6 @@ func LoadGatewayYAML(filePath string, log *slog.Logger) (*Resolved, error) {
 		ToolRouterEnabled:                     toolRouterOn,
 		ToolRouterConfidenceThreshold:         toolThresh,
 		RAG:                                   rag,
-		ConversationMerge:                     mergeCfg,
 		WitnessSampleMaxChars:                 witnessMax,
 		WitnessSampleForceAtDebug:             witnessForceDebug,
 		IndexerSupervisedEnabled:              idxSupEnabled,

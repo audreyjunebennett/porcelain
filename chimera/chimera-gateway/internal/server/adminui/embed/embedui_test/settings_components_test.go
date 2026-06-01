@@ -565,7 +565,7 @@ func TestLogsDerive_conversationTurnGroupsForExpanded_inheritsAndUnattributed(t 
 	}
 
 	events := []map[string]any{
-		{"ts": "2026-05-09T12:00:00.000Z", "seq": 1, "parsed": map[string]any{"rawFlat": map[string]any{"msg": "conversation.merge.resolve_failed"}}},
+		{"ts": "2026-05-09T12:00:00.000Z", "seq": 1, "parsed": map[string]any{"rawFlat": map[string]any{"msg": "gateway.indexer.config"}}},
 		{"ts": "2026-05-09T12:00:00.010Z", "seq": 2, "parsed": map[string]any{"rawFlat": map[string]any{"msg": "conversation.received", "turn_index": 1}}},
 		{"ts": "2026-05-09T12:00:00.020Z", "seq": 3, "parsed": map[string]any{"rawFlat": map[string]any{"msg": "chat.chimera-broker.request"}}},
 		{"ts": "2026-05-09T12:00:00.030Z", "seq": 4, "qdrantTurnIndex": 1, "parsed": map[string]any{"rawFlat": map[string]any{"msg": "qdrant.http.vector_search"}}},

@@ -92,8 +92,6 @@ const (
 	HeaderIndexRunTarget                = "X-Chimera-Index-Run-Id"
 	HeaderChunkIndexTarget              = "X-Chimera-Chunk-Index"
 	HeaderConversationIDTarget          = "X-Chimera-Conversation-Id"
-	HeaderRequestFingerprintTarget      = "X-Chimera-Request-Fingerprint"
-	HeaderRollingFingerprintTarget      = "X-Chimera-Rolling-Fingerprint"
 	HeaderToolRouterTarget              = "X-Chimera-Tool-Router"
 	HeaderToolConfidenceThresholdTarget = "X-Chimera-Tool-Confidence-Threshold"
 	// HeaderUpstreamModelTarget is the broker-resolved model for a chat turn (virtual or direct).

@@ -5,8 +5,7 @@ These samples document the gateway correlation triple for operator logs and UI t
 
 They are not live captures; they mirror slog text handler output.
 
-See: internal/conversationmerge/merge_correlation_test.go,
-     internal/chat/correlation_contract_test.go,
+See: internal/chat/correlation_contract_test.go,
      internal/rag/service_test.go (TestService_Retrieve_logContainsPrincipalId),
      internal/server/ingest_test.go (TestIngest_JSON_logsConversationIDWhenHeaderPresent),
      internal/server/lifecycle_phase3_doc_test.go (Phase 3 lifecycle msg slugs).

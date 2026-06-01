@@ -14,7 +14,6 @@ import (
 
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/chat"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/conversationhistory"
-	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/conversationmerge"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/conversationwitness"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/gwhttp"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/rag"
@@ -129,7 +128,6 @@ var gatewayIndexTmpl = template.Must(template.New("gatewayIndex").Parse(`<!DOCTY
   <dl>
     <dt>Gateway tokens</dt><dd>{{.TokensCount}} configured</dd>
     <dt>Metrics</dt><dd>{{if .MetricsEnabled}}enabled{{else}}disabled{{end}}</dd>
-    <dt>Conversation merge</dt><dd>{{if .ConversationMerge}}enabled{{else}}disabled{{end}}</dd>
     <dt>Broker model providers</dt><dd>{{.Providers}}</dd>
     <dt>Models available</dt><dd>{{.ModelCount}} <span class="muted">(merged list: virtual + upstream)</span></dd>
   </dl>
@@ -236,7 +234,6 @@ func NewMux(rt *Runtime, log *slog.Logger, overlay *StatusOverlay, ui *UIOptions
 			IndexerWorkerClass   string
 			TokensCount          int
 			MetricsEnabled       bool
-			ConversationMerge    bool
 			Providers            string
 			ModelCount           string
 		}{
@@ -254,7 +251,6 @@ func NewMux(rt *Runtime, log *slog.Logger, overlay *StatusOverlay, ui *UIOptions
 			IndexerWorkerClass: idxWorkerClass,
 			TokensCount:        tokStore.Count(),
 			MetricsEnabled:     res.MetricsEnabled,
-			ConversationMerge:  res.ConversationMerge.Enabled,
 			Providers:          providers,
 			ModelCount:         modelCount,
 		}
@@ -622,7 +618,6 @@ func handleV1Chat(w http.ResponseWriter, r *http.Request, rt *Runtime, log *slog
 		})
 		return
 	}
-	flowStart := time.Now()
 
 	var stream bool
 	if s, ok := raw["stream"]; ok {
@@ -654,88 +649,13 @@ func handleV1Chat(w http.ResponseWriter, r *http.Request, rt *Runtime, log *slog
 	flav := ingest.ResolveFlavor(r.Header.Get(ingest.HeaderFlavor), res.RAG.DefaultFlavor)
 	lastUser := rag.LastUserText(raw["messages"])
 
-	var mergeSvc *conversationmerge.Service
-	if os := rt.OperatorStore(); os != nil {
-		mergeSvc = conversationmerge.NewService(res.ConversationMerge, os.DB(), res.UpstreamBaseURL, apiKey, res.RAG, log)
+	var cid, cidSource string
+	if headerCID != "" {
+		cid, cidSource = headerCID, "header"
+	} else {
+		cid, cidSource = uuid.NewString(), "generated"
 	}
-
-	incomingFP := strings.TrimSpace(r.Header.Get(headerRequestFingerprint))
-
-	var cid string
-	var cidSource string
-	var mergeTurn int
-
-	switch {
-	case headerCID != "":
-		cid = headerCID
-		cidSource = "header"
-	case mergeSvc != nil:
-		out, err := mergeSvc.Resolve(ctx, conversationmerge.ResolveInput{
-			TenantID:             sess.TenantID,
-			ProjectID:            proj,
-			FlavorID:             flav,
-			LastUserText:         lastUser,
-			IncomingFingerprint:  incomingFP,
-			ClientConversationID: "",
-			RequestID:            rid,
-			NextTurnIndex:        rt.NextChatTurnIndex,
-		})
-		if err != nil && log != nil {
-			log.With("request_id", rid, "service", "gateway", "principal_id", sess.TenantID).
-				Debug("conversation merge resolve failed", "msg", naming.MsgConversationMergeResolveFailed, "err", err)
-		}
-		if len(out.DedupJSON) > 0 {
-			cid = out.ConversationID
-			turnIdx := out.TurnIndex
-			if turnIdx <= 0 {
-				turnIdx = rt.NextChatTurnIndex(cid)
-			}
-			dedupLog := chatRouteLogger(log, rid, cid, sess.TenantID, turnIdx)
-			w.Header().Set(headerConversationID, cid)
-			if dedupLog != nil {
-				dedupRecv := []any{
-					"msg", naming.MsgConversationReceived,
-					"clientModel", clientModel, "stream", stream, "tenant", sess.TenantID,
-					"project", proj, "flavor", flav, "cid_source", "merge", "timeline_kind", naming.TimelineKindBroker,
-				}
-				if mc := conversationwitness.RequestMessageCount(raw); mc > 0 {
-					dedupRecv = append(dedupRecv, "message_count", mc)
-				}
-				dedupLog.Info("conversation received", dedupRecv...)
-				emitConversationRequestWitness(dedupLog, res, raw)
-			}
-			if fp := mergeSvc.RollingFingerprint(ctx, cid); fp != "" {
-				w.Header().Set(headerRollingFingerprint, fp)
-			}
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			n, _ := w.Write(out.DedupJSON)
-			if hist := newHistoryRecorder(rt, log, ctx, r, sess.TenantID, cid, lastUser, clientModel, proj, flav); hist != nil {
-				hist.PersistDedup(out.DedupJSON)
-			}
-			if dedupLog != nil {
-				conversationwitness.LogResponseWitness(dedupLog, false, out.DedupJSON)
-				if res.ShouldEmitPayloadSample() {
-					conversationwitness.LogPayloadSample(dedupLog, true, res.WitnessSampleMaxRunes(), "response", out.DedupJSON)
-				}
-				dedupLog.Info("conversation delivered", "msg", naming.MsgConversationDelivered,
-					"statusCode", http.StatusOK, "stream", false, "bytes", int64(n),
-					"total_ms", time.Since(flowStart).Milliseconds(), "timeline_kind", naming.TimelineKindBroker)
-			}
-			return
-		}
-		cid = out.ConversationID
-		mergeTurn = out.TurnIndex
-		cidSource = "merge"
-	default:
-		cid = uuid.NewString()
-		cidSource = "generated"
-	}
-
-	turnIdx := mergeTurn
-	if turnIdx <= 0 {
-		turnIdx = rt.NextChatTurnIndex(cid)
-	}
+	turnIdx := rt.NextChatTurnIndex(cid)
 
 	routeLog := chatRouteLogger(log, rid, cid, sess.TenantID, turnIdx)
 	w.Header().Set(headerConversationID, cid)
@@ -756,23 +676,6 @@ func handleV1Chat(w http.ResponseWriter, r *http.Request, rt *Runtime, log *slog
 	LogConversationIncomingToolMessages(routeLog, raw["messages"])
 
 	var chatOpts *chat.ProxyOpts
-	if mergeSvc != nil && !stream {
-		ms := mergeSvc
-		ccid := cid
-		ccTenant := sess.TenantID
-		lu := lastUser
-		chatOpts = &chat.ProxyOpts{
-			OnUpstreamJSONSuccess: func(status int, upstreamModel string, jsonBody []byte) {
-				if status < 200 || status >= 300 {
-					return
-				}
-				fp := ms.RecordTurn(ctx, ccTenant, proj, flav, ccid, lu, jsonBody, time.Now().UTC(), rid)
-				if fp != "" {
-					w.Header().Set(headerRollingFingerprint, fp)
-				}
-			},
-		}
-	}
 	attachConversationDelivery(routeLog, &chatOpts)
 	chatOpts.UpstreamRequestID = rid
 	chatOpts.WitnessEmitPayloadSample = res.ShouldEmitPayloadSample()
@@ -931,9 +834,3 @@ func loggingMiddleware(log *slog.Logger, next http.Handler) http.Handler {
 
 // headerConversationID is an optional client-provided id for log correlation; must match requestid.Valid charset.
 const headerConversationID = naming.HeaderConversationIDTarget
-
-// headerRequestFingerprint optional client echo of legacy rolling fingerprint header for duplicate detection.
-const headerRequestFingerprint = naming.HeaderRequestFingerprintTarget
-
-// headerRollingFingerprint is the gateway-computed rolling hash after each completed JSON completion.
-const headerRollingFingerprint = naming.HeaderRollingFingerprintTarget
