@@ -76,6 +76,7 @@ globalThis.ChimeraSettings.Render.Cards.mountGatewayUsage = function (ctx) {
 
   function buildGatewayUsageIntroHtml() {
     return (
+      '<div class="sum-section-label">Summary</div>' +
       '<div class="gw-usage-intro" id="gw-usage-intro">' +
       '<p class="gw-usage-intro-lead">' +
       "Which models ran, estimated tokens this UTC minute and calendar day, and the latest upstream calls." +

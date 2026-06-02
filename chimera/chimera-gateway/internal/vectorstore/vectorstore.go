@@ -79,6 +79,9 @@ type Store interface {
 	Health(ctx context.Context) error
 	Stats(ctx context.Context, collection string) (Stats, error)
 	DeleteBySource(ctx context.Context, collection, source string) error
+	// DeleteCollection removes an entire collection. Implementations should treat a
+	// missing collection as success so purge is idempotent.
+	DeleteCollection(ctx context.Context, collection string) error
 	// ScrollPoints lists points in collection order for corpus inventory. filter
 	// scopes to tenant/project/flavor when non-nil. cursor is empty on the first
 	// page; subsequent calls pass ScrollBatch.NextCursor from the prior page.

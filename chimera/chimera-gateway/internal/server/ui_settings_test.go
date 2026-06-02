@@ -601,7 +601,7 @@ func TestUILogsAssets_serviceFeedContainsBrokerServiceSummary(t *testing.T) {
 		return string(b)
 	}
 
-	serviceFeed := fetchAuthedAsset("/ui/assets/settings/render/cards/serviceFeed.js")
+	serviceFeed := fetchAuthedAsset("/ui/assets/settings/render/cards/serviceFeed/broker.js")
 	if !strings.Contains(serviceFeed, "indexer-run-kv--chimera-broker-summary") {
 		t.Fatal("expected chimera-broker service card KV class in serviceFeed module")
 	}

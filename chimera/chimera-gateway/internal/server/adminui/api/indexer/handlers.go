@@ -386,6 +386,25 @@ func handleIndexerWorkspaceDELETE(h *handler.Handler, w http.ResponseWriter, r *
 		_ = json.NewEncoder(w).Encode(map[string]any{"error": "operator store unavailable"})
 		return
 	}
+	ws, err := st.GetWorkspace(r.Context(), operatorIndexerTenantID(), id)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]any{"error": err.Error()})
+		return
+	}
+	if ws == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"error": "workspace not found"})
+		return
+	}
+	if err := purgeWorkspaceCorpusIfEnabled(r.Context(), h.RT, ws, strings.TrimSpace(h.SessionPrincipal(r)), h.Log); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadGateway)
+		_ = json.NewEncoder(w).Encode(map[string]any{"error": err.Error()})
+		return
+	}
 	if err := st.DeleteWorkspace(r.Context(), operatorIndexerTenantID(), id); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)

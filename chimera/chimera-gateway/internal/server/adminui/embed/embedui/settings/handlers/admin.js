@@ -279,6 +279,13 @@ globalThis.ChimeraSettings.Handlers.Admin.wire = function (ctx) {
       }
     }
 
+    function reloadAdmin() {
+      Promise.all([fetchAdminState(), fetchAdminTokens()]).then(function () {
+        if (typeof ctx.patchAdminCardsFromPoll === "function" && ctx.patchAdminCardsFromPoll()) return;
+        refreshSummarizedPanel();
+      });
+    }
+
     function credentialActionOpts(triggerBtn) {
       return {
         ctx: ctx,
@@ -326,13 +333,6 @@ globalThis.ChimeraSettings.Handlers.Admin.wire = function (ctx) {
       function patchAdminUsersCardOrRefresh() {
         if (typeof ctx.patchAdminUsersCard === "function" && ctx.patchAdminUsersCard()) return;
         refreshSummarizedPanel();
-      }
-
-      function reloadAdmin() {
-        Promise.all([fetchAdminState(), fetchAdminTokens()]).then(function () {
-          if (typeof ctx.patchAdminCardsFromPoll === "function" && ctx.patchAdminCardsFromPoll()) return;
-          refreshSummarizedPanel();
-        });
       }
 
       function closeProviderPicker() {

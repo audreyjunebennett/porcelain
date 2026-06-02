@@ -14,4 +14,5 @@ globalThis.ChimeraSettings.App.mountWireHandlers = function (ctx) {
   if (typeof H.Admin.wire === "function") H.Admin.wire(ctx);
   if (typeof H.VirtualModels.wire === "function") H.VirtualModels.wire(ctx);
   if (typeof H.ProviderModels.wire === "function") H.ProviderModels.wire(ctx);
+  if (typeof H.RagEmbedding.wire === "function") H.RagEmbedding.wire(ctx);
 };

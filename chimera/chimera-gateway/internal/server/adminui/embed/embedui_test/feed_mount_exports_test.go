@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/dop251/goja"
@@ -47,6 +48,10 @@ var requiredCtxExportsAfterCardMount = []string{
 	"chimeraBrokerProviderHealthStripHtml",
 	"syncIndexerServiceSummaryDom",
 	"scheduleIndexerServiceSummaryFetch",
+	"ragEmbeddingPanelHtml",
+	"syncRagEmbeddingDom",
+	"scheduleRagEmbeddingFetch",
+	"hydrateRagEmbeddingFromApi",
 	"avatarInitials",
 	"avatarHueClass",
 	"tryRegisterRequestConversationCorrelationPrimary",
@@ -158,46 +163,54 @@ func TestSummarizedModelDeps_cardRefsUseCtx(t *testing.T) {
 
 func TestFeedLogService_brokerRelayHelperOnCtx(t *testing.T) {
 	t.Helper()
-	path := cardsUIPath(t, "serviceFeed.js")
-	body, err := os.ReadFile(path)
+	orch, err := os.ReadFile(cardsUIPath(t, "serviceFeed.js"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Contains(body, []byte("ctx.entryIsGatewayUpstreamRelay = entryIsGatewayUpstreamRelay")) {
-		t.Fatal("serviceFeed.js must export entryIsGatewayUpstreamRelay on ctx")
+	if !bytes.Contains(orch, []byte("ctx.entryIsGatewayUpstreamRelay = shell.entryIsGatewayUpstreamRelay")) {
+		t.Fatal("serviceFeed.js orchestrator must assign ctx.entryIsGatewayUpstreamRelay from shell")
+	}
+	shellBody, err := os.ReadFile(cardsUIPath(t, "serviceFeed", "shell.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(shellBody, []byte("function entryIsGatewayUpstreamRelay")) {
+		t.Fatal("serviceFeed/shell.js must define entryIsGatewayUpstreamRelay")
 	}
 }
 
 func TestFeedLogService_sumEvlogUsesCtx(t *testing.T) {
 	t.Helper()
-	path := cardsUIPath(t, "serviceFeed.js")
+	path := cardsUIPath(t, "serviceFeed", "shell.js")
 	body, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if pat := regexp.MustCompile(`[^.]sumEvlogVisibleEntriesForService\s*\(`); pat.Find(body) != nil {
-		t.Fatal("serviceFeed.js must call ctx.sumEvlogVisibleEntriesForService, not bare sumEvlogVisibleEntriesForService")
+		t.Fatal("serviceFeed/shell.js must call ctx.sumEvlogVisibleEntriesForService, not bare sumEvlogVisibleEntriesForService")
 	}
 	if pat := regexp.MustCompile(`[^.]countWarnErrorInEntries\s*\(`); pat.Find(body) != nil {
-		t.Fatal("serviceFeed.js must call ctx.countWarnErrorInEntries, not bare countWarnErrorInEntries")
+		t.Fatal("serviceFeed/shell.js must call ctx.countWarnErrorInEntries, not bare countWarnErrorInEntries")
 	}
 }
 
 func TestFeedLogService_noBareIndexerCrossModuleCalls(t *testing.T) {
 	t.Helper()
-	path := cardsUIPath(t, "serviceFeed.js")
-	body, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	badPat := []*regexp.Regexp{
-		regexp.MustCompile(`[^.]mergePersistedIndexerWatchRoots\s*\(`),
-		regexp.MustCompile(`[^.]indexerCardTitleSortLabel\s*\(`),
-		regexp.MustCompile(`[^.]indexerRunTimelineDedupeKey\s*\(`),
-	}
-	for _, pat := range badPat {
-		if loc := pat.FindIndex(body); loc != nil {
-			t.Fatalf("serviceFeed.js must use ctx for indexer cross-module API at byte %d", loc[0])
+	for _, rel := range []string{"serviceFeed/indexer.js", "serviceFeed/shell.js", "serviceFeed.js"} {
+		path := cardsUIPath(t, rel)
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		badPat := []*regexp.Regexp{
+			regexp.MustCompile(`[^.]mergePersistedIndexerWatchRoots\s*\(`),
+			regexp.MustCompile(`[^.]indexerCardTitleSortLabel\s*\(`),
+			regexp.MustCompile(`[^.]indexerRunTimelineDedupeKey\s*\(`),
+		}
+		for _, pat := range badPat {
+			if loc := pat.FindIndex(body); loc != nil {
+				t.Fatalf("%s must use ctx for indexer cross-module API at byte %d", rel, loc[0])
+			}
 		}
 	}
 }
@@ -236,8 +249,8 @@ func TestFeedLogIndexerPhase4_workspaceAndRunExports(t *testing.T) {
 
 func TestFeedLogService_phase3ServiceOnlyModule(t *testing.T) {
 	t.Helper()
-	path := cardsUIPath(t, "serviceFeed.js")
-	body, err := os.ReadFile(path)
+	shellPath := cardsUIPath(t, "serviceFeed", "shell.js")
+	shellBody, err := os.ReadFile(shellPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -247,17 +260,32 @@ func TestFeedLogService_phase3ServiceOnlyModule(t *testing.T) {
 		"dedupeOperatorWorkspacesNested",
 		"hydrateIndexerServiceSummaryFromApi",
 	}
-	for _, sym := range forbidden {
-		if bytes.Contains(body, []byte("function "+sym)) {
-			t.Fatalf("serviceFeed.js must not define %s (belongs in indexerRun/indexerWorkspace)", sym)
+	for _, rel := range append(serviceFeedModulePaths(), "serviceFeed.js") {
+		path := cardsUIPath(t, rel)
+		body, readErr := os.ReadFile(path)
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		for _, sym := range forbidden {
+			if bytes.Contains(body, []byte("function "+sym)) {
+				t.Fatalf("%s must not define %s (belongs in indexerRun/indexerWorkspace)", rel, sym)
+			}
 		}
 	}
-	if !bytes.Contains(body, []byte("function buildServiceCard")) {
-		t.Fatal("serviceFeed.js must define buildServiceCard")
+	if !bytes.Contains(shellBody, []byte("function buildServiceCard")) {
+		t.Fatal("serviceFeed/shell.js must define buildServiceCard")
 	}
-	n := bytes.Count(body, []byte("\n")) + 1
-	if n > 1100 {
-		t.Fatalf("serviceFeed.js still too large after phase 3 split: %d lines (target ~650 after broker trim in follow-up)", n)
+	totalLines := 0
+	for _, rel := range serviceFeedModulePaths() {
+		path := cardsUIPath(t, rel)
+		body, readErr := os.ReadFile(path)
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		totalLines += bytes.Count(body, []byte("\n")) + 1
+	}
+	if totalLines > 1400 {
+		t.Fatalf("serviceFeed modules still too large after split: %d lines", totalLines)
 	}
 }
 
@@ -291,11 +319,6 @@ func TestFeedCardShared_singleSliceRecentDefinition(t *testing.T) {
 
 func TestFeedLogService_phase1DeadCodeRemoved(t *testing.T) {
 	t.Helper()
-	path := cardsUIPath(t, "serviceFeed.js")
-	body, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
 	removed := []string{
 		"indexerEventMixHistogramHtml",
 		"indexerHistogramLegendHtml",
@@ -305,25 +328,32 @@ func TestFeedLogService_phase1DeadCodeRemoved(t *testing.T) {
 		"sumEvlogBuildTbodyFromConvEvents",
 		"SHOW_CONV_EXPANDED_CONTEXT_STRIP",
 	}
-	for _, sym := range removed {
-		if bytes.Contains(body, []byte(sym)) {
-			t.Fatalf("serviceFeed.js still contains removed symbol %q", sym)
+	for _, rel := range append(serviceFeedModulePaths(), "serviceFeed.js") {
+		body, err := os.ReadFile(cardsUIPath(t, rel))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, sym := range removed {
+			if bytes.Contains(body, []byte(sym)) {
+				t.Fatalf("%s still contains removed symbol %q", rel, sym)
+			}
 		}
 	}
 }
 
 func TestFeedLogService_serviceLabelDelegatesToCtx(t *testing.T) {
 	t.Helper()
-	path := cardsUIPath(t, "serviceFeed.js")
-	body, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if bytes.Contains(body, []byte("function serviceDisplayLabel(key)")) {
-		t.Fatal("serviceFeed.js must call ctx.serviceDisplayLabel directly, not wrap serviceDisplayLabel")
-	}
-	if bytes.Contains(body, []byte("function inferServiceBadge(ev)")) {
-		t.Fatal("serviceFeed.js must call ctx.inferServiceBadge directly, not wrap inferServiceBadge")
+	for _, rel := range append(serviceFeedModulePaths(), "serviceFeed.js") {
+		body, err := os.ReadFile(cardsUIPath(t, rel))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if bytes.Contains(body, []byte("function serviceDisplayLabel(key)")) {
+			t.Fatalf("%s must call ctx.serviceDisplayLabel directly, not wrap serviceDisplayLabel", rel)
+		}
+		if bytes.Contains(body, []byte("function inferServiceBadge(ev)")) {
+			t.Fatalf("%s must call ctx.inferServiceBadge directly, not wrap inferServiceBadge", rel)
+		}
 	}
 }
 
@@ -420,10 +450,11 @@ func TestMountAll_gatewayUsageCardHtml(t *testing.T) {
 	evalJS(t, vm, settingsUIPath(t, "derive", "chimeraBrokerMetrics.js"))
 	evalJS(t, vm, settingsUIPath(t, "derive", "gatewayUsageMetrics.js"))
 	for _, f := range []string{
-		"sharedFormat.js", "serviceCard.js", "serviceFeed.js", "gatewayUsage.js", "mount.js",
+		"sharedFormat.js", "serviceCard.js", "gatewayUsage.js", "mount.js",
 	} {
 		evalJS(t, vm, cardsUIPath(t, f))
 	}
+	evalServiceFeedModules(t, vm)
 	evalJS(t, vm, settingsUIPath(t, "render", "cardChrome.js"))
 	_, err := vm.RunString(`
 		var ctx = {
@@ -525,13 +556,25 @@ func TestServiceFeed_requiredExternalCtxConsumers(t *testing.T) {
 		"chimeraBrokerShortModelLabel",
 	}
 	searchRoots := []string{settingsRoot, filepath.Join(embeduiRoot(t), "..", "embedui_test")}
+	skipBase := map[string]bool{"serviceFeed.js": true}
+	for _, rel := range serviceFeedModulePaths() {
+		skipBase[filepath.Base(rel)] = true
+		skipBase[rel] = true
+	}
 	for _, sym := range mustConsumeOutside {
 		needle := []byte("ctx." + sym + "(")
 		found := false
 		for _, root := range searchRoots {
 			_ = filepath.Walk(root, func(p string, info os.FileInfo, walkErr error) error {
-				if walkErr != nil || info.IsDir() || filepath.Base(p) == "serviceFeed.js" {
+				if walkErr != nil || info.IsDir() {
 					return walkErr
+				}
+				base := filepath.Base(p)
+				if skipBase[base] {
+					return nil
+				}
+				if strings.Contains(p, string(filepath.Separator)+"serviceFeed"+string(filepath.Separator)) {
+					return nil
 				}
 				if filepath.Ext(p) != ".js" && filepath.Ext(p) != ".go" {
 					return nil

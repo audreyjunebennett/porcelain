@@ -667,13 +667,15 @@
 .sum-evlog__footer-row .sum-evlog__copy-btn,
 .sum-evlog__footer-row .sum-evlog__copy-btn--footer {
   flex: 0 0 auto;
-  padding: 0.14rem 0.28rem;
-  border-radius: 5px;
+  min-height: 0;
+  padding: 0.06rem 0.32rem;
+  border-radius: 9999px;
+  background: transparent;
 }
 
 .sum-evlog__footer-row .sum-evlog__copy-icon {
-  width: 1.22rem;
-  height: 1.22rem;
+  width: 0.72rem;
+  height: 0.72rem;
 }
 
 .sum-evlog__section-cell {

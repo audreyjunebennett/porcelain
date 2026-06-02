@@ -16,10 +16,10 @@ Operators need to **choose the embedding model** used for ingest and retrieval f
 
 | Phase                                                                                                  | Outcome                                                                                                          | Status |
 |--------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------|--------|
-| [Phase 1 — Embedding config API and runtime reload](#phase-1--embedding-config-api-and-runtime-reload) | Authenticated API writes `rag.embedding.model` (and `dim` when known); gateway reloads RAG embedder              | `todo` |
-| [Phase 2 — Indexer card embedding selector](#phase-2--indexer-card-embedding-selector)                 | Service card or workspace section: catalog combobox, warning copy, health reflects new model                     | `todo` |
-| [Phase 3 — Workspace delete collection purge](#phase-3--workspace-delete-collection-purge)             | Deleting a workspace drops its Qdrant collection (tenant + project + flavor scope)                               | `todo` |
-| [Phase 4 — Re-embed operator guidance](#phase-4--re-embed-operator-guidance)                           | After embedding change, UI explains full re-index requirement; optional force re-index link when that plan ships | `todo` |
+| [Phase 1 — Embedding config API and runtime reload](#phase-1--embedding-config-api-and-runtime-reload) | Authenticated API writes `rag.embedding.model` (and `dim` when known); gateway reloads RAG embedder              | `shipped` |
+| [Phase 2 — Indexer card embedding selector](#phase-2--indexer-card-embedding-selector)                 | Service card or workspace section: catalog combobox, warning copy, health reflects new model                     | `shipped` |
+| [Phase 3 — Workspace delete collection purge](#phase-3--workspace-delete-collection-purge)             | Deleting a workspace drops its Qdrant collection (tenant + project + flavor scope)                               | `shipped` |
+| [Phase 4 — Re-embed operator guidance](#phase-4--re-embed-operator-guidance)                           | After embedding change, UI explains full re-index requirement; optional force re-index link when that plan ships | `shipped` |
 
 ---
 
@@ -28,6 +28,7 @@ Operators need to **choose the embedding model** used for ingest and retrieval f
 **Problem.** Today `rag.embedding.model` defaults to `ollama/nomic-embed-text:latest` in `gateway.yaml`. The gateway exposes the current value read-only via `GET /v1/indexer/config` and storage health flags `embed_model_not_in_catalog`, but operators cannot change it from `/ui/settings`. The v0.3 setup wizard step 5 assumes an embedding combobox that has no write path.
 
 **Workspace delete.** Deleting a workspace row stops the indexer watch after reload but **does not purge** vectors ([`indexer-workspaces.md`](../features/indexer-workspaces.md) known gap). Operators expect “delete workspace” to clear searchable corpus for that scope.
+
 
 **Related docs:** [`version-v0.3.md`](../version-v0.3.md) (setup wizard step 5), [`version-v0.4.md`](../version-v0.4.md) (indexer workspace lifecycle and purge), [`gateway-rag-ingest-and-retrieval.md`](../features/gateway-rag-ingest-and-retrieval.md), [`indexer-workspaces.md`](../features/indexer-workspaces.md), [`configuration.md`](../configuration.md).
 
@@ -50,7 +51,7 @@ Operators need to **choose the embedding model** used for ingest and retrieval f
 - Session-authenticated PUT updates embedding model; indexer health transitions from `embed_model_not_in_catalog` to ok when a valid catalog id is chosen.
 - No secret material in request/response bodies.
 
-**Status:** `todo`
+**Status:** `shipped`
 
 ---
 
@@ -70,7 +71,7 @@ Operators need to **choose the embedding model** used for ingest and retrieval f
 - Operator changes model in UI without editing YAML; warning appears before persist; `/v1/indexer/config` reflects new id within one sync.
 - Gallery fixture or embedui test covers warning visibility.
 
-**Status:** `todo`
+**Status:** `shipped`
 
 ---
 
@@ -90,7 +91,9 @@ Operators need to **choose the embedding model** used for ingest and retrieval f
 - Delete workspace in UI removes DB row and Qdrant collection for that scope only.
 - Operator runbook/doc cross-link from v0.4 purge section.
 
-**Status:** `todo`
+**Status:** `shipped`
+
+**As-built:** [`indexer-workspaces.md`](../features/indexer-workspaces.md) (corpus purge on delete)
 
 ---
 
@@ -108,16 +111,18 @@ Operators need to **choose the embedding model** used for ingest and retrieval f
 
 - Changing embedding model never implies silent continued use of old vectors without operator-visible warning.
 
-**Status:** `todo`
+**Status:** `shipped`
+
+**As-built:** [`gateway-rag-ingest-and-retrieval.md`](../features/gateway-rag-ingest-and-retrieval.md) (post-save banner, dim mismatch guard)
 
 ---
 
-## Open questions
+## Open questions (resolved for Phase 1)
 
-1. **Global vs per-workspace embedding model** — v0.3 wizard and this plan assume **one gateway-global** `rag.embedding.model`. Per-workspace embed models defer to v0.4+ scope unless explicitly needed for wizard MVP.
-2. **Catalog candidate list** — All broker models vs heuristic “embedding-capable” subset for combobox UX.
-3. **Purge failure on delete** — Transactional (rollback SQLite) vs best-effort purge with retry job.
-4. **Dim auto-detection** — Required fields when switching to models with non-768 dimensions (Qdrant collection recreate implications).
+1. **Global vs per-workspace embedding model** — **One gateway-global** `rag.embedding.model` (confirmed).
+2. **Catalog candidate list** — **All broker models** in combobox; embedding-likely ids sorted first (`embedding_likely: true`).
+3. **Purge failure on delete** — Deferred to Phase 3: transactional SQLite rollback with operator-visible warn/error logs.
+4. **Dim auto-detection** — **Yes**: static map for known ids, then live `/v1/embeddings` probe; writes `rag.embedding.dim` on PUT.
 
 ---
 

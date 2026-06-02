@@ -49,6 +49,27 @@ func cardsUIPath(t *testing.T, rel ...string) string {
 	return settingsUIPath(t, append([]string{"render", "cards"}, rel...)...)
 }
 
+// serviceFeedModulePaths is the script load order for summarized service cards.
+func serviceFeedModulePaths() []string {
+	return []string{
+		"serviceFeed/registry.js",
+		"serviceFeed/shell.js",
+		"serviceFeed/broker.js",
+		"serviceFeed/gateway.js",
+		"serviceFeed/vectorstore.js",
+		"serviceFeed/indexer.js",
+		"serviceFeed/default.js",
+		"serviceFeed.js",
+	}
+}
+
+func evalServiceFeedModules(t *testing.T, vm *goja.Runtime) {
+	t.Helper()
+	for _, f := range serviceFeedModulePaths() {
+		evalJS(t, vm, cardsUIPath(t, f))
+	}
+}
+
 func sharedUIPath(t *testing.T, rel ...string) string {
 	t.Helper()
 	base := filepath.Join(embeduiRoot(t), "shared")
@@ -102,7 +123,7 @@ func loadCardTestCtx(t *testing.T, vm *goja.Runtime) {
 	for _, f := range []string{
 		"operatorFeedback.js", "configureEdit.js", "yamlEditor.js", "draftInput.js",
 		"providerCredentials.js", "scopedEvlog.js", "adminAction.js", "editToolbar.js",
-		"workspacePaths.js", "serviceHealth.js",
+		"workspacePaths.js", "serviceHealth.js", "embeddingModelSelector.js",
 	} {
 		evalJS(t, vm, sharedUIPath(t, f))
 	}
@@ -110,8 +131,12 @@ func loadCardTestCtx(t *testing.T, vm *goja.Runtime) {
 	for _, f := range []string{
 		"sharedFormat.js", "convCard.js", "serviceCard.js", "gatewayOverview.js", "gatewayUsage.js",
 		"adminShared.js", "adminUsers.js", "adminProvider.js", "adminVirtualModels.js", "workspaceDraft.js",
-		"feedLogConv.js", "serviceFeed.js", "indexerRun.js", "indexerWorkspace.js", "mount.js",
+		"feedLogConv.js",
 	} {
+		evalJS(t, vm, cardsUIPath(t, f))
+	}
+	evalServiceFeedModules(t, vm)
+	for _, f := range []string{"indexerRun.js", "indexerWorkspace.js", "ragEmbedding.js", "mount.js"} {
 		evalJS(t, vm, cardsUIPath(t, f))
 	}
 	evalJS(t, vm, settingsUIPath(t, "summarized", "rebuildPolicy.js"))
@@ -137,7 +162,6 @@ func loadCardTestCtx(t *testing.T, vm *goja.Runtime) {
 			chimeraBrokerShortModelLabel: function (id) { return String(id || "—"); },
 			metricsCache: null,
 			gatewayOverviewCache: {
-				semver: "9.9.9-test",
 				virtual_model_id: "virtual/test",
 				service_overview: { refreshed_at: "2026-01-01T12:00:00Z", services: [] }
 			},

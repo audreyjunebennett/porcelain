@@ -197,6 +197,18 @@
         <div id="gallery-fixture-provider-ollama" style="margin-top:0.5rem" aria-live="polite"></div>
       </div>
 
+      <div id="sg-uo-rag-embedding" class="sum-section-label" style="margin-top:1.25rem;scroll-margin-top:3.25rem">RAG embedding</div>
+      <p class="styleguide-sub" style="margin-top:0.15rem">
+        Global embedding model selector on the <strong>chimera-indexer</strong> service card from
+        <code>ragEmbedding.js</code> + <code>ChimeraShared.EmbeddingModelSelector</code> (catalog combobox, re-embed warning, save confirm).
+      </p>
+      <ul class="styleguide-part-slugs" aria-label="Part slugs in this demo">
+        <li><code>indexer-rag.embedding</code></li>
+      </ul>
+      <div id="gallery-fixture-rag-embedding" class="styleguide-demo-bg sg-op-rail" aria-live="polite"></div>
+      <p class="styleguide-sub" style="margin-top:0.35rem">Post-save guidance (re-index banner + link to workspaces):</p>
+      <div id="gallery-fixture-rag-embedding-saved" class="styleguide-demo-bg sg-op-rail" aria-live="polite"></div>
+
       <div id="sg-uo-workspaces" class="sum-section-label" style="margin-top:1.25rem;scroll-margin-top:3.25rem">Workspaces</div>
       <p class="styleguide-sub" style="margin-top:0.15rem">
         Workspace draft create card and managed operator workspace card from <code>workspaceDraft.js</code> /
@@ -239,6 +251,7 @@
   <script src="/ui/assets/shared/editToolbar.js" defer></script>
   <script src="/ui/assets/shared/workspacePaths.js" defer></script>
   <script src="/ui/assets/shared/serviceHealth.js" defer></script>
+  <script src="/ui/assets/shared/embeddingModelSelector.js" defer></script>
   <script src="/ui/assets/settings/render/cards/sharedFormat.js" defer></script>
   <script src="/ui/assets/settings/render/cards/convCard.js" defer></script>
   <script src="/ui/assets/settings/render/cards/serviceCard.js" defer></script>
@@ -250,9 +263,17 @@
   <script src="/ui/assets/settings/render/cards/adminVirtualModels.js" defer></script>
   <script src="/ui/assets/settings/render/cards/workspaceDraft.js" defer></script>
   <script src="/ui/assets/settings/render/cards/feedLogConv.js" defer></script>
+  <script src="/ui/assets/settings/render/cards/serviceFeed/registry.js" defer></script>
+  <script src="/ui/assets/settings/render/cards/serviceFeed/shell.js" defer></script>
+  <script src="/ui/assets/settings/render/cards/serviceFeed/broker.js" defer></script>
+  <script src="/ui/assets/settings/render/cards/serviceFeed/gateway.js" defer></script>
+  <script src="/ui/assets/settings/render/cards/serviceFeed/vectorstore.js" defer></script>
+  <script src="/ui/assets/settings/render/cards/serviceFeed/indexer.js" defer></script>
+  <script src="/ui/assets/settings/render/cards/serviceFeed/default.js" defer></script>
   <script src="/ui/assets/settings/render/cards/serviceFeed.js" defer></script>
   <script src="/ui/assets/settings/render/cards/indexerRun.js" defer></script>
   <script src="/ui/assets/settings/render/cards/indexerWorkspace.js" defer></script>
+  <script src="/ui/assets/settings/render/cards/ragEmbedding.js" defer></script>
   <script src="/ui/assets/settings/render/cards/mount.js" defer></script>
   <script src="/ui/assets/gallery/gallery-parts.js" defer></script>
   <script src="/ui/assets/gallery/gallery-card-fixtures.js" defer></script>

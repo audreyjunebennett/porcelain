@@ -60,6 +60,13 @@ globalThis.ChimeraSettings.Main = function () {
   var indexerOperatorConfigUnavailable = false;
   var indexerServiceSummaryFetchInFlight = false;
   var indexerServiceSummaryFetchWanted = false;
+  var ragEmbeddingCache = null;
+  var ragEmbeddingDraftModel = null;
+  var ragEmbeddingSaving = false;
+  var ragEmbeddingPostSaveBanner = "";
+  var ragEmbeddingHydratedOnce = false;
+  var ragEmbeddingFetchInFlight = false;
+  var ragEmbeddingFetchWanted = false;
   /** Populated during Workspaces card render: watched paths per synthetic `opws\x1e…` bucket id for full-log filtering. */
   var operatorWsFullLogCtx = {};
   /** From latest indexer.run.start root_scopes in buffer: root_id slug → { workspace_id, path, … }. */
@@ -744,6 +751,13 @@ globalThis.ChimeraSettings.Main = function () {
     indexerOperatorConfigUnavailable: indexerOperatorConfigUnavailable,
     indexerServiceSummaryFetchInFlight: indexerServiceSummaryFetchInFlight,
     indexerServiceSummaryFetchWanted: indexerServiceSummaryFetchWanted,
+    ragEmbeddingCache: ragEmbeddingCache,
+    ragEmbeddingDraftModel: ragEmbeddingDraftModel,
+    ragEmbeddingSaving: ragEmbeddingSaving,
+    ragEmbeddingPostSaveBanner: ragEmbeddingPostSaveBanner,
+    ragEmbeddingHydratedOnce: ragEmbeddingHydratedOnce,
+    ragEmbeddingFetchInFlight: ragEmbeddingFetchInFlight,
+    ragEmbeddingFetchWanted: ragEmbeddingFetchWanted,
     operatorWsFullLogCtx: operatorWsFullLogCtx,
     indexerRootScopeByRootId: indexerRootScopeByRootId,
     workspaceDrafts: workspaceDrafts,

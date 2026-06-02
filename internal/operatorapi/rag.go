@@ -25,3 +25,32 @@ type RAGSearchResponse struct {
 	ScoreThreshold float32        `json:"score_threshold"`
 	IndexerHint    string         `json:"indexer_hint,omitempty"`
 }
+
+// RAGEmbeddingCandidate is one catalog model entry for the embedding selector.
+type RAGEmbeddingCandidate struct {
+	ID              string `json:"id"`
+	EmbeddingLikely bool   `json:"embedding_likely"`
+	KnownDim        int    `json:"known_dim,omitempty"`
+}
+
+// RAGEmbeddingGetResponse is GET /api/ui/rag/embedding success JSON.
+type RAGEmbeddingGetResponse struct {
+	Model          string                  `json:"model"`
+	Dim            int                     `json:"dim"`
+	Status         string                  `json:"status"`
+	ModelInCatalog bool                    `json:"model_in_catalog"`
+	CatalogStale   bool                    `json:"catalog_stale,omitempty"`
+	Candidates     []RAGEmbeddingCandidate `json:"candidates"`
+}
+
+// RAGEmbeddingPutRequest is PUT /api/ui/rag/embedding body.
+type RAGEmbeddingPutRequest struct {
+	Model string `json:"model"`
+}
+
+// RAGEmbeddingPutResponse is PUT /api/ui/rag/embedding success JSON.
+type RAGEmbeddingPutResponse struct {
+	OK    bool   `json:"ok"`
+	Model string `json:"model"`
+	Dim   int    `json:"dim"`
+}

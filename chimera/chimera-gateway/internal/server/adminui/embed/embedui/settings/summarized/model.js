@@ -60,8 +60,6 @@ globalThis.ChimeraSettings.Summarized.Model = globalThis.ChimeraSettings.Summari
         SECTION_OVERVIEW,
         "00-gw-overview",
         {
-          semver: gwOv.semver,
-          virtualModelId: gwOv.virtual_model_id,
           refreshedAt: gwOv.service_overview && gwOv.service_overview.refreshed_at
         },
         { serviceCount: gwOv.service_overview && gwOv.service_overview.services ? gwOv.service_overview.services.length : 0 },

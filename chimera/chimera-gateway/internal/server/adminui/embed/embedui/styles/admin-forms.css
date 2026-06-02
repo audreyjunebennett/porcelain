@@ -230,6 +230,128 @@ html[data-theme="design-01"] .sg-op-provider-panel {
   padding: 0.65rem 0.75rem 0.75rem;
 }
 
+.sg-op-rag-embedding-lead {
+  margin: 0 0 0.65rem;
+  font-size: 0.88rem;
+}
+
+.sg-op-rag-embedding-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0 0 0.65rem;
+}
+
+.sg-op-rag-embedding-field__label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--embed-text-muted, #6b6560);
+}
+
+.sg-op-rag-embedding-select {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  padding: 0.45rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid var(--embed-border-subtle, #efeeeb);
+  background: var(--embed-surface, #fff);
+}
+
+.sg-op-rag-embedding-panel .sg-op-provider-panel__actions:empty::after {
+  content: "";
+  display: block;
+  width: 1.65rem;
+  height: 1.65rem;
+}
+
+.sg-op-rag-embedding-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0 0 0.65rem;
+}
+
+.sg-op-rag-embedding-warn {
+  margin: 0.35rem 0 0;
+  padding: 0.75rem 0.85rem;
+  color: var(--embed-semantic-warn-fg);
+  background: var(--embed-semantic-warn-bg);
+  border-color: color-mix(in srgb, var(--embed-semantic-warn-fg) 18%, transparent);
+}
+
+.sg-op-rag-embedding-warn__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+}
+
+.sg-op-rag-embedding-warn__icon {
+  flex: 0 0 auto;
+  font-size: 1.25rem;
+  line-height: 1.35;
+  color: var(--embed-semantic-warn-fg);
+}
+
+.sg-op-rag-embedding-warn__text {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.sg-op-rag-embedding-warn__text .sg-op-health-pill {
+  display: inline-flex;
+  vertical-align: baseline;
+  margin: 0 0.15rem;
+}
+
+.sg-op-rag-embedding-warn--hidden,
+.sg-op-rag-embedding-banner--hidden {
+  display: none;
+}
+
+.sg-op-rag-embedding-banner {
+  margin: 0.5rem 0 0;
+  padding: 0.75rem 0.85rem;
+  color: var(--embed-text-primary);
+  background: var(--embed-surface-muted);
+  border-color: var(--embed-border-medium);
+}
+
+.sg-op-rag-embedding-banner__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+}
+
+.sg-op-rag-embedding-banner__icon {
+  flex: 0 0 auto;
+  font-size: 1.25rem;
+  line-height: 1.35;
+  color: var(--embed-text-link);
+}
+
+.sg-op-rag-embedding-banner__text {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.sg-op-rag-embedding-banner__link {
+  color: var(--embed-text-link);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 0.12em;
+}
+
+.sg-op-rag-embedding-banner__link:hover {
+  color: var(--embed-link-accent);
+}
+
+#sum-feed-workspaces {
+  scroll-margin-top: 3.25rem;
+}
+
 .sg-op-provider-panel--usage .sg-op-provider-models-toolbar {
   margin: 0;
 }
@@ -1286,11 +1408,15 @@ tr.sg-op-vm-fallback-row--unavailable td {
   padding-bottom: 0;
   margin-bottom: 0;
   border-top: 1px solid var(--sum-vm-section-rule, var(--embed-border-medium, #ddd));
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
 }
 .sum-body--virtual-model > .sum-vm-section:first-child {
   border-top: 0;
 }
 .sum-vm-section > summary.sum-vm-section__hdr,
+.sum-vm-section > .sum-vm-section__hdr-trail,
 .sum-vm-section__hdr--bar {
   display: flex;
   align-items: center;
@@ -1302,7 +1428,15 @@ tr.sg-op-vm-fallback-row--unavailable td {
   isolation: isolate;
 }
 .sum-vm-section > summary.sum-vm-section__hdr {
+  flex: 1 1 auto;
+  min-width: 0;
   cursor: pointer;
+}
+.sum-vm-section > .sum-vm-section__hdr-trail {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding-left: 0;
+  cursor: default;
 }
 .sum-vm-section__hdr--bar {
   cursor: default;
@@ -1431,10 +1565,12 @@ tr.sg-op-vm-fallback-row--unavailable td {
 .sum-vm-section[open] > summary .sum-vm-section__lead .sg-op-chev-icon {
   transform: rotate(90deg);
 }
-.sum-vm-section[open] > summary.sum-vm-section__hdr {
-  border-bottom: 1px solid var(--sum-vm-section-rule, var(--embed-border-medium, #ddd));
+.sum-vm-section[open] > .sum-vm-section__body {
+  border-top: 1px solid var(--sum-vm-section-rule, var(--embed-border-medium, #ddd));
 }
 .sum-vm-section__body {
+  flex: 0 0 100%;
+  width: 100%;
   padding: 0.55rem 0.65rem 0.85rem;
 }
 .sum-vm-section__toolbar {

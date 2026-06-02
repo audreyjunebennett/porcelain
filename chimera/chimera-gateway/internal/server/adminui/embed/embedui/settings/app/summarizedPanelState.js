@@ -220,6 +220,9 @@ globalThis.ChimeraSettings.Summarized.mountPanelState = function (bridge) {
     if (typeof ctx.scheduleIndexerServiceSummaryFetch === "function") {
       ctx.scheduleIndexerServiceSummaryFetch(false);
     }
+    if (typeof ctx.scheduleRagEmbeddingFetch === "function") {
+      ctx.scheduleRagEmbeddingFetch(false);
+    }
 
     if (typeof globalThis.sumEvlogHydrateAllIn === "function") {
       try {

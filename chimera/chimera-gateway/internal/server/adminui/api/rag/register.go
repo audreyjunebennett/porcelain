@@ -14,4 +14,10 @@ func Register(mux *http.ServeMux, h *handler.Handler) {
 	mux.HandleFunc("POST /api/ui/rag/search", h.RequireAuthTenantJSON(func(w http.ResponseWriter, r *http.Request, tenantID string) {
 		handleSearch(h, w, r, tenantID)
 	}))
+	mux.HandleFunc("GET /api/ui/rag/embedding", h.RequireAuthJSON(func(w http.ResponseWriter, r *http.Request) {
+		handleEmbeddingGET(h, w, r)
+	}))
+	mux.HandleFunc("PUT /api/ui/rag/embedding", h.RequireAuthJSON(func(w http.ResponseWriter, r *http.Request) {
+		handleEmbeddingPUT(h, w, r)
+	}))
 }

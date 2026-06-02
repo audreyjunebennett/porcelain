@@ -291,10 +291,16 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminVirtualModels = function (ctx)
   }
 
   function vmSectionHeaderHtml(title, opts) {
+    var parts = vmSectionHeaderParts(title, opts);
+    return parts.summary + parts.trail;
+  }
+
+  /** Disclosure label in <summary>; interactive controls live in trail (not inside summary). */
+  function vmSectionHeaderParts(title, opts) {
     opts = opts || {};
     var controls = opts.controlsHtml != null ? String(opts.controlsHtml) : "";
     var desc = opts.desc != null ? String(opts.desc) : "";
-    var out =
+    var summary =
       '<summary class="sum-vm-section__hdr">' +
       '<span class="sum-vm-section__hdr-row">' +
       '<span class="sum-vm-section__lead">' +
@@ -302,19 +308,24 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminVirtualModels = function (ctx)
       "</span>" +
       '<span class="sum-vm-section__title"><span class="sum-section-label">' +
       escapeHtml(String(title || "")) +
-      "</span></span>";
-    if (controls) {
-      out += '<span class="sum-vm-section__trail">' + controls + "</span>";
-    }
-    out += "</span>";
+      "</span></span></span>";
     if (desc) {
-      out +=
+      summary +=
         '<span class="sum-vm-section__hdr-desc-row">' +
         '<p class="sg-op-card-note sg-op-card-note--tight sum-vm-section__hdr-desc">' +
         escapeHtml(desc) +
         "</p></span>";
     }
-    return out + "</summary>";
+    summary += "</summary>";
+    var trail = "";
+    if (controls) {
+      trail =
+        '<div class="sum-vm-section__hdr-trail" data-sum-card-no-toggle>' +
+        '<span class="sum-vm-section__trail">' +
+        controls +
+        "</span></div>";
+    }
+    return { summary: summary, trail: trail };
   }
 
   function vmConfigureBtn(action, vmId, title) {

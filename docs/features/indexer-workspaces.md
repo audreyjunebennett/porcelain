@@ -43,7 +43,7 @@ Operators define **indexer workspaces**—a project, flavor, and one or more abs
 | Reload strategy | Full **watch-session reload** after queue idle; not incremental in-process root attach/detach |
 | Materialize errors | `RootsFromWorkspacesResponse` is **all-or-nothing** — one missing/invalid path fails the whole materialize |
 | Tenant for UI CRUD | `operatorIndexerTenantID()` (empty string for single-user desktop today) |
-| Corpus on delete | Stop watching after reload; **no** automatic vector purge |
+| Corpus on delete | Stop watching after reload; **purge** scoped Qdrant collection on `DELETE /api/ui/indexer/workspaces/{id}` when RAG is enabled (uses UI session principal as ingest tenant + workspace project/flavor). Purge failure **blocks** SQLite delete (502). |
 
 **Persistence**
 
@@ -69,7 +69,8 @@ Operators define **indexer workspaces**—a project, flavor, and one or more abs
 |---------|----------|
 | Operator store | `chimera/chimera-gateway/internal/operatorstore/store.go` |
 | Indexer-facing API | `internal/server/indexerapi/indexer.go` (`HandleWorkspaces`) |
-| UI handlers | `internal/server/adminui/api/indexer/handlers.go`, `register.go` |
+| UI handlers + purge | `internal/server/adminui/api/indexer/handlers.go`, `workspace_purge.go` |
+| Vector purge | `internal/rag/service.go` (`PurgeWorkspaceCorpus`), `internal/vectorstore/` (`DeleteCollection`) |
 | Indexer client + materialize | `chimera/chimera-indexer/internal/indexer/workspaces.go` |
 | Supervised poll + reload | `chimera/chimera-indexer/main.go` |
 | Settings UI workspaces | `embed/embedui/settings/` — `summarizedFeed.js`, workspace draft/card components |
@@ -81,17 +82,17 @@ Operators define **indexer workspaces**—a project, flavor, and one or more abs
 ```bash
 go test ./chimera/chimera-indexer/internal/indexer/ -run Workspaces
 go test ./chimera/chimera-gateway/internal/operatorstore/...
-go test ./chimera/chimera-gateway/internal/server/adminui/embed/embedui_test -run -i Workspace
+go test ./chimera/chimera-gateway/internal/server/adminui/api/indexer/... -run WorkspaceDELETE
 ```
 
-Manual: create a workspace with two paths on `/ui/settings`; confirm one card; add a third path; within ~30s (+ queue drain) confirm `indexer.supervised.workspaces_changed` and reload; delete workspace and confirm indexing stops after reload.
+Manual: create a workspace with two paths on `/ui/settings`; confirm one card; add a third path; within ~30s (+ queue drain) confirm `indexer.supervised.workspaces_changed` and reload; delete workspace and confirm indexing stops after reload **and** the scoped Qdrant collection is removed (`gateway.operator.workspace.purged`).
 
 ## Out of scope and known gaps
 
 - **Force re-index** — not shipped ([`plans/indexer-sync-state-sqlite-and-force-reindex.md`](../plans/indexer-sync-state-sqlite-and-force-reindex.md)).
 - **Incremental watcher refactor** (`AddRoot`/`RemoveRoot` without session tear-down) — planned in workspace API Phase 3; **not** implemented; reload remains the mechanism.
 - **Best-effort per-path materialize** — planned in accurate-reporting Phase 4D; **not** implemented.
-- **Corpus purge jobs** on workspace or path delete — documented follow-up only.
+- **Corpus purge on workspace delete** — `DELETE /api/ui/indexer/workspaces/{id}` drops the vector collection for `(ingest tenant, project_id, flavor_id)` before removing the SQLite row. Ingest tenant is the authenticated UI session principal (same tenant the indexer uses via API key). If RAG is enabled but purge fails, the workspace row is kept and the API returns 502. Structured log: `gateway.operator.workspace.purged` (success) / `gateway.operator.workspace.purge_failed` (blocked delete).
 - **Configurable poll interval in YAML** — constant 30s in code today.
 - **ETag / revision** on workspaces response — not implemented.
 

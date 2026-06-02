@@ -192,6 +192,7 @@ func (rt *Runtime) Sync() {
 		return
 	}
 
+	prev := rt.resolved
 	next, err := config.LoadGatewayYAML(rt.gatewayPath, rt.log)
 	if err != nil {
 		if rt.log != nil {
@@ -200,7 +201,8 @@ func (rt *Runtime) Sync() {
 		return
 	}
 	pathsChanged := next.TokensPath != rt.resolved.TokensPath
-	rt.resolved = rt.applyBrokerBaseURLOverride(next)
+	next = rt.applyBrokerBaseURLOverride(next)
+	rt.resolved = next
 	rt.gatewayMtime = gst.ModTime()
 	if next.ProviderFreeTierPath != "" {
 		if st, err := os.Stat(next.ProviderFreeTierPath); err == nil {
@@ -212,6 +214,9 @@ func (rt *Runtime) Sync() {
 	if pathsChanged {
 		rt.tokens = tokens.NewStore(next.TokensPath, rt.log)
 	}
+	if ragServiceConfigChanged(prev, next) {
+		rt.rebuildRAGLocked()
+	}
 	if rt.log != nil {
 		rt.log.Info("reloaded gateway config", "msg", "gateway.config.reloaded", "path", rt.gatewayPath, "config_file", naming.GatewayConfigFileTarget)
 	}
@@ -221,6 +226,64 @@ func (rt *Runtime) Snapshot() (*config.Resolved, *tokens.Store) {
 	rt.mu.RLock()
 	defer rt.mu.RUnlock()
 	return rt.resolved, rt.tokens
+}
+
+// GatewayPath returns the on-disk gateway.yaml path loaded by this runtime.
+func (rt *Runtime) GatewayPath() string {
+	rt.mu.RLock()
+	defer rt.mu.RUnlock()
+	return rt.gatewayPath
+}
+
+func ragServiceConfigChanged(prev, next *config.Resolved) bool {
+	if next == nil {
+		return false
+	}
+	if prev == nil {
+		return next.RAG.Enabled
+	}
+	a, b := prev.RAG, next.RAG
+	return a.Enabled != b.Enabled ||
+		a.EmbeddingBaseURL != b.EmbeddingBaseURL ||
+		a.EmbeddingPath != b.EmbeddingPath ||
+		a.EmbeddingModel != b.EmbeddingModel ||
+		a.EmbeddingDim != b.EmbeddingDim ||
+		a.QdrantURL != b.QdrantURL ||
+		a.QdrantAPIKey != b.QdrantAPIKey ||
+		a.ChunkSize != b.ChunkSize ||
+		a.ChunkOverlap != b.ChunkOverlap ||
+		a.TopK != b.TopK ||
+		a.ScoreThreshold != b.ScoreThreshold
+}
+
+func (rt *Runtime) rebuildRAGLocked() {
+	if rt.resolved == nil || !rt.resolved.RAG.Enabled {
+		rt.rag = nil
+		return
+	}
+	s, err := buildRAGService(rt.resolved, rt.log)
+	if err != nil {
+		rt.rag = nil
+		if rt.log != nil {
+			rt.log.Warn("rag reload failed", "msg", "gateway.rag.reload_failed", "err", err)
+		}
+		return
+	}
+	rt.rag = s
+	if rt.log != nil {
+		rt.log.Info("rag service reloaded", "msg", "gateway.rag.reloaded",
+			"embedding_model", rt.resolved.RAG.EmbeddingModel,
+			"embedding_dim", rt.resolved.RAG.EmbeddingDim,
+		)
+	}
+}
+
+// ReloadRAG rebuilds the in-memory RAG service from the current resolved config.
+// Call after mutating gateway.yaml when Sync may not yet observe a new mtime.
+func (rt *Runtime) ReloadRAG() {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	rt.rebuildRAGLocked()
 }
 
 // NextChatTurnIndex returns the next 1-based turn index for this conversation_id (in-process only).

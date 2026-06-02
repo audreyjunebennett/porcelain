@@ -62,7 +62,7 @@ func TestSummarizedModel_buildsConversationServiceGatewayCards(t *testing.T) {
 				byRun: {},
 				partitionRegistry: {}
 			},
-			gatewayOverviewCache: { semver: "1.0.0", virtual_model_id: "v/test", service_overview: { services: [] } },
+			gatewayOverviewCache: { service_overview: { services: [] } },
 			metricsCache: { metrics_store_open: true, rows: [] },
 			adminStateCache: { providers: { groq: { keys: [], ok: true } }, gateway: {} },
 			tokenListCache: [],

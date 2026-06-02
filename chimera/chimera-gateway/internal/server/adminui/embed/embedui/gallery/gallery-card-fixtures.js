@@ -83,7 +83,6 @@
         day_rollups: [{ provider: "groq", model_id: "groq/free", calls: 12, status: 200 }]
       },
       gatewayOverviewCache: {
-        semver: "1.4.2+gallery",
         virtual_model_id: "virtual/claude-opus-proxy",
         service_overview: {
           refreshed_at: new Date().toISOString(),
@@ -133,7 +132,17 @@
       },
       resolveLogsOperatorUserLabel: function () {
         return "Gallery operator";
-      }
+      },
+      ragEmbeddingCache: {
+        model: "ollama/nomic-embed-text:latest",
+        dim: 768,
+        status: "ok",
+        candidates: [
+          { id: "ollama/nomic-embed-text:latest", embedding_likely: true, known_dim: 768 },
+          { id: "groq/llama3", embedding_likely: false }
+        ]
+      },
+      ragEmbeddingDraftModel: "groq/llama3"
     };
     ChimeraSettings.Render.mountSumEvlog(ctx);
     ChimeraSettings.Render.Cards.mountAll(ctx);
@@ -161,6 +170,14 @@
       "gallery-fixture-provider-ollama",
       ctx.buildAdminProviderCardHtml("ollama", "Ollama", "Ol", "Local chat + embeddings")
     );
+    if (typeof ctx.ragEmbeddingPanelHtml === "function") {
+      setHtml("gallery-fixture-rag-embedding", ctx.ragEmbeddingPanelHtml());
+      ctx.ragEmbeddingDraftModel = null;
+      ctx.ragEmbeddingPostSaveBanner = true;
+      setHtml("gallery-fixture-rag-embedding-saved", ctx.ragEmbeddingPanelHtml());
+      ctx.ragEmbeddingPostSaveBanner = false;
+      ctx.ragEmbeddingDraftModel = "groq/llama3";
+    }
     if (ctx.workspaceDrafts && ctx.workspaceDrafts.length && typeof ctx.buildWorkspaceDraftCardHtml === "function") {
       setHtml("gallery-fixture-workspace-draft", ctx.buildWorkspaceDraftCardHtml(ctx.workspaceDrafts[0]));
     }

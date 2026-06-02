@@ -431,6 +431,9 @@ globalThis.ChimeraSettings.App.mountSummarizedFeed = function (ctx) {
       }
     });
   }
+  if (globalThis.ChimeraSettings.Api && typeof ChimeraSettings.Api.mountRagEmbeddingApi === "function") {
+    ChimeraSettings.Api.mountRagEmbeddingApi(ctx);
+  }
 
   feedBridge.fetchAdminTokens = ctx.fetchAdminTokens;
   feedBridge.fetchProviderModels = ctx.fetchProviderModels;

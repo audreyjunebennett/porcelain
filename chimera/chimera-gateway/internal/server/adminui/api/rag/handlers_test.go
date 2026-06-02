@@ -50,6 +50,10 @@ func (m *memSearchStore) Stats(_ context.Context, c string) (vectorstore.Stats, 
 	return vectorstore.Stats{Collection: c, Points: int64(len(m.points[c])), VectorDim: 8}, nil
 }
 func (m *memSearchStore) DeleteBySource(context.Context, string, string) error { return nil }
+func (m *memSearchStore) DeleteCollection(_ context.Context, c string) error {
+	delete(m.points, c)
+	return nil
+}
 func (m *memSearchStore) ScrollPoints(context.Context, string, *vectorstore.Coords, int, string) (vectorstore.ScrollBatch, error) {
 	return vectorstore.ScrollBatch{}, nil
 }

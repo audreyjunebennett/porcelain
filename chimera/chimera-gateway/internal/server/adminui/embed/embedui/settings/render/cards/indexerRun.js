@@ -24,6 +24,34 @@ globalThis.ChimeraSettings.Render.Cards.mountFeedLogIndexerRun = function (ctx) 
   var buildManagedWorkspaceToolbarHtml = ctx.buildManagedWorkspaceToolbarHtml;
   var operatorCardChevronHtml = ctx.operatorCardChevronHtml;
   var serviceSummaryStatusPillHtml = ctx.serviceSummaryStatusPillHtml;
+  var formatLogDateTimeLocal = ctx.formatLogDateTimeLocal;
+  var formatLogDateTimeLocalHtml = ctx.formatLogDateTimeLocalHtml;
+  var formatLogRelativeAgo = ctx.formatLogRelativeAgo;
+  var toIsoDatetimeAttr = ctx.toIsoDatetimeAttr;
+  if (typeof formatLogDateTimeLocal !== "function") {
+    formatLogDateTimeLocal = function () {
+      return "—";
+    };
+  }
+  if (typeof formatLogDateTimeLocalHtml !== "function") {
+    formatLogDateTimeLocalHtml = function (ts) {
+      return (
+        '<div class="dt-stack"><span class="dt-line dt-time">' +
+        escapeHtml(formatLogDateTimeLocal(ts)) +
+        "</span></div>"
+      );
+    };
+  }
+  if (typeof formatLogRelativeAgo !== "function") {
+    formatLogRelativeAgo = function () {
+      return "";
+    };
+  }
+  if (typeof toIsoDatetimeAttr !== "function") {
+    toIsoDatetimeAttr = function () {
+      return "";
+    };
+  }
 
   var indexerEvlogWorkspaceLabelMapCacheKey = null;
   var indexerEvlogWorkspaceLabelMapCache = null;
@@ -529,7 +557,6 @@ globalThis.ChimeraSettings.Render.Cards.mountFeedLogIndexerRun = function (ctx) 
     }
     if (m === "indexer.job.skipped") {
       var why = f && f.reason != null ? String(f.reason).replace(/\s+/g, " ").trim() : "";
-      if (why.length > 80) why = why.slice(0, 78) + "…";
       return { rel: rel, st: "skipped", cls: "sum-st-complete", detail: why };
     }
     if (m.indexOf("indexer.job.failed") === 0) {
@@ -548,7 +575,6 @@ globalThis.ChimeraSettings.Render.Cards.mountFeedLogIndexerRun = function (ctx) 
       if (!es) {
         var err = f && (f.err != null ? f.err : f.error != null ? f.error : "");
         es = err != null ? String(err).replace(/\s+/g, " ").trim() : "";
-        if (es.length > 80) es = es.slice(0, 78) + "…";
       }
       return { rel: rel, st: "failed", cls: "sum-st-error", detail: es };
     }
@@ -629,14 +655,13 @@ globalThis.ChimeraSettings.Render.Cards.mountFeedLogIndexerRun = function (ctx) 
       '<table class="sum-metrics-table sum-metrics-table--indexer-recent">' +
       "<colgroup>" +
       '<col class="indexer-recent-col-time">' +
-      '<col class="indexer-recent-col-path">' +
-      '<col class="indexer-recent-col-detail">' +
+      '<col class="indexer-recent-col-message">' +
       '<col class="indexer-recent-col-status">' +
       "</colgroup>" +
-      "<thead><tr><th class=\"indexer-recent-cell-time\">Time</th><th class=\"indexer-recent-cell-path\">Path</th><th class=\"indexer-recent-cell-detail\">Detail</th><th class=\"indexer-recent-cell-status\">Status</th></tr></thead><tbody>";
+      '<thead><tr><th class="indexer-recent-cell-time">Time</th><th class="indexer-recent-cell-message">Message</th><th class="indexer-recent-cell-status">Status</th></tr></thead><tbody>';
     if (!rows.length) {
       html +=
-        '<tr><td colspan="4" class="muted">No file-level activity in the loaded window yet. Scroll up to load older lines.</td></tr>';
+        '<tr><td colspan="3" class="muted">No file-level activity in the loaded window yet. Scroll up to load older lines.</td></tr>';
     } else {
       for (var r = 0; r < rows.length; r++) {
         var it = rows[r];
@@ -647,6 +672,19 @@ globalThis.ChimeraSettings.Render.Cards.mountFeedLogIndexerRun = function (ctx) 
         else if (it.st === "retrieved") lvlClass = "lvl-INFO";
         var iso = typeof toIsoDatetimeAttr === "function" ? toIsoDatetimeAttr(it.ts) : "";
         var relAgo = typeof formatLogRelativeAgo === "function" ? formatLogRelativeAgo(it.ts) : "";
+        var timeInner =
+          typeof formatLogDateTimeLocalHtml === "function"
+            ? formatLogDateTimeLocalHtml(it.ts)
+            : escapeHtml(it.t);
+        var msgInner =
+          '<div class="indexer-recent-msg">' +
+          '<div class="indexer-recent-msg-path"><code class="sum-mono-id">' +
+          escapeHtml(it.rel) +
+          "</code></div>" +
+          (it.detail
+            ? '<div class="indexer-recent-msg-detail muted">' + escapeHtml(it.detail) + "</div>"
+            : "") +
+          "</div>";
         html +=
           "<tr>" +
           '<td class="indexer-recent-cell-time sum-evlog__cell--time">' +
@@ -654,13 +692,10 @@ globalThis.ChimeraSettings.Render.Cards.mountFeedLogIndexerRun = function (ctx) 
           (iso ? ' datetime="' + escapeHtml(iso) + '"' : "") +
           (relAgo ? ' title="' + escapeHtml(relAgo) + '"' : "") +
           ">" +
-          escapeHtml(it.t) +
+          timeInner +
           "</time></td>" +
-          '<td class="indexer-recent-cell-path"><code class="sum-mono-id">' +
-          escapeHtml(it.rel) +
-          "</code></td>" +
-          '<td class="indexer-recent-cell-detail muted">' +
-          (it.detail ? escapeHtml(it.detail) : "") +
+          '<td class="indexer-recent-cell-message">' +
+          msgInner +
           "</td>" +
           '<td class="indexer-recent-cell-status"><span class="log-line-sum__lvl ' +
           escapeHtml(lvlClass) +

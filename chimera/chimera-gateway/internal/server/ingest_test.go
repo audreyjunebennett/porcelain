@@ -82,6 +82,14 @@ func (s *inMemoryStore) DeleteBySource(_ context.Context, c, src string) error {
 	return nil
 }
 
+func (s *inMemoryStore) DeleteCollection(_ context.Context, c string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.collections, c)
+	delete(s.points, c)
+	return nil
+}
+
 func (s *inMemoryStore) ScrollPoints(_ context.Context, c string, filter *vectorstore.Coords, limit int, cursor string) (vectorstore.ScrollBatch, error) {
 	if limit <= 0 {
 		limit = 256

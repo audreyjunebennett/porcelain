@@ -1,6 +1,7 @@
 package embedui_test
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
@@ -16,7 +17,7 @@ func TestLogsCards_gatewayOverview_rendersIdAndVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 	html := v.String()
-	for _, want := range []string{`id="gw-overview"`, "9.9.9-test", "virtual/test", "Overview"} {
+	for _, want := range []string{`id="gw-overview"`, "Overview", "Service health"} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("missing %q in %q", want, html)
 		}
@@ -302,6 +303,7 @@ func TestLogsCards_virtualModelCard_detailsLayout(t *testing.T) {
 		`vm-routing-enabled-toggle`,
 		`vm-router-enabled-toggle`,
 		`sum-vm-section__hdr-toggles`,
+		`sum-vm-section__hdr-trail`,
 		`sum-vm-section__hdr-desc`,
 		`Required. Ordered upstream model ids`,
 		`vm-42-identity-view`,
@@ -318,6 +320,11 @@ func TestLogsCards_virtualModelCard_detailsLayout(t *testing.T) {
 	} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("missing %q in %q", want, html)
+		}
+	}
+	for _, sumInner := range regexp.MustCompile(`<summary class="sum-vm-section__hdr">([\s\S]*?)</summary>`).FindAllStringSubmatch(html, -1) {
+		if strings.Contains(sumInner[1], "<button") {
+			t.Fatalf("virtual model section summary must not contain buttons, got %q", sumInner[1])
 		}
 	}
 	for _, absent := range []string{
@@ -584,8 +591,6 @@ func TestLogsCards_gatewayOverview_serviceHealthStrip(t *testing.T) {
 	for _, want := range []string{
 		`id="gw-overview"`,
 		"sum-bf-prov-health",
-		"9.9.9-test",
-		"virtual/test",
 	} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("missing %q in %q", want, html)
@@ -748,6 +753,89 @@ func TestLogsCards_adminProviderEventMatches_progressDetail(t *testing.T) {
 		};
 		if (!ctx.adminProviderEventMatches(slugFlat, "ollama")) {
 			throw new Error("provider_id slug should match ollama");
+		}
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLogsCards_ragEmbedding_warningWhenDraftDiffers(t *testing.T) {
+	vm := goja.New()
+	loadCardTestCtx(t, vm)
+
+	_, err := vm.RunString(`
+		ctx.ragEmbeddingCache = {
+			model: "ollama/nomic-embed-text:latest",
+			dim: 768,
+			status: "ok",
+			candidates: [
+				{ id: "ollama/nomic-embed-text:latest", embedding_likely: true, known_dim: 768 },
+				{ id: "groq/llama3", embedding_likely: false }
+			]
+		};
+		ctx.ragEmbeddingDraftModel = "groq/llama3";
+		var html = ctx.ragEmbeddingPanelHtml();
+		if (html.indexOf('id="rag-embedding-warn"') < 0) {
+			throw new Error("expected warning callout");
+		}
+		if (html.indexOf("invalidates all existing vectors") < 0) {
+			throw new Error("expected re-embed copy");
+		}
+		if (html.indexOf("Changing the indexing model from") < 0) {
+			throw new Error("expected warning lead-in with saved model");
+		}
+		if (html.indexOf("material-symbols-outlined sg-op-rag-embedding-warn__icon") < 0 || html.indexOf(">warning</span>") < 0) {
+			throw new Error("expected warning icon");
+		}
+		if (html.indexOf("ollama/nomic-embed-text:latest") < 0) {
+			throw new Error("expected saved model pill in warning");
+		}
+		if (html.indexOf("sg-op-rag-embedding-warn--hidden") >= 0) {
+			throw new Error("warning should be visible when draft differs");
+		}
+		if (html.indexOf('data-admin-action="rag-embedding-save"') < 0) {
+			throw new Error("expected save toolbar when draft differs");
+		}
+		ctx.ragEmbeddingDraftModel = null;
+		var savedHtml = ctx.ragEmbeddingPanelHtml();
+		if (savedHtml.indexOf("sg-op-rag-embedding-warn--hidden") < 0) {
+			throw new Error("warning should hide when draft matches saved");
+		}
+		ctx.ragEmbeddingPostSaveBanner = true;
+		var bannerHtml = ctx.ragEmbeddingPanelHtml();
+		if (bannerHtml.indexOf("schedule re-index for affected workspaces") < 0) {
+			throw new Error("expected post-save banner copy");
+		}
+		if (bannerHtml.indexOf('data-rag-embedding-goto-workspaces="1"') < 0) {
+			throw new Error("expected workspaces link in post-save banner");
+		}
+		if (bannerHtml.indexOf("#sum-feed-workspaces") < 0) {
+			throw new Error("expected workspaces section anchor");
+		}
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLogsCards_ragEmbedding_serviceCardIncludesPanel(t *testing.T) {
+	vm := goja.New()
+	loadCardTestCtx(t, vm)
+
+	_, err := vm.RunString(`
+		ctx.ragEmbeddingCache = {
+			model: "test-embed",
+			dim: 8,
+			status: "ok",
+			candidates: [{ id: "test-embed", embedding_likely: true }]
+		};
+		var html = ctx.buildServiceCard("chimera-indexer", [], { byRun: {}, partitionRegistry: {} });
+		if (html.indexOf("indexer-rag.embedding") < 0) {
+			throw new Error("indexer service card missing embedding panel");
+		}
+		if (html.indexOf("rag-embedding-model-select") < 0) {
+			throw new Error("indexer service card missing combobox");
 		}
 	`)
 	if err != nil {

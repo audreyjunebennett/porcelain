@@ -121,8 +121,6 @@ globalThis.ChimeraSettings.Render.Cards.mountGatewayOverview = function (ctx) {
     var data = ctx.gatewayOverviewCache;
     var loading = !data;
     var hasErr = !!(data && data._error);
-    var semver = data && data.semver ? String(data.semver) : "—";
-    var virtualModel = data && data.virtual_model_id ? String(data.virtual_model_id) : "—";
     var ov = data && data.service_overview ? data.service_overview : null;
     var compactHealth = gatewayServiceHealthStripHtml(ov, { compact: true });
     var sub;
@@ -131,7 +129,7 @@ globalThis.ChimeraSettings.Render.Cards.mountGatewayOverview = function (ctx) {
     } else if (hasErr) {
       sub = '<span class="sum-sub sum-sub--clamp muted">Overview unavailable — using last known logs.</span>';
     } else {
-      sub = '<span class="sum-sub sum-sub--clamp">Main-surface parity: version, virtual model, and service health.</span>';
+      sub = '<span class="sum-sub sum-sub--clamp">Main-surface parity: service health.</span>';
     }
     var body = "";
     if (loading) {
@@ -146,8 +144,6 @@ globalThis.ChimeraSettings.Render.Cards.mountGatewayOverview = function (ctx) {
         gatewayServiceHealthStripHtml(ov) +
         "</div>" +
         '<dl class="indexer-run-kv indexer-run-kv--gateway-summary" data-ui-part="gateway-overview.kv">' +
-        "<dt>version</dt><dd><code class=\"sum-mono-id\">" + escapeHtml(semver) + "</code></dd>" +
-        "<dt>virtual model</dt><dd><code class=\"sum-mono-id\">" + escapeHtml(virtualModel) + "</code></dd>" +
         "<dt>updated</dt><dd>" + escapeHtml(refAt) + "</dd>" +
         "</dl>";
     }

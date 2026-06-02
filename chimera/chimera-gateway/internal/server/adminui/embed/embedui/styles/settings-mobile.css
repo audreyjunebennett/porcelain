@@ -241,4 +241,9 @@
     margin-left: 0;
     width: 100%;
   }
+
+  /* Workspace recently evaluated files: keep status column visible; message wraps in remaining width. */
+  .sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent {
+    --indexer-recent-time-w: 4.25rem;
+  }
 }

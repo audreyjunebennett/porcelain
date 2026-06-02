@@ -33,8 +33,12 @@ func loadFeedSmokeStack(t *testing.T, vm *goja.Runtime) {
 	for _, f := range []string{
 		"sharedFormat.js", "convCard.js", "serviceCard.js", "gatewayOverview.js", "gatewayUsage.js",
 		"adminShared.js", "adminUsers.js", "adminProvider.js", "adminVirtualModels.js", "workspaceDraft.js",
-		"feedLogConv.js", "serviceFeed.js", "indexerRun.js", "indexerWorkspace.js", "mount.js",
+		"feedLogConv.js",
 	} {
+		evalJS(t, vm, cardsUIPath(t, f))
+	}
+	evalServiceFeedModules(t, vm)
+	for _, f := range []string{"indexerRun.js", "indexerWorkspace.js", "mount.js"} {
 		evalJS(t, vm, cardsUIPath(t, f))
 	}
 	for _, f := range []string{"hash.js", "model.js", "aggregate.js", "renderHtml.js"} {
@@ -74,7 +78,6 @@ func loadFeedSmokeStack(t *testing.T, vm *goja.Runtime) {
 			metricsEventsTableHtml: function () { return ""; },
 			metricsCache: { metrics_store_open: true, rows: [], message: "" },
 			gatewayOverviewCache: {
-				semver: "9.9.9-test",
 				virtual_model_id: "virtual/test",
 				service_overview: { refreshed_at: "2026-01-01T12:00:00Z", services: [] }
 			},

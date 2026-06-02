@@ -26,6 +26,7 @@ globalThis.ChimeraSettings.Render.Cards.mountSummarizedFeedCards = function (ctx
   if (typeof C.mountCardChrome === "function") C.mountCardChrome(ctx);
   if (typeof C.mountFeedLogIndexerRun === "function") C.mountFeedLogIndexerRun(ctx);
   if (typeof C.mountFeedLogIndexerWorkspace === "function") C.mountFeedLogIndexerWorkspace(ctx);
+  if (typeof C.mountRagEmbedding === "function") C.mountRagEmbedding(ctx);
   if (typeof C.mountFeedLogConv === "function") C.mountFeedLogConv(ctx);
   if (typeof C.mountServiceFeed === "function") C.mountServiceFeed(ctx);
 };

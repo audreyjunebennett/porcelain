@@ -253,6 +253,20 @@ func (s *Service) Retrieve(ctx context.Context, req RetrieveRequest) ([]vectorst
 		floor = req.ScoreThreshold
 	}
 	collection := vectorstore.CollectionName(req.Coords)
+	if blocked, reason := s.collectionDimBlocksRetrieve(ctx, collection); blocked {
+		if s.log != nil {
+			s.log.Warn("skipping retrieval: collection vector dimension does not match configured embedding model; re-index required",
+				"msg", "rag.retrieve.dim_mismatch",
+				"tenant", req.Coords.TenantID,
+				"project", req.Coords.ProjectID,
+				"flavor", req.Coords.FlavorID,
+				"collection", collection,
+				"embed_dim", s.embedDim,
+				"reason", reason,
+			)
+		}
+		return nil, nil
+	}
 	ti := req.TurnIndex
 	if ti <= 0 {
 		ti = 1
@@ -384,10 +398,45 @@ func (s *Service) ScoreThreshold() float32 { return s.scoreFloor }
 // StoreHealth is exposed for /v1/indexer/storage/health.
 func (s *Service) StoreHealth(ctx context.Context) error { return s.store.Health(ctx) }
 
+func (s *Service) collectionDimBlocksRetrieve(ctx context.Context, collection string) (bool, string) {
+	stats, err := s.store.Stats(ctx, collection)
+	if err != nil || stats.Points <= 0 || stats.VectorDim <= 0 {
+		return false, ""
+	}
+	if stats.VectorDim != s.embedDim {
+		return true, fmt.Sprintf("collection_dim=%d configured_dim=%d", stats.VectorDim, s.embedDim)
+	}
+	return false, ""
+}
+
 // StoreStats is exposed for /v1/indexer/storage/stats.
 func (s *Service) StoreStats(ctx context.Context, c vectorstore.Coords) (vectorstore.Stats, error) {
 	collection := vectorstore.CollectionName(c)
 	return s.store.Stats(ctx, collection)
+}
+
+// PurgeWorkspaceCorpus drops the vector collection for coords. Missing collections succeed.
+func (s *Service) PurgeWorkspaceCorpus(ctx context.Context, c vectorstore.Coords) (vectorstore.Stats, error) {
+	collection := vectorstore.CollectionName(c)
+	st, statsErr := s.store.Stats(ctx, collection)
+	if statsErr != nil {
+		st = vectorstore.Stats{Collection: collection}
+	}
+	if err := s.store.DeleteCollection(ctx, collection); err != nil {
+		return st, err
+	}
+	if s.log != nil {
+		s.log.Info("operator workspace corpus purged",
+			"msg", "gateway.operator.workspace.purged",
+			"type", "gateway.operator.workspace.purged",
+			"collection", collection,
+			"tenant_id", c.TenantID,
+			"project_id", c.ProjectID,
+			"flavor_id", c.FlavorID,
+			"points_purged", st.Points,
+		)
+	}
+	return st, nil
 }
 
 // CorpusInventoryEntry is one deduplicated source row for GET /v1/indexer/corpus/inventory.

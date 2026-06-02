@@ -411,3 +411,22 @@ func (c *Client) DeleteBySource(ctx context.Context, collection, source string) 
 	}
 	return c.do(ctx, http.MethodPost, "/collections/"+collection+"/points/delete?wait=true", body, nil)
 }
+
+// DeleteCollection drops the named collection. Missing collections are success.
+func (c *Client) DeleteCollection(ctx context.Context, collection string) error {
+	err := c.do(ctx, http.MethodDelete, "/collections/"+collection, nil, nil)
+	if err != nil && collectionMissing(err) {
+		return nil
+	}
+	return err
+}
+
+func collectionMissing(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "Not found") ||
+		strings.Contains(msg, "doesn't exist") ||
+		strings.Contains(msg, "status 404")
+}
