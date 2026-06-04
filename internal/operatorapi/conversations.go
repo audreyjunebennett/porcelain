@@ -26,6 +26,10 @@ type ConversationRAGHit struct {
 	Language      string  `json:"language,omitempty"`
 	VectorPointID string  `json:"vector_point_id,omitempty"`
 	ContentSHA256 string  `json:"content_sha256,omitempty"`
+	StartLine     int     `json:"start_line,omitempty"`
+	EndLine       int     `json:"end_line,omitempty"`
+	StartsMidLine bool    `json:"starts_mid_line,omitempty"`
+	ChunkIndex    int     `json:"chunk_index,omitempty"`
 }
 
 // ConversationTurn is one message in a transcript.

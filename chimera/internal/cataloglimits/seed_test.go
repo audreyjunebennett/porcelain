@@ -1,6 +1,8 @@
 package cataloglimits
 
 import (
+	"database/sql"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -42,6 +44,72 @@ data:
 	}
 	if _, ok := m["ollama/llama3.2:3b"]; ok {
 		t.Fatal("expected missing context_length to be omitted")
+	}
+}
+
+func TestCatalogModelIDs(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "catalog.yaml")
+	const src = `
+data:
+  - id: groq/a
+    context_length: 8192
+  - id: gemini/b
+    context_length: 4096
+`
+	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ids, err := CatalogModelIDs(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ids) != 2 || ids[0] != "gemini/b" || ids[1] != "groq/a" {
+		t.Fatalf("ids=%v", ids)
+	}
+}
+
+func TestMergeEnsureModels_deduplicates(t *testing.T) {
+	got := MergeEnsureModels([]string{"groq/a", "groq/b"}, []string{"groq/b", "gemini/x"})
+	if len(got) != 3 || got[0] != "gemini/x" {
+		t.Fatalf("got=%v", got)
+	}
+}
+
+func TestLoadEnsureModelsFromOperatorSQLite(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "operator.sqlite")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE virtual_models (
+		id INTEGER PRIMARY KEY, model_id TEXT NOT NULL, name TEXT NOT NULL, version TEXT NOT NULL,
+		description TEXT NOT NULL DEFAULT '', enabled INTEGER NOT NULL DEFAULT 1,
+		visibility TEXT NOT NULL DEFAULT 'public', created_by_principal_id TEXT NOT NULL DEFAULT '',
+		tenant_id TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+	); CREATE TABLE virtual_model_fallback (
+		virtual_model_id INTEGER PRIMARY KEY, chain_json TEXT NOT NULL, updated_at TEXT NOT NULL
+	);`); err != nil {
+		t.Fatal(err)
+	}
+	chain, _ := json.Marshal([]string{"groq/fast", "groq/slow"})
+	if _, err := db.Exec(`INSERT INTO virtual_models(id, model_id, name, version, enabled, created_at, updated_at)
+		VALUES (1, 'Test-1.0.0', 'Test', '1.0.0', 1, 'now', 'now')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO virtual_model_fallback(virtual_model_id, chain_json, updated_at)
+		VALUES (1, ?, 'now')`, string(chain)); err != nil {
+		t.Fatal(err)
+	}
+	_ = db.Close()
+
+	ids, err := LoadEnsureModelsFromOperatorSQLite(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ids) != 2 || ids[0] != "groq/fast" || ids[1] != "groq/slow" {
+		t.Fatalf("ids=%v", ids)
 	}
 }
 

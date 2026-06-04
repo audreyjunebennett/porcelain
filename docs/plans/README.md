@@ -33,6 +33,7 @@ These plans are complete. Read the linked feature record for as-built behavior.
 | [log-conversations.md](log-conversations.md) | [operator-settings-ui](../features/operator-settings-ui.md) |
 | [operator-message-registry.md](operator-message-registry.md) | [operator-log-message-registry](../features/operator-log-message-registry.md) |
 | [virtual-models-operator.md](virtual-models-operator.md) | [operator-virtual-models](../features/operator-virtual-models.md), [gateway chat routing pipeline](../features/gateway-chat-routing-pipeline.md) |
+| [remove-legacy-gateway-routing.md](remove-legacy-gateway-routing.md) | [operator-virtual-models](../features/operator-virtual-models.md), [gateway chat routing pipeline](../features/gateway-chat-routing-pipeline.md) |
 | [provider-model-availability.md](provider-model-availability.md) | [operator-provider-model-availability](../features/operator-provider-model-availability.md) |
 | [context-window-admission.md](context-window-admission.md) | [context-window-admission](../features/context-window-admission.md) (`partial`) |
 | [adminui-filesystem-dev-mode.md](adminui-filesystem-dev-mode.md) | [operator-ui-filesystem-dev-mode](../features/operator-ui-filesystem-dev-mode.md) |
@@ -62,7 +63,12 @@ Create a feature record when implementation ships.
 
 | Plan | Summary |
 |------|---------|
+| [indexer-embedding-model-and-workspace-purge.md](indexer-embedding-model-and-workspace-purge.md) | Operator embedding model selector on indexer card; workspace delete drops vector collection |
+| [operator-workspace-search.md](operator-workspace-search.md) | Direct workspace search API, `/ui/search`, ribbon nav |
+| [embedui-settings-card-cleanup.md](embedui-settings-card-cleanup.md) | Settings feed and card component refactor for consistency |
+| [embedui-feed-log-service-split.md](embedui-feed-log-service-split.md) | Split `feedLogService.js` into service-only + indexer modules; remove dead extraction code |
 | [indexer-manifest-ingest.md](indexer-manifest-ingest.md) | Manifest-only ingest, line-number snippets |
+| [indexer-memory-usage-analysis.md](indexer-memory-usage-analysis.md) | Idle ~1.2 GB RSS on Windows; pprof attribution and mitigations |
 | [indexer-sync-state-sqlite-and-force-reindex.md](indexer-sync-state-sqlite-and-force-reindex.md) | SQLite sync checkpoints, force re-index |
 | [operator-cli.md](operator-cli.md) | `chimeractl` operator CLI |
 | [env-precedence-contract.md](env-precedence-contract.md) | Unified env/config precedence |

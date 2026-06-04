@@ -85,6 +85,34 @@ func TestWriteResponseHeaders(t *testing.T) {
 	}
 }
 
+func TestSummarizeHits_lineMetadata(t *testing.T) {
+	got := SummarizeHits([]vectorstore.Hit{{
+		Score: 0.88,
+		Payload: vectorstore.Payload{
+			Source:        "pkg/a.go",
+			Text:          "code",
+			StartLine:     10,
+			EndLine:       12,
+			StartsMidLine: true,
+			ChunkIndex:    2,
+			ContentSHA256: "sha256:abc",
+			Language:      "go",
+		},
+	}})
+	if len(got) != 1 {
+		t.Fatalf("len=%d", len(got))
+	}
+	if got[0].StartLine != 10 || got[0].EndLine != 12 || !got[0].StartsMidLine {
+		t.Fatalf("lines=%+v", got[0])
+	}
+	if got[0].ChunkIndex != 2 || got[0].ContentSHA256 != "sha256:abc" {
+		t.Fatalf("meta=%+v", got[0])
+	}
+	if got[0].Language != "go" {
+		t.Fatalf("language=%q", got[0].Language)
+	}
+}
+
 func TestWriteResponseHeaders_preservesUnicode(t *testing.T) {
 	rec := httptest.NewRecorder()
 	want := "Phase 1 — Embedding Model Selection"

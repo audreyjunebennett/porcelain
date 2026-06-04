@@ -386,6 +386,23 @@ func (c *GatewayClient) FetchCorpusInventoryPage(ctx context.Context, path strin
 	return &out, nil
 }
 
+// CorpusStaleEntry is one stale source row for PUT /v1/indexer/corpus/stale.
+type CorpusStaleEntry struct {
+	Source        string `json:"source"`
+	IndexedSHA256 string `json:"indexed_sha256"`
+	LiveSHA256    string `json:"live_sha256"`
+}
+
+// PutCorpusStale replaces the gateway stale snapshot for the scoped corpus.
+func (c *GatewayClient) PutCorpusStale(ctx context.Context, entries []CorpusStaleEntry, hdrs map[string]string, pol SessionRetryPolicy, rng *rand.Rand) error {
+	body, err := json.Marshal(map[string]any{"entries": entries})
+	if err != nil {
+		return err
+	}
+	_, err = c.httpDoWithPolicy(ctx, http.MethodPut, apiPathIndexerCorpusStale, "application/json", body, hdrs, pol, rng)
+	return err
+}
+
 // CorpusInventoryRow is a merged view of one source path for reconciliation.
 type CorpusInventoryRow struct {
 	ContentSHA256     string
@@ -447,8 +464,88 @@ type IngestResponse struct {
 	Collection        string `json:"collection"`
 }
 
-// Ingest sends one whole file to POST /v1/ingest. The caller is responsible
-// for closing any io.ReadCloser they pass via req.Body.
+// IngestManifestBody uploads marshaled manifest JSON to POST /v1/ingest.
+func (c *GatewayClient) IngestManifestBody(ctx context.Context, payload []byte, req IngestRequest) (*IngestResponse, error) {
+	headers := ingestScopeHeaders(req)
+	httpReq, err := c.newRequest(ctx, http.MethodPost, "/v1/ingest", "application/json", bytes.NewReader(payload), headers)
+	if err != nil {
+		return nil, err
+	}
+	res, err := c.HTTP.Do(httpReq)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return nil, classify(res, "/v1/ingest")
+	}
+	var out IngestResponse
+	if err := json.NewDecoder(res.Body).Decode(&out); err != nil {
+		return nil, fmt.Errorf("decode ingest response: %w", err)
+	}
+	return &out, nil
+}
+
+// IngestManifest uploads a pre-built manifest to POST /v1/ingest.
+func (c *GatewayClient) IngestManifest(ctx context.Context, manifest IngestManifest, req IngestRequest) (*IngestResponse, error) {
+	payload, err := json.Marshal(manifest)
+	if err != nil {
+		return nil, err
+	}
+	return c.IngestManifestBody(ctx, payload, req)
+}
+
+func ingestScopeHeaders(req IngestRequest) map[string]string {
+	headers := map[string]string{}
+	if req.Project != "" {
+		headers[naming.HeaderProjectTarget] = req.Project
+	}
+	if req.Flavor != "" {
+		headers[naming.HeaderFlavorTarget] = req.Flavor
+	}
+	return headers
+}
+
+// IngestManifestSession uses POST /v1/ingest/session + complete with manifest JSON (no transport chunks).
+func (c *GatewayClient) IngestManifestSession(ctx context.Context, manifest IngestManifest, req IngestRequest, gw *IndexerConfig, pol SessionRetryPolicy) (*IngestResponse, error) {
+	if gw == nil {
+		return nil, errors.New("ingest manifest session: gateway config is nil")
+	}
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	startPath := strings.TrimSpace(gw.IngestSessionPath)
+	if startPath == "" {
+		startPath = "/v1/ingest/session"
+	}
+	if !strings.HasPrefix(startPath, "/") {
+		startPath = "/" + startPath
+	}
+	hdrs := ingestScopeHeaders(req)
+	startPayload, err := json.Marshal(map[string]string{
+		"source":       req.Source,
+		"content_hash": req.ContentHash,
+	})
+	if err != nil {
+		return nil, err
+	}
+	startBody, err := c.httpDoWithPolicy(ctx, http.MethodPost, startPath, "application/json", startPayload, hdrs, pol, rng)
+	if err != nil {
+		return nil, err
+	}
+	var sess sessionStartResponse
+	if err := json.Unmarshal(startBody, &sess); err != nil {
+		return nil, fmt.Errorf("decode ingest session start: %w", err)
+	}
+	if sess.SessionID == "" {
+		return nil, fmt.Errorf("ingest session: missing session_id")
+	}
+	manifestPayload, err := json.Marshal(manifest)
+	if err != nil {
+		return nil, err
+	}
+	return c.completeIngestSessionWithBody(ctx, sess.SessionID, manifestPayload, hdrs, pol, rng)
+}
+
+// Ingest sends one whole file to POST /v1/ingest (deprecated — use IngestManifest).
 func (c *GatewayClient) Ingest(ctx context.Context, req IngestRequest) (*IngestResponse, error) {
 	if req.Source == "" || req.Body == nil {
 		return nil, errors.New("ingest: source and body are required")
@@ -662,8 +759,12 @@ func (c *GatewayClient) putIngestChunk(ctx context.Context, sessionID string, in
 }
 
 func (c *GatewayClient) completeIngestSession(ctx context.Context, sessionID string, hdrs map[string]string, pol SessionRetryPolicy, rng *rand.Rand) (*IngestResponse, error) {
+	return c.completeIngestSessionWithBody(ctx, sessionID, []byte("{}"), hdrs, pol, rng)
+}
+
+func (c *GatewayClient) completeIngestSessionWithBody(ctx context.Context, sessionID string, body []byte, hdrs map[string]string, pol SessionRetryPolicy, rng *rand.Rand) (*IngestResponse, error) {
 	path := "/v1/ingest/session/" + url.PathEscape(sessionID) + "/complete"
-	b, err := c.httpDoWithPolicy(ctx, http.MethodPost, path, "application/json", []byte("{}"), hdrs, pol, rng)
+	b, err := c.httpDoWithPolicy(ctx, http.MethodPost, path, "application/json", body, hdrs, pol, rng)
 	if err != nil {
 		return nil, err
 	}

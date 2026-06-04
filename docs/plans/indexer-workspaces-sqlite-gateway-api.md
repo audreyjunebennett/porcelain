@@ -8,7 +8,7 @@
 | **Targets** | Gateway + indexer next minor; desktop inherits supervised behavior |
 | **Last updated** | See git history |
 | **Supersedes / superseded by** | None |
-| **As-built** | [`docs/features/indexer-workspaces.md`](../features/indexer-workspaces.md) — Phase 3 incremental watcher without session reload **not** shipped; poll + full reload documented as gap |
+| **As-built** | [`docs/features/indexer-workspaces.md`](../features/indexer-workspaces.md) |
 
 ## At a glance
 
@@ -17,14 +17,14 @@ Operators still manage **workspaces** from the logs UI, but those definitions li
 | Phase | Outcome | Status |
 |-------|---------|--------|
 | [Phase 1 — Operator data store and gateway CRUD](#phase-1--operator-data-store-and-gateway-crud) | Workspaces persist in a dedicated SQLite file; gateway exposes create/read/update/delete used by the UI | `done` |
-| [Phase 2 — Indexer client and merge rules](#phase-2--indexer-client-and-merge-rules) | `chimera-indexer` fetches workspace list over HTTP; supervised YAML supplies **tuning only**; no DB dependency in the indexer binary | `todo` |
-| [Phase 3 — Dynamic roots, polling, and docs](#phase-3--dynamic-roots-polling-and-docs) | Configurable poll refetches workspaces; indexer **adds/removes watch roots without** recycling the whole watch session; docs and tests | `todo` |
+| [Phase 2 — Indexer client and merge rules](#phase-2--indexer-client-and-merge-rules) | `chimera-indexer` fetches workspace list over HTTP; supervised YAML supplies **tuning only**; no DB dependency in the indexer binary | `done` |
+| [Phase 3 — Dynamic roots, polling, and docs](#phase-3--dynamic-roots-polling-and-docs) | Configurable poll refetches workspaces; indexer **adds/removes watch roots without** recycling the whole watch session; docs and tests | `done` |
 
 ---
 
 ## Background
 
-Today, `indexer.supervised.yaml` is both the **merged `--config` layer** for the supervised child (`cmd/chimera-indexer` with explicit `--config`) and the **mutable store** for workspace roots: UI handlers in `internal/server/ui_indexer.go` read and write the whole file (`GET/PUT /api/ui/indexer/config`, append/update/remove root). The indexer watches that path (`indexer.WatchConfigPathForReload` from `cmd/chimera-indexer/main.go`); **any** save bumps mtime and cancels the current watch session in favor of a new one (`errSupervisedReload`), which assigns a new `index_run_id` per session. That matches the “ids change on reload” behavior operators see.
+Today, `indexer.supervised.yaml` is both the **merged `--config` layer** for the supervised child (`cmd/chimera-indexer` with explicit `--config`) and the **mutable store** for workspace roots: UI handlers in `internal/server/ui_indexer.go` read and write the whole file (`GET/PUT /api/ui/indexer/config`, append/update/remove root). The indexer watches that path (`indexer.WatchConfigPathForReload` from `cmd/chimera-indexer/main.go`); **any** save bumps mtime and cancels the current watch session in favor of a new one (`errSupervisedRelo=ad`), which assigns a new `index_run_id` per session. That matches the “ids change on reload” behavior operators see.
 
 Putting **roots** and **tuning** in the same file means every workspace add/remove rewrites the same artifact the watcher observes. Partial writes or parse errors during save can also surface as a failed reload or a stuck process depending on timing.
 
@@ -62,6 +62,10 @@ Putting **roots** and **tuning** in the same file means every workspace add/remo
 
 **Status:** `done`
 
+---
+
+## Phase 2 — Indexer client and merge rules
+
 **Goal.** The supervised indexer obtains workspaces from the gateway using the same **Bearer token** model as ingest (`CHIMERA_GATEWAY_TOKEN`), without reading SQLite.
 
 **Deliverables**
@@ -77,7 +81,16 @@ Putting **roots** and **tuning** in the same file means every workspace add/remo
 - Integration-style test: gateway serves tenant workspaces; indexer client builds the correct flat list of `(abs path, scope)` jobs.
 - Indexer binary does not gain a dependency on SQLite drivers for this feature.
 
-**Status:** `todo`
+**Verification (2026-06-03)**
+
+```bash
+go test ./chimera/chimera-indexer/internal/indexer/ -run Workspaces
+go test ./chimera/chimera-gateway/internal/operatorstore/...
+go test ./chimera/chimera-gateway/internal/server/adminui/api/indexer/... -run Workspace
+go test ./chimera/chimera-gateway/internal/server/... -run IndexerWorkspaces
+```
+
+**Status:** `done`
 
 ---
 
@@ -102,7 +115,7 @@ Putting **roots** and **tuning** in the same file means every workspace add/remo
 - Editing supervised YAML tuning still hot-reloads **without** requiring workspace poll to fire.
 - Documented one-shot migration from old YAML-only roots to DB.
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 

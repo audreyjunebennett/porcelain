@@ -24,8 +24,15 @@ globalThis.ChimeraSettings.Render.Cards.mountGatewayUsage = function (ctx) {
   var aggregateRollupRows = ctx.aggregateRollupRows;
   var metricsRollupTableHtml = ctx.metricsRollupTableHtml;
   var metricsEventsTableHtml = ctx.metricsEventsTableHtml;
-  var chimeraBrokerShortModelLabel = ctx.chimeraBrokerShortModelLabel;
   var sgOpHealthPillHtml = ctx.sgOpHealthPillHtml;
+
+  function chimeraBrokerShortModelLabel(model) {
+    if (typeof ctx.chimeraBrokerShortModelLabel === "function") {
+      return ctx.chimeraBrokerShortModelLabel(model);
+    }
+    if (!model || model === "—") return "—";
+    return String(model);
+  }
 
   function gatewayUsageRollupStatHtml(value, icon, title) {
     return (
@@ -69,6 +76,7 @@ globalThis.ChimeraSettings.Render.Cards.mountGatewayUsage = function (ctx) {
 
   function buildGatewayUsageIntroHtml() {
     return (
+      '<div class="sum-section-label">Summary</div>' +
       '<div class="gw-usage-intro" id="gw-usage-intro">' +
       '<p class="gw-usage-intro-lead">' +
       "Which models ran, estimated tokens this UTC minute and calendar day, and the latest upstream calls." +

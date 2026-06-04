@@ -10,6 +10,7 @@ func loadSummarizedDirtyRoutingCtx(t *testing.T, vm *goja.Runtime) {
 	t.Helper()
 	evalJS(t, vm, settingsUIPath(t, "testing", "loader.js"))
 	evalJS(t, vm, settingsUIPath(t, "util", "hash.js"))
+	evalJS(t, vm, settingsUIPath(t, "derive", "logLineClassification.js"))
 	evalJS(t, vm, settingsUIPath(t, "app", "summarizedDirtyRouting.js"))
 	_, err := vm.RunString(`
 		var deps = {

@@ -144,6 +144,29 @@ func toQPayload(p vectorstore.Payload) map[string]interface{} {
 	if strings.TrimSpace(p.ClientContentHash) != "" {
 		m["client_content_hash"] = p.ClientContentHash
 	}
+	if p.ChunkSchema > 0 {
+		m["chunk_schema"] = p.ChunkSchema
+		m["chunk_index"] = p.ChunkIndex
+		m["chunk_count"] = p.ChunkCount
+		m["start_line"] = p.StartLine
+		m["end_line"] = p.EndLine
+		m["start_byte"] = p.StartByte
+		m["end_byte"] = p.EndByte
+		m["start_ch"] = p.StartCh
+		m["end_ch"] = p.EndCh
+		if p.StartsMidLine {
+			m["starts_mid_line"] = true
+		}
+		if p.LineCount > 0 {
+			m["line_count"] = p.LineCount
+		}
+		if p.FileBytes > 0 {
+			m["file_bytes"] = p.FileBytes
+		}
+		if strings.TrimSpace(p.Language) != "" {
+			m["language"] = p.Language
+		}
+	}
 	return m
 }
 
@@ -172,6 +195,45 @@ func fromQPayload(m map[string]any) vectorstore.Payload {
 	}
 	if v, ok := m["client_content_hash"].(string); ok {
 		p.ClientContentHash = v
+	}
+	if v, ok := m["chunk_schema"].(float64); ok {
+		p.ChunkSchema = int(v)
+	}
+	if v, ok := m["chunk_index"].(float64); ok {
+		p.ChunkIndex = int(v)
+	}
+	if v, ok := m["chunk_count"].(float64); ok {
+		p.ChunkCount = int(v)
+	}
+	if v, ok := m["start_line"].(float64); ok {
+		p.StartLine = int(v)
+	}
+	if v, ok := m["end_line"].(float64); ok {
+		p.EndLine = int(v)
+	}
+	if v, ok := m["start_byte"].(float64); ok {
+		p.StartByte = int(v)
+	}
+	if v, ok := m["end_byte"].(float64); ok {
+		p.EndByte = int(v)
+	}
+	if v, ok := m["start_ch"].(float64); ok {
+		p.StartCh = int(v)
+	}
+	if v, ok := m["end_ch"].(float64); ok {
+		p.EndCh = int(v)
+	}
+	if v, ok := m["starts_mid_line"].(bool); ok {
+		p.StartsMidLine = v
+	}
+	if v, ok := m["line_count"].(float64); ok {
+		p.LineCount = int(v)
+	}
+	if v, ok := m["file_bytes"].(float64); ok {
+		p.FileBytes = int(v)
+	}
+	if v, ok := m["language"].(string); ok {
+		p.Language = v
 	}
 	return p
 }
@@ -404,10 +466,61 @@ func (c *Client) Stats(ctx context.Context, collection string) (vectorstore.Stat
 	return vectorstore.Stats{Collection: collection, Points: resp.Result.PointsCount, VectorDim: dim}, nil
 }
 
+// GetPoints loads point payloads by id (best-effort; unknown ids skipped).
+func (c *Client) GetPoints(ctx context.Context, collection string, ids []string) ([]vectorstore.PointPayload, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	body := map[string]any{
+		"ids":          ids,
+		"with_payload": true,
+		"with_vector":  false,
+	}
+	var resp struct {
+		Result []struct {
+			ID      any                    `json:"id"`
+			Payload map[string]interface{} `json:"payload"`
+		} `json:"result"`
+	}
+	if err := c.do(ctx, http.MethodPost, "/collections/"+collection+"/points", body, &resp); err != nil {
+		if collectionMissing(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	out := make([]vectorstore.PointPayload, 0, len(resp.Result))
+	for _, r := range resp.Result {
+		out = append(out, vectorstore.PointPayload{
+			ID:      fmt.Sprint(r.ID),
+			Payload: fromQPayload(r.Payload),
+		})
+	}
+	return out, nil
+}
+
 // DeleteBySource removes all points whose payload.source matches.
 func (c *Client) DeleteBySource(ctx context.Context, collection, source string) error {
 	body := map[string]any{
 		"filter": map[string]any{"must": []map[string]any{kvKeyword("source", source)}},
 	}
 	return c.do(ctx, http.MethodPost, "/collections/"+collection+"/points/delete?wait=true", body, nil)
+}
+
+// DeleteCollection drops the named collection. Missing collections are success.
+func (c *Client) DeleteCollection(ctx context.Context, collection string) error {
+	err := c.do(ctx, http.MethodDelete, "/collections/"+collection, nil, nil)
+	if err != nil && collectionMissing(err) {
+		return nil
+	}
+	return err
+}
+
+func collectionMissing(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "Not found") ||
+		strings.Contains(msg, "doesn't exist") ||
+		strings.Contains(msg, "status 404")
 }

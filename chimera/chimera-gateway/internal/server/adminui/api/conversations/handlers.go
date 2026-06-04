@@ -258,6 +258,9 @@ func turnWire(t operatorstore.ConversationTurn) operatorapi.ConversationTurn {
 				Language:      r.Language,
 				VectorPointID: r.VectorPointID,
 				ContentSHA256: r.ContentSHA256,
+				StartLine:     r.StartLine,
+				EndLine:       r.EndLine,
+				StartsMidLine: r.StartsMidLine,
 			})
 		}
 	}

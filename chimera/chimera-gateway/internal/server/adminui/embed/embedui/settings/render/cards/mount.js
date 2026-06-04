@@ -1,5 +1,6 @@
 /**
- * Mount all summarized-feed card render modules on ctx (call from summarizedFeed.js).
+ * Mount admin/gateway card modules on ctx (settings feed, gallery, setup wizard).
+ * Log-feed card families mount via mountSummarizedFeedCards after mountAll.
  */
 globalThis.ChimeraSettings = globalThis.ChimeraSettings || {};
 globalThis.ChimeraSettings.Render = globalThis.ChimeraSettings.Render || {};
@@ -11,14 +12,21 @@ globalThis.ChimeraSettings.Render.Cards.mountAll = function (ctx) {
   if (typeof C.mountAdminShared === "function") C.mountAdminShared(ctx);
   if (typeof C.mountConvCard === "function") C.mountConvCard(ctx);
   if (typeof C.mountServiceCard === "function") C.mountServiceCard(ctx);
-  if (typeof C.mountGatewayOverview === "function") C.mountGatewayOverview(ctx);
   if (typeof C.mountGatewayUsage === "function") C.mountGatewayUsage(ctx);
+  if (typeof C.mountGatewayOverview === "function") C.mountGatewayOverview(ctx);
   if (typeof C.mountAdminUsers === "function") C.mountAdminUsers(ctx);
   if (typeof C.mountAdminProvider === "function") C.mountAdminProvider(ctx);
-  if (typeof C.mountAdminRouting === "function") C.mountAdminRouting(ctx);
-  if (typeof C.mountAdminFallback === "function") C.mountAdminFallback(ctx);
-  if (typeof C.mountAdminRouterModels === "function") C.mountAdminRouterModels(ctx);
   if (typeof C.mountAdminVirtualModels === "function") C.mountAdminVirtualModels(ctx);
-  if (typeof C.mountAdminWorkflows === "function") C.mountAdminWorkflows(ctx);
   if (typeof C.mountWorkspaceDraft === "function") C.mountWorkspaceDraft(ctx);
+};
+
+/** Summarized log-feed cards: chrome → indexer → conv → service (single mount path). */
+globalThis.ChimeraSettings.Render.Cards.mountSummarizedFeedCards = function (ctx) {
+  var C = globalThis.ChimeraSettings.Render.Cards;
+  if (typeof C.mountCardChrome === "function") C.mountCardChrome(ctx);
+  if (typeof C.mountFeedLogIndexerRun === "function") C.mountFeedLogIndexerRun(ctx);
+  if (typeof C.mountFeedLogIndexerWorkspace === "function") C.mountFeedLogIndexerWorkspace(ctx);
+  if (typeof C.mountRagEmbedding === "function") C.mountRagEmbedding(ctx);
+  if (typeof C.mountFeedLogConv === "function") C.mountFeedLogConv(ctx);
+  if (typeof C.mountServiceFeed === "function") C.mountServiceFeed(ctx);
 };

@@ -38,6 +38,15 @@ type RAG struct {
 	DefaultProject    string
 	DefaultFlavor     string
 	CollectionScope   string // reserved for future scope keys (currently always "tenant_project_flavor")
+
+	// CoherenceMode controls stale-index warnings: off | warn | strict (default warn).
+	CoherenceMode string
+	// ToolingEnabled gates /v1/rag/* expansion APIs.
+	ToolingEnabled bool
+	// ExpansionCacheTTLSeconds is LRU TTL for merged context slices (0 = 300).
+	ExpansionCacheTTLSeconds int
+	// ExpansionCacheMaxEntries caps hot context cache size (0 = 256).
+	ExpansionCacheMaxEntries int
 }
 
 const (
@@ -63,23 +72,33 @@ type vectorstoreDoc struct {
 // gateway stays on the v0.1 path; vectorstore fields are still resolved for health URLs.
 func (d ragDoc) effective(vs vectorstoreDoc) RAG {
 	r := RAG{
-		Enabled:           d.Enabled != nil && *d.Enabled,
-		QdrantURL:         strings.TrimSpace(vs.URL),
-		QdrantAPIKey:      strings.TrimSpace(vs.APIKey),
-		QdrantLogLevel:    strings.TrimSpace(vs.LogLevel),
-		EmbeddingBaseURL:  strings.TrimSpace(d.Embedding.BaseURL),
-		EmbeddingPath:     strings.TrimSpace(d.Embedding.Path),
-		EmbeddingModel:    strings.TrimSpace(d.Embedding.Model),
-		EmbeddingDim:      d.Embedding.Dim,
-		ChunkSize:         d.Chunking.Size,
-		ChunkOverlap:      d.Chunking.Overlap,
-		TopK:              d.Retrieval.TopK,
-		ScoreThreshold:    d.Retrieval.ScoreThreshold,
-		MaxIngestBytes:    d.Ingest.MaxBytes,
-		MaxWholeFileBytes: d.Ingest.MaxWholeFileBytes,
-		DefaultProject:    strings.TrimSpace(d.Defaults.ProjectID),
-		DefaultFlavor:     strings.TrimSpace(d.Defaults.FlavorID),
-		CollectionScope:   "tenant_project_flavor",
+		Enabled:                  d.Enabled != nil && *d.Enabled,
+		QdrantURL:                strings.TrimSpace(vs.URL),
+		QdrantAPIKey:             strings.TrimSpace(vs.APIKey),
+		QdrantLogLevel:           strings.TrimSpace(vs.LogLevel),
+		EmbeddingBaseURL:         strings.TrimSpace(d.Embedding.BaseURL),
+		EmbeddingPath:            strings.TrimSpace(d.Embedding.Path),
+		EmbeddingModel:           strings.TrimSpace(d.Embedding.Model),
+		EmbeddingDim:             d.Embedding.Dim,
+		ChunkSize:                d.Chunking.Size,
+		ChunkOverlap:             d.Chunking.Overlap,
+		TopK:                     d.Retrieval.TopK,
+		ScoreThreshold:           d.Retrieval.ScoreThreshold,
+		MaxIngestBytes:           d.Ingest.MaxBytes,
+		MaxWholeFileBytes:        d.Ingest.MaxWholeFileBytes,
+		DefaultProject:           strings.TrimSpace(d.Defaults.ProjectID),
+		DefaultFlavor:            strings.TrimSpace(d.Defaults.FlavorID),
+		CollectionScope:          "tenant_project_flavor",
+		CoherenceMode:            normalizeCoherenceMode(d.Coherence.Mode),
+		ToolingEnabled:           d.Tooling.Enabled == nil || *d.Tooling.Enabled,
+		ExpansionCacheTTLSeconds: d.Tooling.CacheTTLSeconds,
+		ExpansionCacheMaxEntries: d.Tooling.CacheMaxEntries,
+	}
+	if r.ExpansionCacheTTLSeconds <= 0 {
+		r.ExpansionCacheTTLSeconds = 300
+	}
+	if r.ExpansionCacheMaxEntries <= 0 {
+		r.ExpansionCacheMaxEntries = 256
 	}
 	if r.QdrantURL == "" {
 		r.QdrantURL = defaultQdrantURL
@@ -184,4 +203,21 @@ type ragDoc struct {
 		ProjectID string `yaml:"project_id"`
 		FlavorID  string `yaml:"flavor_id"`
 	} `yaml:"defaults"`
+	Coherence struct {
+		Mode string `yaml:"mode"`
+	} `yaml:"coherence"`
+	Tooling struct {
+		Enabled         *bool `yaml:"enabled"`
+		CacheTTLSeconds int   `yaml:"expansion_cache_ttl_seconds"`
+		CacheMaxEntries int   `yaml:"expansion_cache_max_entries"`
+	} `yaml:"tooling"`
+}
+
+func normalizeCoherenceMode(m string) string {
+	switch strings.ToLower(strings.TrimSpace(m)) {
+	case "off", "strict":
+		return strings.ToLower(strings.TrimSpace(m))
+	default:
+		return "warn"
+	}
 }

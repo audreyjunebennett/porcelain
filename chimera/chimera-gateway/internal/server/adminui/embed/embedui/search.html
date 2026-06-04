@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Chimera — Search</title>
+  <script src="/ui/assets/embed-theme.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/ui/assets/theme-tokens.css" />
+  <link rel="stylesheet" href="/ui/assets/ui.css" />
+  <link rel="stylesheet" href="/ui/assets/styles/chat.css" />
+  <link rel="stylesheet" href="/ui/assets/styles/search.css" />
+</head>
+<body class="search-page embed-page">
+  <div class="search-layout">
+    <div class="search-main">
+      <header class="search-title-host" aria-label="Search title">
+        <h1 class="search-title">Workspace search</h1>
+        <p class="search-title__hint">Search indexed files without sending a chat message.</p>
+      </header>
+      <section class="search-controls" aria-label="Search controls">
+        <div class="search-controls__panel">
+          <textarea id="search-query" rows="1" placeholder="Search indexed content…" aria-label="Search query"></textarea>
+          <div class="search-controls__footer">
+            <div class="search-controls__selectors">
+              <label class="search-controls__select-wrap">
+                <span class="visually-hidden" id="search-workspace-label">Workspace</span>
+                <select id="search-workspace" aria-labelledby="search-workspace-label" required>
+                  <option value="" disabled selected>Select workspace…</option>
+                </select>
+              </label>
+              <label class="search-controls__threshold-wrap" title="Minimum relevance score (0–100%)">
+                <span class="visually-hidden" id="search-threshold-label">Score threshold</span>
+                <span class="search-controls__threshold-field">
+                  <input type="text" id="search-threshold" inputmode="numeric" autocomplete="off" spellcheck="false" value="72%" aria-labelledby="search-threshold-label" />
+                  <span class="material-symbols-outlined material-symbols-outlined--sm search-controls__threshold-icon" aria-hidden="true">readiness_score</span>
+                </span>
+                <input type="range" id="search-threshold-slider" class="search-controls__threshold-slider" min="0" max="100" step="1" value="72" aria-labelledby="search-threshold-label" />
+              </label>
+            </div>
+            <button type="button" class="btn btn--primary search-controls__submit" id="search-submit" title="Run search" aria-label="Run search">
+              <span class="material-symbols-outlined" aria-hidden="true">search</span>
+            </button>
+          </div>
+        </div>
+      </section>
+      <main id="search-results" class="search-results" aria-live="polite" aria-label="Search results"></main>
+    </div>
+  </div>
+  <script src="/ui/assets/ui/util/escape.js"></script>
+  <script src="/ui/assets/chat/render/markdown.js"></script>
+  <script src="/ui/assets/chat/render/snippet.js"></script>
+  <script src="/ui/assets/chat/render/input.js"></script>
+  <script src="/ui/assets/search/state.js"></script>
+  <script src="/ui/assets/search/gatewayClient.js"></script>
+  <script src="/ui/assets/search/render/highlight.js"></script>
+  <script src="/ui/assets/search/render/results.js"></script>
+  <script src="/ui/assets/search/app.js"></script>
+</body>
+</html>

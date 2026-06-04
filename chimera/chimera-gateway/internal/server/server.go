@@ -12,10 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/assets"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/chat"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/conversationhistory"
-	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/conversationmerge"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/conversationwitness"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/gwhttp"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/rag"
@@ -89,26 +87,7 @@ var gatewayIndexTmpl = template.Must(template.New("gatewayIndex").Parse(`<!DOCTY
     body {
       font-family: system-ui, sans-serif; max-width: 48rem; margin: 1.5rem auto 2.5rem; padding: 0 1rem;
       line-height: 1.55; color: #1a1a1a;
-      position: relative;
-      min-height: 100vh;
     }
-    /* Large faint brand mark — behind content, fixed to the right */
-    body::before {
-      content: "";
-      position: fixed;
-      right: -4%;
-      top: 50%;
-      transform: translateY(-50%);
-      width: min(52vw, 24rem);
-      height: min(52vw, 24rem);
-      max-height: 85vh;
-      background: url("/assets/icon.png") no-repeat center right;
-      background-size: contain;
-      opacity: 0.07;
-      pointer-events: none;
-      z-index: 0;
-    }
-    body > * { position: relative; z-index: 1; }
     h1 { font-size: 1.45rem; margin-bottom: 0.25rem; }
     h2 { font-size: 1.05rem; margin-top: 1.75rem; margin-bottom: 0.65rem; color: #222; }
     .subtitle { color: #555; margin-top: 0; font-size: 0.95rem; }
@@ -149,7 +128,6 @@ var gatewayIndexTmpl = template.Must(template.New("gatewayIndex").Parse(`<!DOCTY
   <dl>
     <dt>Gateway tokens</dt><dd>{{.TokensCount}} configured</dd>
     <dt>Metrics</dt><dd>{{if .MetricsEnabled}}enabled{{else}}disabled{{end}}</dd>
-    <dt>Conversation merge</dt><dd>{{if .ConversationMerge}}enabled{{else}}disabled{{end}}</dd>
     <dt>Broker model providers</dt><dd>{{.Providers}}</dd>
     <dt>Models available</dt><dd>{{.ModelCount}} <span class="muted">(merged list: virtual + upstream)</span></dd>
   </dl>
@@ -162,15 +140,6 @@ var gatewayIndexTmpl = template.Must(template.New("gatewayIndex").Parse(`<!DOCTY
 func NewMux(rt *Runtime, log *slog.Logger, overlay *StatusOverlay, ui *UIOptions) http.Handler {
 	configureAdminUIListenForEmbed(rt, overlay)
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /assets/icon.png", func(w http.ResponseWriter, r *http.Request) {
-		if len(assets.IconPNG) == 0 {
-			http.NotFound(w, r)
-			return
-		}
-		w.Header().Set("Content-Type", "image/png")
-		w.Header().Set("Cache-Control", "public, max-age=86400")
-		_, _ = w.Write(assets.IconPNG)
-	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
 			http.NotFound(w, r)
@@ -185,7 +154,7 @@ func NewMux(rt *Runtime, log *slog.Logger, overlay *StatusOverlay, ui *UIOptions
 			return
 		}
 		rt.Sync()
-		res, tokStore, _ := rt.Snapshot()
+		res, tokStore := rt.Snapshot()
 		ctx := r.Context()
 		apiKey := rt.UpstreamAPIKey()
 
@@ -265,12 +234,11 @@ func NewMux(rt *Runtime, log *slog.Logger, overlay *StatusOverlay, ui *UIOptions
 			IndexerWorkerClass   string
 			TokensCount          int
 			MetricsEnabled       bool
-			ConversationMerge    bool
 			Providers            string
 			ModelCount           string
 		}{
 			Semver:             res.Semver,
-			VirtualModel:       res.VirtualModelID,
+			VirtualModel:       rt.PrimaryVirtualModelID(),
 			GatewayURL:         gwURL,
 			BrokerURL:          chimeraBrokerURL,
 			BrokerOK:           chimeraBrokerOK,
@@ -283,7 +251,6 @@ func NewMux(rt *Runtime, log *slog.Logger, overlay *StatusOverlay, ui *UIOptions
 			IndexerWorkerClass: idxWorkerClass,
 			TokensCount:        tokStore.Count(),
 			MetricsEnabled:     res.MetricsEnabled,
-			ConversationMerge:  res.ConversationMerge.Enabled,
 			Providers:          providers,
 			ModelCount:         modelCount,
 		}
@@ -309,7 +276,7 @@ func NewMux(rt *Runtime, log *slog.Logger, overlay *StatusOverlay, ui *UIOptions
 			return
 		}
 		rt.Sync()
-		res, _, _ := rt.Snapshot()
+		res, _ := rt.Snapshot()
 		apiKey := rt.UpstreamAPIKey()
 		ctx := r.Context()
 		ok, st, detail := brokerclient.ProbeHealth(ctx, res.HealthUpstreamURL, apiKey, healthTimeout(res), log)
@@ -360,7 +327,7 @@ func NewMux(rt *Runtime, log *slog.Logger, overlay *StatusOverlay, ui *UIOptions
 			return
 		}
 		rt.Sync()
-		res, _, _ := rt.Snapshot()
+		res, _ := rt.Snapshot()
 		writeMergedModelsResponse(w, r.Context(), rt, res, "", rt.UpstreamAPIKey(), healthTimeout(res), log)
 	})
 
@@ -429,6 +396,29 @@ func NewMux(rt *Runtime, log *slog.Logger, overlay *StatusOverlay, ui *UIOptions
 		}
 		indexerapi.HandleCorpusInventory(w, r, rt, log)
 	})
+	mux.HandleFunc("/v1/indexer/corpus/stale", func(w http.ResponseWriter, r *http.Request) {
+		store := rt.CorpusStaleStore()
+		switch r.Method {
+		case http.MethodGet:
+			indexerapi.HandleCorpusStaleGET(w, r, rt, store)
+		case http.MethodPut:
+			indexerapi.HandleCorpusStalePUT(w, r, rt, store)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+	mux.HandleFunc("/v1/rag/segments", func(w http.ResponseWriter, r *http.Request) {
+		indexerapi.HandleRAGSegmentsGET(w, r, rt)
+	})
+	mux.HandleFunc("/v1/rag/context", func(w http.ResponseWriter, r *http.Request) {
+		indexerapi.HandleRAGContextGET(w, r, rt)
+	})
+	mux.HandleFunc("/v1/rag/adjacent", func(w http.ResponseWriter, r *http.Request) {
+		indexerapi.HandleRAGAdjacentGET(w, r, rt)
+	})
+	mux.HandleFunc("/v1/rag/tools", func(w http.ResponseWriter, r *http.Request) {
+		indexerapi.HandleRAGToolsGET(w, r, rt)
+	})
 
 	adminui.Register(mux, rt, log, ui)
 
@@ -437,7 +427,7 @@ func NewMux(rt *Runtime, log *slog.Logger, overlay *StatusOverlay, ui *UIOptions
 
 func handleV1Models(w http.ResponseWriter, r *http.Request, rt *Runtime, log *slog.Logger) {
 	rt.Sync()
-	res, tokStore, _ := rt.Snapshot()
+	res, tokStore := rt.Snapshot()
 	token := gwhttp.BearerToken(r.Header.Get("Authorization"))
 	sess := tokStore.Validate(token)
 	if token == "" || sess == nil {
@@ -511,7 +501,7 @@ func writeMergedModelsResponse(w http.ResponseWriter, ctx context.Context, rt *R
 	}
 	ensureOpenAIModelListItems(data)
 	data = catalog.FilterOpenAIModelDataByAvailability(data, rt.ProviderModelAvailability(principalID))
-	out := prependVirtualModelsToCatalog(data, rt, principalID, res)
+	out := prependVirtualModelsToCatalog(data, rt, principalID)
 	_ = json.NewEncoder(w).Encode(map[string]any{"object": "list", "data": out})
 }
 
@@ -615,7 +605,7 @@ func newHistoryRecorder(rt *Runtime, log *slog.Logger, ctx context.Context, r *h
 
 func handleV1Chat(w http.ResponseWriter, r *http.Request, rt *Runtime, log *slog.Logger) {
 	rt.Sync()
-	res, tokStore, pol := rt.Snapshot()
+	res, tokStore := rt.Snapshot()
 	token := gwhttp.BearerToken(r.Header.Get("Authorization"))
 	sess := tokStore.Validate(token)
 	if token == "" || sess == nil {
@@ -651,7 +641,6 @@ func handleV1Chat(w http.ResponseWriter, r *http.Request, rt *Runtime, log *slog
 		})
 		return
 	}
-	flowStart := time.Now()
 
 	var stream bool
 	if s, ok := raw["stream"]; ok {
@@ -665,10 +654,10 @@ func handleV1Chat(w http.ResponseWriter, r *http.Request, rt *Runtime, log *slog
 
 	ctx := r.Context()
 	skipToolRouter := strings.EqualFold(strings.TrimSpace(r.Header.Get(naming.HeaderToolRouterTarget)), "skip")
-	th := res.ToolRouterConfidenceThreshold
+	var headerToolThresh float64
 	if h := strings.TrimSpace(r.Header.Get(naming.HeaderToolConfidenceThresholdTarget)); h != "" {
 		if v, err := strconv.ParseFloat(h, 64); err == nil {
-			th = v
+			headerToolThresh = v
 		}
 	}
 	rtDur := time.Duration(res.ChatTimeoutMs) * time.Millisecond
@@ -683,88 +672,13 @@ func handleV1Chat(w http.ResponseWriter, r *http.Request, rt *Runtime, log *slog
 	flav := ingest.ResolveFlavor(r.Header.Get(ingest.HeaderFlavor), res.RAG.DefaultFlavor)
 	lastUser := rag.LastUserText(raw["messages"])
 
-	var mergeSvc *conversationmerge.Service
-	if os := rt.OperatorStore(); os != nil {
-		mergeSvc = conversationmerge.NewService(res.ConversationMerge, os.DB(), res.UpstreamBaseURL, apiKey, res.RAG, log)
+	var cid, cidSource string
+	if headerCID != "" {
+		cid, cidSource = headerCID, "header"
+	} else {
+		cid, cidSource = uuid.NewString(), "generated"
 	}
-
-	incomingFP := strings.TrimSpace(r.Header.Get(headerRequestFingerprint))
-
-	var cid string
-	var cidSource string
-	var mergeTurn int
-
-	switch {
-	case headerCID != "":
-		cid = headerCID
-		cidSource = "header"
-	case mergeSvc != nil:
-		out, err := mergeSvc.Resolve(ctx, conversationmerge.ResolveInput{
-			TenantID:             sess.TenantID,
-			ProjectID:            proj,
-			FlavorID:             flav,
-			LastUserText:         lastUser,
-			IncomingFingerprint:  incomingFP,
-			ClientConversationID: "",
-			RequestID:            rid,
-			NextTurnIndex:        rt.NextChatTurnIndex,
-		})
-		if err != nil && log != nil {
-			log.With("request_id", rid, "service", "gateway", "principal_id", sess.TenantID).
-				Debug("conversation merge resolve failed", "msg", naming.MsgConversationMergeResolveFailed, "err", err)
-		}
-		if len(out.DedupJSON) > 0 {
-			cid = out.ConversationID
-			turnIdx := out.TurnIndex
-			if turnIdx <= 0 {
-				turnIdx = rt.NextChatTurnIndex(cid)
-			}
-			dedupLog := chatRouteLogger(log, rid, cid, sess.TenantID, turnIdx)
-			w.Header().Set(headerConversationID, cid)
-			if dedupLog != nil {
-				dedupRecv := []any{
-					"msg", naming.MsgConversationReceived,
-					"clientModel", clientModel, "stream", stream, "tenant", sess.TenantID,
-					"project", proj, "flavor", flav, "cid_source", "merge", "timeline_kind", naming.TimelineKindBroker,
-				}
-				if mc := conversationwitness.RequestMessageCount(raw); mc > 0 {
-					dedupRecv = append(dedupRecv, "message_count", mc)
-				}
-				dedupLog.Info("conversation received", dedupRecv...)
-				emitConversationRequestWitness(dedupLog, res, raw)
-			}
-			if fp := mergeSvc.RollingFingerprint(ctx, cid); fp != "" {
-				w.Header().Set(headerRollingFingerprint, fp)
-			}
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			n, _ := w.Write(out.DedupJSON)
-			if hist := newHistoryRecorder(rt, log, ctx, r, sess.TenantID, cid, lastUser, clientModel, proj, flav); hist != nil {
-				hist.PersistDedup(out.DedupJSON)
-			}
-			if dedupLog != nil {
-				conversationwitness.LogResponseWitness(dedupLog, false, out.DedupJSON)
-				if res.ShouldEmitPayloadSample() {
-					conversationwitness.LogPayloadSample(dedupLog, true, res.WitnessSampleMaxRunes(), "response", out.DedupJSON)
-				}
-				dedupLog.Info("conversation delivered", "msg", naming.MsgConversationDelivered,
-					"statusCode", http.StatusOK, "stream", false, "bytes", int64(n),
-					"total_ms", time.Since(flowStart).Milliseconds(), "timeline_kind", naming.TimelineKindBroker)
-			}
-			return
-		}
-		cid = out.ConversationID
-		mergeTurn = out.TurnIndex
-		cidSource = "merge"
-	default:
-		cid = uuid.NewString()
-		cidSource = "generated"
-	}
-
-	turnIdx := mergeTurn
-	if turnIdx <= 0 {
-		turnIdx = rt.NextChatTurnIndex(cid)
-	}
+	turnIdx := rt.NextChatTurnIndex(cid)
 
 	routeLog := chatRouteLogger(log, rid, cid, sess.TenantID, turnIdx)
 	w.Header().Set(headerConversationID, cid)
@@ -785,23 +699,6 @@ func handleV1Chat(w http.ResponseWriter, r *http.Request, rt *Runtime, log *slog
 	LogConversationIncomingToolMessages(routeLog, raw["messages"])
 
 	var chatOpts *chat.ProxyOpts
-	if mergeSvc != nil && !stream {
-		ms := mergeSvc
-		ccid := cid
-		ccTenant := sess.TenantID
-		lu := lastUser
-		chatOpts = &chat.ProxyOpts{
-			OnUpstreamJSONSuccess: func(status int, upstreamModel string, jsonBody []byte) {
-				if status < 200 || status >= 300 {
-					return
-				}
-				fp := ms.RecordTurn(ctx, ccTenant, proj, flav, ccid, lu, jsonBody, time.Now().UTC(), rid)
-				if fp != "" {
-					w.Header().Set(headerRollingFingerprint, fp)
-				}
-			},
-		}
-	}
 	attachConversationDelivery(routeLog, &chatOpts)
 	chatOpts.UpstreamRequestID = rid
 	chatOpts.WitnessEmitPayloadSample = res.ShouldEmitPayloadSample()
@@ -812,7 +709,7 @@ func handleV1Chat(w http.ResponseWriter, r *http.Request, rt *Runtime, log *slog
 		histRec.Attach(&chatOpts)
 	}
 
-	vmCtx, vmStatus, vmErrBody := resolveVirtualModelChat(rt, clientModel, sess.TenantID, res)
+	vmCtx, vmStatus, vmErrBody := resolveVirtualModelChat(rt, clientModel, sess.TenantID)
 	if vmErrBody != nil {
 		if histRec != nil {
 			histRec.PersistGatewayError(vmStatus, vmErrBody)
@@ -823,7 +720,7 @@ func handleV1Chat(w http.ResponseWriter, r *http.Request, rt *Runtime, log *slog
 		return
 	}
 	if vmCtx != nil {
-		if handleVirtualModelChat(ctx, w, rt, res, pol, vmCtx, raw, stream, skipToolRouter, th, routeLog,
+		if handleVirtualModelChat(ctx, w, rt, res, vmCtx, raw, stream, skipToolRouter, headerToolThresh, routeLog,
 			cid, turnIdx, rid, sess.TenantID, proj, flav, apiKey, rtDur, chatOpts, histRec) {
 			return
 		}
@@ -908,7 +805,7 @@ func httpAccessLogLevel(path string, status int) slog.Level {
 	if status < 200 || status >= 300 {
 		return slog.LevelInfo
 	}
-	if strings.HasPrefix(path, "/ui/assets/") || strings.HasPrefix(path, "/assets/") {
+	if strings.HasPrefix(path, "/ui/assets/") {
 		return slog.LevelDebug
 	}
 	if path == "/v1/indexer/workspaces" {
@@ -960,9 +857,3 @@ func loggingMiddleware(log *slog.Logger, next http.Handler) http.Handler {
 
 // headerConversationID is an optional client-provided id for log correlation; must match requestid.Valid charset.
 const headerConversationID = naming.HeaderConversationIDTarget
-
-// headerRequestFingerprint optional client echo of legacy rolling fingerprint header for duplicate detection.
-const headerRequestFingerprint = naming.HeaderRequestFingerprintTarget
-
-// headerRollingFingerprint is the gateway-computed rolling hash after each completed JSON completion.
-const headerRollingFingerprint = naming.HeaderRollingFingerprintTarget

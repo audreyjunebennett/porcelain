@@ -16,8 +16,7 @@ func TestLoadGatewayYAML_providerLimits_defaultPath_missingFile_emptySpec(t *tes
 	}
 	raw := strings.TrimSpace(`
 gateway: { listen_port: 3000 }
-paths: { tokens: "./t.yaml", routing_policy: "./r.yaml" }
-routing: { fallback_chain: ["a/b"] }
+paths: { tokens: "./t.yaml" }
 `)
 	if err := os.WriteFile(gw, []byte(raw+"\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -54,8 +53,7 @@ providers:
 	}
 	raw := `
 gateway: { listen_port: 3000 }
-paths: { tokens: "./t.yaml", routing_policy: "./r.yaml" }
-routing: { fallback_chain: ["a/b"] }
+paths: { tokens: "./t.yaml" }
 `
 	if err := os.WriteFile(gw, []byte(raw), 0o644); err != nil {
 		t.Fatal(err)

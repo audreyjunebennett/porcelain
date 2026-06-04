@@ -29,7 +29,7 @@ func RefreshAvailableModels(ctx context.Context, rt *Runtime, log *slog.Logger) 
 		return nil
 	}
 	apiKey := rt.UpstreamAPIKey()
-	res, _, _ := rt.Snapshot()
+	res, _ := rt.Snapshot()
 	snap := catalog.BuildSnapshot(ctx, res, apiKey, healthTimeout(res), log)
 	rt.SetCatalogSnapshot(snap)
 	catalog.EmitAvailableModelsLog(snap, log)

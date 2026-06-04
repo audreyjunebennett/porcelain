@@ -1,6 +1,7 @@
 package indexer
 
 import (
+	"runtime/debug"
 	"sync/atomic"
 	"time"
 )
@@ -304,6 +305,7 @@ func (ix *Indexer) MaybeEmitScopeStatusEdge(explicitReason string) {
 		ix.lastScopeStatusEmitted = map[string]scopeStatusEmitted{}
 	}
 
+	prevGlobals := ix.lastGlobalScopeStatus
 	globals := readings[0].globals
 	globalReason := explicitReason
 	if globalReason == "" {
@@ -337,6 +339,9 @@ func (ix *Indexer) MaybeEmitScopeStatusEdge(explicitReason string) {
 		}
 	}
 	ix.lastGlobalScopeStatus = globals
+	if globals.PhaseEdgeBucket == "watch_idle" && prevGlobals.PhaseEdgeBucket != "watch_idle" {
+		debug.FreeOSMemory()
+	}
 }
 
 func (ix *Indexer) logScopeStatusLine(r scopeStatusReading, changeReason string) {

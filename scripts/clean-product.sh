@@ -44,7 +44,7 @@ chimera_clean_run_confirm_msg() {
 		echo "chimera-vectorstore-clean-run: removes data/vectorstore/ — stop the stack first; re-run with CONFIRM=1"
 		;;
 	indexer)
-		echo "chimera-indexer-clean-run: removes data/gateway/indexer.* — stop the stack first; re-run with CONFIRM=1"
+		echo "chimera-indexer-clean-run: removes data/indexer/ — stop the stack first; re-run with CONFIRM=1"
 		;;
 	*)
 		echo "chimera-${PRODUCT}-clean-run: removes runtime state — stop the stack first; re-run with CONFIRM=1"
@@ -216,8 +216,7 @@ indexer)
 		rm_paths "config/indexer.yaml"
 	fi
 	if want run; then
-		rm_paths \
-			"data/indexer.sync-state.json" 
+		rm_paths "data/indexer"
 	fi
 	;;
 desktop)

@@ -7,20 +7,20 @@
 | **Status** | `current` |
 | **Introduced** | Gateway operator shell v0.2 train (embed UI refactor) |
 | **Originated from** | Chat-only implementation; no delivery plan |
-| **Related features** | [Operator conversation history](operator-conversation-history.md), [Operator chat UI](operator-chat-ui.md) |
+| **Related features** | [Operator conversation history](operator-conversation-history.md), [Operator chat UI](operator-chat-ui.md), [Operator workspace search](operator-workspace-search.md) |
 | **Depends on** | UI session auth, `/ui` app shell iframe, conversation history API |
 | **Last updated** | See git history |
 
 ## At a glance
 
-The operator app at `/ui` shows a persistent left navigation ribbon beside the main content iframe. The ribbon has two states—**collapsed** (a narrow icon rail) and **expanded** (a panel with saved chat history). Navigation, history browsing, new chat, and settings all live in the ribbon; there is no separate top navigation bar. Chat and settings load in the iframe to the right while the ribbon stays visible. Expanded/collapsed state is remembered in browser `localStorage`.
+The operator app at `/ui` shows a persistent left navigation ribbon beside the main content iframe. The ribbon has two states—**collapsed** (a narrow icon rail) and **expanded** (a panel with saved chat history). Navigation, history browsing, new chat, workspace search, and settings all live in the ribbon; there is no separate top navigation bar. Chat, search, and settings load in the iframe to the right while the ribbon stays visible. Expanded/collapsed state is remembered in browser `localStorage`.
 
 ## Operator-visible behavior
 
 ### Layout
 
 - **`GET /ui`** renders the app shell (`index.html`): `[ ribbon | iframe ]`.
-- Default iframe route is **`/ui/chat`**. Settings opens at **`/ui/settings?embed=1`** inside the same iframe.
+- Default iframe route is **`/ui/chat`**. Settings opens at **`/ui/settings?embed=1`**; workspace search at **`/ui/search?embed=1`** inside the same iframe.
 - The former shell top bar (reload, copy chat, settings gear) is **removed**.
 
 ### Collapsed ribbon (~3 rem)
@@ -30,7 +30,8 @@ Always visible. Top to bottom:
 1. **History toggle** — Material icon `side_navigation`. Tooltip: **Show chat history**. Expands the panel.
 2. **New chat** — icon only (`edit_square`). Starts a new chat session in the iframe.
 3. *(flex spacer)*
-4. **Settings** — fixed at the **bottom-left** of the ribbon (`settings` icon). Opens settings in the iframe; when settings is already open, returns to the prior route.
+4. **Search** — fixed above settings in the ribbon footer (`manage_search` icon). Opens workspace search in the iframe; when search is already open, returns to the prior route.
+5. **Settings** — fixed at the **bottom-left** of the ribbon (`settings` icon). Opens settings in the iframe; when settings is already open, returns to the prior route.
 
 ### Expanded ribbon (~16 rem)
 
@@ -41,7 +42,8 @@ Animated width transition. Top to bottom:
 3. **All / Bookmarks** filter tabs (above the rule).
 4. **Horizontal rule**.
 5. **Chat history list** — scrolls independently; subtle bottom fade indicates more content above the footer.
-6. **Settings** — fixed footer at **bottom-left**; icon plus **Settings** label when expanded.
+6. **Search** — footer control above settings; icon plus **Search** label when expanded.
+7. **Settings** — fixed footer at **bottom-left**; icon plus **Settings** label when expanded.
 
 ### History list (expanded only)
 
@@ -73,9 +75,10 @@ Ribbon text uses the same **design-01** tokens as `/ui/settings` (Hanken Grotesk
 
 Font **sizes** in the ribbon are unchanged from the ribbon UX pass; only family, weight, letter-spacing, and foreground colors align with settings.
 
-### New chat and settings
+### New chat, search, and settings
 
 - **New chat** clears the in-memory chat session and assigns a new `conversation_id` on the next send. It does **not** delete persisted history rows (see [Operator conversation history](operator-conversation-history.md)).
+- **Search** remembers the iframe route (and open chat conversation when leaving chat) before opening search and restores them when search is closed from the ribbon.
 - **Settings** remembers the iframe route before opening settings and restores it when settings is closed from the ribbon.
 
 ## System behavior and contracts
@@ -93,10 +96,10 @@ Font **sizes** in the ribbon are unchanged from the ribbon UX pass; only family,
 
 | Topic | Decision |
 |-------|----------|
-| Ribbon placement | App shell (`index.html`), not inside `chat.html`, so navigation persists across chat ↔ settings |
+| Ribbon placement | App shell (`index.html`), not inside `chat.html`, so navigation persists across chat ↔ search ↔ settings |
 | Top bar | Removed; ribbon is sole chrome for navigation |
 | History filters | Rendered in `#shell-ribbon-filters` above the rule, not inside the scrollable list |
-| Settings footer | Only control in ribbon footer; pinned bottom-left with `margin-top: auto` |
+| Settings footer | Search and settings stacked in ribbon footer; pinned bottom-left with `margin-top: auto` |
 | Bookmarks vs flag | UI says **Bookmarks**; API and store still use `flagged` / `?flagged=1` |
 | Row actions | Bookmark toggle only in ribbon; rename/delete deferred from ribbon (title edit remains in chat title bar when a thread is open) |
 | Expanded state persistence | `localStorage` key `chimera-ribbon-expanded` (`"1"` / `"0"`) |
@@ -113,6 +116,7 @@ Font **sizes** in the ribbon are unchanged from the ribbon UX pass; only family,
 |---------|--------|
 | `GET /ui` | App shell with ribbon + iframe |
 | `GET /ui/chat` | Chat page loaded in iframe |
+| `GET /ui/search?embed=1` | Workspace search page loaded in iframe |
 | `GET /ui/settings?embed=1` | Settings page loaded in iframe |
 | `GET /api/ui/conversations` | History list (shell panel); see conversation history feature |
 | `GET /api/ui/conversations/{id}` | Transcript load (chat iframe via `historyClient.js`) |
@@ -156,11 +160,12 @@ go test ./chimera/chimera-gateway/internal/server/adminui/embed/embedui_test -ru
 
 Manual:
 
-1. Open `/ui` — confirm no top bar; collapsed ribbon with toggle, new chat, and bottom settings.
-2. Expand ribbon (**Ctrl+B** or toggle) — **Porcelain**, filters above rule, scrollable history, fixed settings footer.
+1. Open `/ui` — confirm no top bar; collapsed ribbon with toggle, new chat, and footer search + settings.
+2. Expand ribbon (**Ctrl+B** or toggle) — **Porcelain**, filters above rule, scrollable history, fixed search + settings footer.
 3. Open a saved chat — title and messages appear in the main panel; list scroll unchanged.
 4. **New chat** (**Ctrl+N**) — empty chat; list selection clears.
-5. **Settings** — settings in iframe; ribbon stays; close returns to prior page.
+5. **Search** — workspace search in iframe; ribbon stays; close returns to prior page (including open chat thread when applicable).
+6. **Settings** — settings in iframe; ribbon stays; close returns to prior page.
 6. Reload `/ui` — expanded state restored from `localStorage`.
 
 ## Out of scope and known gaps
@@ -169,7 +174,7 @@ Manual:
 - **Copy chat** and **Reload** removed with the old top bar; copy remains per-message inside chat.
 - Mobile overlay / drawer treatment for narrow viewports.
 - `Cmd+B` / `Cmd+N` on macOS (shortcuts require **Ctrl** today).
-- Ribbon does not appear on standalone `/ui/chat` or `/ui/settings` without the shell.
+- Ribbon does not appear on standalone `/ui/chat`, `/ui/search`, or `/ui/settings` without the shell.
 
 ## References
 

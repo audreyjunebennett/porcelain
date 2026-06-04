@@ -75,7 +75,7 @@ func TestStateObsLevel_changeEmitsInfo(t *testing.T) {
 	}
 }
 
-func TestEmitStorageStatsAndState_missingCollectionRepeatsWarn(t *testing.T) {
+func TestEmitStorageStatsAndState_missingCollectionAutoRepairOnce(t *testing.T) {
 	var buf syncBuffer
 	log := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
@@ -109,7 +109,16 @@ func TestEmitStorageStatsAndState_missingCollectionRepeatsWarn(t *testing.T) {
 			Scope:   ScopeFragment{ProjectID: "porcelain"},
 		}},
 	}
+	dir := t.TempDir()
+	st, err := OpenSyncState(filepath.Join(dir, "sync.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	_ = st.Put("r1"+scopeKeySep+"f", SyncEntry{ClientSHA: "c", ServerSHA: "s"})
+
 	ix := New(cfg, client, log)
+	ix.syncState = st
 	ix.initialScanCompleted.Store(true)
 	gw := &IndexerConfig{TenantID: "lynn"}
 	gw.Defaults.ProjectID = "porcelain"
@@ -119,9 +128,15 @@ func TestEmitStorageStatsAndState_missingCollectionRepeatsWarn(t *testing.T) {
 	ix.EmitStorageStatsAndState(ctx, true)
 	ix.EmitStorageStatsAndState(ctx, true)
 
+	if strings.Contains(buf.String(), "indexer.reindex.auto_collection_missing") == false {
+		t.Fatalf("expected auto-repair log: %q", buf.String())
+	}
 	statsInfo, statsWarn, statsDebug := observationLevelCounts(buf.String(), "indexer.storage.stats")
-	if statsInfo != 0 || statsWarn != 2 || statsDebug != 0 {
-		t.Fatalf("missing collection should repeat WARN: info=%d warn=%d debug=%d body=%q", statsInfo, statsWarn, statsDebug, buf.String())
+	if statsWarn != 0 {
+		t.Fatalf("missing collection should not WARN: warn=%d body=%q", statsWarn, buf.String())
+	}
+	if statsInfo < 1 {
+		t.Fatalf("expected INFO storage stats: info=%d debug=%d body=%q", statsInfo, statsDebug, buf.String())
 	}
 }
 

@@ -388,6 +388,53 @@ func containsAll(s string, parts ...string) bool {
 	return true
 }
 
+func TestOperatorMessage_indexer_storage_stats_missingCollection(t *testing.T) {
+	vm := goja.New()
+	loadOperatorMessageCtx(t, vm)
+	fn, ok := goja.AssertFunction(vm.Get("ChimeraSettings").ToObject(vm).Get("Render").ToObject(vm).Get("operatorMessage"))
+	if !ok {
+		t.Fatal("missing operatorMessage")
+	}
+	v, err := fn(goja.Undefined(), vm.ToValue(map[string]any{
+		"service":        "indexer",
+		"msg":            "indexer.storage.stats",
+		"available":      false,
+		"ingest_project": "assistants",
+		"detail":         "qdrant GET /collections/foo: status 404: collection doesn't exist",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := v.String()
+	if !containsAll(got, "No search index yet", "assistants", "next ingest") {
+		t.Fatalf("got %q", got)
+	}
+	if contains(got, "Could not verify") {
+		t.Fatalf("generic verify copy leaked: %q", got)
+	}
+}
+
+func TestOperatorMessage_gateway_workspace_reindex_requested(t *testing.T) {
+	vm := goja.New()
+	loadOperatorMessageCtx(t, vm)
+	fn, ok := goja.AssertFunction(vm.Get("ChimeraSettings").ToObject(vm).Get("Render").ToObject(vm).Get("operatorMessage"))
+	if !ok {
+		t.Fatal("missing operatorMessage")
+	}
+	v, err := fn(goja.Undefined(), vm.ToValue(map[string]any{
+		"service":            "gateway",
+		"msg":                "gateway.operator.workspace.reindex_requested",
+		"workspace_id":       3,
+		"reindex_generation": 2,
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !containsAll(v.String(), "Re-index requested", "workspace 3", "generation 2") {
+		t.Fatalf("got %q", v.String())
+	}
+}
+
 func TestOperatorMessage_operatorFriendlyGatewayMsg_compat(t *testing.T) {
 	vm := goja.New()
 	loadOperatorMessageCtx(t, vm)

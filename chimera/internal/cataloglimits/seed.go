@@ -3,13 +3,17 @@
 package cataloglimits
 
 import (
+	"database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/lynn/porcelain/chimera/internal/providerlimits"
 	"gopkg.in/yaml.v3"
+	_ "modernc.org/sqlite"
 )
 
 const schemaVersion = 2
@@ -64,31 +68,99 @@ func LoadCatalogContextLengths(path string) (map[string]int64, error) {
 	return out, nil
 }
 
-// LoadFallbackChain reads routing.fallback_chain from gateway.yaml when present.
-func LoadFallbackChain(path string) ([]string, error) {
-	raw, err := os.ReadFile(path)
+// CatalogModelIDs returns all model ids from catalog-available.snapshot.yaml.
+func CatalogModelIDs(path string) ([]string, error) {
+	catalog, err := LoadCatalogContextLengths(path)
 	if err != nil {
-		return nil, fmt.Errorf("read gateway %s: %w", path, err)
+		return nil, err
 	}
-	var doc struct {
-		Routing struct {
-			FallbackChain []string `yaml:"fallback_chain"`
-		} `yaml:"routing"`
+	out := make([]string, 0, len(catalog))
+	for id := range catalog {
+		out = append(out, id)
 	}
-	if err := yaml.Unmarshal(raw, &doc); err != nil {
-		return nil, fmt.Errorf("parse gateway %s: %w", path, err)
-	}
-	var out []string
-	for _, id := range doc.Routing.FallbackChain {
-		if id = strings.TrimSpace(id); id != "" {
-			out = append(out, id)
-		}
-	}
+	sort.Strings(out)
 	return out, nil
 }
 
+// LoadEnsureModelsFromOperatorSQLite reads fallback chain entries from enabled virtual models.
+func LoadEnsureModelsFromOperatorSQLite(path string) ([]string, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return nil, nil
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return nil, fmt.Errorf("operator sqlite path: %w", err)
+	}
+	dsn := "file:" + filepath.ToSlash(abs) + "?mode=ro"
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("open operator sqlite %s: %w", path, err)
+	}
+	defer db.Close()
+
+	rows, err := db.Query(`SELECT f.chain_json
+		FROM virtual_model_fallback f
+		INNER JOIN virtual_models v ON v.id = f.virtual_model_id
+		WHERE v.enabled = 1`)
+	if err != nil {
+		return nil, fmt.Errorf("query virtual model fallback chains: %w", err)
+	}
+	defer rows.Close()
+
+	seen := map[string]struct{}{}
+	var out []string
+	for rows.Next() {
+		var chainJSON string
+		if err := rows.Scan(&chainJSON); err != nil {
+			return nil, err
+		}
+		var chain []string
+		if err := json.Unmarshal([]byte(chainJSON), &chain); err != nil {
+			return nil, fmt.Errorf("parse fallback chain json: %w", err)
+		}
+		for _, id := range chain {
+			id = strings.TrimSpace(id)
+			if id == "" {
+				continue
+			}
+			if _, ok := seen[id]; ok {
+				continue
+			}
+			seen[id] = struct{}{}
+			out = append(out, id)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+// MergeEnsureModels deduplicates and sorts ensure-model id lists.
+func MergeEnsureModels(parts ...[]string) []string {
+	seen := map[string]struct{}{}
+	var out []string
+	for _, part := range parts {
+		for _, id := range part {
+			id = strings.TrimSpace(id)
+			if id == "" {
+				continue
+			}
+			if _, ok := seen[id]; ok {
+				continue
+			}
+			seen[id] = struct{}{}
+			out = append(out, id)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
 // ApplyContextWindows merges context_window (and known prompt overrides) into cfg.
-// ensureModels lists ids that must exist after seeding (e.g. gateway fallback_chain entries).
+// ensureModels lists ids that must exist after seeding (e.g. virtual model fallback chains).
 func ApplyContextWindows(cfg *providerlimits.Config, catalog map[string]int64, ensureModels []string, opts ApplyOptions) ApplyReport {
 	if cfg == nil {
 		return ApplyReport{}

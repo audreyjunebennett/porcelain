@@ -565,7 +565,7 @@ func TestUISettingsAssets_servesEntryJSWhenAuthed(t *testing.T) {
 	}
 }
 
-func TestUILogsAssets_summarizedFeedContainsBrokerServiceSummary(t *testing.T) {
+func TestUILogsAssets_serviceFeedContainsBrokerServiceSummary(t *testing.T) {
 	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	up := chimeraBrokerStubForUILogs(t)
 	t.Cleanup(up.Close)
@@ -584,42 +584,49 @@ func TestUILogsAssets_summarizedFeedContainsBrokerServiceSummary(t *testing.T) {
 	if _, err := client.Post(front.URL+"/api/ui/login", "application/json", strings.NewReader(`{"token":"gw-ui-secret"}`)); err != nil {
 		t.Fatal(err)
 	}
-	res, err := client.Get(front.URL + "/ui/assets/settings/app/summarizedFeed.js")
-	if err != nil {
-		t.Fatal(err)
+	fetchAuthedAsset := func(path string) string {
+		t.Helper()
+		res, err := client.Get(front.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		if res.StatusCode != http.StatusOK {
+			t.Fatalf("GET %s status %d", path, res.StatusCode)
+		}
+		b, err := io.ReadAll(res.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
 	}
-	defer res.Body.Close()
-	if res.StatusCode != http.StatusOK {
-		t.Fatalf("status %d", res.StatusCode)
+
+	serviceFeed := fetchAuthedAsset("/ui/assets/settings/render/cards/serviceFeed/broker.js")
+	if !strings.Contains(serviceFeed, "indexer-run-kv--chimera-broker-summary") {
+		t.Fatal("expected chimera-broker service card KV class in serviceFeed module")
 	}
-	b, err := io.ReadAll(res.Body)
-	if err != nil {
-		t.Fatal(err)
+	if !strings.Contains(serviceFeed, "sum-mini-row--chimera-broker-deck") {
+		t.Fatal("expected chimera-broker summary deck layout class in serviceFeed module")
 	}
-	body := string(b)
-	if !strings.Contains(body, "indexer-run-kv--chimera-broker-summary") {
-		t.Fatal("expected chimera-broker service card KV class in summarized feed module")
+	if !strings.Contains(serviceFeed, "Provider health") {
+		t.Fatal("expected broker provider-health section label in serviceFeed module")
 	}
-	if !strings.Contains(body, "sum-mini-row--chimera-broker-deck") {
-		t.Fatal("expected chimera-broker summary deck layout class in summarized feed module")
+	if !strings.Contains(serviceFeed, "Relay outcomes") {
+		t.Fatal("expected broker relay-outcome section label in serviceFeed module")
 	}
-	if !strings.Contains(body, "Provider health") {
-		t.Fatal("expected broker provider-health section label in summarized feed module")
+	if !strings.Contains(serviceFeed, "sum-bf-prov-health-root") {
+		t.Fatal("expected provider-health strip root class in serviceFeed module")
 	}
-	if !strings.Contains(body, "Relay outcomes") {
-		t.Fatal("expected broker relay-outcome section label in summarized feed module")
+	if !strings.Contains(serviceFeed, "sum-timeline-bar--relay-outcome") {
+		t.Fatal("expected relay-outcome strip class in serviceFeed module")
 	}
-	if !strings.Contains(body, "sum-bf-prov-health-root") {
-		t.Fatal("expected provider-health strip root class in summarized feed module")
-	}
-	if !strings.Contains(body, "sum-timeline-bar--relay-outcome") {
-		t.Fatal("expected relay-outcome strip class in summarized feed module")
-	}
-	if !strings.Contains(body, "/api/ui/chimera-broker/providers") {
-		t.Fatal("expected summarized feed module to fetch live broker provider snapshot")
-	}
-	if !strings.Contains(body, "chimera-broker-provider-health-strip") {
+	if !strings.Contains(serviceFeed, "chimera-broker-provider-health-strip") {
 		t.Fatal("expected stable id wrapper for broker provider-health strip patching")
+	}
+
+	polling := fetchAuthedAsset("/ui/assets/settings/app/summarizedPolling.js")
+	if !strings.Contains(polling, "/api/ui/chimera-broker/providers") {
+		t.Fatal("expected summarized polling module to fetch live broker provider snapshot")
 	}
 }
 
@@ -717,43 +724,6 @@ func TestUIShellPage_servesWhenAuthed(t *testing.T) {
 	}
 }
 
-func TestUIPWAPage_servesWhenAuthed(t *testing.T) {
-	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
-	up := chimeraBrokerStubForUILogs(t)
-	t.Cleanup(up.Close)
-
-	rt := runtimeForUILogs(t, up.URL)
-	ui := NewUIOptions()
-	ui.LogStore = servicelogs.New(10)
-	front := httptest.NewServer(NewMux(rt, testLog(), nil, ui))
-	t.Cleanup(front.Close)
-
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar}
-	if _, err := client.Post(front.URL+"/api/ui/login", "application/json", strings.NewReader(`{"token":"gw-ui-secret"}`)); err != nil {
-		t.Fatal(err)
-	}
-	res, err := client.Get(front.URL + "/ui/pwa")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer res.Body.Close()
-	if res.StatusCode != http.StatusOK {
-		t.Fatalf("status %d", res.StatusCode)
-	}
-	b, err := io.ReadAll(res.Body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	page := string(b)
-	if !strings.Contains(page, ">PWA<") {
-		t.Fatal("expected PWA landing content")
-	}
-}
-
 func TestUILegacyRoutes_notFoundWhenAuthed(t *testing.T) {
 	t.Setenv(naming.EnvBrokerAPIKeyTarget, "ukey")
 	up := chimeraBrokerStubForUILogs(t)
@@ -774,7 +744,7 @@ func TestUILegacyRoutes_notFoundWhenAuthed(t *testing.T) {
 		t.Fatal(err)
 	}
 	legacy := []string{
-		"/ui/desktop", "/ui/logs", "/ui/panel", "/ui/metrics", "/ui/indexer",
+		"/ui/desktop", "/ui/logs", "/ui/panel", "/ui/metrics", "/ui/indexer", "/ui/pwa",
 		"/ui/gallery", "/ui/gallery/operator", "/ui/gallery/tokens",
 		"/ui/assets/reload.svg",
 	}
@@ -825,11 +795,17 @@ func TestUISettingsGallery_servesWhenAuthed(t *testing.T) {
 	for _, w := range []string{
 		"Settings gallery",
 		`/ui/assets/gallery/gallery-shell.css`,
+		`/ui/assets/gallery/gallery-card-fixtures.js`,
+		`/ui/assets/gallery/gallery-parts.js`,
+		`gallery-parts-toggle`,
+		`card-parts-registry.md`,
 		`/ui/assets/gallery/gallery-evlog-markup.js`,
 		`/ui/assets/gallery/gallery-event-log-demo.js`,
+		`gallery-fixture-overview`,
+		`gallery-fixture-provider-groq`,
+		`gallery-fixture-virtual-model`,
 		`data-sum-evlog-cols="2"`,
 		`sum-evlog__msg-meta`,
-		`material-symbols-outlined`,
 	} {
 		if !strings.Contains(page, w) {
 			t.Fatalf("missing %q in gallery HTML", w)
@@ -869,7 +845,7 @@ func TestUIOperatorPages_serveWithoutLogStore(t *testing.T) {
 	if _, err := client.Post(front.URL+"/api/ui/login", "application/json", strings.NewReader(`{"token":"gw-ui-secret"}`)); err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{"/ui", "/ui/chat", "/ui/pwa", "/ui/settings", "/ui/settings/gallery"} {
+	for _, path := range []string{"/ui", "/ui/chat", "/ui/settings", "/ui/settings/gallery"} {
 		res, err := client.Get(front.URL + path)
 		if err != nil {
 			t.Fatal(err)

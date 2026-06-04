@@ -1,21 +1,21 @@
 # Plan: Short title (under ~10 words)
 
-| Field | Value |
-|-------|-------|
-| **Doc kind** | `feature-plan` |
-| **Owners / areas** | Gateway, indexer, desktop, … |
-| **Status** | `draft` |
-| **Targets** | e.g. gateway v0.4, indexer Phase 7 |
-| **Last updated** | See git history |
-| **Supersedes / superseded by** | None |
-| **As-built** | None — link to [`docs/features/`](../features/README.md) when shipped |
+| Field                          | Value                                                                 |
+|--------------------------------|-----------------------------------------------------------------------|
+| **Doc kind**                   | `feature-plan`                                                        |
+| **Owners / areas**             | Gateway, indexer, desktop, …                                          |
+| **Status**                     | `draft`                                                               |
+| **Targets**                    | e.g. gateway v0.4, indexer Phase 7                                    |
+| **Last updated**               | See git history                                                       |
+| **Supersedes / superseded by** | None                                                                  |
+| **As-built**                   | None — link to [`docs/features/`](../features/README.md) when shipped |
 
 ## At a glance
 
 One to three sentences in plain language. Lead with the value to the operator or end-user, not the implementation. Avoid acronyms when a normal phrase will do, and avoid words that only make sense to people already deep in the codebase.
 
-| Phase | Outcome | Status |
-|-------|---------|--------|
+| Phase                                                      | Outcome                      | Status |
+|------------------------------------------------------------|------------------------------|--------|
 | [Phase 1 — Short phase title](#phase-1--short-phase-title) | One-line user-facing outcome | `todo` |
 | [Phase 2 — Short phase title](#phase-2--short-phase-title) | One-line user-facing outcome | `todo` |
 | [Phase 3 — Short phase title](#phase-3--short-phase-title) | One-line user-facing outcome | `todo` |

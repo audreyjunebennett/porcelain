@@ -9,26 +9,16 @@ type StateResponse struct {
 
 // GatewayState is the gateway section of GET /api/ui/state.
 type GatewayState struct {
-	Semver                        string                `json:"semver"`
-	VirtualModelID                string                `json:"virtual_model_id"`
-	PublicBaseURL                 string                `json:"public_base_url"`
-	TokenHint                     string                `json:"token_hint"`
-	FilterFreeTierModels          bool                  `json:"filter_free_tier_models"`
-	FallbackChain                 []string              `json:"fallback_chain"`
-	RoutingPolicyBasename         string                `json:"routing_policy_basename"`
-	RouterModels                  []string              `json:"router_models"`
-	ToolRouterEnabled             bool                  `json:"tool_router_enabled"`
-	ToolRouterConfidenceThreshold float64               `json:"tool_router_confidence_threshold"`
-	ToolRouterLastModel           string                `json:"tool_router_last_model"`
-	ToolRouterLastError           string                `json:"tool_router_last_error"`
-	ToolRouterLastAt              string                `json:"tool_router_last_at"`
-	RoutingPolicyYAML             string                `json:"routing_policy_yaml"`
-	ServiceOverview               ServiceOverview       `json:"service_overview"`
-	IndexerSupervisedConfigPath   string                `json:"indexer_supervised_config_path"`
-	IndexerSupervisedEnabled      bool                  `json:"indexer_supervised_enabled"`
-	OperatorSQLitePath            string                `json:"operator_sqlite_path"`
-	OperatorStoreOpen             bool                  `json:"operator_store_open"`
-	VirtualModels                 []VirtualModelSummary `json:"virtual_models,omitempty"`
+	Semver                      string                `json:"semver"`
+	VirtualModelID              string                `json:"virtual_model_id"`
+	PublicBaseURL               string                `json:"public_base_url"`
+	TokenHint                   string                `json:"token_hint"`
+	ServiceOverview             ServiceOverview       `json:"service_overview"`
+	IndexerSupervisedConfigPath string                `json:"indexer_supervised_config_path"`
+	IndexerSupervisedEnabled    bool                  `json:"indexer_supervised_enabled"`
+	OperatorSQLitePath          string                `json:"operator_sqlite_path"`
+	OperatorStoreOpen           bool                  `json:"operator_store_open"`
+	VirtualModels               []VirtualModelSummary `json:"virtual_models,omitempty"`
 }
 
 // ServiceOverview is gateway.service_overview in GET /api/ui/state.

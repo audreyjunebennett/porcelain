@@ -48,32 +48,51 @@ globalThis.ChimeraSettings.Render.Cards.mountSharedFormat = function (ctx) {
     return formatInt(x);
   }
 
+  var GW_METRICS_COLGROUP =
+    "<colgroup>" +
+    '<col class="gw-metrics-col-provider">' +
+    '<col class="gw-metrics-col-model">' +
+    '<col class="gw-metrics-col-http">' +
+    '<col class="gw-metrics-col-num">' +
+    '<col class="gw-metrics-col-num">' +
+    "</colgroup>";
+  var GW_METRICS_EVENTS_COLGROUP =
+    "<colgroup>" +
+    '<col class="gw-metrics-col-time">' +
+    '<col class="gw-metrics-col-provider">' +
+    '<col class="gw-metrics-col-model">' +
+    '<col class="gw-metrics-col-http">' +
+    '<col class="gw-metrics-col-num">' +
+    "</colgroup>";
+
   function metricsRollupTableHtml(rows) {
     if (!rows || !rows.length) {
       return (
-        '<div class="sum-metrics-table-wrap">' +
-        '<table class="sum-metrics-table"><tbody>' +
+        '<div class="sum-metrics-table-wrap sum-metrics-table-wrap--scroll-body">' +
+        '<table class="sum-metrics-table sum-metrics-table--scroll-body"><tbody>' +
         '<tr><td class="muted">No models used</td></tr>' +
         "</tbody></table></div>"
       );
     }
     var h = [];
     h.push(
-      '<div class="sum-metrics-table-wrap"><table class="sum-metrics-table"><thead><tr><th>Provider</th><th>Model</th><th>HTTP</th><th class="num">Calls</th><th class="num">Est. tokens</th></tr></thead><tbody>'
+      '<div class="sum-metrics-table-wrap sum-metrics-table-wrap--scroll-body"><table class="sum-metrics-table sum-metrics-table--scroll-body">' +
+      GW_METRICS_COLGROUP +
+      '<thead><tr><th>Provider</th><th>Model</th><th>HTTP</th><th class="num">Calls</th><th class="num">tokens</th></tr></thead><tbody>'
     );
     for (var i = 0; i < rows.length; i++) {
       var r = rows[i];
       h.push(
         "<tr><td>" +
         escapeHtml(r.provider) +
-        '</td><td><code class="sum-mono-id">' +
+        '</td><td class="gw-metrics-cell-model"><code class="sum-mono-id">' +
         escapeHtml(r.model_id) +
-        '</code></td><td>' +
+        '</code></td><td class="gw-metrics-cell-http">' +
         escapeHtml(r.status) +
         '</td><td class="num">' +
-        escapeHtml(r.calls) +
+        escapeHtml(formatInt(r.calls)) +
         '</td><td class="num">' +
-        escapeHtml(r.est_tokens) +
+        escapeHtml(formatInt(r.est_tokens)) +
         "</td></tr>"
       );
     }
@@ -134,7 +153,9 @@ globalThis.ChimeraSettings.Render.Cards.mountSharedFormat = function (ctx) {
     }
     var h = [];
     h.push(
-      '<div class="sum-metrics-table-wrap sum-metrics-events-scroll"><table class="sum-metrics-table"><thead><tr><th>Time (UTC)</th><th>Provider</th><th>Model</th><th>HTTP</th><th class="num">Est. tokens</th></tr></thead><tbody>'
+      '<div class="sum-metrics-table-wrap sum-metrics-table-wrap--scroll-body sum-metrics-events-scroll"><table class="sum-metrics-table sum-metrics-table--scroll-body">' +
+      GW_METRICS_EVENTS_COLGROUP +
+      '<thead><tr><th>Time (UTC)</th><th>Provider</th><th>Model</th><th>HTTP</th><th class="num">tokens</th></tr></thead><tbody>'
     );
     for (var i = 0; i < rows.length; i++) {
       var r = rows[i];
@@ -143,12 +164,12 @@ globalThis.ChimeraSettings.Render.Cards.mountSharedFormat = function (ctx) {
         escapeHtml(formatUtcLikeLogTimestamp(r.occurred_at)) +
         "</td><td>" +
         escapeHtml(r.provider) +
-        '</td><td><code class="sum-mono-id">' +
+        '</td><td class="gw-metrics-cell-model"><code class="sum-mono-id">' +
         escapeHtml(r.model_id) +
-        '</code></td><td>' +
+        '</code></td><td class="gw-metrics-cell-http">' +
         escapeHtml(r.status) +
         '</td><td class="num">' +
-        escapeHtml(r.est_tokens) +
+        escapeHtml(formatInt(r.est_tokens)) +
         "</td></tr>"
       );
     }

@@ -111,8 +111,6 @@ archives:
         dst: config/api-keys.example.yaml
       - src: config/chimera-broker.config.json
         dst: config/chimera-broker.config.json
-      - src: config/routing-policy.yaml
-        dst: config/routing-policy.yaml
       - src: config/provider-free-tier.yaml
         dst: config/provider-free-tier.yaml
       - src: config/indexer.example.yaml

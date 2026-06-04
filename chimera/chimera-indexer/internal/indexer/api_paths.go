@@ -7,5 +7,6 @@ const (
 	apiPathIndexerStorageStats    = "/v1/indexer/storage/stats"
 	apiPathIndexerStorageHealth   = "/v1/indexer/storage/health"
 	apiPathIndexerCorpusInventory = "/v1/indexer/corpus/inventory"
+	apiPathIndexerCorpusStale     = "/v1/indexer/corpus/stale"
 	apiPathGatewayHealth          = "/health"
 )

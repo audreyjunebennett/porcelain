@@ -19,7 +19,7 @@ import (
 // (GET /v1/indexer/workspaces). Same auth and RAG gating as HandleConfig.
 func HandleWorkspaces(w http.ResponseWriter, r *http.Request, rt *gruntime.Runtime, _ *slog.Logger) {
 	rt.Sync()
-	res, tokStore, _ := rt.Snapshot()
+	res, tokStore := rt.Snapshot()
 	token := gwhttp.BearerToken(r.Header.Get("Authorization"))
 	sess := tokStore.Validate(token)
 	if token == "" || sess == nil {
@@ -47,10 +47,11 @@ func HandleWorkspaces(w http.ResponseWriter, r *http.Request, rt *gruntime.Runti
 		Path   string `json:"path"`
 	}
 	type wsOut struct {
-		WorkspaceID int64     `json:"workspace_id"`
-		ProjectID   string    `json:"project_id"`
-		FlavorID    string    `json:"flavor_id"`
-		Paths       []pathOut `json:"paths"`
+		WorkspaceID       int64     `json:"workspace_id"`
+		ProjectID         string    `json:"project_id"`
+		FlavorID          string    `json:"flavor_id"`
+		ReindexGeneration int64     `json:"reindex_generation"`
+		Paths             []pathOut `json:"paths"`
 	}
 	payload := struct {
 		Object     string  `json:"object"`
@@ -67,10 +68,11 @@ func HandleWorkspaces(w http.ResponseWriter, r *http.Request, rt *gruntime.Runti
 			paths = append(paths, pathOut{PathID: p.ID, Path: p.Path})
 		}
 		payload.Workspaces = append(payload.Workspaces, wsOut{
-			WorkspaceID: row.ID,
-			ProjectID:   row.ProjectID,
-			FlavorID:    row.FlavorID,
-			Paths:       paths,
+			WorkspaceID:       row.ID,
+			ProjectID:         row.ProjectID,
+			FlavorID:          row.FlavorID,
+			ReindexGeneration: row.ReindexGeneration,
+			Paths:             paths,
 		})
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -80,7 +82,7 @@ func HandleWorkspaces(w http.ResponseWriter, r *http.Request, rt *gruntime.Runti
 // HandleConfig returns the effective RAG / indexer settings for the authenticated tenant.
 func HandleConfig(w http.ResponseWriter, r *http.Request, rt *gruntime.Runtime, _ *slog.Logger) {
 	rt.Sync()
-	res, tokStore, _ := rt.Snapshot()
+	res, tokStore := rt.Snapshot()
 	token := gwhttp.BearerToken(r.Header.Get("Authorization"))
 	sess := tokStore.Validate(token)
 	if token == "" || sess == nil {
@@ -109,6 +111,13 @@ func HandleConfig(w http.ResponseWriter, r *http.Request, rt *gruntime.Runtime, 
 		"ingest_chunk_path_tpl":    "/v1/ingest/session/{session_id}/chunk",
 		"ingest_complete_path_tpl": "/v1/ingest/session/{session_id}/complete",
 		"corpus_inventory_path":    "/v1/indexer/corpus/inventory",
+		"corpus_stale_path":        "/v1/indexer/corpus/stale",
+		"coherence_mode":           CoherenceMode(res),
+		"rag_tooling_enabled":      res.RAG.ToolingEnabled,
+		"rag_segments_path":        "/v1/rag/segments",
+		"rag_context_path":         "/v1/rag/context",
+		"rag_adjacent_path":        "/v1/rag/adjacent",
+		"rag_tools_path":           "/v1/rag/tools",
 		"required_headers":         []string{"Authorization"},
 		"optional_headers":         []string{scope.HeaderProject, scope.HeaderFlavor, scope.HeaderIndexRun},
 		"payload_fields": []string{
@@ -135,7 +144,7 @@ func HandleConfig(w http.ResponseWriter, r *http.Request, rt *gruntime.Runtime, 
 // treating the JSON body as a transport error; auth and RAG-disabled errors remain 503.
 func HandleHealth(w http.ResponseWriter, r *http.Request, rt *gruntime.Runtime, log *slog.Logger) {
 	rt.Sync()
-	res, tokStore, _ := rt.Snapshot()
+	res, tokStore := rt.Snapshot()
 	token := gwhttp.BearerToken(r.Header.Get("Authorization"))
 	sess := tokStore.Validate(token)
 	if token == "" || sess == nil {
@@ -155,7 +164,7 @@ func HandleHealth(w http.ResponseWriter, r *http.Request, rt *gruntime.Runtime, 
 // HandleStats returns live vectorstore stats for the scoped collection.
 func HandleStats(w http.ResponseWriter, r *http.Request, rt *gruntime.Runtime, _ *slog.Logger) {
 	rt.Sync()
-	res, tokStore, _ := rt.Snapshot()
+	res, tokStore := rt.Snapshot()
 	token := gwhttp.BearerToken(r.Header.Get("Authorization"))
 	sess := tokStore.Validate(token)
 	if token == "" || sess == nil {
@@ -203,7 +212,7 @@ func HandleStats(w http.ResponseWriter, r *http.Request, rt *gruntime.Runtime, _
 // HandleCorpusInventory returns a paginated list of unique sources in the scoped corpus.
 func HandleCorpusInventory(w http.ResponseWriter, r *http.Request, rt *gruntime.Runtime, _ *slog.Logger) {
 	rt.Sync()
-	res, tokStore, _ := rt.Snapshot()
+	res, tokStore := rt.Snapshot()
 	token := gwhttp.BearerToken(r.Header.Get("Authorization"))
 	sess := tokStore.Validate(token)
 	if token == "" || sess == nil {

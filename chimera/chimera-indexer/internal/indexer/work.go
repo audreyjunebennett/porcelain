@@ -50,6 +50,11 @@ func ScopeKey(project, flavor string) string {
 	return project + scopeKeySep + flavor
 }
 
+// CorpusInventoryKey scopes a root-relative source path to one ingest corpus.
+func CorpusInventoryKey(project, flavor, relPath string) string {
+	return ScopeKey(project, flavor) + scopeKeySep + relPath
+}
+
 // FanoutMeta carries scan-derived scheduling metadata for logging and fan-out.
 type FanoutMeta struct {
 	NScopes               int
@@ -76,7 +81,8 @@ type WorkItem struct {
 	BulkScopeKey string
 
 	// Scan (WorkScan)
-	ScanID string
+	ScanID      string
+	ScanRootIDs []string // when non-empty, walk only these root ids
 
 	// Fan-out list (WorkFanoutList)
 	FanoutID   string

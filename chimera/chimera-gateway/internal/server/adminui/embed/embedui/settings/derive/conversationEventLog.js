@@ -153,13 +153,6 @@
     };
   }
 
-  function turnHasMerged(sortedAsc, getFlat) {
-    for (var i = 0; i < sortedAsc.length; i++) {
-      if (flatMsg(getFlat(sortedAsc[i].parsed)) === "conversation.merged") return true;
-    }
-    return false;
-  }
-
   function turnIndexFromEvents(sortedAsc, getFlat) {
     for (var i = sortedAsc.length - 1; i >= 0; i--) {
       var f = getFlat(sortedAsc[i].parsed);
@@ -174,7 +167,6 @@
     var msg = flatMsg(flat);
     if (!msg) return false;
     var ml = msg.toLowerCase();
-    if (msg === "conversation.merged") return true;
     if (msg === "chat.request") return true;
     if (msg === "conversation.request.witness") return true;
     if (msg === "conversation.response.witness") return true;
@@ -214,9 +206,8 @@
     }
     var turnCtx = { hasRagAttached: hasRagAttached };
     var routingSummary = routingSummaryFromTurnEvents(sorted, getFlat);
-    var merged = turnHasMerged(sorted, getFlat);
     var turnIndex = turnIndexFromEvents(sorted, getFlat);
-    var isNewConversation = turnIndex === 1 && !merged;
+    var isNewConversation = turnIndex === 1;
     var chainLen = routingSummary.chainLen;
     var clientModel = routingSummary.clientModel;
     var upstream = routingSummary.upstream;

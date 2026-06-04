@@ -17,7 +17,7 @@ When `rag.enabled` is true, the gateway runs a shared **RAG service** that chunk
 
 ## Operator-visible behavior
 
-- **Settings** — Indexer workspace cards and storage health reflect RAG readiness (vector store + embedding model in catalog).
+- **Settings** — Indexer service card exposes global embedding model selector; after save, an info banner links to the Workspaces section for re-index guidance.
 - **Chat** — Optional workspace selector scopes retrieval; assistant messages show expandable snippets with path, score, and highlighted text.
 - **Logs** — `rag.ingest.*`, `rag.query`, `conversation.rag.span`, and retrieval lifecycle slugs appear in the settings event log when RAG runs on a turn.
 
@@ -28,7 +28,7 @@ When `rag.enabled` is true, the gateway runs a shared **RAG service** that chunk
 - **Gateway owns chunking and embedding** — chunk size/overlap from gateway config; indexer sends whole-file or session-chunked **text** only.
 - **Collection naming** — Derived from `(tenant_id, project_id, flavor_id)` via `vectorstore.CollectionName`.
 - **Re-ingest** — Delete-by-source then upsert; server computes authoritative `content_sha256` over UTF-8 bytes.
-- **Retrieve** — Embed query → vector search with score floor and top‑k; empty query returns no hits.
+- **Retrieve** — Embed query → vector search with score floor and top‑k; empty query returns no hits. When collection `vector_dim` ≠ configured `rag.embedding.dim` and the collection has points, retrieval returns **no hits** and logs `rag.retrieve.dim_mismatch` (stale vectors after an embedding model change until re-index).
 - **Chat injection** — Non-empty hits formatted as “Retrieved context” system message prepended to proxied chat body (see `rag.FormatRetrievedContext`, `rag.InjectSystemMessage`).
 - **RAG disabled** — Ingest and indexer config APIs return **503**; chat skips retrieval injection.
 - **Scope** — Bearer token supplies `tenant_id`; project/flavor from headers or gateway defaults.
@@ -79,9 +79,17 @@ go test ./chimera/chimera-gateway/internal/server/ -run RAG
 
 Manual: ingest a file via indexer or `POST /v1/ingest`, chat with matching project/flavor headers, confirm snippets in UI and `X-Chimera-RAG-Hits`.
 
+## Revision coherence and expansion (manifest P6–7)
+
+- **Stale sources** — Indexer compares on-disk normalized hash to sync-state `ServerSHA` on workspace poll; `PUT /v1/indexer/corpus/stale` replaces per-scope entries. Operators read `GET /v1/indexer/corpus/stale` or `/api/ui/indexer/corpus/stale`. Chat shows a **Stale** badge when a hit’s `content_sha256` matches an entry’s `indexed_sha256` and mode is not `off` (`rag.coherence.mode`: `off` \| `warn` \| `strict`, default `warn`).
+- **Strict mode** — `GET /v1/rag/*` expansion returns 409 `corpus_stale` when the indexed digest is stale.
+- **Expansion REST** (when `rag.tooling.enabled`, default true): `GET /v1/rag/segments`, `/context`, `/adjacent`, `/tools`. Segment text comes from Qdrant payloads keyed by `corpus_segments.vector_point_id`; context-around merges overlapping chunks with LRU cache (`rag.tooling.expansion_cache_*`).
+- **Code** — `internal/corpusstale`, `internal/rag/expansion.go`, `internal/server/indexerapi/rag_expansion.go`, `internal/operatorstore/corpus_segments_query.go`.
+
 ## Out of scope and known gaps
 
-- Line-number snippet gutters — [`indexer-manifest-ingest`](../plans/indexer-manifest-ingest.md) draft.
+- `X-Chimera-RAG-Hits` and `FormatRetrievedContext` include line ranges; chat UI gutter shipped ([`indexer-manifest-ingest`](../plans/indexer-manifest-ingest.md) Phases 4–5).
+- Indexer `POST /v1/indexer/read-segment` (live file bytes) — deferred; expansion uses Qdrant + segment index only.
 - Per-virtual-model RAG scope — deferred (see [virtual models](operator-virtual-models.md)).
 
 ## References

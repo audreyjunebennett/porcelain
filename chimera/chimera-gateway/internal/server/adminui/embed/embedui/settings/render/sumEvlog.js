@@ -64,6 +64,7 @@ globalThis.ChimeraSettings.Render.mountSumEvlog = function (ctx) {
     if (opts.suppressIndexerBadge && (k === "chimera-indexer" || k === "indexer")) return true;
     if (opts.suppressVectorstoreBadge && (k === "chimera-vectorstore" || k === "vectorstore")) return true;
     if (opts.suppressGatewayBadge && (k === "chimera-gateway" || k === "gateway")) return true;
+    if (opts.suppressBrokerBadge && (k === "chimera-broker" || k === "broker")) return true;
     return false;
   }
 
@@ -156,6 +157,27 @@ globalThis.ChimeraSettings.Render.mountSumEvlog = function (ctx) {
     return true;
   }
 
+  function sumEvlogIndexerStorageStatsMissingCollection(flat) {
+    if (!flat || typeof flat !== "object") return false;
+    var blob = String(flat.detail != null ? flat.detail : flat.err != null ? flat.err : "")
+      .toLowerCase()
+      .trim();
+    if (!blob) return false;
+    if (blob.indexOf("404") >= 0) return true;
+    var phrases = [
+      "doesn't exist",
+      "does not exist",
+      "not found",
+      "collection missing",
+      "no collection"
+    ];
+    var pi;
+    for (pi = 0; pi < phrases.length; pi++) {
+      if (blob.indexOf(phrases[pi]) >= 0) return true;
+    }
+    return false;
+  }
+
   /** indexer.storage.stats with available:false — often logged at INFO though detail carries HTTP errors. */
   function sumEvlogIndexerStorageStatsUnavailable(flat) {
     if (!flat || typeof flat !== "object") return null;
@@ -185,7 +207,10 @@ globalThis.ChimeraSettings.Render.mountSumEvlog = function (ctx) {
     var ixUnavail = sumEvlogIndexerStorageStatsUnavailable(flat);
     if (ixUnavail) {
       if (ixUnavail.http != null && http == null) http = ixUnavail.http;
-      if (lk !== "ERROR" && http != null && http >= 400) lk = "ERROR";
+      if (sumEvlogIndexerStorageStatsMissingCollection(flat)) {
+        if (lk === "ERROR") lk = "INFO";
+        else if (lk !== "WARN" && lk !== "INFO") lk = "INFO";
+      } else if (lk !== "ERROR" && http != null && http >= 400) lk = "ERROR";
       else if (lk !== "ERROR" && lk !== "WARN") lk = "WARN";
     }
     return { levelKey: lk, http: http };
@@ -277,6 +302,7 @@ globalThis.ChimeraSettings.Render.mountSumEvlog = function (ctx) {
     }
     var msgOpts = { forEventLog: true };
     if (opts.convEvlogMeta) msgOpts.convEvlogMeta = opts.convEvlogMeta;
+    if (opts.suppressBrokerBadge) msgOpts.omitBrokerPrefix = true;
     var msg = escapeHtml(primaryLogMessage(parsed, ev.text, msgOpts));
     var sourceMeta = sumEvlogSourceMetaHtml(badgeOpt, opts);
     var statusInner = sumEvlogStatusInnerHtml(parsed);
@@ -286,13 +312,13 @@ globalThis.ChimeraSettings.Render.mountSumEvlog = function (ctx) {
       "</span></span>";
     return (
       '<div class="sum-evlog__msg-wrap">' +
+      '<div class="sum-evlog__msg-text">' +
+      msg +
+      "</div>" +
       '<div class="sum-evlog__msg-meta">' +
       sourceMeta +
       tierHtml +
       statusMeta +
-      "</div>" +
-      '<div class="sum-evlog__msg-text">' +
-      msg +
       "</div></div>"
     );
   }
@@ -397,6 +423,9 @@ globalThis.ChimeraSettings.Render.mountSumEvlog = function (ctx) {
       '<colgroup><col class="sum-evlog__col-time" /><col class="sum-evlog__col-msg" /></colgroup>';
     var statusTh = "";
     var rootAttrs = ' data-sum-evlog-root data-sum-evlog-cols="' + escapeHtml(String(cols)) + '"';
+    if (o.uiPart) {
+      rootAttrs += ' data-ui-part="' + escapeHtml(String(o.uiPart)) + '"';
+    }
     if (o.sourceColumnKind === "indexer-workspace") {
       rootAttrs += ' data-sum-evlog-source-indexer-workspace';
     }
@@ -525,6 +554,7 @@ globalThis.ChimeraSettings.Render.mountSumEvlog = function (ctx) {
       if (name === "chimera-indexer" || opts.suppressIndexerBadge) summaryOpts.suppressIndexerBadge = true;
       if (name === "chimera-vectorstore" || opts.suppressVectorstoreBadge) summaryOpts.suppressVectorstoreBadge = true;
       if (name === "chimera-gateway" || opts.suppressGatewayBadge) summaryOpts.suppressGatewayBadge = true;
+      if (name === "chimera-broker" || opts.suppressBrokerBadge) summaryOpts.suppressBrokerBadge = true;
       var bd2 = opts.indexerRunLine
         ? typeof ctx.badgeForIndexerRunLine === "function"
           ? ctx.badgeForIndexerRunLine(ent2)

@@ -49,6 +49,33 @@ func cardsUIPath(t *testing.T, rel ...string) string {
 	return settingsUIPath(t, append([]string{"render", "cards"}, rel...)...)
 }
 
+// serviceFeedModulePaths is the script load order for summarized service cards.
+func serviceFeedModulePaths() []string {
+	return []string{
+		"serviceFeed/registry.js",
+		"serviceFeed/shell.js",
+		"serviceFeed/broker.js",
+		"serviceFeed/gateway.js",
+		"serviceFeed/vectorstore.js",
+		"serviceFeed/indexer.js",
+		"serviceFeed/default.js",
+		"serviceFeed.js",
+	}
+}
+
+func evalServiceFeedModules(t *testing.T, vm *goja.Runtime) {
+	t.Helper()
+	for _, f := range serviceFeedModulePaths() {
+		evalJS(t, vm, cardsUIPath(t, f))
+	}
+}
+
+func sharedUIPath(t *testing.T, rel ...string) string {
+	t.Helper()
+	base := filepath.Join(embeduiRoot(t), "shared")
+	return filepath.Join(append([]string{base}, rel...)...)
+}
+
 func mustReadFile(t *testing.T, path string) string {
 	t.Helper()
 	b, err := os.ReadFile(path)
@@ -88,14 +115,31 @@ func loadCardTestCtx(t *testing.T, vm *goja.Runtime) {
 	evalJS(t, vm, uiEmbedPath(t, "util", "escape.js"))
 	evalJS(t, vm, settingsUIPath(t, "util", "escape.js"))
 	evalJS(t, vm, settingsUIPath(t, "util", "hash.js"))
+	evalJS(t, vm, settingsUIPath(t, "util", "time.js"))
+	evalJS(t, vm, settingsUIPath(t, "derive", "chimeraBrokerMetrics.js"))
+	evalJS(t, vm, settingsUIPath(t, "derive", "logLineClassification.js"))
+	evalJS(t, vm, settingsUIPath(t, "derive", "conversationAggregate.js"))
 	evalJS(t, vm, settingsUIPath(t, "render", "sumEvlog.js"))
 	for _, f := range []string{
+		"operatorFeedback.js", "configureEdit.js", "yamlEditor.js", "draftInput.js",
+		"providerCredentials.js", "scopedEvlog.js", "adminAction.js", "editToolbar.js",
+		"workspacePaths.js", "serviceHealth.js", "embeddingModelSelector.js",
+	} {
+		evalJS(t, vm, sharedUIPath(t, f))
+	}
+	evalJS(t, vm, settingsUIPath(t, "render", "cardChrome.js"))
+	for _, f := range []string{
 		"sharedFormat.js", "convCard.js", "serviceCard.js", "gatewayOverview.js", "gatewayUsage.js",
-		"adminShared.js", "adminUsers.js", "adminProvider.js", "adminRouting.js", "adminFallback.js",
-		"adminRouterModels.js", "adminVirtualModels.js", "adminWorkflows.js", "workspaceDraft.js", "mount.js",
+		"adminShared.js", "adminUsers.js", "adminProvider.js", "adminVirtualModels.js", "workspaceDraft.js",
+		"feedLogConv.js",
 	} {
 		evalJS(t, vm, cardsUIPath(t, f))
 	}
+	evalServiceFeedModules(t, vm)
+	for _, f := range []string{"indexerRun.js", "indexerWorkspace.js", "ragEmbedding.js", "mount.js"} {
+		evalJS(t, vm, cardsUIPath(t, f))
+	}
+	evalJS(t, vm, settingsUIPath(t, "summarized", "rebuildPolicy.js"))
 
 	_, err := vm.RunString(`
 		var ctx = {
@@ -104,6 +148,7 @@ func loadCardTestCtx(t *testing.T, vm *goja.Runtime) {
 			entryCache: [],
 			strHash: ChimeraSettings.strHash,
 			entryInstant: function () { return null; },
+			humanDurationMs: ChimeraSettings.humanDurationMs,
 			logSummaryHtml: function () { return ""; },
 			tbody: null,
 			sumEvlogRowTrHtml: function () { return ""; },
@@ -117,7 +162,6 @@ func loadCardTestCtx(t *testing.T, vm *goja.Runtime) {
 			chimeraBrokerShortModelLabel: function (id) { return String(id || "—"); },
 			metricsCache: null,
 			gatewayOverviewCache: {
-				semver: "9.9.9-test",
 				virtual_model_id: "virtual/test",
 				service_overview: { refreshed_at: "2026-01-01T12:00:00Z", services: [] }
 			},
@@ -142,6 +186,11 @@ func loadCardTestCtx(t *testing.T, vm *goja.Runtime) {
 		};
 		ChimeraSettings.Render.mountSumEvlog(ctx);
 		ChimeraSettings.Render.Cards.mountAll(ctx);
+		var C = ChimeraSettings.Render.Cards;
+		if (typeof C.mountSummarizedFeedCards === "function") C.mountSummarizedFeedCards(ctx);
+		if (typeof ctx.pickFolderForWorkspaceDraft !== "function") throw new Error("pickFolderForWorkspaceDraft missing on ctx");
+		if (typeof ctx.findWorkspaceDraft !== "function") throw new Error("findWorkspaceDraft missing on ctx");
+		globalThis.__cardTestCtx = ctx;
 	`)
 	if err != nil {
 		t.Fatalf("mount card ctx: %v", err)

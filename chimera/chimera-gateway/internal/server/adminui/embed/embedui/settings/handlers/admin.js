@@ -1,5 +1,5 @@
 /**
- * Admin workflow cards and workspace draft UI (tokens, routing, providers).
+ * Admin workflow cards and workspace draft UI (tokens, providers).
  * Exports: ChimeraSettings.Handlers.Admin.wire(ctx)
  */
 globalThis.ChimeraSettings = globalThis.ChimeraSettings || {};
@@ -8,7 +8,6 @@ globalThis.ChimeraSettings.Handlers.Admin = globalThis.ChimeraSettings.Handlers.
 
 globalThis.ChimeraSettings.Handlers.Admin.wire = function (ctx) {
   var refreshSummarizedPanel = ctx.refreshSummarizedPanel;
-  var refreshAdminCardAfterEditToggle = ctx.refreshAdminCardAfterEditToggle;
   var scheduleStoryRebuild = ctx.scheduleStoryRebuild;
   var findWorkspaceDraft = ctx.findWorkspaceDraft;
   var appendWorkspaceDraftPath = ctx.appendWorkspaceDraftPath;
@@ -18,8 +17,6 @@ globalThis.ChimeraSettings.Handlers.Admin.wire = function (ctx) {
   var fetchAdminTokens = ctx.fetchAdminTokens;
   var adminPostJSON = ctx.adminPostJSON;
   var adminSetMessage = ctx.adminSetMessage;
-  var parseFallbackChainInput = ctx.parseFallbackChainInput;
-  var fallbackChainToYAML = ctx.fallbackChainToYAML;
   var saveWorkspaceDraftById = ctx.saveWorkspaceDraftById;
   var removeWorkspaceDraft = ctx.removeWorkspaceDraft;
   var beginWorkspaceManagedEdit = ctx.beginWorkspaceManagedEdit;
@@ -27,6 +24,7 @@ globalThis.ChimeraSettings.Handlers.Admin.wire = function (ctx) {
   var refreshWorkspaceManagedPaths = ctx.refreshWorkspaceManagedPaths;
   var saveManagedWorkspacePaths = ctx.saveManagedWorkspacePaths;
   var deleteManagedWorkspace = ctx.deleteManagedWorkspace;
+  var reindexManagedWorkspace = ctx.reindexManagedWorkspace;
 
   if (!globalThis.__ChimeraSettingsWorkspaceDraftUiWired) {
     globalThis.__ChimeraSettingsWorkspaceDraftUiWired = true;
@@ -112,6 +110,12 @@ globalThis.ChimeraSettings.Handlers.Admin.wire = function (ctx) {
             ev.preventDefault();
             ev.stopPropagation();
             deleteManagedWorkspace(wsNumM);
+            return;
+          }
+          if (t.closest(".ws-managed-btn-reindex")) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            if (typeof reindexManagedWorkspace === "function") reindexManagedWorkspace(wsNumM);
             return;
           }
           if (t.closest(".ws-managed-btn-add")) {
@@ -260,7 +264,16 @@ globalThis.ChimeraSettings.Handlers.Admin.wire = function (ctx) {
   if (!globalThis.__ChimeraSettingsAdminWorkflowWired) {
     globalThis.__ChimeraSettingsAdminWorkflowWired = true;
 
+    var OF = globalThis.ChimeraShared && globalThis.ChimeraShared.OperatorFeedback;
+    var YE = globalThis.ChimeraShared && globalThis.ChimeraShared.YamlEditor;
+    var DI = globalThis.ChimeraShared && globalThis.ChimeraShared.DraftInput;
+    var PC = globalThis.ChimeraShared && globalThis.ChimeraShared.ProviderCredentials;
+
     function setAdminSaveBtnPending(btn, pending) {
+      if (OF && typeof OF.setSaveBtnPending === "function") {
+        OF.setSaveBtnPending(btn, pending);
+        return;
+      }
       if (!btn) return;
       btn.disabled = !!pending;
       if (pending) btn.setAttribute("aria-disabled", "true");
@@ -268,65 +281,34 @@ globalThis.ChimeraSettings.Handlers.Admin.wire = function (ctx) {
     }
 
     function syncYamlOverlayVScrollFromTarget(t) {
-      var yep = globalThis.ChimeraUI && globalThis.ChimeraUI.YamlEditorPanel;
-      if (yep && typeof yep.syncOverlayVScrollFromTarget === "function") {
-        yep.syncOverlayVScrollFromTarget(t);
-        return;
+      if (YE && typeof YE.syncOverlayVScrollFromTarget === "function") {
+        YE.syncOverlayVScrollFromTarget(t);
       }
-      if (!t || String(t.tagName || "").toLowerCase() !== "textarea") return;
-      var wrap = t.closest && t.closest(".sg-op-yaml-wrap");
-      if (!wrap) return;
-      wrap.classList.toggle("sg-op-yaml-wrap--vscroll", t.scrollHeight > t.clientHeight + 1);
     }
 
-    function applyRoutingPolicyDraftToEditor() {
-      var val = String(ctx.routingPolicyDraft != null ? ctx.routingPolicyDraft : "");
-      var yep = globalThis.ChimeraUI && globalThis.ChimeraUI.YamlEditorPanel;
-      if (yep && typeof yep.setValue === "function") {
-        yep.setValue("admin-routing-yaml", val);
-      } else {
-        var y = document.getElementById("admin-routing-yaml");
-        if (y) y.value = val;
-      }
-      var savedPolicy = String((((ctx.adminStateCache && ctx.adminStateCache.gateway) || {}).routing_policy_yaml) || "");
-      ctx.routingPolicyTouched = val !== savedPolicy;
-      var wrap = document.getElementById("admin-routing-policy-wrap");
-      if (wrap) wrap.classList.toggle("sg-op-yaml-wrap--dirty", !!ctx.routingPolicyTouched);
-      syncYamlOverlayVScrollFromTarget(wrap);
+    function reloadAdmin() {
+      Promise.all([fetchAdminState(), fetchAdminTokens()]).then(function () {
+        if (typeof ctx.patchAdminCardsFromPoll === "function" && ctx.patchAdminCardsFromPoll()) return;
+        refreshSummarizedPanel();
+      });
+    }
+
+    function credentialActionOpts(triggerBtn) {
+      return {
+        ctx: ctx,
+        triggerBtn: triggerBtn,
+        setMessage: adminSetMessage,
+        setPending: setAdminSaveBtnPending,
+        postJSON: adminPostJSON,
+        onSuccess: reloadAdmin
+      };
     }
 
     document.body.addEventListener("input", function (ev) {
       var t = ev.target;
       if (!t || !t.id) return;
-      if (t.id === "admin-routing-yaml") {
-        ctx.routingPolicyDraft = t.value != null ? String(t.value) : "";
-        var savedPolicy = String((((ctx.adminStateCache && ctx.adminStateCache.gateway) || {}).routing_policy_yaml) || "");
-        ctx.routingPolicyTouched = String(ctx.routingPolicyDraft) !== savedPolicy;
-        var routingWrap = document.getElementById("admin-routing-policy-wrap");
-        if (routingWrap) routingWrap.classList.toggle("sg-op-yaml-wrap--dirty", !!ctx.routingPolicyTouched);
-      }
-      else if (t.id === "admin-fallback-yaml") {
-        ctx.fallbackTouched = true;
-        var fallbackWrap = document.getElementById("admin-fallback-yaml-wrap");
-        if (fallbackWrap) fallbackWrap.classList.add("sg-op-yaml-wrap--dirty");
-      }
-      else if (t.id === "admin-router-models-yaml") {
-        ctx.routerModelsTouched = true;
-        ctx.routerModelsDraft = t.value != null ? String(t.value) : "";
-        var routerWrap = document.getElementById("admin-router-models-wrap");
-        if (routerWrap) routerWrap.classList.add("sg-op-yaml-wrap--dirty");
-      }
-      else if (t.id === "admin-router-threshold") {
-        ctx.routerThresholdTouched = true;
-        ctx.routerThresholdDraft = t.value != null ? String(t.value) : "";
-      } else if (t.id === "admin-ollama-url") {
-        ctx.adminOllamaUrlDraft = t.value != null ? String(t.value) : "";
-      } else if (t.id && t.id.indexOf("admin-") === 0 && t.id.slice(-4) === "-key") {
-        var provKey = t.id.slice("admin-".length, -"-key".length);
-        if (provKey) {
-          if (!ctx.adminProviderKeyDraft) ctx.adminProviderKeyDraft = {};
-          ctx.adminProviderKeyDraft[provKey] = t.value != null ? String(t.value) : "";
-        }
+      if (DI && typeof DI.applyAdminCredentialInput === "function" && DI.applyAdminCredentialInput(ctx, t)) {
+        return;
       }
     });
     document.body.addEventListener("input", function (ev) {
@@ -358,13 +340,6 @@ globalThis.ChimeraSettings.Handlers.Admin.wire = function (ctx) {
       function patchAdminUsersCardOrRefresh() {
         if (typeof ctx.patchAdminUsersCard === "function" && ctx.patchAdminUsersCard()) return;
         refreshSummarizedPanel();
-      }
-
-      function reloadAdmin() {
-        Promise.all([fetchAdminState(), fetchAdminTokens()]).then(function () {
-          if (typeof ctx.patchAdminCardsFromPoll === "function" && ctx.patchAdminCardsFromPoll()) return;
-          refreshSummarizedPanel();
-        });
       }
 
       function closeProviderPicker() {
@@ -463,111 +438,6 @@ globalThis.ChimeraSettings.Handlers.Admin.wire = function (ctx) {
         return;
       }
 
-      function refreshAdminEditCard(patchFn) {
-        if (typeof refreshAdminCardAfterEditToggle === "function") {
-          refreshAdminCardAfterEditToggle(patchFn);
-          return;
-        }
-        refreshSummarizedPanel();
-      }
-
-      if (act === "fallback-configure") {
-        ctx.adminFallbackEditing = true;
-        refreshAdminEditCard(ctx.patchAdminFallbackCard);
-        return;
-      }
-
-      if (act === "routing-configure") {
-        ctx.adminRoutingEditing = true;
-        if (ctx.routingPolicyDraft == null) ctx.routingPolicyDraft = String((((ctx.adminStateCache && ctx.adminStateCache.gateway) || {}).routing_policy_yaml) || "");
-        refreshAdminEditCard(ctx.patchAdminRoutingCard);
-        return;
-      }
-
-      if (act === "routing-cancel") {
-        ctx.adminRoutingEditing = false;
-        ctx.routingPolicyTouched = false;
-        ctx.routingPolicyDraft = String((((ctx.adminStateCache && ctx.adminStateCache.gateway) || {}).routing_policy_yaml) || "");
-        refreshAdminEditCard(ctx.patchAdminRoutingCard);
-        return;
-      }
-
-      if (act === "router-configure") {
-        ctx.adminRouterEditing = true;
-        refreshAdminEditCard(ctx.patchAdminRouterModelsCard);
-        return;
-      }
-
-      if (act === "router-cancel") {
-        ctx.adminRouterEditing = false;
-        ctx.routerModelsTouched = false;
-        ctx.routerModelsDraft = null;
-        ctx.routerThresholdTouched = false;
-        ctx.routerThresholdDraft = null;
-        ctx.routerEnabledTouched = false;
-        ctx.routerEnabledDraft = null;
-        refreshAdminEditCard(ctx.patchAdminRouterModelsCard);
-        return;
-      }
-
-      if (act === "fallback-cancel") {
-        ctx.adminFallbackEditing = false;
-        ctx.fallbackTouched = false;
-        refreshAdminEditCard(ctx.patchAdminFallbackCard);
-        return;
-      }
-
-      if (act === "routing-policy-refresh") {
-        fetchAdminState()
-          .catch(function () {})
-          .then(function () {
-            var saved = String((((ctx.adminStateCache && ctx.adminStateCache.gateway) || {}).routing_policy_yaml) || "");
-            ctx.routingPolicyDraft = saved;
-            applyRoutingPolicyDraftToEditor();
-          });
-        return;
-      }
-
-      if (act === "fallback-refresh") {
-        ctx.fallbackTouched = false;
-        refreshSummarizedPanel();
-        return;
-      }
-
-      if (act === "router-models-refresh") {
-        ctx.routerModelsTouched = false;
-        ctx.routerModelsDraft = null;
-        refreshSummarizedPanel();
-        return;
-      }
-
-      if (act === "router-enabled-toggle") {
-        var toggleEl = t;
-        if (!toggleEl || !toggleEl.getAttribute || !toggleEl.classList || !toggleEl.classList.contains("sum-router-toggle")) {
-          toggleEl = t.closest && t.closest(".sum-router-toggle");
-        }
-        if (!toggleEl || !toggleEl.getAttribute) return;
-        var nextPressed = String(toggleEl.getAttribute("aria-pressed") || "").toLowerCase() !== "true";
-        var savedModels = Array.isArray((((ctx.adminStateCache && ctx.adminStateCache.gateway) || {}).router_models))
-          ? (((ctx.adminStateCache && ctx.adminStateCache.gateway) || {}).router_models)
-          : [];
-        var savedThr = parseFloat(String((((ctx.adminStateCache && ctx.adminStateCache.gateway) || {}).tool_router_confidence_threshold) || "0.5"));
-        if (isNaN(savedThr) || savedThr < 0 || savedThr > 1) savedThr = 0.5;
-        adminPostJSON("/api/ui/routing/router_tooling", {
-          router_models: savedModels,
-          tool_router_enabled: nextPressed,
-          confidence_threshold: savedThr
-        })
-          .then(function () {
-            ctx.routerEnabledTouched = false;
-            ctx.routerEnabledDraft = null;
-            adminSetMessage("", "Tool router " + (nextPressed ? "enabled." : "disabled."));
-            reloadAdmin();
-          })
-          .catch(function (e) { adminSetMessage("err", e && e.message ? e.message : String(e)); });
-        return;
-      }
-
       if (act === "user-token-copy") {
         var valCopy = String(t.getAttribute("data-token") || "");
         if (valCopy) {
@@ -613,26 +483,13 @@ globalThis.ChimeraSettings.Handlers.Admin.wire = function (ctx) {
       }
 
       if (act === "provider-key-add") {
-        var prov = String(t.getAttribute("data-provider") || "").trim().toLowerCase();
-        var inputId = prov ? "admin-" + prov + "-key" : "";
-        var val = inputId ? ((document.getElementById(inputId) || {}).value || "") : "";
-        if (!val.trim()) {
-          adminSetMessage("err", "Enter a key.");
+        if (PC && typeof PC.runProviderKeyAdd === "function") {
+          var provAdd = String(t.getAttribute("data-provider") || "").trim().toLowerCase();
+          var keyOpts = credentialActionOpts(t);
+          keyOpts.providerId = provAdd;
+          PC.runProviderKeyAdd(keyOpts);
           return;
         }
-        setAdminSaveBtnPending(t, true);
-        adminPostJSON("/api/ui/provider/" + prov + "/keys", { value: String(val).trim() })
-          .then(function () {
-            var inp = document.getElementById(inputId);
-            if (inp) inp.value = "";
-            if (ctx.adminProviderKeyDraft && prov) delete ctx.adminProviderKeyDraft[prov];
-            adminSetMessage("", "Provider key added.");
-            reloadAdmin();
-          })
-          .catch(function (e) {
-            setAdminSaveBtnPending(t, false);
-            adminSetMessage("err", e && e.message ? e.message : String(e));
-          });
         return;
       }
 
@@ -647,158 +504,13 @@ globalThis.ChimeraSettings.Handlers.Admin.wire = function (ctx) {
       }
 
       if (act === "ollama-save") {
-        var baseURL = ((document.getElementById("admin-ollama-url") || {}).value || "").trim();
-        if (!baseURL) {
-          adminSetMessage("err", "Enter a URL.");
+        if (PC && typeof PC.runOllamaUrlSave === "function") {
+          PC.runOllamaUrlSave(credentialActionOpts(t));
           return;
         }
-        setAdminSaveBtnPending(t, true);
-        adminPostJSON("/api/ui/provider/ollama/base_url", { base_url: baseURL })
-          .then(function () {
-            ctx.adminOllamaUrlDraft = null;
-            adminSetMessage("", "Ollama URL saved.");
-            reloadAdmin();
-          })
-          .catch(function (e) {
-            setAdminSaveBtnPending(t, false);
-            adminSetMessage("err", e && e.message ? e.message : String(e));
-          });
         return;
       }
 
-      if (act === "routing-generate") {
-        adminPostJSON("/api/ui/routing/preview", {})
-          .then(function (j) {
-            var savedPolicy = String((((ctx.adminStateCache && ctx.adminStateCache.gateway) || {}).routing_policy_yaml) || "");
-            ctx.routingPolicyDraft = String((j && j.routing_policy_yaml) || "");
-            ctx.routingPolicyTouched = String(ctx.routingPolicyDraft) !== savedPolicy;
-            adminSetMessage("", "Routing preview generated. Save to apply.");
-            refreshSummarizedPanel();
-          })
-          .catch(function (e) { adminSetMessage("err", e && e.message ? e.message : String(e)); });
-        return;
-      }
-
-      if (act === "routing-evaluate") {
-        var policyYAML = ((document.getElementById("admin-routing-yaml") || {}).value || "");
-        if (!String(policyYAML).trim()) {
-          policyYAML = String((((ctx.adminStateCache && ctx.adminStateCache.gateway) || {}).routing_policy_yaml) || "");
-        }
-        var fbRaw = ((document.getElementById("admin-fallback-yaml") || {}).value || "");
-        if (!String(fbRaw).trim()) {
-          var fc = (((ctx.adminStateCache && ctx.adminStateCache.gateway) || {}).fallback_chain) || [];
-          fbRaw = fallbackChainToYAML(fc);
-        }
-        var fallbackList;
-        try {
-          fallbackList = parseFallbackChainInput(fbRaw);
-        } catch (e) {
-          adminSetMessage("err", "Fallback chain: " + (e && e.message ? e.message : String(e)));
-          return;
-        }
-        if (!fallbackList.length) {
-          adminSetMessage("err", "Fallback chain: add at least one model id.");
-          return;
-        }
-        var evalMsg = String(((document.getElementById("admin-routing-eval-msg") || {}).value || ""));
-        var evalSmoke = !!((document.getElementById("admin-routing-eval-smoke") || {}).checked);
-        var outEl = document.getElementById("admin-routing-eval-out");
-        adminPostJSON("/api/ui/routing/evaluate", {
-          routing_policy_yaml: policyYAML,
-          fallback_chain: fallbackList,
-          messages: [{ role: "user", content: evalMsg }],
-          smoke_completion: evalSmoke
-        })
-          .then(function (j) {
-            if (outEl) outEl.textContent = JSON.stringify(j, null, 2);
-            adminSetMessage("", "Dry-run complete.");
-          })
-          .catch(function (e) {
-            if (outEl) outEl.textContent = "";
-            adminSetMessage("err", e && e.message ? e.message : String(e));
-          });
-        return;
-      }
-
-      if (act === "routing-policy-save") {
-        var policyYAML = ((document.getElementById("admin-routing-yaml") || {}).value || "");
-        if (!String(policyYAML).trim()) {
-          adminSetMessage("err", "Routing policy YAML is required.");
-          return;
-        }
-        adminPostJSON("/api/ui/routing/policy", { routing_policy_yaml: policyYAML })
-          .then(function () {
-            ctx.routingPolicyTouched = false;
-            ctx.routingPolicyDraft = null;
-            ctx.adminRoutingEditing = false;
-            adminSetMessage("", "Routing policy saved.");
-            reloadAdmin();
-          })
-          .catch(function (e) { adminSetMessage("err", e && e.message ? e.message : String(e)); });
-        return;
-      }
-
-      if (act === "fallback-save") {
-        try {
-          var fallbackList = parseFallbackChainInput(((document.getElementById("admin-fallback-yaml") || {}).value || ""));
-          adminPostJSON("/api/ui/routing/fallback_chain", { fallback_chain: fallbackList })
-            .then(function () {
-              ctx.fallbackTouched = false;
-              ctx.adminFallbackEditing = false;
-              adminSetMessage("", "Fallback chain saved.");
-              reloadAdmin();
-            })
-            .catch(function (e) { adminSetMessage("err", e && e.message ? e.message : String(e)); });
-        } catch (e) {
-          adminSetMessage("err", e && e.message ? e.message : String(e));
-        }
-        return;
-      }
-
-      if (act === "router-save") {
-        try {
-          var modelsRaw = ((document.getElementById("admin-router-models-yaml") || {}).value || "");
-          if (!String(modelsRaw).trim() && ctx.routerModelsTouched && ctx.routerModelsDraft != null) modelsRaw = String(ctx.routerModelsDraft);
-          if (!String(modelsRaw).trim()) modelsRaw = fallbackChainToYAML((((ctx.adminStateCache && ctx.adminStateCache.gateway) || {}).router_models) || []);
-          var models = parseFallbackChainInput(modelsRaw);
-          var thr = parseFloat(String(((document.getElementById("admin-router-threshold") || {}).value || "0.5"), 10));
-          if (isNaN(thr) || thr < 0 || thr > 1) throw new Error("Threshold must be a number between 0 and 1.");
-          var routerEnabledBtn = document.getElementById("admin-router-enabled");
-          var enabled = String((routerEnabledBtn && routerEnabledBtn.getAttribute && routerEnabledBtn.getAttribute("aria-pressed")) || "").toLowerCase() === "true";
-          adminPostJSON("/api/ui/routing/router_tooling", {
-            router_models: models,
-            tool_router_enabled: enabled,
-            confidence_threshold: thr
-          })
-            .then(function () {
-              ctx.routerModelsTouched = false;
-              ctx.routerModelsDraft = null;
-              ctx.routerThresholdTouched = false;
-              ctx.routerThresholdDraft = null;
-              ctx.routerEnabledTouched = false;
-              ctx.routerEnabledDraft = null;
-              ctx.adminRouterEditing = false;
-              adminSetMessage("", "Router settings saved.");
-              reloadAdmin();
-            })
-            .catch(function (e) { adminSetMessage("err", e && e.message ? e.message : String(e)); });
-        } catch (e) {
-          adminSetMessage("err", e && e.message ? e.message : String(e));
-        }
-        return;
-      }
-
-      if (act === "routing-free-tier-toggle") {
-        var curPressed = String(t.getAttribute("aria-pressed") || "").toLowerCase() === "true";
-        var nextEnabled = !curPressed;
-        adminPostJSON("/api/ui/routing/filter_free_tier_models", { enabled: nextEnabled })
-          .then(function () {
-            adminSetMessage("", "Free-tier filter updated.");
-            reloadAdmin();
-          })
-          .catch(function (e) { adminSetMessage("err", e && e.message ? e.message : String(e)); });
-        return;
-      }
     });
 
     document.body.addEventListener("focusin", function (ev) {

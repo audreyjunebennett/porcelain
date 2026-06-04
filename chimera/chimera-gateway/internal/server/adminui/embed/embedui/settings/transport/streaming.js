@@ -10,16 +10,13 @@
  * - getEmbedded(): boolean
  * - getStarted(), setStarted(bool)
  * - statusEl (nullable)
- * - nearBottom(), nearBottomTextarea(ta)
+ * - nearBottom()
  * - parseLogText(source,text,ts)
  * - entryCache (array), seenSeq (object), maxSeqRef {value}, minLoadedSeqRef {value}
  * - bufferMinSeqRef {value}, bufferMinSeqFromServerRef {value}
  * - constants: CLIENT_CACHE_MAX, INITIAL_TAIL_LIMIT, BACKFILL_CHUNK, RENDER_CHUNK, stickPx
  * - render hooks: scheduleStoryRebuild(), scheduleSummarizedDirtyFlush(), markSummarizedDirtyFromEntry(),
- *   updateSummarizedCorrelationFromEntry(), rebuildAllRows(), rebuildRawLogsTextarea(opts),
- *   appendRawLineToTextarea(ent, follow) (legacy), appendTableRow(parsed, follow, seq, entryTs, rawText)
- *   Raw live stream uses scheduleRawLogsDomFlush (rAF-coalesced rebuild; avoids textarea +=).
- * - filters hooks: applyFilters(), ensureAppOption(app), ensureLevelOption(lvl), entryMatchesFilters(parsed)
+ *   updateSummarizedCorrelationFromEntry()
  * - fetchTokenLabels()
  */
 
@@ -74,27 +71,13 @@ function prependHistoricalEntries(ctx, entriesOldestFirst) {
   }
   ctx.minLoadedSeqRef.value = ctx.entryCache.length ? ctx.entryCache[0].seq : ctx.minLoadedSeqRef.value;
 
-  var viewMode = ctx.getViewMode();
-  if (viewMode === "summarized") {
+  if (ctx.getViewMode() === "summarized") {
     ctx.scheduleStoryRebuild();
-  } else if (viewMode === "raw") {
-    ctx.rebuildAllRows();
     window.requestAnimationFrame(function () {
       var dh = document.documentElement.scrollHeight - prevH;
       window.scrollTo(0, prevTop + dh);
     });
-  } else if (viewMode === "raw_logs") {
-    var ta = document.getElementById("raw-logs-textarea");
-    var prevTaTop = ta ? ta.scrollTop : 0;
-    var prevTaScrollH = ta ? ta.scrollHeight : 0;
-    ctx.rebuildRawLogsTextarea({ scrollBottom: false });
-    if (ta) {
-      window.requestAnimationFrame(function () {
-        ta.scrollTop = prevTaTop + (ta.scrollHeight - prevTaScrollH);
-      });
-    }
   }
-  ctx.applyFilters();
 }
 
 function fetchOlderLogs(ctx) {
@@ -129,26 +112,6 @@ function fetchOlderLogs(ctx) {
     });
 }
 
-/**
- * Batch raw_logs textarea updates to one rebuild per animation frame. Incremental
- * `textarea.value += line` is O(n²) in characters and freezes the UI on large buffers.
- */
-function scheduleRawLogsDomFlush(ctx, followTa) {
-  ctx.rawLogsFlushFollow = ctx.rawLogsFlushFollow || followTa;
-  if (ctx.rawLogsRafPending) return;
-  ctx.rawLogsRafPending = true;
-  window.requestAnimationFrame(function () {
-    ctx.rawLogsRafPending = false;
-    var ta0 = document.getElementById("raw-logs-textarea");
-    var scroll =
-      typeof ctx.nearBottomTextarea === "function" && ta0
-        ? ctx.nearBottomTextarea(ta0) && ctx.rawLogsFlushFollow
-        : ctx.rawLogsFlushFollow;
-    ctx.rebuildRawLogsTextarea({ scrollBottom: !!scroll });
-    ctx.rawLogsFlushFollow = false;
-  });
-}
-
 function appendLine(ctx, e) {
   if (!e || e.seq == null) return;
   var sq = Number(e.seq);
@@ -167,13 +130,21 @@ function appendLine(ctx, e) {
     cacheTrimmed = true;
   }
 
-  var viewMode = ctx.getViewMode();
-  if (viewMode === "summarized") {
-    if (cacheTrimmed) {
-      ctx.scheduleStoryRebuild();
-    } else {
-      if (typeof ctx.updateSummarizedCorrelationFromEntry === "function") {
-        ctx.updateSummarizedCorrelationFromEntry({
+  if (cacheTrimmed) {
+    ctx.scheduleStoryRebuild();
+  } else {
+    if (typeof ctx.updateSummarizedCorrelationFromEntry === "function") {
+      ctx.updateSummarizedCorrelationFromEntry({
+        seq: e.seq,
+        source: e.source,
+        text: e.text || "",
+        ts: e.ts,
+        parsed: parsed
+      });
+    }
+    if (!ctx.suppressSummarizedDirty) {
+      if (typeof ctx.markSummarizedDirtyFromEntry === "function") {
+        ctx.markSummarizedDirtyFromEntry({
           seq: e.seq,
           source: e.source,
           text: e.text || "",
@@ -181,44 +152,14 @@ function appendLine(ctx, e) {
           parsed: parsed
         });
       }
-      if (!ctx.suppressSummarizedDirty) {
-        if (typeof ctx.markSummarizedDirtyFromEntry === "function") {
-          ctx.markSummarizedDirtyFromEntry({
-            seq: e.seq,
-            source: e.source,
-            text: e.text || "",
-            ts: e.ts,
-            parsed: parsed
-          });
-        }
-        if (typeof ctx.scheduleSummarizedDirtyFlush === "function") {
-          ctx.scheduleSummarizedDirtyFlush();
-        } else {
-          ctx.scheduleStoryRebuild();
-        }
+      if (typeof ctx.scheduleSummarizedDirtyFlush === "function") {
+        ctx.scheduleSummarizedDirtyFlush();
+      } else {
+        ctx.scheduleStoryRebuild();
       }
     }
-    if (follow) window.scrollTo(0, document.documentElement.scrollHeight);
-    return;
   }
-  if (viewMode === "raw_logs") {
-    ctx.ensureAppOption(parsed.app);
-    if (parsed.levelCanon) ctx.ensureLevelOption(parsed.levelCanon);
-    var ta0 = document.getElementById("raw-logs-textarea");
-    if (cacheTrimmed) {
-      ctx.rebuildRawLogsTextarea({ scrollBottom: ctx.nearBottomTextarea(ta0) });
-      return;
-    }
-    if (ctx.suppressRawLogsDom) return;
-    var followTa = ctx.nearBottomTextarea(ta0);
-    if (ctx.entryMatchesFilters(parsed)) {
-      scheduleRawLogsDomFlush(ctx, followTa);
-    }
-    return;
-  }
-  ctx.ensureAppOption(parsed.app);
-  if (parsed.levelCanon) ctx.ensureLevelOption(parsed.levelCanon);
-  ctx.appendTableRow(parsed, follow, e.seq, e.ts, e.text);
+  if (follow) window.scrollTo(0, document.documentElement.scrollHeight);
 }
 
 function applyPollPayloadBatched(ctx, data, opts, startIdx, doneFn) {
@@ -227,22 +168,14 @@ function applyPollPayloadBatched(ctx, data, opts, startIdx, doneFn) {
   var lines = data.lines || [];
   var i = startIdx || 0;
   var end = Math.min(i + ctx.RENDER_CHUNK, lines.length);
-  var bulkSummarized = ctx.getViewMode() === "summarized";
-  if (bulkSummarized && i === 0) {
+  if (i === 0) {
     if (ctx.historyTailReadyRef) ctx.historyTailReadyRef.value = false;
     ctx.suppressSummarizedDirty = true;
     ctx.summarizedDirtyRafPending = false;
     if (typeof ctx.clearSummarizedDirtySets === "function") ctx.clearSummarizedDirtySets();
   }
-  var bulkRaw = ctx.getViewMode() === "raw_logs";
-  if (bulkRaw) ctx.suppressRawLogsDom = true;
   for (; i < end; i++) {
     appendLine(ctx, lines[i]);
-  }
-  if (bulkRaw) {
-    ctx.suppressRawLogsDom = false;
-    var taBulk = document.getElementById("raw-logs-textarea");
-    ctx.rebuildRawLogsTextarea({ scrollBottom: ctx.nearBottomTextarea(taBulk) });
   }
 
   if (end < lines.length) {
@@ -252,26 +185,15 @@ function applyPollPayloadBatched(ctx, data, opts, startIdx, doneFn) {
     });
     return;
   }
-  if (bulkSummarized) {
-    if (ctx.historyTailReadyRef) ctx.historyTailReadyRef.value = true;
-    if (typeof ctx.beginSummarizedLiveSettle === "function") {
-      ctx.beginSummarizedLiveSettle();
-    } else {
-      ctx.suppressSummarizedDirty = false;
-      if (typeof ctx.scheduleStoryRebuild === "function") ctx.scheduleStoryRebuild();
-    }
+  if (ctx.historyTailReadyRef) ctx.historyTailReadyRef.value = true;
+  if (typeof ctx.beginSummarizedLiveSettle === "function") {
+    ctx.beginSummarizedLiveSettle();
+  } else {
+    ctx.suppressSummarizedDirty = false;
+    if (typeof ctx.scheduleStoryRebuild === "function") ctx.scheduleStoryRebuild();
   }
   statusSet(ctx, "", "");
   if (lines.length) ctx.minLoadedSeqRef.value = lines[0].seq;
-  if (opts.rawPrimeScroll && lines.length && (ctx.getViewMode() === "raw" || ctx.getViewMode() === "raw_logs")) {
-    window.requestAnimationFrame(function () {
-      if (ctx.getViewMode() === "raw") window.scrollTo(0, document.documentElement.scrollHeight);
-      else {
-        var ta = document.getElementById("raw-logs-textarea");
-        if (ta) ta.scrollTop = ta.scrollHeight;
-      }
-    });
-  }
   if (doneFn) doneFn();
 }
 
@@ -411,7 +333,7 @@ function startStreaming(ctx) {
       if (ctx.startingRef) ctx.startingRef.value = false;
       // Only mark as started after we successfully loaded the small history tail.
       ctx.setStarted(true);
-      applyPollPayloadBatched(ctx, data, { rawPrimeScroll: true }, 0, function () {
+      applyPollPayloadBatched(ctx, data, {}, 0, function () {
         ctx.fetchTokenLabels();
         startEventSource(ctx);
       });
@@ -443,12 +365,6 @@ function init(ctx) {
     }
     document.documentElement.setAttribute("data-chimera-logs-transport-init", "1");
   }
-  window.addEventListener("scroll", function () {
-    if (ctx.getViewMode() === "summarized") return;
-    if (window.scrollY > 260) return;
-    fetchOlderLogs(ctx);
-  }, { passive: true });
-
   /** Summarized mode: backfill older lines only when the user scrolls up near the top (not on initial load at scrollY 0). */
   var summarizedLastScrollY = typeof window.scrollY === "number" ? window.scrollY : 0;
   window.addEventListener(
@@ -470,23 +386,12 @@ function init(ctx) {
     { passive: true }
   );
 
-  var rawTaAttach = document.getElementById("raw-logs-textarea");
-  if (rawTaAttach) rawTaAttach.addEventListener("scroll", function (ev) {
-    if (ctx.getViewMode() !== "raw_logs") return;
-    var ta = ev.target;
-    if (!ta || ta.scrollTop > 160) return;
-    fetchOlderLogs(ctx);
-  }, { passive: true });
-
   if (ctx.getEmbedded()) {
     window.addEventListener("message", function (ev) {
       if (ev.origin !== window.location.origin) return;
       var d = ev.data;
       if (d && d.type === "chimera-settings-activate") {
-        if (d.view) {
-          ctx.setViewMode(String(d.view));
-          ctx.onViewModeChanged();
-        }
+        if (ctx.onViewModeChanged) ctx.onViewModeChanged();
         startStreaming(ctx);
       }
     });

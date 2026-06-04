@@ -57,8 +57,8 @@ Operators can return to past gateway chats days later. Each saved thread include
 
 **Persistence**
 
-- Tables: `conversations`, `conversation_turns`, `conversation_retrievals` (migration `000003_conversation_history.sql`).
-- Per turn: user/assistant/error content, selected and resolved model ids, token counts, RAG hit snippets with `vector_point_id` / optional `content_sha256`.
+- Tables: `conversations`, `conversation_turns`, `conversation_retrievals` (migrations `000004` + `000007_manifest_retrieval_lines`).
+- Per turn: user/assistant/error content, selected and resolved model ids, token counts, RAG hit snippets with `vector_point_id`, optional `content_sha256`, and line range (`start_line`, `end_line`, `starts_mid_line`).
 - Live chat `X-Chimera-Conversation-Id` aligns with `conversations.conversation_id`.
 
 ## Interfaces

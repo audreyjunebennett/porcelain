@@ -17,7 +17,7 @@ Configuration and observability live on **`/ui/settings`**: collapsible **summar
 
 ## Operator-visible behavior
 
-- **Routes** — `/ui` (shell + ribbon), `/ui/chat`, `/ui/settings`, `/ui/settings/gallery`, `/ui/pwa`; login at `/ui/login`.
+- **Routes** — `/ui` (shell + ribbon), `/ui/chat`, `/ui/settings`, `/ui/settings/gallery`; login at `/ui/login`.
 - **Settings embed mode** — `?embed=1` hides standalone chrome; shell posts `chimera-settings-activate` on load.
 - **Summarized view (default)** — Cards for gateway version/health, usage metrics, API tokens, dynamic provider cards (Groq, Gemini, Ollama, …), virtual model cards, legacy global routing cards (where still wired), and indexer workspace cards fed from SQLite + structured indexer logs.
 - **Event log** — Filter by app source and level; **Summary** shows registry-driven one-liners; **Detailed** shows parsed field grid. Conversation-scoped rows group routing, RAG, upstream relay, tools, and merge/dedup lifecycle (`conversation.*` slugs).
@@ -76,7 +76,7 @@ Configuration and observability live on **`/ui/settings`**: collapsible **summar
 | Routes | `internal/server/adminui/embed/routes.go` |
 | Settings shell | `embed/embedui/settings.html`, `settings_app.js`, `settings_entry.js` |
 | Summarized feed | `embed/embedui/settings/app/summarizedFeed.js`, `summarizedDirtyRouting.js` |
-| Card renderers | `embed/embedui/settings/render/cards/` — `adminVirtualModels.js`, `adminRouting.js`, provider cards, gateway overview |
+| Card renderers | `embed/embedui/settings/render/cards/` — admin/gateway cards via `mountAll`; log-feed cards via `mountSummarizedFeedCards` (`cardChrome.js`, `feedLogConv.js`, `serviceFeed.js`, `indexerRun.js`, `indexerWorkspace.js`) |
 | Derive / classify | `embed/embedui/settings/derive/` |
 | Operator copy | `embed/embedui/settings/render/operatorMessage*.js`, generated `operator_copy.js` |
 | Log API | `internal/server/adminui/api/logs/` |
@@ -98,7 +98,6 @@ Manual: login → `/ui` → open **Settings** from ribbon; confirm cards hydrate
 - Full CSS sectioning of `settings.css` (logs-ui-maintainability Workstream C partial).
 - Remote log shipping (Splunk, etc.) — ring buffer only.
 - Legacy global routing YAML cards coexist with per-VM cards during migration; prefer virtual model cards for new config.
-- `/ui/pwa` placeholder — not primary operator workflow.
 
 ## References
 

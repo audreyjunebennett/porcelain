@@ -142,6 +142,10 @@ func (f *fakeQdrant) handler() http.Handler {
 			_ = json.NewDecoder(r.Body).Decode(&body)
 			f.collections[rest] = body.Vectors.Size
 			_ = json.NewEncoder(w).Encode(map[string]any{"result": true})
+		case !strings.Contains(rest, "/") && r.Method == http.MethodDelete:
+			delete(f.collections, rest)
+			delete(f.points, rest)
+			_ = json.NewEncoder(w).Encode(map[string]any{"result": true})
 		default:
 			http.Error(w, "not implemented in fake: "+r.Method+" "+r.URL.Path, http.StatusNotImplemented)
 		}
@@ -245,6 +249,33 @@ func TestClient_Health(t *testing.T) {
 	f.mu.Unlock()
 	if err := c.Health(context.Background()); err == nil {
 		t.Fatalf("expected error when down")
+	}
+}
+
+func TestClient_DeleteCollection(t *testing.T) {
+	f := newFake()
+	srv := httptest.NewServer(f.handler())
+	defer srv.Close()
+	c := New(srv.URL, "")
+	ctx := context.Background()
+	if err := c.EnsureCollection(ctx, "chimera-t-p-_-abcd1234", 4); err != nil {
+		t.Fatal(err)
+	}
+	pts := []vectorstore.Point{
+		{ID: "11111111-1111-1111-1111-111111111111", Vector: []float32{1, 0, 0, 0}, Payload: vectorstore.Payload{TenantID: "t", ProjectID: "p", Text: "hello", Source: "a.txt"}},
+	}
+	if err := c.Upsert(ctx, "chimera-t-p-_-abcd1234", pts); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.DeleteCollection(ctx, "chimera-t-p-_-abcd1234"); err != nil {
+		t.Fatalf("delete collection: %v", err)
+	}
+	st, err := c.Stats(ctx, "chimera-t-p-_-abcd1234")
+	if err == nil && st.Points > 0 {
+		t.Fatalf("expected collection gone, stats=%+v", st)
+	}
+	if err := c.DeleteCollection(ctx, "chimera-t-p-_-abcd1234"); err != nil {
+		t.Fatalf("delete missing collection should succeed: %v", err)
 	}
 }
 

@@ -319,16 +319,18 @@ function collectIndexerRunMeta(runId, evs, opts) {
     scopeQueueFanoutPending = null,
     scopePendingBulkTier1 = null,
     scopeLatestRel = null,
-    scopeLatestRoot = null;
+    scopeLatestRoot = null,
+    scopeStatusForMetrics = null;
   if (lastScopeStatusFlat) {
-    var statusForMetrics = lastScopeStatusEdgeFlat || lastScopeStatusFlat;
-    scopeWorkspaceTotal = Number(statusForMetrics.workspace_files_total);
+    // Prefer the newest scope.status (including heartbeats) for queue tallies; edge events can lag.
+    scopeStatusForMetrics = lastScopeStatusFlat || lastScopeStatusEdgeFlat;
+    scopeWorkspaceTotal = Number(scopeStatusForMetrics.workspace_files_total);
     if (isNaN(scopeWorkspaceTotal)) scopeWorkspaceTotal = null;
-    scopeQueueIngestPending = Number(statusForMetrics.queue_ingest_pending);
+    scopeQueueIngestPending = Number(scopeStatusForMetrics.queue_ingest_pending);
     if (isNaN(scopeQueueIngestPending)) scopeQueueIngestPending = null;
-    scopeQueueFanoutPending = Number(statusForMetrics.queue_fanout_files_pending);
+    scopeQueueFanoutPending = Number(scopeStatusForMetrics.queue_fanout_files_pending);
     if (isNaN(scopeQueueFanoutPending)) scopeQueueFanoutPending = null;
-    scopePendingBulkTier1 = Number(statusForMetrics.pending_bulk_tier1);
+    scopePendingBulkTier1 = Number(scopeStatusForMetrics.pending_bulk_tier1);
     if (isNaN(scopePendingBulkTier1)) scopePendingBulkTier1 = null;
   }
   if (scopeWorkspaceTotal == null && discoveryCandidatesForBucket != null) {
@@ -450,8 +452,9 @@ function collectIndexerRunMeta(runId, evs, opts) {
     scopePendingBulkTier1: scopePendingBulkTier1,
     scopeLatestRel: scopeLatestRel,
     scopeLatestRoot: scopeLatestRoot,
-    scopeStatusFlat: lastScopeStatusEdgeFlat || lastScopeStatusFlat,
+    scopeStatusFlat: lastScopeStatusFlat,
     scopeStatusEdgeFlat: lastScopeStatusEdgeFlat,
+    scopeStatusForMetrics: scopeStatusForMetrics,
     scopeActiveFlat: lastScopeActiveFlat,
     lastRecoveryPollFlat: lastRecoveryPollFlat,
     lastSkipSummaryFlat: lastSkipSummaryFlat,

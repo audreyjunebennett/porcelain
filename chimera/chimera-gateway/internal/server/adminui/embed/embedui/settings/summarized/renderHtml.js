@@ -73,7 +73,7 @@ globalThis.ChimeraSettings.Summarized.Render = globalThis.ChimeraSettings.Summar
     }
 
     var wsCards = sortCards(cardsInSection(model, SECTION_WORKSPACES), false);
-    body += '<div class="sum-feed-section sum-feed-section--workspaces">';
+    body += '<div class="sum-feed-section sum-feed-section--workspaces" id="sum-feed-workspaces">';
     if (renderers.workspacesSectionHead) {
       body += renderers.workspacesSectionHead();
     } else {

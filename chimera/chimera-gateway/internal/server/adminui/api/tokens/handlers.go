@@ -23,7 +23,7 @@ func handleTokensList(h *handler.Handler, w http.ResponseWriter, r *http.Request
 		return
 	}
 	h.RT.Sync()
-	_, tokStore, _ := h.RT.Snapshot()
+	_, tokStore := h.RT.Snapshot()
 	if tokStore == nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -62,7 +62,7 @@ func handleTokensCreate(h *handler.Handler, w http.ResponseWriter, r *http.Reque
 	if label == "" {
 		label = "token"
 	}
-	_, tokStore, _ := h.RT.Snapshot()
+	_, tokStore := h.RT.Snapshot()
 	if tokStore == nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -106,7 +106,7 @@ func handleTokensDelete(h *handler.Handler, w http.ResponseWriter, r *http.Reque
 		_ = json.NewEncoder(w).Encode(operatorapi.ErrorBody{Error: "invalid json"})
 		return
 	}
-	_, tokStore, _ := h.RT.Snapshot()
+	_, tokStore := h.RT.Snapshot()
 	if tokStore == nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return

@@ -24,6 +24,19 @@ globalThis.ChimeraSettings.Handlers.VirtualModels.wire = function (ctx) {
   var buildVirtualModelDraftCardHtml = ctx.buildVirtualModelDraftCardHtml;
   var scheduleStoryRebuild = ctx.scheduleStoryRebuild;
 
+  var AA = globalThis.ChimeraShared && globalThis.ChimeraShared.AdminAction;
+  var CE = globalThis.ChimeraShared && globalThis.ChimeraShared.ConfigureEdit;
+  var YE = globalThis.ChimeraShared && globalThis.ChimeraShared.YamlEditor;
+
+  function runVmJson(opts) {
+    if (AA && typeof AA.runJson === "function") return AA.runJson(opts);
+    return opts.request().then(opts.onSuccess).catch(function (e) {
+      if (typeof opts.setMessage === "function") {
+        opts.setMessage("err", e && e.message ? e.message : String(e));
+      }
+    });
+  }
+
   function vmIdFromEl(t) {
     return Number(String(t.getAttribute("data-vm-id") || "").trim());
   }
@@ -292,6 +305,27 @@ globalThis.ChimeraSettings.Handlers.VirtualModels.wire = function (ctx) {
         var m = String(t.id).match(/^vm-(\d+)-(name|version|description)$/);
         if (!m) return;
         syncVmHeaderFromDom(Number(m[1]));
+        var yamlM = String(t.id).match(/^vm-(\d+)-(fallback-yaml-ta|routing-yaml-ta|router-yaml-ta)$/);
+        if (yamlM && YE && typeof YE.applyTextareaInputDirty === "function") {
+          var vmIdYaml = Number(yamlM[1]);
+          var uiYaml = vmUi(vmIdYaml);
+          var field = yamlM[2];
+          YE.applyTextareaInputDirty(t, {
+            ui: uiYaml,
+            onDirty: function (ui, el) {
+              if (field === "fallback-yaml-ta") {
+                ui.fallbackTouched = true;
+                ui.fallbackDraft = el.value != null ? String(el.value) : "";
+              } else if (field === "routing-yaml-ta") {
+                ui.policyTouched = true;
+                ui.policyDraft = el.value != null ? String(el.value) : "";
+              } else if (field === "router-yaml-ta") {
+                ui.routerModelsTouched = true;
+                ui.routerModelsDraft = el.value != null ? String(el.value) : "";
+              }
+            }
+          });
+        }
       },
       true
     );
@@ -488,10 +522,21 @@ globalThis.ChimeraSettings.Handlers.VirtualModels.wire = function (ctx) {
       }
       if (act === "vm-fallback-cancel") {
         vmSectionKeepOpen(ui, "fallback");
-        ui.fallbackEditing = false;
-        ui.fallbackTouched = false;
-        ui.fallbackDraft = null;
-        patchVm(vmId);
+        if (CE && typeof CE.restoreEditOnCancel === "function") {
+          CE.restoreEditOnCancel(ui, {
+            editingKey: "fallbackEditing",
+            touchedKey: "fallbackTouched",
+            draftKey: "fallbackDraft",
+            onAfter: function () {
+              patchVm(vmId);
+            }
+          });
+        } else {
+          ui.fallbackEditing = false;
+          ui.fallbackTouched = false;
+          ui.fallbackDraft = null;
+          patchVm(vmId);
+        }
         return;
       }
       if (act === "vm-routing-configure") {
@@ -503,10 +548,22 @@ globalThis.ChimeraSettings.Handlers.VirtualModels.wire = function (ctx) {
       }
       if (act === "vm-routing-cancel") {
         vmSectionKeepOpen(ui, "routing");
-        ui.routingEditing = false;
-        ui.policyTouched = false;
-        ui.policyDraft = String((det && det.routing_policy_yaml) || "");
-        patchVm(vmId);
+        if (CE && typeof CE.restoreEditOnCancel === "function") {
+          CE.restoreEditOnCancel(ui, {
+            editingKey: "routingEditing",
+            touchedKey: "policyTouched",
+            draftKey: "policyDraft",
+            draftValue: String((det && det.routing_policy_yaml) || ""),
+            onAfter: function () {
+              patchVm(vmId);
+            }
+          });
+        } else {
+          ui.routingEditing = false;
+          ui.policyTouched = false;
+          ui.policyDraft = String((det && det.routing_policy_yaml) || "");
+          patchVm(vmId);
+        }
         return;
       }
       if (act === "vm-router-configure") {
@@ -652,17 +709,19 @@ globalThis.ChimeraSettings.Handlers.VirtualModels.wire = function (ctx) {
             adminSetMessage("err", "Fallback chain must include at least one model id.");
             return;
           }
-          (adminPutJSON || adminPostJSON)(vmApiPath(vmId, "/fallback"), { fallback_chain: chain })
-            .then(function () {
+          runVmJson({
+            request: function () {
+              return (adminPutJSON || adminPostJSON)(vmApiPath(vmId, "/fallback"), { fallback_chain: chain });
+            },
+            setMessage: adminSetMessage,
+            successMsg: "Fallback chain saved.",
+            onSuccess: function () {
               ui.fallbackEditing = false;
               ui.fallbackTouched = false;
               ui.fallbackDraft = null;
-              adminSetMessage("", "Fallback chain saved.");
               return reloadVm(vmId);
-            })
-            .catch(function (e) {
-              adminSetMessage("err", e && e.message ? e.message : String(e));
-            });
+            }
+          });
         } catch (e) {
           adminSetMessage("err", e && e.message ? e.message : String(e));
         }
@@ -678,17 +737,22 @@ globalThis.ChimeraSettings.Handlers.VirtualModels.wire = function (ctx) {
         var routeToggle = document.getElementById(pfx + "routing-enabled");
         var polOn =
           routeToggle && String(routeToggle.getAttribute("aria-pressed") || "").toLowerCase() === "true";
-        (adminPutJSON || adminPostJSON)(vmApiPath(vmId, "/routing-policy"), { enabled: polOn, routing_policy_yaml: polYAML })
-          .then(function () {
+        runVmJson({
+          request: function () {
+            return (adminPutJSON || adminPostJSON)(vmApiPath(vmId, "/routing-policy"), {
+              enabled: polOn,
+              routing_policy_yaml: polYAML
+            });
+          },
+          setMessage: adminSetMessage,
+          successMsg: "Routing policy saved.",
+          onSuccess: function () {
             ui.routingEditing = false;
             ui.policyTouched = false;
             ui.policyDraft = null;
-            adminSetMessage("", "Routing policy saved.");
             return reloadVm(vmId);
-          })
-          .catch(function (e) {
-            adminSetMessage("err", e && e.message ? e.message : String(e));
-          });
+          }
+        });
         return;
       }
 
@@ -700,12 +764,17 @@ globalThis.ChimeraSettings.Handlers.VirtualModels.wire = function (ctx) {
           var toolToggle = document.getElementById(pfx + "router-enabled");
           var rOn =
             toolToggle && String(toolToggle.getAttribute("aria-pressed") || "").toLowerCase() === "true";
-          (adminPutJSON || adminPostJSON)(vmApiPath(vmId, "/tool-router"), {
-            tool_router_enabled: rOn,
-            router_models: rchain,
-            confidence_threshold: thr
-          })
-            .then(function () {
+          runVmJson({
+            request: function () {
+              return (adminPutJSON || adminPostJSON)(vmApiPath(vmId, "/tool-router"), {
+                tool_router_enabled: rOn,
+                router_models: rchain,
+                confidence_threshold: thr
+              });
+            },
+            setMessage: adminSetMessage,
+            successMsg: "Tool router saved.",
+            onSuccess: function () {
               ui.routerEditing = false;
               ui.routerModelsTouched = false;
               ui.routerThresholdTouched = false;
@@ -713,12 +782,9 @@ globalThis.ChimeraSettings.Handlers.VirtualModels.wire = function (ctx) {
               ui.routerModelsDraft = null;
               ui.routerThresholdDraft = null;
               ui.routerEnabledDraft = null;
-              adminSetMessage("", "Tool router saved.");
               return reloadVm(vmId);
-            })
-            .catch(function (e) {
-              adminSetMessage("err", e && e.message ? e.message : String(e));
-            });
+            }
+          });
         } catch (e) {
           adminSetMessage("err", e && e.message ? e.message : String(e));
         }
@@ -726,27 +792,32 @@ globalThis.ChimeraSettings.Handlers.VirtualModels.wire = function (ctx) {
       }
 
       if (act === "vm-fallback-generate" || act === "vm-routing-generate") {
-        adminPostJSON(vmApiPath(vmId, "/routing/generate"), { save: false })
-          .then(function (j) {
+        var genAct = act;
+        runVmJson({
+          request: function () {
+            return adminPostJSON(vmApiPath(vmId, "/routing/generate"), { save: false });
+          },
+          setMessage: adminSetMessage,
+          successMsg:
+            genAct === "vm-fallback-generate"
+              ? "Generated fallback from live catalog. Keep to save."
+              : "Generated routing policy from live catalog. Keep to save.",
+          onSuccess: function (j) {
             j = j || {};
-            if (act === "vm-fallback-generate") {
+            if (genAct === "vm-fallback-generate") {
               ui.fallbackDraft = fallbackChainToYAML(j.fallback_chain || []);
               ui.fallbackTouched = true;
               ui.fallbackEditing = true;
               vmSectionKeepOpen(ui, "fallback");
-              adminSetMessage("", "Generated fallback from live catalog. Keep to save.");
             } else {
               ui.policyDraft = String(j.routing_policy_yaml || "");
               ui.policyTouched = true;
               ui.routingEditing = true;
               vmSectionKeepOpen(ui, "routing");
-              adminSetMessage("", "Generated routing policy from live catalog. Keep to save.");
             }
             patchVm(vmId);
-          })
-          .catch(function (e) {
-            adminSetMessage("err", e && e.message ? e.message : String(e));
-          });
+          }
+        });
         return;
       }
 

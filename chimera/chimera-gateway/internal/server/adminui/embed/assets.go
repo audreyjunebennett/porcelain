@@ -13,7 +13,7 @@ import (
 	"github.com/lynn/porcelain/internal/naming"
 )
 
-//go:embed embedui/login.html embedui/settings.html embedui/settings.css embedui/ui.css embedui/theme-tokens.css embedui/embed-theme.js embedui/styles/* embedui/ui/* embedui/ui/*/* embedui/ui/vendor/* embedui/settings_app.js embedui/settings_entry.js embedui/settings/* embedui/settings/*/* embedui/index.html embedui/pwa.html embedui/chat.html embedui/setup.html embedui/settings/gallery.html embedui/gallery/* embedui/chat/* embedui/chat/*/* embedui/shell/*
+//go:embed embedui/login.html embedui/settings.html embedui/settings.css embedui/ui.css embedui/theme-tokens.css embedui/embed-theme.js embedui/styles/* embedui/ui/* embedui/ui/*/* embedui/ui/vendor/* embedui/shared/* embedui/settings_app.js embedui/settings_entry.js embedui/settings/* embedui/settings/*/* embedui/settings/*/*/* embedui/index.html embedui/chat.html embedui/search.html embedui/setup.html embedui/settings/gallery.html embedui/gallery/* embedui/chat/* embedui/chat/*/* embedui/search/* embedui/search/*/* embedui/shell/*
 var embeddedFS embed.FS
 
 type assetState struct {

@@ -40,7 +40,8 @@ const (
 const (
 	// IndexerConfigFileName is the layered YAML basename under .locus (and explicit --config paths).
 	IndexerConfigFileName = "indexer.config.yaml"
-	// IndexerSyncStateFileName is the default local skip-cache file next to config or under .locus.
+	// IndexerSyncStateFileName is the default configured sync-state path (legacy .json name).
+	// OpenSyncState stores checkpoints in sync-state.sqlite beside this path.
 	IndexerSyncStateFileName = "indexer.sync-state.json"
 
 	indexerHiddenStateDir = naming.IndexerHiddenStateDirTarget
@@ -201,6 +202,10 @@ type FileConfig struct {
 	// QueueSnapshotIdleInfoIntervalMS controls how often unchanged idle indexer.queue.snapshot
 	// lines repeat at INFO (default 300000 = 5 min). Negative disables idle INFO heartbeats.
 	QueueSnapshotIdleInfoIntervalMS int `yaml:"queue_snapshot_idle_info_interval_ms"`
+
+	// WorkspacesPollIntervalMS is how often supervised mode re-fetches GET /v1/indexer/workspaces.
+	// Zero uses default (30s). Negative is treated as default.
+	WorkspacesPollIntervalMS int `yaml:"workspaces_poll_interval_ms"`
 }
 
 // Resolved is the runtime indexer configuration after merging YAML, env vars,
@@ -278,6 +283,9 @@ type Resolved struct {
 	// SupervisedLayer is true when --config names an explicit YAML file (desktop supervised).
 	// Effective watch roots come from GET /v1/indexer/workspaces; YAML roots and --root are ignored.
 	SupervisedLayer bool
+
+	// WorkspacesPollInterval is the supervised workspace list poll cadence.
+	WorkspacesPollInterval time.Duration
 }
 
 // Root is a watched directory and its stable, slug-form identifier used in
@@ -331,7 +339,8 @@ type Overrides struct {
 	Roots      []string
 	// ExplicitConfigPath is the --config path when the operator passes one (including
 	// supervised desktop). When sync_state_path is unset in merged YAML, Resolve
-	// defaults sync state to filepath.Join(filepath.Dir(absExplicit), "indexer.sync-state.json").
+	// defaults sync state to filepath.Join(filepath.Dir(absExplicit), IndexerSyncStateFileName).
+	// The on-disk store is SQLite at sync-state.sqlite next to a .json configured path.
 	ExplicitConfigPath string
 	// AllowEmptyRoots, when true, skips the "at least one watch root" check so supervised
 	// mode can stay alive and wait for the UI to append roots (desktop bootstrap).
@@ -450,6 +459,12 @@ func Resolve(fc FileConfig, env func(string) string, ov Overrides) (Resolved, er
 		r.QueueSnapshotIdleInfoInterval = time.Duration(fc.QueueSnapshotIdleInfoIntervalMS) * time.Millisecond
 	default:
 		r.QueueSnapshotIdleInfoInterval = time.Duration(defaultQueueSnapshotIdleInfoIntervalMs) * time.Millisecond
+	}
+	switch {
+	case fc.WorkspacesPollIntervalMS > 0:
+		r.WorkspacesPollInterval = time.Duration(fc.WorkspacesPollIntervalMS) * time.Millisecond
+	default:
+		r.WorkspacesPollInterval = defaultWorkspacesPollInterval
 	}
 	if fc.Defaults != nil {
 		r.DefaultScope = ScopeFragment{

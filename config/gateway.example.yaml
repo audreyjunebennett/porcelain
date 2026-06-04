@@ -7,9 +7,9 @@
 
 # chimera-gateway: client-facing API, operator UI, routing, and RAG orchestration.
 #
-# Binds HTTP (listen_host / listen_port) and defines the virtual model id (Chimera-<semver>).
+# Binds HTTP (listen_host / listen_port). Virtual models are configured in operator settings (SQLite).
 gateway:
-  # Semantic version for the virtual model id (Chimera-<semver>).
+  # Gateway release semver (display / diagnostics).
   semver: "0.2.0"
   # HTTP listen address for chimera-gateway.
   listen_host: "127.0.0.1"
@@ -52,7 +52,7 @@ vectorstore:
 
 # Timeouts and background checks against chimera-broker and related probes.
 #
-# Used for GET /health, catalog polling, and upstream chat completion deadlines.
+# Used for GET /health, catalog polling in /ui/logs, and upstream chat completion deadlines.
 health:
   # Timeout (ms) for chimera-broker health and GET /v1/models catalog fetch.
   timeout_ms: 5000
@@ -68,135 +68,94 @@ health:
 # Reloaded when the file mtime changes (gateway.yaml also reloads when provider-free-tier changes).
 paths:
   api_keys: "./api-keys.yaml"
-  routing_policy: "./routing-policy.yaml"
   provider_free_tier: "./provider-free-tier.yaml"
   provider_model_limits: "./provider-model-limits.yaml"
-
-# Virtual-model routing: which chimera-broker models to call and how to filter the catalog.
-#
-# Clients may request the Chimera-<semver> virtual id; the gateway maps that to fallback_chain
-# models and optional tool-router slimming before the main completion.
-routing:
-  # When true, intersect GET /v1/models with provider_free_tier allowlist.
-  filter_free_tier_models: true
-  # Ordered chimera-broker model ids for virtual-model chat; try next on 429 / selected 5xx.
-  fallback_chain:
-    - "groq/llama-3.3-70b-versatile"
-    - "gemini/gemini-2.5-flash"
-    - "gemini/gemini-2.5-flash-lite"
-    - "gemini/gemini-2.5-flash-preview-tts"
-    - "gemini/gemini-3-flash-preview"
-    - "gemini/gemini-3.1-flash-lite"
-    - "gemini/gemini-3.1-flash-lite-preview"
-    - "gemini/gemini-3.1-flash-live-preview"
-    - "groq/openai/gpt-oss-120b"
-    - "groq/qwen/qwen3-32b"
-    - "groq/meta-llama/llama-4-scout-17b-16e-instruct"
-    - "groq/openai/gpt-oss-20b"
-    - "groq/llama-3.1-8b-instant"
-    - "groq/allam-2-7b"
-    - "groq/groq/compound"
-    - "groq/groq/compound-mini"
-    - "ollama/llama3.2:3b"
-    - "ollama/qwen3.5:9b"
-  # chimera-broker models for tool-router scoring before the main completion. Empty = disabled.
-  router_models: []
-  # - "ollama/llama3.2:3b"
-  # - "groq/groq/compound-mini"
-  tool_router:
-    # Requires non-empty router_models.
-    enabled: false
-    # Keep tools with router score >= threshold (0–1).
-    confidence_threshold: 0.5
 
 # Gateway metrics: SQLite usage and chat outcomes for quotas and operator views.
 #
 # Applied at process start only (changing paths requires a restart). When enabled, supports
-# provider_model_limits enforcement and conversation_merge embedding history.
+# provider_model_limits enforcement.
 metrics:
   enabled: true
   # sqlite_path: "../data/gateway/metrics.sqlite"
   # migrations_dir: "../migrations/chimera-gateway/metrics"
 
-# Operator database: indexer workspaces (project/flavor paths and supervised state).
+# Operator database: workspaces, conversations, corpus segment index (manifest ingest).
 #
-# Always opened at default paths unless you uncomment overrides below. Separate from metrics.sqlite.
+# Opened at default paths unless you uncomment overrides below. Separate from metrics.sqlite.
 # operator:
 #   sqlite_path: "../data/gateway/operator.sqlite"
 #   migrations_dir: "../migrations/chimera-gateway/operator"
 
 # Operator logs UI: ring-buffer retention for supervised /ui/logs.
 # operator_logs:
-#   indexer_pinned_lines_max: 64  # reserve slots for run.start, scope.status, gate, skip summaries
-
-# Conversation merge: reuse an existing chat session when the client omits a conversation id.
-#
-# Uses rag.embedding (when RAG is on) plus operator SQLite to match recent sessions by similarity.
-# Optional sticky-attach fields link short follow-ups without a full embedding match.
-conversation_merge:
-  enabled: true
-  # Minimum cosine similarity to attach to an existing session.
-  match_threshold: 0.75
-  # Only consider sessions updated within this many minutes.
-  recent_window_minutes: 10
-  # Max candidate sessions to score per request.
-  candidate_limit: 32
-  # Drop idle sessions after this many hours.
-  max_idle_hours: 168
-  # Sticky attach: link short follow-ups to the latest session within a time window.
-  # session_attach_minutes: 45
-  # session_attach_min_cosine: 0.18
-  # session_short_follow_up_runes: 220
+#   indexer_pinned_lines_max: 64
 
 # chimera-indexer: file watcher that ingests workspace files into vectorstore via the gateway.
 #
 # When supervised.enabled is true, chimera-supervisor starts the indexer after chimera-broker is
-# healthy. Set CHIMERA_GATEWAY_TOKEN in the environment for authenticated POST /v1/ingest.
+# healthy. Set CHIMERA_GATEWAY_TOKEN in the environment for authenticated ingest.
+# Watch directories are in operator SQLite (/ui/settings), not in indexer YAML.
 # See docs/indexer.md.
 indexer:
   supervised:
     # Start chimera-indexer after chimera-broker is healthy (needs CHIMERA_GATEWAY_TOKEN for ingest).
     enabled: true
-    # By default, JSON logs on stderr are enabled. Set log_json: false to opt out.
+    # JSON structured logs on stderr (filter /ui/settings by source indexer). false = plain text.
     # log_json: false
-    # The gateway can run the indexer provided at the given path.
+    # Optional explicit path to chimera-indexer binary (default: next to gateway or PATH).
     # bin: ""
-    # When the gateway runs the indexer, it writes and reads its configuration from this file.
+    # Indexer tuning YAML passed as --config (relative to this file unless absolute).
     # Created by `make chimera-indexer-configure` from config/indexer.example.yaml.
     config_path: "indexer.yaml"
-    # When the gateway disables RAG it also disables the indexer.
-    # With rag disabled, to run the indexer set this to true.
+    # Allow supervised indexer when rag.enabled is false (default false).
     # start_when_rag_disabled: false
 
-# Retrieval-augmented generation ("RAG"): gateway behavior for knowledge-backed chat.
+# Retrieval-augmented generation ("RAG"): manifest ingest, search, coherence, expansion tools.
 #
-# When enabled, chimera-gateway can index text into vectorstore, search it at chat time,
-# and inject matching snippets into requests to the virtual Chimera model (Chimera-<semver>).
-# vectorstore.* above is where vectors are stored; this block controls embeddings, chunking,
-# search limits, ingest size, and default project/flavor ids.
+# When enabled, the gateway accepts indexer manifest ingest, serves retrieval at chat time,
+# and stores vectors in vectorstore. Indexer chunking uses rag.chunking sizes advertised on
+# GET /v1/indexer/config.
 rag:
   # Master switch: ingest APIs, indexer APIs, chat-time retrieval, and vectorstore health checks.
   enabled: true
-  # How text is turned into vectors (usually via chimera-broker /v1/embeddings).
   embedding:
     # Defaults to broker.base_url when empty.
     # base_url: ""
     path: "/v1/embeddings"
     model: "ollama/nomic-embed-text:latest"
     dim: 768
-  # How documents are split before indexing.
   chunking:
     size: 512
     overlap: 128
-  # How many chunks to fetch from vectorstore per chat request and minimum similarity.
   retrieval:
     top_k: 8
     score_threshold: 0.50
-  # POST /v1/ingest and session ingest size limits.
   ingest:
     max_bytes: 10485760
+    # Single POST /v1/ingest body limit; larger files use session ingest (default: same as max_bytes).
     # max_whole_file_bytes: 2097152
-  # Default X-Chimera-Project / X-Chimera-Flavor-Id when clients omit headers.
   defaults:
     project_id: "default"
     flavor_id: ""
+  # Stale-index warnings in chat (off | warn | strict). strict blocks GET /v1/rag/* expansion.
+  coherence:
+    mode: warn
+  # Workspace expansion APIs: /v1/rag/segments, /context, /adjacent, /tools.
+  tooling:
+    enabled: true
+    # expansion_cache_ttl_seconds: 300
+    # expansion_cache_max_entries: 256
+
+# Internal embedding provider: supervised chimera-embed + llama-server (optional).
+#
+# Off unless enabled. When on, point rag.embedding at the local /v1/embeddings endpoint.
+# internal_embedding:
+#   enabled: false
+#   provider: "internal"
+#   model: "internal/nomic-embed-text"
+#   dim: 768
+#   base_url: "http://127.0.0.1:8090"
+#   model_path: "../data/embedding/models/nomic-embed-text.gguf"
+#   cache_dir: "../data/embedding/cache"
+#   log_level: "info"

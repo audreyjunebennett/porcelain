@@ -22,6 +22,7 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminProvider = function (ctx) {
   var sgOpHealthPillHtml = ctx.sgOpHealthPillHtml;
   var operatorCardChevronHtml = ctx.operatorCardChevronHtml;
   var adminScopedEvlogPanelFromEvents = ctx.adminScopedEvlogPanelFromEvents;
+  var adminProviderEventMatches = ctx.adminProviderEventMatches;
 
   function providerIsOllama(providerId) {
     if (providerId === "ollama") return true;
@@ -61,28 +62,21 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminProvider = function (ctx) {
     return ctx.adminProviderModelsEditingId === providerId;
   }
 
+  var ET = globalThis.ChimeraShared && globalThis.ChimeraShared.EditToolbar;
+
   function providerModelsIconBtn(action, providerId, title, iconName, opts) {
     opts = opts || {};
-    var cls = "sg-op-yaml-ov-btn";
-    if (opts.extraClass) cls += " " + String(opts.extraClass);
-    var disabled = opts.disabled ? " disabled" : "";
-    return (
-      '<button type="button" class="' +
-      cls +
-      '" data-admin-action="' +
-      escapeHtml(String(action || "")) +
-      '" data-provider="' +
-      escapeHtml(providerId) +
-      '" title="' +
-      escapeHtml(title) +
-      '" aria-label="' +
-      escapeHtml(title) +
-      '"' +
-      disabled +
-      '><span class="material-symbols-outlined" aria-hidden="true">' +
-      escapeHtml(String(iconName || "")) +
-      "</span></button>"
-    );
+    if (ET && typeof ET.iconBtnHtml === "function") {
+      return ET.iconBtnHtml(escapeHtml, {
+        action: action,
+        title: title,
+        icon: iconName,
+        extraClass: opts.extraClass,
+        disabled: opts.disabled,
+        dataAttrs: { provider: providerId }
+      });
+    }
+    return "";
   }
 
   function buildProviderModelsToolbar(providerId, editing, saving) {
@@ -117,11 +111,14 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminProvider = function (ctx) {
     return actions;
   }
 
-  function buildProviderPanel(title, headerActionsHtml, bodyHtml, panelKind) {
+  function buildProviderPanel(title, headerActionsHtml, bodyHtml, panelKind, uiPart) {
+    var partAttr = uiPart ? ' data-ui-part="' + escapeHtml(String(uiPart)) + '"' : "";
     return (
       '<section class="sg-op-provider-panel sg-op-provider-panel--' +
       escapeHtml(String(panelKind || "block")) +
-      '">' +
+      '"' +
+      partAttr +
+      ">" +
       '<header class="sg-op-provider-panel__head">' +
       '<h4 class="sg-op-provider-panel__title sum-section-label">' +
       escapeHtml(title) +
@@ -227,11 +224,16 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminProvider = function (ctx) {
     if (!providerHasCredentials(providerId, ((ctx.adminStateCache || {}).providers || {})[providerId])) {
       return "";
     }
-    return buildProviderPanel(
-      "Model usage (24h)",
-      buildProviderModelsToolbar(providerId, editing, saving),
-      buildProviderUsageListHtml(providerId, editing),
-      "usage"
+    return (
+      '<section class="sg-op-provider-panel sg-op-provider-panel--usage">' +
+      '<header class="sg-op-provider-panel__head">' +
+      '<h4 class="sg-op-provider-panel__title sum-section-label">Model usage (24h)</h4>' +
+      '<div class="sg-op-provider-panel__actions" data-ui-part="admin-provider.models-toolbar">' +
+      buildProviderModelsToolbar(providerId, editing, saving) +
+      "</div></header>" +
+      '<div class="sg-op-provider-panel__body" data-ui-part="admin-provider.models-list">' +
+      buildProviderUsageListHtml(providerId, editing) +
+      "</div></section>"
     );
   }
 
@@ -280,14 +282,16 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminProvider = function (ctx) {
         '"/></div>' +
         providerModelsIconBtn("ollama-save", providerId, "Save server URL", "keep") +
         "</div>",
-      "endpoint"
+      "endpoint",
+      "admin-provider.keys"
     );
 
     var keysPanel = buildProviderPanel(
       "API keys",
       "",
       providerRowsHtml(providerId, row) + providerKeyAddBlockHtml(providerId),
-      "keys"
+      "keys",
+      "admin-provider.keys"
     );
 
     var body = "";
@@ -302,17 +306,11 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminProvider = function (ctx) {
       for (var ei = entryCache.length - 1; ei >= 0 && scoped.length < 18; ei--) {
         var ev = entryCache[ei];
         var fEv = getFlat(ev.parsed);
-        var msgEv = String(fEv.msg || fEv.message || "").toLowerCase();
-        var providerHit =
-          String(fEv.provider_id || fEv.provider || fEv.upstream_provider || "").toLowerCase() ===
-            String(providerId).toLowerCase() ||
-          String(fEv.upstreamModel || fEv.model || "")
-            .toLowerCase()
-            .indexOf(String(providerId).toLowerCase() + "/") === 0 ||
-          msgEv.indexOf(String(providerId).toLowerCase()) >= 0;
-        if (providerHit) scoped.push(ev);
+        if (adminProviderEventMatches(fEv, providerId)) scoped.push(ev);
       }
-      scopedPanel = adminScopedEvlogPanelFromEvents("Scoped log - " + title, "provider-" + providerId, scoped);
+      scopedPanel = adminScopedEvlogPanelFromEvents("Scoped log - " + title, "provider-" + providerId, scoped, {
+        uiPart: "admin-provider.scoped-evlog"
+      });
     }
     var avatarClass = adminProviderAvatarClass(providerId);
     var cardCls = "sum-card sum-card--provider";
@@ -323,7 +321,7 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminProvider = function (ctx) {
       '" id="admin-provider-' +
       escapeHtml(providerId) +
       '">' +
-      '<summary><span class="sum-avatar ' +
+      '<summary data-ui-part="admin-provider.summary"><span class="sum-avatar ' +
       escapeHtml(avatarClass) +
       '">' +
       escapeHtml(avatar) +
@@ -342,6 +340,92 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminProvider = function (ctx) {
     );
   }
 
+  var ADMIN_PROVIDERS_INTRO_HTML =
+    '<div class="sum-workspaces-intro"><p class="sum-workspaces-intro-lead">Providers drive upstream inference through chimera-broker; each card shows configuration, usage, and scoped log activity.</p></div>';
+
+  function providerCatalogApi() {
+    return globalThis.ChimeraSettings &&
+      ChimeraSettings.Providers &&
+      ChimeraSettings.Providers.Catalog
+      ? ChimeraSettings.Providers.Catalog
+      : null;
+  }
+
+  function buildAdminProviderPickerHtml() {
+    var api = providerCatalogApi();
+    var addable = api && typeof api.addableProviderEntries === "function" ? api.addableProviderEntries(ctx) : [];
+    var listHtml = "";
+    if (!addable.length) {
+      listHtml = '<p class="sg-op-provider-picker__empty muted">All catalog providers are already on this page.</p>';
+    } else {
+      listHtml = '<ul class="sg-op-provider-picker__list" role="listbox" aria-label="Add provider">';
+      for (var pi = 0; pi < addable.length; pi++) {
+        var ent = addable[pi];
+        listHtml +=
+          '<li class="sg-op-provider-picker__item" role="presentation">' +
+          '<button type="button" class="sg-op-provider-picker__option" role="option" data-admin-action="provider-picker-select" data-provider-id="' +
+          escapeHtml(ent.id) +
+          '">' +
+          '<span class="sg-op-provider-picker__avatar" aria-hidden="true">' +
+          escapeHtml(ent.avatar || ent.id.slice(0, 2).toUpperCase()) +
+          "</span>" +
+          '<span class="sg-op-provider-picker__meta">' +
+          '<span class="sg-op-provider-picker__title">' +
+          escapeHtml(ent.title || ent.id) +
+          "</span>" +
+          '<span class="sg-op-provider-picker__sub">' +
+          escapeHtml(ent.subtitle || "") +
+          "</span></span></button></li>";
+      }
+      listHtml += "</ul>";
+    }
+    return (
+      '<div id="sg-op-provider-picker" class="sg-op-provider-picker" hidden>' +
+      '<div class="sg-op-provider-picker__panel">' +
+      listHtml +
+      '<div class="sg-op-provider-picker__foot">' +
+      '<button type="button" class="sg-op-btn sg-op-btn--ghost" data-admin-action="provider-picker-cancel">Cancel</button>' +
+      "</div></div></div>"
+    );
+  }
+
+  function buildAdminProvidersSectionBreakHtml() {
+    if (typeof ctx.operatorSectionHeadHtml !== "function") {
+      return (
+        '<div class="sum-section-label sum-feed-section-title">Providers</div>' +
+        ADMIN_PROVIDERS_INTRO_HTML
+      );
+    }
+    var api = providerCatalogApi();
+    var canAdd = api && typeof api.hasAddableProviders === "function" ? api.hasAddableProviders(ctx) : false;
+    var actionHtml = "";
+    if (typeof ctx.operatorSectionAddBtn === "function") {
+      actionHtml = ctx.operatorSectionAddBtn(
+        {
+          "data-admin-action": "provider-picker-open",
+          id: "sg-op-provider-picker-trigger",
+          "aria-expanded": "false",
+          "aria-controls": "sg-op-provider-picker",
+          "aria-haspopup": "listbox"
+        },
+        "Add provider",
+        canAdd
+          ? { title: "Add a provider card" }
+          : { disabled: true, title: "All catalog providers are already visible" }
+      );
+    }
+    return (
+      '<div class="sg-op-providers-section" id="sg-op-providers-section">' +
+      '<div class="sg-op-providers-section__anchor">' +
+      ctx.operatorSectionHeadHtml("Providers", "hub", { actionHtml: actionHtml }) +
+      buildAdminProviderPickerHtml() +
+      "</div>" +
+      ADMIN_PROVIDERS_INTRO_HTML +
+      "</div>"
+    );
+  }
   ctx.buildAdminProviderCardHtml = buildAdminProviderCardHtml;
   ctx.providerHasCredentials = providerHasCredentials;
+  ctx.buildAdminProviderPickerHtml = buildAdminProviderPickerHtml;
+  ctx.buildAdminProvidersSectionBreakHtml = buildAdminProvidersSectionBreakHtml;
 };

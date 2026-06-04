@@ -19,9 +19,6 @@ gateway:
   listen_port: 3000
 paths:
   api_keys: "./api-keys.yaml"
-  routing_policy: "./routing-policy.yaml"
-routing:
-  fallback_chain: ["groq/x"]
 `)
 	if err := os.WriteFile(gw, []byte(raw+"\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -48,8 +45,7 @@ func TestLoadGatewayYAML_metricsDisabled(t *testing.T) {
 	dir := t.TempDir()
 	gw := filepath.Join(dir, "gateway.yaml")
 	raw := `gateway: { listen_port: 3000 }
-paths: { tokens: "./t.yaml", routing_policy: "./r.yaml" }
-routing: { fallback_chain: ["a/b"] }
+paths: { tokens: "./t.yaml" }
 metrics:
   enabled: false
 `

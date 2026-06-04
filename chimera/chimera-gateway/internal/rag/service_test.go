@@ -74,6 +74,31 @@ func (s *fakeStore) DeleteBySource(_ context.Context, c, src string) error {
 	return nil
 }
 
+func (s *fakeStore) GetPoints(_ context.Context, c string, ids []string) ([]vectorstore.PointPayload, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	byID := map[string]vectorstore.Point{}
+	for _, p := range s.points[c] {
+		byID[p.ID] = p
+	}
+	var out []vectorstore.PointPayload
+	for _, id := range ids {
+		if p, ok := byID[id]; ok {
+			out = append(out, vectorstore.PointPayload{ID: p.ID, Payload: p.Payload})
+		}
+	}
+	return out, nil
+}
+
+func (s *fakeStore) DeleteCollection(_ context.Context, c string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.collections, c)
+	delete(s.points, c)
+	delete(s.deletedSrcs, c)
+	return nil
+}
+
 func (s *fakeStore) ScrollPoints(_ context.Context, c string, filter *vectorstore.Coords, limit int, cursor string) (vectorstore.ScrollBatch, error) {
 	if limit <= 0 {
 		limit = 256
@@ -316,5 +341,69 @@ func TestService_Retrieve_logContainsPrincipalId(t *testing.T) {
 	}
 	if !strings.Contains(out, "msg=conversation.rag.span") || !strings.Contains(out, "window_ms=10000") {
 		t.Fatalf("missing fallback lifecycle RAG span:\n%s", out)
+	}
+}
+
+func TestService_PurgeWorkspaceCorpus(t *testing.T) {
+	s, st, _ := newSvc(t)
+	ctx := context.Background()
+	c := vectorstore.Coords{TenantID: "t1", ProjectID: "proj", FlavorID: "main"}
+	if _, err := s.Ingest(ctx, IngestRequest{Coords: c, Source: "doc.txt", Text: strings.Repeat("word ", 80)}); err != nil {
+		t.Fatal(err)
+	}
+	coll := vectorstore.CollectionName(c)
+	if len(st.points[coll]) == 0 {
+		t.Fatal("expected points before purge")
+	}
+	stBefore, err := s.PurgeWorkspaceCorpus(ctx, c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stBefore.Points == 0 {
+		t.Fatalf("expected stats before purge to report points, got %+v", stBefore)
+	}
+	if len(st.points[coll]) != 0 {
+		t.Fatalf("collection should be empty after purge")
+	}
+	stAfter, err := s.store.Stats(ctx, coll)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stAfter.Points != 0 {
+		t.Fatalf("stats after purge: %+v", stAfter)
+	}
+}
+
+func TestService_Retrieve_dimMismatchSkipsHits(t *testing.T) {
+	st := newFakeStore()
+	em := &fakeEmbedder{dim: 8, model: "test-embed"}
+	var buf strings.Builder
+	log := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	s, err := New(Options{
+		Store: st, Embedder: em, EmbeddingDim: 8, ChunkSize: 64, ChunkOverlap: 16, TopK: 4, ScoreThreshold: 0.5, Log: log,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := vectorstore.Coords{TenantID: "t1", ProjectID: "proj"}
+	coll := vectorstore.CollectionName(c)
+	st.collections[coll] = 768
+	st.points[coll] = []vectorstore.Point{
+		{
+			ID:      "11111111-1111-1111-1111-111111111111",
+			Vector:  make([]float32, 8),
+			Payload: vectorstore.Payload{TenantID: "t1", ProjectID: "proj", Text: "hello world", Source: "a.txt"},
+		},
+	}
+	hits, err := s.Retrieve(context.Background(), RetrieveRequest{Coords: c, Query: "hello"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hits) != 0 {
+		t.Fatalf("expected no hits on dim mismatch, got %d", len(hits))
+	}
+	out := buf.String()
+	if !strings.Contains(out, "rag.retrieve.dim_mismatch") {
+		t.Fatalf("expected dim mismatch log, got:\n%s", out)
 	}
 }

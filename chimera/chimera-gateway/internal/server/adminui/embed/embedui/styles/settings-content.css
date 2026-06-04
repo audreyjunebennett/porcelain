@@ -71,7 +71,7 @@
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
   word-break: break-word; font-size: 0.78rem; color: var(--embed-text-heading); line-height: 1.35;
 }
-/* Bifrost service card: full log uses buildDetailsColumn + room for long upstream lines */
+/* Broker service card: full log field grid + room for long upstream lines */
 .sum-full-log.sum-full-log--chimera-broker .log-line-sum__msg {
   -webkit-line-clamp: 12;
   max-height: none;
@@ -81,13 +81,54 @@
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
   word-break: break-word;
 }
-.log-fields-block { margin-top: 0.35rem; font-size: 0.78rem; }
 /* Gateway metrics tables (same data as GET /api/ui/metrics) inside summarized card */
 .sum-metrics-table-wrap { overflow-x: auto; margin: 0.35rem 0 0.75rem; }
+/* Scrollable metrics tables: header stays visible, body scrolls */
+.sum-metrics-table-wrap.sum-metrics-table-wrap--scroll-body {
+  max-height: none;
+  overflow: visible;
+}
+.sum-metrics-table-wrap.sum-metrics-table-wrap--scroll-body .sum-metrics-table--scroll-body {
+  display: block;
+  overflow: visible;
+}
+.sum-metrics-table-wrap.sum-metrics-table-wrap--scroll-body .sum-metrics-table--scroll-body thead,
+.sum-metrics-table-wrap.sum-metrics-table-wrap--scroll-body .sum-metrics-table--scroll-body tbody {
+  display: block;
+  width: 100%;
+}
+.sum-metrics-table-wrap.sum-metrics-table-wrap--scroll-body .sum-metrics-table--scroll-body thead {
+  position: relative;
+  z-index: 2;
+  box-shadow:
+    0 5px 10px -4px color-mix(in srgb, var(--embed-text-primary) 14%, transparent),
+    0 2px 4px -2px color-mix(in srgb, var(--embed-text-primary) 10%, transparent);
+}
+.sum-metrics-table-wrap.sum-metrics-table-wrap--scroll-body .sum-metrics-table--scroll-body tbody {
+  max-height: 14rem;
+  overflow-x: visible;
+  overflow-y: auto;
+}
+.sum-metrics-table-wrap.sum-metrics-table-wrap--scroll-body .sum-metrics-table--scroll-body thead tr,
+.sum-metrics-table-wrap.sum-metrics-table-wrap--scroll-body .sum-metrics-table--scroll-body tbody tr {
+  display: table;
+  width: 100%;
+  table-layout: fixed;
+}
+.sum-metrics-table--scroll-body col.gw-metrics-col-provider { width: 5.5rem; }
+.sum-metrics-table--scroll-body col.gw-metrics-col-http { width: 3.75rem; }
+.sum-metrics-table--scroll-body col.gw-metrics-col-num { width: 5.75rem; }
+.sum-metrics-table--scroll-body col.gw-metrics-col-time { width: 5.25rem; }
+.sum-metrics-table--scroll-body .gw-metrics-cell-http {
+  white-space: nowrap;
+  text-align: center;
+}
+.sum-metrics-table--scroll-body .gw-metrics-cell-model code {
+  white-space: normal;
+  word-break: break-all;
+}
 /* Recent upstream calls: cap height like .sum-full-log on other summary cards */
 .sum-metrics-table-wrap.sum-metrics-events-scroll {
-  max-height: 14rem;
-  overflow-y: auto;
   margin-bottom: 0;
 }
 .sum-metrics-table {
@@ -104,9 +145,16 @@
 .sum-metrics-table code { font-size: 0.72rem; }
 
 /* Indexer workspace card: recently evaluated files — header stays visible, body scrolls */
+.sum-metrics-table-wrap.indexer-recent-files {
+  overflow-x: hidden;
+  max-width: 100%;
+}
 .sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent {
+  --indexer-recent-time-w: 4.75rem;
+  --indexer-recent-status-w: calc(10ch + 2 * var(--sg-op-summary-pill-px, 0.32rem));
   display: block;
   overflow: visible;
+  width: 100%;
 }
 .sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent thead,
 .sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent tbody {
@@ -122,59 +170,81 @@
 }
 .sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent tbody {
   max-height: 14rem;
-  overflow-x: visible;
+  overflow-x: hidden;
   overflow-y: auto;
 }
 .sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent thead tr,
 .sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent tbody tr {
   display: table;
-  width: max-content;
-  min-width: 100%;
-  table-layout: auto;
+  width: 100%;
+  table-layout: fixed;
 }
 .sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent col.indexer-recent-col-time {
-  width: 21ch;
+  width: var(--indexer-recent-time-w);
 }
-.sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent col.indexer-recent-col-path {
+.sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent col.indexer-recent-col-message {
   width: auto;
 }
-.sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent col.indexer-recent-col-detail {
-  width: 8rem;
-}
-/* Longest status label is "evaluating" (10ch); badge padding included */
 .sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent col.indexer-recent-col-status {
-  width: calc(10ch + 2 * var(--sg-op-summary-pill-px, 0.32rem));
+  width: var(--indexer-recent-status-w);
 }
 .sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent .indexer-recent-cell-time,
-.sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent .sum-evlog__cell--time {
-  width: 21ch;
-  max-width: 21ch;
+.sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent .sum-evlog__cell--time,
+.sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent th.indexer-recent-cell-time {
+  width: var(--indexer-recent-time-w);
+  max-width: var(--indexer-recent-time-w);
   box-sizing: border-box;
+  vertical-align: top;
 }
-.sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent .indexer-recent-cell-time time,
-.sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent .sum-evlog__cell--time time {
-  display: inline-block;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--embed-text-mono-dt);
-  font-variant-numeric: tabular-nums;
+.sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent .indexer-recent-cell-message,
+.sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent th.indexer-recent-cell-message {
+  width: auto;
+  min-width: 0;
+  max-width: 100%;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  white-space: normal;
 }
-.sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent .indexer-recent-cell-path {
-  white-space: nowrap;
+.sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent .indexer-recent-msg {
+  min-width: 0;
+  max-width: 100%;
 }
-.sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent .indexer-recent-cell-detail {
-  max-width: 12rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent .indexer-recent-msg-path {
+  min-width: 0;
+  max-width: 100%;
 }
-.sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent .indexer-recent-cell-status {
-  width: calc(10ch + 2 * var(--sg-op-summary-pill-px, 0.32rem));
-  max-width: calc(10ch + 2 * var(--sg-op-summary-pill-px, 0.32rem));
+.sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent .indexer-recent-msg-path code {
+  display: block;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+.sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent .indexer-recent-msg-detail {
+  margin-top: 0.2rem;
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+.sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent .indexer-recent-cell-status,
+.sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent th.indexer-recent-cell-status {
+  width: var(--indexer-recent-status-w);
+  min-width: var(--indexer-recent-status-w);
+  max-width: var(--indexer-recent-status-w);
   box-sizing: border-box;
   text-align: center;
   white-space: nowrap;
+  vertical-align: top;
+}
+.sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent .sum-evlog__cell--time time {
+  display: block;
+}
+.sum-metrics-table-wrap.indexer-recent-files .sum-metrics-table--indexer-recent .sum-evlog__cell--time .dt-stack .dt-line {
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 /* Conversation card — segmented lifecycle bar (gapped segments + labels in expanded body) */

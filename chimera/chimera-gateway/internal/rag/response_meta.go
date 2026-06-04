@@ -15,10 +15,15 @@ const hitPreviewMaxRunes = 1600
 
 // HitSummary is a compact retrieval hit exposed to operator/chat clients.
 type HitSummary struct {
-	Source   string  `json:"source"`
-	Text     string  `json:"text"`
-	Score    float32 `json:"score"`
-	Language string  `json:"language,omitempty"`
+	Source        string  `json:"source"`
+	Text          string  `json:"text"`
+	Score         float32 `json:"score"`
+	Language      string  `json:"language,omitempty"`
+	StartLine     int     `json:"start_line,omitempty"`
+	EndLine       int     `json:"end_line,omitempty"`
+	StartsMidLine bool    `json:"starts_mid_line,omitempty"`
+	ChunkIndex    int     `json:"chunk_index,omitempty"`
+	ContentSHA256 string  `json:"content_sha256,omitempty"`
 }
 
 // LanguageFromSource infers a highlight/render language id from a file path or source label.
@@ -71,11 +76,20 @@ func SummarizeHits(hits []vectorstore.Hit) []HitSummary {
 		if src == "" {
 			src = "unknown"
 		}
+		lang := LanguageFromSource(src)
+		if l := strings.TrimSpace(h.Payload.Language); l != "" {
+			lang = l
+		}
 		out = append(out, HitSummary{
-			Source:   src,
-			Text:     previewHitText(h.Payload.Text),
-			Score:    h.Score,
-			Language: LanguageFromSource(src),
+			Source:        src,
+			Text:          previewHitText(h.Payload.Text),
+			Score:         h.Score,
+			Language:      lang,
+			StartLine:     h.Payload.StartLine,
+			EndLine:       h.Payload.EndLine,
+			StartsMidLine: h.Payload.StartsMidLine,
+			ChunkIndex:    h.Payload.ChunkIndex,
+			ContentSHA256: strings.TrimSpace(h.Payload.ContentSHA256),
 		})
 	}
 	return out

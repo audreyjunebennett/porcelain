@@ -153,7 +153,7 @@ func (ix *Indexer) RunWorkers(ctx context.Context) {
 func (ix *Indexer) processWorkItem(ctx context.Context, wi WorkItem, rng *rand.Rand, workerID int) error {
 	switch wi.Kind {
 	case WorkScan:
-		return ix.runScanJob(ctx, wi.ScanID)
+		return ix.runScanJob(ctx, wi.ScanID, wi.ScanRootIDs)
 	case WorkFanoutList:
 		return ix.runFanoutList(ctx, wi)
 	case WorkIngest:

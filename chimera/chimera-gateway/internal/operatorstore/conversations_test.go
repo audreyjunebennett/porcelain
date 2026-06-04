@@ -47,6 +47,7 @@ func TestConversationHistory_CRUDFlagDelete(t *testing.T) {
 	if err := s.ReplaceTurnRetrievals(ctx, asstTurn, []RetrievalInput{{
 		FilePath: "src/a.go", Score: 0.9, SnippetText: "func main() {}", Language: "go",
 		VectorPointID: "pt-1", ContentSHA256: "sha256:abc",
+		StartLine: 42, EndLine: 58, StartsMidLine: true,
 	}}); err != nil {
 		t.Fatal(err)
 	}
@@ -78,6 +79,10 @@ func TestConversationHistory_CRUDFlagDelete(t *testing.T) {
 	}
 	if len(tr.Turns[1].Retrievals) != 1 {
 		t.Fatalf("retrievals=%+v", tr.Turns[1].Retrievals)
+	}
+	r0 := tr.Turns[1].Retrievals[0]
+	if r0.StartLine != 42 || r0.EndLine != 58 || !r0.StartsMidLine {
+		t.Fatalf("line metadata=%+v", r0)
 	}
 
 	if _, err := s.GetConversationTranscript(ctx, principalB, cid); err != nil {

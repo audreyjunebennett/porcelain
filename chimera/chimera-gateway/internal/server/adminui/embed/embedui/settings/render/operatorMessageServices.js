@@ -288,6 +288,7 @@
       return bits.join(" · ");
     },
     broker_trim_detail: function (flat, entry, opts) {
+      opts = opts || {};
       var det = trimDetail(flat, 260);
       var base = entry.summary || "";
       var slug = entry.slug || "";
@@ -297,6 +298,7 @@
         return "Config store ready";
       }
       if (!det) return base;
+      if (opts.forEventLog === true && base === "chimera-broker") return det;
       if (base.indexOf("invalid") >= 0 || base.indexOf("warning") >= 0 || base.indexOf("error") >= 0 || base.indexOf("Upstream") >= 0) {
         return base + " · " + det;
       }
@@ -343,9 +345,27 @@
       if (pn) return "Plugin " + pn;
       return entry.summary || "Plugin status";
     },
-    broker_provider_id: function (flat, entry) {
+    broker_provider_id: function (flat, entry, opts) {
+      opts = opts || {};
       var pid = flat.provider_id != null ? String(flat.provider_id).trim() : "";
       var base = entry.summary || "";
+      var det = trimDetail(flat, 260);
+      if (opts.forEventLog === true) {
+        if (det) {
+          var detL = det.toLowerCase();
+          var pidL = pid.toLowerCase();
+          if (
+            pidL &&
+            (detL.indexOf("provider " + pidL) >= 0 ||
+              detL.indexOf("for provider " + pidL) >= 0 ||
+              detL.indexOf("provider_id=" + pidL) >= 0)
+          ) {
+            return det;
+          }
+          return pid ? base + " · " + pid + " · " + det : base + " · " + det;
+        }
+        return pid ? base + " · " + pid : base;
+      }
       return pid ? base + " · " + pid : base;
     },
     broker_log_retention: function (flat, entry) {

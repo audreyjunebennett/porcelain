@@ -1,14 +1,14 @@
 # Plan: Operator UI settings routes and app shell
 
-| Field | Value |
-|-------|-------|
-| **Doc kind** | `refactor-plan` |
-| **Owners / areas** | Gateway admin UI (`adminui/embed`), Locus desktop login defaults, embed UI tests |
-| **Status** | `done` |
-| **Targets** | Gateway / operator UI v0.3 |
-| **Last updated** | See git history |
+| Field                          | Value                                                                                                                                                                                                                     |
+|--------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Doc kind**                   | `refactor-plan`                                                                                                                                                                                                           |
+| **Owners / areas**             | Gateway admin UI (`adminui/embed`), Locus desktop login defaults, embed UI tests                                                                                                                                          |
+| **Status**                     | `done`                                                                                                                                                                                                                    |
+| **Targets**                    | Gateway / operator UI v0.3                                                                                                                                                                                                |
+| **Last updated**               | See git history                                                                                                                                                                                                           |
 | **Supersedes / superseded by** | Supersedes scattered notes in [`embedui-component-system.md`](embedui-component-system.md) and [`chimera-gateway-package-boundaries.md`](chimera-gateway-package-boundaries.md) for `/ui/logs` / `/ui/desktop` entry URLs |
-| **As-built** | [`docs/features/operator-settings-ui.md`](../features/operator-settings-ui.md), [`operator-left-navigation-ribbon.md`](../features/operator-left-navigation-ribbon.md) |
+| **As-built**                   | [`docs/features/operator-settings-ui.md`](../features/operator-settings-ui.md), [`operator-left-navigation-ribbon.md`](../features/operator-left-navigation-ribbon.md)                                                    |
 
 **Behavioral source of truth:** the [settings UI](../features/operator-settings-ui.md) and [navigation ribbon](../features/operator-left-navigation-ribbon.md) feature records describe as-built behavior; this plan is delivery history.
 
@@ -16,12 +16,12 @@
 
 Operators land on a simple **app shell** at `/ui` (top bar with settings, iframe showing the PWA placeholder). Configuration and observability live on **`/ui/settings`** (today’s logs page), opened from the settings control like the old desktop shell—not as a separate “logs” product surface. Routes, HTML filenames, and static asset URLs align 1:1 so paths are predictable; legacy redirects and deep links are removed (no prior users). **`/api/ui/*` JSON/SSE endpoints stay unchanged.**
 
-| Phase | Outcome | Status |
-|-------|---------|--------|
-| [Phase 1 — Routes and aligned page files](#phase-1--routes-and-aligned-page-files) | `/ui`, `/ui/pwa`, `/ui/settings`, `/ui/settings/gallery` only; files renamed to match | `done` |
-| [Phase 2 — Shell, settings UX, and deep-link removal](#phase-2--shell-settings-ux-and-deep-link-removal) | Default app entry, embedded settings, no `?focus=` / legacy chrome | `done` |
-| [Phase 3 — Gallery consolidation and refresh icons](#phase-3--gallery-consolidation-and-refresh-icons) | Single settings gallery; token swatches removed; Material `refresh` replaces `reload.svg` | `done` |
-| [Phase 4 — Tests, tooling, and login defaults](#phase-4--tests-tooling-and-login-defaults) | Go tests, gallery path checker, Locus `next` paths updated | `done` |
+| Phase                                                                                                    | Outcome                                                                                   | Status |
+|----------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------|--------|
+| [Phase 1 — Routes and aligned page files](#phase-1--routes-and-aligned-page-files)                       | `/ui`, `/ui/pwa`, `/ui/settings`, `/ui/settings/gallery` only; files renamed to match     | `done` |
+| [Phase 2 — Shell, settings UX, and deep-link removal](#phase-2--shell-settings-ux-and-deep-link-removal) | Default app entry, embedded settings, no `?focus=` / legacy chrome                        | `done` |
+| [Phase 3 — Gallery consolidation and refresh icons](#phase-3--gallery-consolidation-and-refresh-icons)   | Single settings gallery; token swatches removed; Material `refresh` replaces `reload.svg` | `done` |
+| [Phase 4 — Tests, tooling, and login defaults](#phase-4--tests-tooling-and-login-defaults)               | Go tests, gallery path checker, Locus `next` paths updated                                | `done` |
 
 ---
 

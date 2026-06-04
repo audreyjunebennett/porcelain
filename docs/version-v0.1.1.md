@@ -153,7 +153,7 @@ The gateway POSTs that payload to `{upstream.base_url}/v1/chat/completions` with
 
 - **Directory:** `data/gateway/` (same `data/` convention as `data/bifrost/`, `data/qdrant/`).
 - **Database file:** e.g. `data/gateway/metrics.sqlite` (exact filename is an implementation detail; keep a single primary DB file in that directory unless split is justified later).
-- `make clean-data` (with `CONFIRM=1`) **must** remove `data/gateway/` alongside BiFrost and Qdrant data so operators get a consistent “empty local stack” story.
+- `make clean-data` (with `CONFIRM=1`) **must** remove `data/gateway/` alongside BiFrost, Qdrant, and `data/locus-desktop/` launcher state so operators get a consistent “empty local stack” story.
 
 #### 3.6.2 Migrations (file-based, not DDL in Go)
 

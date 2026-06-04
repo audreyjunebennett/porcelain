@@ -33,7 +33,7 @@ Architectures: **linux/darwin** **amd64** and **arm64**; **windows amd64** only 
 
 ## Prerequisites on the target machine
 
-- **Config:** `config/gateway.yaml`, `config/chimera-broker.config.json`, `routing-policy.yaml`, `provider-free-tier.yaml` (archives ship examples as starting points). `config/api-keys.yaml` from setup or copy of `api-keys.example.yaml`. See [configuration.md](configuration.md).
+- **Config:** `config/gateway.yaml`, `config/chimera-broker.config.json`, `provider-free-tier.yaml` (archives ship examples as starting points). Routing policy lives on virtual models in operator SQLite, not a global YAML file. `config/api-keys.yaml` from setup or copy of `api-keys.example.yaml`. See [configuration.md](configuration.md).
 - **Environment:** provider keys in `.env` (copy from `env.example`).
 - **BiFrost:** install `bifrost-http` separately, or use `make release-package` for a local bundle that includes it.
 

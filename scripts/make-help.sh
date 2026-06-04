@@ -89,6 +89,6 @@ echo "  make configure                        materialize config for runtime sta
 echo "  make run                              execute the [locus-desktop] application"
 echo "  make test                             validate correctness and behavior"
 echo "  make clean                            cleans workspace completely (requires CONFIRM=1)"
-echo "  make clean-data                       remove Chimera runtime data (requires CONFIRM=1)"
+echo "  make clean-data                       remove Chimera + locus-desktop runtime data (requires CONFIRM=1)"
 echo
 

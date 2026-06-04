@@ -94,7 +94,7 @@ Manual: stop embed provider with Qdrant running; confirm health `ok: false`, gat
 - **Lightweight embed probe POST** on health endpoint — not implemented; catalog + provider classification only.
 - **Remote log shipping** (Splunk, etc.) — in-process ring buffer only.
 - **Replacing gateway ingest metrics** with indexer-reported truth — gateway/Qdrant remain authoritative for stored corpus.
-- **Storage-stats empty-collection copy improvements** — partial; auto-repair on 404 collection tied to unshipped sync-state plan.
+- **Storage-stats empty collection** — friendly operator copy and INFO-level event log for expected 404; indexer auto-clears sync checkpoints once per scope when collection is missing.
 - **Summarized UI card-per-scope for every rollup mode when N>1** — partial coverage; some story/rollup paths not fully verified.
 
 ## References

@@ -1,23 +1,23 @@
 ## Plan: Internal Embedding Provider Exploration
 
-| Field | Value |
-|-------|-------|
-| **Doc kind** | `feature-plan` |
-| **Owners / areas** | Gateway, indexer |
-| **Status** | `draft` |
-| **Targets** | gateway v0.4, indexer Phase 7 |
-| **Last updated** | See git history |
-| **Supersedes / superseded by** | None |
+| Field                          | Value                         |
+|--------------------------------|-------------------------------|
+| **Doc kind**                   | `feature-plan`                |
+| **Owners / areas**             | Gateway, indexer              |
+| **Status**                     | `draft`                       |
+| **Targets**                    | gateway v0.4, indexer Phase 7 |
+| **Last updated**               | See git history               |
+| **Supersedes / superseded by** | None                          |
 
 ## At a glance
 
 Explore loading and running an embedding model inside the gateway stack to reduce reliance on external services like Ollama. This plan aims to provide an internal embedding capability, starting off by default and configurable via `gateway.yaml`. The goal is to expose an OpenAI-compatible `/embeddings` endpoint on localhost.
 
-| Phase | Outcome | Status |
-|-------|---------|--------|
-| [Phase 1 — Embedding Model Selection](#phase-1--embedding-model-selection) | Select a suitable embedding model | `todo` |
+| Phase                                                                            | Outcome                                                         | Status |
+|----------------------------------------------------------------------------------|-----------------------------------------------------------------|--------|
+| [Phase 1 — Embedding Model Selection](#phase-1--embedding-model-selection)       | Select a suitable embedding model                               | `todo` |
 | [Phase 2 — Inference Backend Evaluation](#phase-2--inference-backend-evaluation) | Evaluate inference backend options (native runtime vs. sidecar) | `todo` |
-| [Phase 3 — Integration with Indexer](#phase-3--integration-with-indexer) | Integrate internal embedding with indexer | `todo` |
+| [Phase 3 — Integration with Indexer](#phase-3--integration-with-indexer)         | Integrate internal embedding with indexer                       | `todo` |
 
 ## Background
 

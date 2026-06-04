@@ -1,23 +1,23 @@
 # Plan: Embed UI theme and static styleguide
 
-| Field | Value |
-|-------|-------|
-| **Doc kind** | `feature-plan` |
-| **Owners / areas** | Gateway embed UI (`internal/server/embedui`) |
-| **Status** | `done` |
-| **Targets** | Summarized logs UI (cards, tables, chips, progress, lists) |
-| **Last updated** | See git history |
-| **Supersedes / superseded by** | None |
+| Field                          | Value                                                      |
+|--------------------------------|------------------------------------------------------------|
+| **Doc kind**                   | `feature-plan`                                             |
+| **Owners / areas**             | Gateway embed UI (`internal/server/embedui`)               |
+| **Status**                     | `done`                                                     |
+| **Targets**                    | Summarized logs UI (cards, tables, chips, progress, lists) |
+| **Last updated**               | See git history                                            |
+| **Supersedes / superseded by** | None                                                       |
 
 ## At a glance
 
 Operators and contributors iterate faster on a consistent product color scheme when they can open a static HTML page, edit CSS, and reload without rebuilding the gateway or running `make`. This plan adds a self-contained token layer plus a component gallery that mirrors the real class names used by `logs.js` / `logs.css`, then optionally refactors shipped CSS to consume the same variables.
 
-| Phase | Outcome | Status |
-|-------|---------|--------|
-| [Phase 1 — Token layer and static styleguide scaffold](#phase-1--token-layer-and-static-styleguide-scaffold) | Semantic CSS variables and a minimal browser-openable page under `temp/theme/` (or agreed path) with no dependency on the running app | `done` |
-| [Phase 2 — Component gallery and card matrix](#phase-2--component-gallery-and-card-matrix) | Exhaustive small primitives (pills, levels, service badges, statuses) plus representative cards, tables, progress bars, and list surfaces matching production class names | `done` |
-| [Phase 3 — Align product CSS with tokens](#phase-3--align-product-css-with-tokens) | `logs.css` consumes shared tokens via `@import` of `theme-tokens.css` so theme tweaks propagate to the live embed UI | `done` |
+| Phase                                                                                                        | Outcome                                                                                                                                                                   | Status |
+|--------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------|
+| [Phase 1 — Token layer and static styleguide scaffold](#phase-1--token-layer-and-static-styleguide-scaffold) | Semantic CSS variables and a minimal browser-openable page under `temp/theme/` (or agreed path) with no dependency on the running app                                     | `done` |
+| [Phase 2 — Component gallery and card matrix](#phase-2--component-gallery-and-card-matrix)                   | Exhaustive small primitives (pills, levels, service badges, statuses) plus representative cards, tables, progress bars, and list surfaces matching production class names | `done` |
+| [Phase 3 — Align product CSS with tokens](#phase-3--align-product-css-with-tokens)                           | `logs.css` consumes shared tokens via `@import` of `theme-tokens.css` so theme tweaks propagate to the live embed UI                                                      | `done` |
 
 ---
 

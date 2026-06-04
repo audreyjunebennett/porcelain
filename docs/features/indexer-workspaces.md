@@ -19,7 +19,7 @@ Operators define **indexer workspaces**—a project, flavor, and one or more abs
 
 - **Workspaces section** on `/ui/settings` — create, edit, delete workspaces; add/remove watched paths; native folder picker in desktop webview (`window.chimeraPickFolder` / `window.top.chimeraPickFolder` in iframe).
 - **Card identity** — Titles use **USER:PROJECT[:FLAVOR]** from the workspace row, not inferred from noisy log lines. Multiple paths on one workspace render as **one** card.
-- **Expectations on change** — Adding or removing a path updates SQLite immediately; the indexer picks up changes within the workspace poll interval (default **30s**) after the current session's work queue drains (up to **10 minutes** wait). A new `index_run_id` is assigned when the watch session reloads.
+- **Expectations on change** — Adding or removing a path updates SQLite immediately; the indexer picks up changes within `workspaces_poll_interval_ms` (default **30s**) after the work queue drains (up to **10 minutes** wait). **`index_run_id` stays stable** for the process; roots are added/removed in-process without restarting `RunWatchers`.
 - **YAML tuning** — Advanced indexer settings remain in `indexer.supervised.yaml`; edits hot-reload without touching workspace rows.
 - **Orphan log lines** — Process-level indexer messages with no matching DB row appear under the **chimera-indexer service** summary, not as extra workspace cards.
 
@@ -40,10 +40,10 @@ Operators define **indexer workspaces**—a project, flavor, and one or more abs
 | Workspace id | Integer `AUTOINCREMENT`; operators do not supply ids |
 | Delivery to indexer | **Pull only** — periodic poll + session start fetch; no gateway push |
 | Fingerprint | `WorkspacesRootsFingerprint` hashes sorted `(workspace_id, path, project_id, flavor_id)` tuples — path add/remove/edit detected |
-| Reload strategy | Full **watch-session reload** after queue idle; not incremental in-process root attach/detach |
+| Reload strategy | **Incremental** add/remove of fsnotify roots and targeted scan for new paths; YAML tuning reloads in-process |
 | Materialize errors | `RootsFromWorkspacesResponse` is **all-or-nothing** — one missing/invalid path fails the whole materialize |
 | Tenant for UI CRUD | `operatorIndexerTenantID()` (empty string for single-user desktop today) |
-| Corpus on delete | Stop watching after reload; **no** automatic vector purge |
+| Corpus on delete | Stop watching after reload; **purge** scoped Qdrant collection on `DELETE /api/ui/indexer/workspaces/{id}` when RAG is enabled (uses UI session principal as ingest tenant + workspace project/flavor). Purge failure **blocks** SQLite delete (502). |
 
 **Persistence**
 
@@ -60,7 +60,7 @@ Operators define **indexer workspaces**—a project, flavor, and one or more abs
 | `POST /api/ui/indexer/workspaces` | Create workspace + paths |
 | `PUT /api/ui/indexer/workspaces/{id}` | Update project/flavor/paths |
 | `DELETE /api/ui/indexer/workspaces/{id}` | Delete workspace and paths |
-| Indexer poll | Default 30s in `main.go`; logs `indexer.supervised.workspaces_changed` with `prev_paths_hash` / `new_paths_hash` |
+| Indexer poll | `workspaces_poll_interval_ms` in supervised YAML (default 30s); logs `indexer.supervised.workspaces_changed` then `indexer.supervised.workspaces_applied` |
 | Structured logs | Scope fields include `workspace_id`, `ingest_project`, `flavor_id`, `indexer_target_key` on job and status lines |
 
 ## Code map
@@ -69,9 +69,11 @@ Operators define **indexer workspaces**—a project, flavor, and one or more abs
 |---------|----------|
 | Operator store | `chimera/chimera-gateway/internal/operatorstore/store.go` |
 | Indexer-facing API | `internal/server/indexerapi/indexer.go` (`HandleWorkspaces`) |
-| UI handlers | `internal/server/adminui/api/indexer/handlers.go`, `register.go` |
+| UI handlers + purge | `internal/server/adminui/api/indexer/handlers.go`, `workspace_purge.go` |
+| Vector purge | `internal/rag/service.go` (`PurgeWorkspaceCorpus`), `internal/vectorstore/` (`DeleteCollection`) |
 | Indexer client + materialize | `chimera/chimera-indexer/internal/indexer/workspaces.go` |
-| Supervised poll + reload | `chimera/chimera-indexer/main.go` |
+| Supervised poll + dynamic roots | `chimera/chimera-indexer/main.go`, `internal/indexer/dynamic_roots.go`, `internal/indexer/watch.go` |
+| Legacy YAML roots import | `internal/operatorstore/import_supervised_roots.go` (gateway startup when DB empty) |
 | Settings UI workspaces | `embed/embedui/settings/` — `summarizedFeed.js`, workspace draft/card components |
 | Log pinning / scope registry | `embed/embedui/settings/derive/indexerPartition.js`, `servicelogs/pin_indexer.go` |
 | Tests | `workspaces_test.go`, `operatorstore/store_test.go`, `embedui_test/settings_*` |
@@ -81,18 +83,17 @@ Operators define **indexer workspaces**—a project, flavor, and one or more abs
 ```bash
 go test ./chimera/chimera-indexer/internal/indexer/ -run Workspaces
 go test ./chimera/chimera-gateway/internal/operatorstore/...
-go test ./chimera/chimera-gateway/internal/server/adminui/embed/embedui_test -run -i Workspace
+go test ./chimera/chimera-gateway/internal/server/adminui/api/indexer/... -run WorkspaceDELETE
 ```
 
-Manual: create a workspace with two paths on `/ui/settings`; confirm one card; add a third path; within ~30s (+ queue drain) confirm `indexer.supervised.workspaces_changed` and reload; delete workspace and confirm indexing stops after reload.
+Manual: create a workspace with two paths on `/ui/settings`; confirm one card; add a third path; within poll interval (+ queue drain) confirm `indexer.supervised.workspaces_changed` and `workspaces_applied` with **unchanged** `index_run_id`; delete workspace and confirm indexing stops **and** the scoped Qdrant collection is removed (`gateway.operator.workspace.purged`).
 
 ## Out of scope and known gaps
 
-- **Force re-index** — not shipped ([`plans/indexer-sync-state-sqlite-and-force-reindex.md`](../plans/indexer-sync-state-sqlite-and-force-reindex.md)).
-- **Incremental watcher refactor** (`AddRoot`/`RemoveRoot` without session tear-down) — planned in workspace API Phase 3; **not** implemented; reload remains the mechanism.
+- **Re-index all** — no dedicated UI control; per-workspace **Re-index** on managed cards calls `POST /api/ui/indexer/workspaces/{id}/reindex` ([`plans/indexer-sync-state-sqlite-and-force-reindex.md`](../plans/indexer-sync-state-sqlite-and-force-reindex.md) shipped).
 - **Best-effort per-path materialize** — planned in accurate-reporting Phase 4D; **not** implemented.
-- **Corpus purge jobs** on workspace or path delete — documented follow-up only.
-- **Configurable poll interval in YAML** — constant 30s in code today.
+- **Corpus purge on workspace delete** — `DELETE /api/ui/indexer/workspaces/{id}` drops the vector collection for `(ingest tenant, project_id, flavor_id)` before removing the SQLite row. Ingest tenant is the authenticated UI session principal (same tenant the indexer uses via API key). If RAG is enabled but purge fails, the workspace row is kept and the API returns 502. Structured log: `gateway.operator.workspace.purged` (success) / `gateway.operator.workspace.purge_failed` (blocked delete).
+- **Removed watch path** — fsnotify stops; sync checkpoints cleared; stale sources pushed via `PUT /v1/indexer/corpus/stale` when possible (not a full collection purge unless the whole workspace is deleted).
 - **ETag / revision** on workspaces response — not implemented.
 
 ## References

@@ -1,25 +1,25 @@
 # Plan: Indexer sync-state SQLite and force re-index
 
-| Field | Value |
-|-------|-------|
-| **Doc kind** | `feature-plan` |
-| **Owners / areas** | `chimera-indexer`, gateway (`operatorstore`, indexer API, embed UI settings), operator docs |
-| **Status** | `draft` |
-| **Targets** | locus-desktop supervised stack; gateway + indexer next minor |
-| **Last updated** | 2026-05-25 |
+| Field                          | Value                                                                                                                                                                                                                                                                                                                            |
+|--------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Doc kind**                   | `feature-plan`                                                                                                                                                                                                                                                                                                                   |
+| **Owners / areas**             | `chimera-indexer`, gateway (`operatorstore`, indexer API, embed UI settings), operator docs                                                                                                                                                                                                                                      |
+| **Status**                     | `shipped`                                                                                                                                                                                                                                                                                                                        |
+| **Targets**                    | locus-desktop supervised stack; gateway + indexer next minor                                                                                                                                                                                                                                                                     |
+| **Last updated**               | 2026-05-25                                                                                                                                                                                                                                                                                                                       |
 | **Supersedes / superseded by** | Complements [`indexer-workspaces-sqlite-gateway-api.md`](indexer-workspaces-sqlite-gateway-api.md) (workspace list polling). Coordinates with [`indexer-manifest-ingest.md`](indexer-manifest-ingest.md) (segment index vs sync checkpoints). Does not replace corpus inventory reconciliation in [`indexer.md`](../indexer.md). |
 
 ## At a glance
 
 Operators who run several large workspaces need a reliable way to **re-upload embedded content** when the local skip cache and Qdrant drift apart—for example after a vectorstore reset, a missing collection, or stale `indexer.sync-state.json` entries. Today that file grows without bound and rewrites entirely on every successful ingest, which does not scale past a few thousand files. This plan moves per-file SHA checkpoints into **indexer-local SQLite**, adds a **Re-index workspace** control on the settings screen, and uses a small **reindex generation counter** in operator SQLite (read via the existing workspace poll) so the gateway never has to push commands to the indexer.
 
-| Phase | Outcome | Status |
-|-------|---------|--------|
-| [Phase 1 — Indexer-local sync-state SQLite](#phase-1--indexer-local-sync-state-sqlite) | Checkpoints stored incrementally; JSON migrates once; per-root delete is cheap | `todo` |
-| [Phase 2 — Operator reindex intent and API](#phase-2--operator-reindex-intent-and-api) | Settings can bump a workspace reindex counter; indexer API exposes it | `todo` |
-| [Phase 3 — Indexer applies reindex and rescans](#phase-3--indexer-applies-reindex-and-rescans) | Poll detects generation change, clears local checkpoints, re-enqueues work | `todo` |
-| [Phase 4 — Settings UI and operator copy](#phase-4--settings-ui-and-operator-copy) | Force re-index button, confirmation, and log messages operators understand | `todo` |
-| [Phase 5 — Auto-repair and storage-stats messaging](#phase-5--auto-repair-and-storage-stats-messaging) | Missing Qdrant collection clears stale skips; UI stops sounding like a workspace lookup failure | `todo` |
+| Phase                                                                                                  | Outcome                                                                                         | Status |
+|--------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------|--------|
+| [Phase 1 — Indexer-local sync-state SQLite](#phase-1--indexer-local-sync-state-sqlite)                 | Checkpoints stored incrementally; JSON migrates once; per-root delete is cheap                  | `done` |
+| [Phase 2 — Operator reindex intent and API](#phase-2--operator-reindex-intent-and-api)                 | Settings can bump a workspace reindex counter; indexer API exposes it                           | `done` |
+| [Phase 3 — Indexer applies reindex and rescans](#phase-3--indexer-applies-reindex-and-rescans)         | Poll detects generation change, clears local checkpoints, re-enqueues work                      | `done` |
+| [Phase 4 — Settings UI and operator copy](#phase-4--settings-ui-and-operator-copy)                     | Force re-index button, confirmation, and log messages operators understand                      | `done` |
+| [Phase 5 — Auto-repair and storage-stats messaging](#phase-5--auto-repair-and-storage-stats-messaging) | Missing Qdrant collection clears stale skips; UI stops sounding like a workspace lookup failure | `done` |
 
 ---
 
@@ -44,12 +44,12 @@ Operators who run several large workspaces need a reliable way to **re-upload em
 
 ### Split of responsibility
 
-| Concern | Owner | Mechanism |
-|---------|-------|-----------|
-| Per-file SHA checkpoints | Indexer process | Local SQLite at `sync_state_path` (default beside config YAML) |
-| Operator intent to re-index | Gateway / operator SQLite | `reindex_generation` (or equivalent) per workspace row |
-| Delivery of intent | Existing poll | `GET /v1/indexer/workspaces` includes generation; indexer compares to last seen |
-| Remote corpus truth | Gateway / Qdrant | Corpus inventory (separate fix if 404); optional auto-clear on collection 404 |
+| Concern                     | Owner                     | Mechanism                                                                       |
+|-----------------------------|---------------------------|---------------------------------------------------------------------------------|
+| Per-file SHA checkpoints    | Indexer process           | Local SQLite at `sync_state_path` (default beside config YAML)                  |
+| Operator intent to re-index | Gateway / operator SQLite | `reindex_generation` (or equivalent) per workspace row                          |
+| Delivery of intent          | Existing poll             | `GET /v1/indexer/workspaces` includes generation; indexer compares to last seen |
+| Remote corpus truth         | Gateway / Qdrant          | Corpus inventory (separate fix if 404); optional auto-clear on collection 404   |
 
 **Related docs:** [`docs/indexer.md`](../indexer.md), [`supervisor-info-log-trim.md`](supervisor-info-log-trim.md), [`indexer-workspaces-accurate-reporting.md`](indexer-workspaces-accurate-reporting.md).
 
@@ -96,7 +96,13 @@ Operators who run several large workspaces need a reliable way to **re-upload em
 - Existing supervised installs migrate automatically on first run after upgrade.
 - Deleting checkpoints for one `root_id` does not affect other roots.
 
-**Status:** `todo`
+**Status:** `done`
+
+**Verification**
+
+```bash
+go test ./chimera/chimera-indexer/internal/indexer/ -run SyncState -count=1
+```
 
 ---
 
@@ -118,7 +124,7 @@ Operators who run several large workspaces need a reliable way to **re-upload em
 - Generation survives gateway restart.
 - Indexer binary still does not import `operatorstore` or open `operator.sqlite`.
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 
@@ -140,7 +146,7 @@ Operators who run several large workspaces need a reliable way to **re-upload em
 - Other workspaces' sync entries untouched.
 - Re-index with unchanged file content still runs ingest (checkpoints cleared); idempotent upsert on gateway side is acceptable.
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 
@@ -160,7 +166,7 @@ Operators who run several large workspaces need a reliable way to **re-upload em
 - Manual: click re-index on `assistants` → within ~30s indexer logs reindex applied → upsert summaries appear → storage stats show collection reachable with points > 0 (when ingest succeeds).
 - Button disabled when operator store unavailable (same gating as workspace CRUD).
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 
@@ -180,7 +186,7 @@ Operators who run several large workspaces need a reliable way to **re-upload em
 - Scenario: sync state populated, Qdrant collection missing → one repair action → ingest resumes without manual JSON delete.
 - Settings event log shows WARN/INFO, not ERROR, for empty collection on idle system.
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 

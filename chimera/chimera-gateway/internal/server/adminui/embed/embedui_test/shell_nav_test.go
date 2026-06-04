@@ -13,6 +13,8 @@ func TestIndexHTML_includesNavRibbon(t *testing.T) {
 		`data-ribbon-action="toggle"`,
 		`data-ribbon-action="new-chat"`,
 		`data-ribbon-action="settings"`,
+		`data-ribbon-action="search"`,
+		"manage_search",
 		`id="chat-history"`,
 		`id="shell-ribbon-filters"`,
 		`class="shell-ribbon__footer"`,
@@ -30,7 +32,7 @@ func TestIndexHTML_includesNavRibbon(t *testing.T) {
 		}
 	}
 	navRibbon := mustReadFile(t, embeduiRoot(t)+"/shell/navRibbon.js")
-	for _, needle := range []string{"NARROW_BREAKPOINT", "shell-ribbon--narrow", "applyViewportRibbonLayout"} {
+	for _, needle := range []string{"NARROW_BREAKPOINT", "shell-ribbon--narrow", "applyViewportRibbonLayout", "SEARCH_ROUTE", "openSearch", "isSearchRoute"} {
 		if !strings.Contains(navRibbon, needle) {
 			t.Fatalf("navRibbon.js missing %q", needle)
 		}

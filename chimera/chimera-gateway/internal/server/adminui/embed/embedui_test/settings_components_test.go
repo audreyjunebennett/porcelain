@@ -565,7 +565,7 @@ func TestLogsDerive_conversationTurnGroupsForExpanded_inheritsAndUnattributed(t 
 	}
 
 	events := []map[string]any{
-		{"ts": "2026-05-09T12:00:00.000Z", "seq": 1, "parsed": map[string]any{"rawFlat": map[string]any{"msg": "conversation.merge.resolve_failed"}}},
+		{"ts": "2026-05-09T12:00:00.000Z", "seq": 1, "parsed": map[string]any{"rawFlat": map[string]any{"msg": "gateway.indexer.config"}}},
 		{"ts": "2026-05-09T12:00:00.010Z", "seq": 2, "parsed": map[string]any{"rawFlat": map[string]any{"msg": "conversation.received", "turn_index": 1}}},
 		{"ts": "2026-05-09T12:00:00.020Z", "seq": 3, "parsed": map[string]any{"rawFlat": map[string]any{"msg": "chat.chimera-broker.request"}}},
 		{"ts": "2026-05-09T12:00:00.030Z", "seq": 4, "qdrantTurnIndex": 1, "parsed": map[string]any{"rawFlat": map[string]any{"msg": "qdrant.http.vector_search"}}},
@@ -783,6 +783,20 @@ func TestLogsDerive_chimeraBrokerOperatorLine(t *testing.T) {
 		{
 			flat: map[string]any{"msg": "chat.chimera-broker.response", "statusCode": 200, "usageTotalTokens": 50, "responseBytes": 1200, "finish_reason": "stop"},
 			want: "Provider responded · 50 tokens used (prompt + completion) · finish: stop",
+		},
+		{
+			flat: map[string]any{
+				"service": "chimera-broker", "msg": "broker.log.zerolog",
+				"progress_detail": "failed to list models for provider ollama: network error occurred while connecting to provider API",
+			},
+			want: "failed to list models for provider ollama: network error occurred while connecting to provider API",
+		},
+		{
+			flat: map[string]any{
+				"service": "chimera-broker", "msg": "broker.provider.model_discovery.fail", "provider_id": "ollama",
+				"progress_detail": "failed to list models for provider ollama: network error occurred while connecting to provider API",
+			},
+			want: "failed to list models for provider ollama: network error occurred while connecting to provider API",
 		},
 	}
 	opts := map[string]any{"forEventLog": true}
@@ -1987,6 +2001,42 @@ func TestLogsDerive_collectIndexerRunMeta_scopeStatus(t *testing.T) {
 	}
 }
 
+func TestLogsDerive_collectIndexerRunMeta_scopeStatusHeartbeatWinsOverStaleEdge(t *testing.T) {
+	vm := goja.New()
+	loadIndexerPresentCtx(t, vm)
+	evalJS(t, vm, settingsUIPath(t, "derive", "indexerMetrics.js"))
+
+	rs := `[{"root_id":"r1","path":"/a","ingest_project":"p1","flavor_id":"","indexer_target_key":"ik_one"}]`
+	script := fmt.Sprintf(`
+		var evs = [
+			{ parsed: { rawFlat: {
+				service: "indexer", index_run_id: "runZ", msg: "indexer.run.start",
+				root_ids: "r1", watch_root_paths: ["/a"], root_scopes: %s
+			}}},
+			{ parsed: { rawFlat: {
+				service: "indexer", index_run_id: "runZ", msg: "indexer.scope.status",
+				indexer_target_key: "ik_one", change_reason: "backlog",
+				workspace_files_total: 100, queue_ingest_pending: 0, queue_fanout_files_pending: 50
+			}}},
+			{ parsed: { rawFlat: {
+				service: "indexer", index_run_id: "runZ", msg: "indexer.scope.status",
+				indexer_target_key: "ik_one", change_reason: "heartbeat",
+				workspace_files_total: 100, queue_ingest_pending: 0, queue_fanout_files_pending: 0
+			}}}
+		];
+		function getFlat(p) { return (p && p.rawFlat) || {}; }
+		ChimeraSettings.Derive.collectIndexerRunMeta("ik_one", evs, { getFlat: getFlat });
+	`, strconv.Quote(rs))
+	v, err := vm.RunString(script)
+	if err != nil {
+		t.Fatal(err)
+	}
+	o := v.ToObject(vm)
+	if n := o.Get("scopeQueueFanoutPending"); n == nil || n.Export() != int64(0) {
+		t.Fatalf("scopeQueueFanoutPending=%v want 0 from newest heartbeat", n)
+	}
+}
+
 func TestLogsDerive_indexerPresent_groupKey(t *testing.T) {
 	vm := goja.New()
 	loadIndexerPresentCtx(t, vm)
@@ -2774,8 +2824,11 @@ func TestLogsRender_sumEvlog_indexerStorageStatsUnavailableShowsStatus(t *testin
 		t.Fatal(err)
 	}
 	model := modelV.ToObject(vm)
-	if model.Get("levelKey").String() != "ERROR" {
-		t.Fatalf("levelKey = %q, want ERROR", model.Get("levelKey").String())
+	if model.Get("levelKey").String() == "ERROR" {
+		t.Fatalf("missing collection should not be ERROR, got %q", model.Get("levelKey").String())
+	}
+	if model.Get("levelKey").String() != "INFO" {
+		t.Fatalf("levelKey = %q, want INFO", model.Get("levelKey").String())
 	}
 	if model.Get("http").ToInteger() != 404 {
 		t.Fatalf("http = %v, want 404", model.Get("http"))
@@ -2789,8 +2842,8 @@ func TestLogsRender_sumEvlog_indexerStorageStatsUnavailableShowsStatus(t *testin
 		t.Fatal(err)
 	}
 	status := statusV.String()
-	if !strings.Contains(status, "ERROR") {
-		t.Fatalf("expected ERROR pill in status column, got %q", status)
+	if strings.Contains(status, "ERROR") {
+		t.Fatalf("missing collection should not show ERROR pill, got %q", status)
 	}
 	if !strings.Contains(status, "404") {
 		t.Fatalf("expected 404 HTTP pill in status column, got %q", status)

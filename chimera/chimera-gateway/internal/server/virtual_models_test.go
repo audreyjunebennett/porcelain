@@ -63,6 +63,7 @@ func TestVirtualModels_twoModelsDifferentRouting(t *testing.T) {
 	if err := rt.ReloadVirtualModels(ctx); err != nil {
 		t.Fatal(err)
 	}
+	seedChimeraTestVMWithPolicy(t, rt, "0.1.0", []string{"groq/fast", "groq/slow"}, "groq/fast")
 
 	front := httptest.NewServer(NewMux(rt, testLog(), nil, nil))
 	t.Cleanup(front.Close)
@@ -129,6 +130,7 @@ func TestVirtualModels_listIncludesBootstrapped(t *testing.T) {
 		t.Fatal(err)
 	}
 	rt := mustRuntime(t, gwPath)
+	seedChimeraTestVM(t, rt, "0.1.0", []string{"groq/x"})
 	if rt.VirtualModels() == nil {
 		t.Fatal("expected virtual model registry")
 	}
@@ -176,6 +178,7 @@ func TestVirtualModels_disabledRejected(t *testing.T) {
 		t.Fatal(err)
 	}
 	rt := mustRuntime(t, gwPath)
+	seedChimeraTestVM(t, rt, "0.1.0", []string{"groq/x"})
 	st := rt.OperatorStore()
 	disabled := false
 	if err := st.UpdateVirtualModelMetadata(context.Background(), "", 1, "", "", "", &disabled, nil); err != nil {

@@ -4,8 +4,6 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -30,15 +28,6 @@ func BuildResponse(ctx context.Context, tenantID string, publicBaseURL string, r
 		provOut[name] = entry
 	}
 
-	routeBase := ""
-	routingPolicyYAML := ""
-	if p := strings.TrimSpace(res.RoutingPolicyPath); p != "" {
-		routeBase = filepath.Base(p)
-		if b, err := os.ReadFile(p); err == nil {
-			routingPolicyYAML = string(b)
-		}
-	}
-	rm, trAt, trErr := rt.ToolRouterLast()
 	chimeraBrokerURL := strings.TrimSuffix(res.UpstreamBaseURL, "/")
 	chimeraBrokerOK, _, chimeraBrokerDetail := brokerclient.ProbeHealth(ctx, res.HealthUpstreamURL, rt.UpstreamAPIKey(), gruntime.HealthTimeout(res), log)
 	chimeraBrokerState := "down"
@@ -117,29 +106,17 @@ func BuildResponse(ctx context.Context, tenantID string, publicBaseURL string, r
 			}
 		}
 	}
-	bootstrapVMID := res.VirtualModelID
+	bootstrapVMID := ""
 	if reg := rt.VirtualModels(); reg != nil {
-		if id := reg.BootstrapModelID(); id != "" {
-			bootstrapVMID = id
-		}
+		bootstrapVMID = reg.BootstrapModelID()
 	}
 
 	return operatorapi.StateResponse{
 		Gateway: operatorapi.GatewayState{
-			Semver:                        res.Semver,
-			VirtualModelID:                bootstrapVMID,
-			PublicBaseURL:                 publicBaseURL,
-			TokenHint:                     "Paste the same gateway token you used to sign in.",
-			FilterFreeTierModels:          res.FilterFreeTierModels,
-			FallbackChain:                 res.FallbackChain,
-			RoutingPolicyBasename:         routeBase,
-			RouterModels:                  res.RouterModels,
-			ToolRouterEnabled:             res.ToolRouterEnabled,
-			ToolRouterConfidenceThreshold: res.ToolRouterConfidenceThreshold,
-			ToolRouterLastModel:           rm,
-			ToolRouterLastError:           trErr,
-			ToolRouterLastAt:              apirut.FormatRFC3339OrEmpty(trAt),
-			RoutingPolicyYAML:             routingPolicyYAML,
+			Semver:         res.Semver,
+			VirtualModelID: bootstrapVMID,
+			PublicBaseURL:  publicBaseURL,
+			TokenHint:      "Paste the same gateway token you used to sign in.",
 			ServiceOverview: operatorapi.ServiceOverview{
 				OverallState: overviewState,
 				Gateway:      operatorapi.ServiceState{State: "up"},

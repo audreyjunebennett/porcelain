@@ -225,6 +225,8 @@ type RetrieveRequest struct {
 	Coords vectorstore.Coords
 	Query  string
 	TopK   int // <= 0 uses Service default
+	// ScoreThreshold <= 0 uses Service default score floor.
+	ScoreThreshold float32
 	// Optional correlation from the gateway chat handler.
 	RequestID      string
 	ConversationID string
@@ -246,7 +248,25 @@ func (s *Service) Retrieve(ctx context.Context, req RetrieveRequest) ([]vectorst
 	if k <= 0 {
 		k = s.topK
 	}
+	floor := s.scoreFloor
+	if req.ScoreThreshold > 0 {
+		floor = req.ScoreThreshold
+	}
 	collection := vectorstore.CollectionName(req.Coords)
+	if blocked, reason := s.collectionDimBlocksRetrieve(ctx, collection); blocked {
+		if s.log != nil {
+			s.log.Warn("skipping retrieval: collection vector dimension does not match configured embedding model; re-index required",
+				"msg", "rag.retrieve.dim_mismatch",
+				"tenant", req.Coords.TenantID,
+				"project", req.Coords.ProjectID,
+				"flavor", req.Coords.FlavorID,
+				"collection", collection,
+				"embed_dim", s.embedDim,
+				"reason", reason,
+			)
+		}
+		return nil, nil
+	}
 	ti := req.TurnIndex
 	if ti <= 0 {
 		ti = 1
@@ -277,7 +297,7 @@ func (s *Service) Retrieve(ctx context.Context, req RetrieveRequest) ([]vectorst
 			"flavor", req.Coords.FlavorID,
 			"collection", collection,
 			"top_k", k,
-			"score_threshold", s.scoreFloor,
+			"score_threshold", floor,
 			"query_bytes", len(req.Query),
 			"query", previewText(req.Query),
 		}
@@ -305,7 +325,7 @@ func (s *Service) Retrieve(ctx context.Context, req RetrieveRequest) ([]vectorst
 		args = append(args, "timeline_kind", naming.TimelineKindVectorstore)
 		s.log.Debug("rag embedding retrieved", args...)
 	}
-	hits, err := s.store.Search(ctx, collection, vec, k, s.scoreFloor, &req.Coords)
+	hits, err := s.store.Search(ctx, collection, vec, k, floor, &req.Coords)
 	if err != nil {
 		return nil, fmt.Errorf("search: %w", err)
 	}
@@ -321,7 +341,7 @@ func (s *Service) Retrieve(ctx context.Context, req RetrieveRequest) ([]vectorst
 				"hits", len(hits),
 				"top_k", k,
 				"score", h.Score,
-				"score_threshold", s.scoreFloor,
+				"score_threshold", floor,
 				"point_id", h.ID,
 				"source", h.Payload.Source,
 				"text", previewText(h.Payload.Text),
@@ -369,18 +389,62 @@ func previewText(s string) string {
 // EmbedDim is the configured embedding dimension (used by /v1/indexer/config).
 func (s *Service) EmbedDim() int { return s.embedDim }
 
-// ChunkSize / ChunkOverlap accessors for /v1/indexer/config.
-func (s *Service) ChunkSize() int    { return s.chunkSize }
-func (s *Service) ChunkOverlap() int { return s.chunkOverlap }
-func (s *Service) TopK() int         { return s.topK }
+// TopK / ChunkOverlap accessors for /v1/indexer/config.
+// GetPointPayloads loads Qdrant payloads for point ids in a collection.
+func (s *Service) GetPointPayloads(ctx context.Context, collection string, ids []string) ([]vectorstore.PointPayload, error) {
+	if s == nil || s.store == nil {
+		return nil, errors.New("rag: nil store")
+	}
+	return s.store.GetPoints(ctx, collection, ids)
+}
+
+func (s *Service) ChunkSize() int          { return s.chunkSize }
+func (s *Service) ChunkOverlap() int       { return s.chunkOverlap }
+func (s *Service) TopK() int               { return s.topK }
+func (s *Service) ScoreThreshold() float32 { return s.scoreFloor }
 
 // StoreHealth is exposed for /v1/indexer/storage/health.
 func (s *Service) StoreHealth(ctx context.Context) error { return s.store.Health(ctx) }
+
+func (s *Service) collectionDimBlocksRetrieve(ctx context.Context, collection string) (bool, string) {
+	stats, err := s.store.Stats(ctx, collection)
+	if err != nil || stats.Points <= 0 || stats.VectorDim <= 0 {
+		return false, ""
+	}
+	if stats.VectorDim != s.embedDim {
+		return true, fmt.Sprintf("collection_dim=%d configured_dim=%d", stats.VectorDim, s.embedDim)
+	}
+	return false, ""
+}
 
 // StoreStats is exposed for /v1/indexer/storage/stats.
 func (s *Service) StoreStats(ctx context.Context, c vectorstore.Coords) (vectorstore.Stats, error) {
 	collection := vectorstore.CollectionName(c)
 	return s.store.Stats(ctx, collection)
+}
+
+// PurgeWorkspaceCorpus drops the vector collection for coords. Missing collections succeed.
+func (s *Service) PurgeWorkspaceCorpus(ctx context.Context, c vectorstore.Coords) (vectorstore.Stats, error) {
+	collection := vectorstore.CollectionName(c)
+	st, statsErr := s.store.Stats(ctx, collection)
+	if statsErr != nil {
+		st = vectorstore.Stats{Collection: collection}
+	}
+	if err := s.store.DeleteCollection(ctx, collection); err != nil {
+		return st, err
+	}
+	if s.log != nil {
+		s.log.Info("operator workspace corpus purged",
+			"msg", "gateway.operator.workspace.purged",
+			"type", "gateway.operator.workspace.purged",
+			"collection", collection,
+			"tenant_id", c.TenantID,
+			"project_id", c.ProjectID,
+			"flavor_id", c.FlavorID,
+			"points_purged", st.Points,
+		)
+	}
+	return st, nil
 }
 
 // CorpusInventoryEntry is one deduplicated source row for GET /v1/indexer/corpus/inventory.

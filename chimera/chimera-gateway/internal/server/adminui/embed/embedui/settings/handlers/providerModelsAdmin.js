@@ -18,6 +18,16 @@ globalThis.ChimeraSettings.Handlers.ProviderModels.wire = function (ctx) {
   var adminSetMessage = ctx.adminSetMessage;
   var patchAdminProviderCard = ctx.patchAdminProviderCard;
   var adminProviderModelsMapFromResponse = ctx.adminProviderModelsMapFromResponse;
+  var AA = globalThis.ChimeraShared && globalThis.ChimeraShared.AdminAction;
+
+  function runProviderJson(opts) {
+    if (AA && typeof AA.runJson === "function") return AA.runJson(opts);
+    return opts.request().then(opts.onSuccess).catch(function (e) {
+      if (typeof opts.setMessage === "function") {
+        opts.setMessage("err", e && e.message ? e.message : String(e));
+      }
+    });
+  }
 
   if (globalThis.__ChimeraSettingsProviderModelsWired) return;
   globalThis.__ChimeraSettingsProviderModelsWired = true;
@@ -326,20 +336,25 @@ globalThis.ChimeraSettings.Handlers.ProviderModels.wire = function (ctx) {
 
       if (act === "provider-models-apply-free-tier") {
         if (ctx.adminProviderModelsEditingId !== providerId) return;
-        adminPostJSON("/api/ui/providers/" + encodeURIComponent(providerId) + "/models/apply-free-tier", {})
-          .then(function (doc) {
+        runProviderJson({
+          request: function () {
+            return adminPostJSON(
+              "/api/ui/providers/" + encodeURIComponent(providerId) + "/models/apply-free-tier",
+              {}
+            );
+          },
+          setMessage: adminSetMessage,
+          successMsg: "Free-tier draft applied. Save to persist.",
+          onSuccess: function (doc) {
             var draft = ensureProviderDraft(providerId);
             draft.models =
               typeof adminProviderModelsMapFromResponse === "function"
                 ? adminProviderModelsMapFromResponse(doc)
                 : {};
             if (doc && doc.note) adminSetMessage("", String(doc.note));
-            else adminSetMessage("", "Free-tier draft applied. Save to persist.");
             refreshProviderModelsCard(providerId);
-          })
-          .catch(function (e) {
-            adminSetMessage("err", e && e.message ? e.message : String(e));
-          });
+          }
+        });
         return;
       }
 
@@ -349,20 +364,26 @@ globalThis.ChimeraSettings.Handlers.ProviderModels.wire = function (ctx) {
         var modelsMap = draftSave.models || {};
         draftSave.saving = true;
         refreshProviderModelsCard(providerId);
-        adminPutJSON("/api/ui/providers/" + encodeURIComponent(providerId) + "/models", { models: modelsMap })
-          .then(function (doc) {
+        runProviderJson({
+          request: function () {
+            return adminPutJSON("/api/ui/providers/" + encodeURIComponent(providerId) + "/models", {
+              models: modelsMap
+            });
+          },
+          setMessage: adminSetMessage,
+          successMsg: "Model availability saved.",
+          onSuccess: function (doc) {
             if (!ctx.adminProviderModelsCache) ctx.adminProviderModelsCache = {};
             ctx.adminProviderModelsCache[providerId] = doc;
             ctx.adminProviderModelsEditingId = null;
             if (ctx.adminProviderModelsDraft) delete ctx.adminProviderModelsDraft[providerId];
-            adminSetMessage("", "Model availability saved.");
             return reloadAdminAfterProviderModelsSave();
-          })
-          .catch(function (e) {
+          },
+          onError: function () {
             draftSave.saving = false;
             refreshProviderModelsCard(providerId);
-            adminSetMessage("err", e && e.message ? e.message : String(e));
-          });
+          }
+        });
       }
     },
     false

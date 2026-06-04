@@ -7,11 +7,11 @@ import (
 )
 
 func TestSplit_EmptyAndBlank(t *testing.T) {
-	if got := Split("", 10, 2); got != nil {
-		t.Fatalf("expected nil for empty, got %v", got)
+	if got := Split("", 10, 2); len(got) != 0 {
+		t.Fatalf("expected no chunks for empty, got %v", got)
 	}
-	if got := Split("   \n  ", 10, 2); got != nil {
-		t.Fatalf("expected nil for blank, got %v", got)
+	if got := Split("   \n  ", 10, 2); len(got) != 0 {
+		t.Fatalf("expected no chunks for blank, got %v", got)
 	}
 }
 

@@ -93,11 +93,8 @@ func TestUILoginAndState(t *testing.T) {
 	writeGateway(t, gwPath, chimeraBroker.URL, []string{"m"}, "")
 	tokPath := filepath.Join(dir, "api-keys.yaml")
 	writeTokens(t, tokPath, "gw-ui-secret", "t1")
-	routePath := filepath.Join(dir, "routing-policy.yaml")
-	if err := os.WriteFile(routePath, []byte("rules: []\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
 	rt := mustRuntime(t, gwPath)
+	seedChimeraTestVM(t, rt, "0.1.0", []string{"m"})
 	front := httptest.NewServer(NewMux(rt, testLog(), nil, NewUIOptions()))
 	t.Cleanup(front.Close)
 
@@ -498,6 +495,7 @@ func TestChatVirtualModelFallback429(t *testing.T) {
 	writeRouting(t, routePath, "groq/a", 999999) // no rule match for short message → ambiguous or chain
 
 	rt := mustRuntime(t, gwPath)
+	seedChimeraTestVMWithPolicy(t, rt, "0.1.0", []string{"groq/a", "groq/b"}, "groq/a")
 	h := NewMux(rt, testLog(), nil, nil)
 	front := httptest.NewServer(h)
 	t.Cleanup(front.Close)

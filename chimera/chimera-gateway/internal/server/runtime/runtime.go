@@ -9,12 +9,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/corpusstale"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/gatewaymetrics"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/operatorstore"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/providermodels"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/rag"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/rag/ragembed"
-	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/routing"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/catalog"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/vectorstore/qdrant"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/virtualmodel"
@@ -35,7 +35,6 @@ type Runtime struct {
 	freeTierMtime         time.Time
 	resolved              *config.Resolved
 	tokens                *tokens.Store
-	routing               *routing.Policy
 	metrics               *gatewaymetrics.Store // optional; nil when disabled or init failed
 	operator              *operatorstore.Store  // optional; nil when init failed
 	virtualModels         *virtualmodel.Registry
@@ -66,6 +65,8 @@ type Runtime struct {
 
 	indexerStatusMu sync.Mutex
 	indexerStatus   IndexerSupervisorStatus
+
+	corpusStaleStore *corpusstale.Store
 }
 
 // IndexerSupervisorStatus is the gateway-owned view of supervised indexer process health.
@@ -100,12 +101,12 @@ func NewRuntimeWithBrokerOverride(gatewayPath string, log *slog.Logger, brokerBa
 		config.PatchResolvedUpstream(res, brokerBaseURLOverride)
 	}
 	rt := &Runtime{
+		corpusStaleStore:      corpusstale.NewStore(),
 		log:                   log,
 		gatewayPath:           gatewayPath,
 		brokerBaseURLOverride: brokerBaseURLOverride,
 		resolved:              res,
 		tokens:                tokens.NewStore(res.TokensPath, log),
-		routing:               routing.NewPolicy(res.RoutingPolicyPath, log),
 		ingestSessions:        newIngestSessionStore(),
 	}
 	if res.MetricsEnabled {
@@ -125,6 +126,9 @@ func NewRuntimeWithBrokerOverride(gatewayPath string, log *slog.Logger, brokerBa
 		}
 	} else {
 		rt.operator = s
+		if err := operatorstore.ImportSupervisedYAMLRootsIfEmpty(context.Background(), s, "", res.IndexerSupervisedConfigPath, log); err != nil && log != nil {
+			log.Warn("legacy supervised roots import failed", "msg", "gateway.operator.workspaces_import_failed", "err", err)
+		}
 		if err := operatorstore.BootstrapVirtualModels(context.Background(), s, res, log); err != nil {
 			if log != nil {
 				log.Warn("virtual model bootstrap failed", "msg", "gateway.virtual_model.bootstrap_failed", "err", err)
@@ -195,6 +199,7 @@ func (rt *Runtime) Sync() {
 		return
 	}
 
+	prev := rt.resolved
 	next, err := config.LoadGatewayYAML(rt.gatewayPath, rt.log)
 	if err != nil {
 		if rt.log != nil {
@@ -202,9 +207,9 @@ func (rt *Runtime) Sync() {
 		}
 		return
 	}
-	pathsChanged := next.TokensPath != rt.resolved.TokensPath ||
-		next.RoutingPolicyPath != rt.resolved.RoutingPolicyPath
-	rt.resolved = rt.applyBrokerBaseURLOverride(next)
+	pathsChanged := next.TokensPath != rt.resolved.TokensPath
+	next = rt.applyBrokerBaseURLOverride(next)
+	rt.resolved = next
 	rt.gatewayMtime = gst.ModTime()
 	if next.ProviderFreeTierPath != "" {
 		if st, err := os.Stat(next.ProviderFreeTierPath); err == nil {
@@ -215,17 +220,77 @@ func (rt *Runtime) Sync() {
 	}
 	if pathsChanged {
 		rt.tokens = tokens.NewStore(next.TokensPath, rt.log)
-		rt.routing = routing.NewPolicy(next.RoutingPolicyPath, rt.log)
+	}
+	if ragServiceConfigChanged(prev, next) {
+		rt.rebuildRAGLocked()
 	}
 	if rt.log != nil {
 		rt.log.Info("reloaded gateway config", "msg", "gateway.config.reloaded", "path", rt.gatewayPath, "config_file", naming.GatewayConfigFileTarget)
 	}
 }
 
-func (rt *Runtime) Snapshot() (*config.Resolved, *tokens.Store, *routing.Policy) {
+func (rt *Runtime) Snapshot() (*config.Resolved, *tokens.Store) {
 	rt.mu.RLock()
 	defer rt.mu.RUnlock()
-	return rt.resolved, rt.tokens, rt.routing
+	return rt.resolved, rt.tokens
+}
+
+// GatewayPath returns the on-disk gateway.yaml path loaded by this runtime.
+func (rt *Runtime) GatewayPath() string {
+	rt.mu.RLock()
+	defer rt.mu.RUnlock()
+	return rt.gatewayPath
+}
+
+func ragServiceConfigChanged(prev, next *config.Resolved) bool {
+	if next == nil {
+		return false
+	}
+	if prev == nil {
+		return next.RAG.Enabled
+	}
+	a, b := prev.RAG, next.RAG
+	return a.Enabled != b.Enabled ||
+		a.EmbeddingBaseURL != b.EmbeddingBaseURL ||
+		a.EmbeddingPath != b.EmbeddingPath ||
+		a.EmbeddingModel != b.EmbeddingModel ||
+		a.EmbeddingDim != b.EmbeddingDim ||
+		a.QdrantURL != b.QdrantURL ||
+		a.QdrantAPIKey != b.QdrantAPIKey ||
+		a.ChunkSize != b.ChunkSize ||
+		a.ChunkOverlap != b.ChunkOverlap ||
+		a.TopK != b.TopK ||
+		a.ScoreThreshold != b.ScoreThreshold
+}
+
+func (rt *Runtime) rebuildRAGLocked() {
+	if rt.resolved == nil || !rt.resolved.RAG.Enabled {
+		rt.rag = nil
+		return
+	}
+	s, err := buildRAGService(rt.resolved, rt.log)
+	if err != nil {
+		rt.rag = nil
+		if rt.log != nil {
+			rt.log.Warn("rag reload failed", "msg", "gateway.rag.reload_failed", "err", err)
+		}
+		return
+	}
+	rt.rag = s
+	if rt.log != nil {
+		rt.log.Info("rag service reloaded", "msg", "gateway.rag.reloaded",
+			"embedding_model", rt.resolved.RAG.EmbeddingModel,
+			"embedding_dim", rt.resolved.RAG.EmbeddingDim,
+		)
+	}
+}
+
+// ReloadRAG rebuilds the in-memory RAG service from the current resolved config.
+// Call after mutating gateway.yaml when Sync may not yet observe a new mtime.
+func (rt *Runtime) ReloadRAG() {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	rt.rebuildRAGLocked()
 }
 
 // NextChatTurnIndex returns the next 1-based turn index for this conversation_id (in-process only).
@@ -271,6 +336,17 @@ func (rt *Runtime) SetOperatorStoreForTest(store *operatorstore.Store) {
 }
 
 // VirtualModels returns the in-memory virtual model registry, or nil when operator store is unavailable.
+// PrimaryVirtualModelID returns the first enabled virtual model id from operator SQLite, or "".
+func (rt *Runtime) PrimaryVirtualModelID() string {
+	if rt == nil {
+		return ""
+	}
+	if reg := rt.VirtualModels(); reg != nil {
+		return reg.BootstrapModelID()
+	}
+	return ""
+}
+
 func (rt *Runtime) VirtualModels() *virtualmodel.Registry {
 	rt.mu.RLock()
 	defer rt.mu.RUnlock()
@@ -493,6 +569,14 @@ func (rt *Runtime) CloseOperator() {
 }
 
 // RAG returns the RAG service when enabled, else nil.
+// CorpusStaleStore returns the in-memory indexer stale-source snapshot store.
+func (rt *Runtime) CorpusStaleStore() *corpusstale.Store {
+	if rt == nil {
+		return nil
+	}
+	return rt.corpusStaleStore
+}
+
 func (rt *Runtime) RAG() *rag.Service {
 	rt.mu.RLock()
 	defer rt.mu.RUnlock()

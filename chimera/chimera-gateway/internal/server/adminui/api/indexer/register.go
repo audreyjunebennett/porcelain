@@ -38,4 +38,13 @@ func Register(mux *http.ServeMux, h *handler.Handler) {
 	mux.HandleFunc("DELETE /api/ui/indexer/workspace-paths/{pathid}", h.RequireAuthJSON(func(w http.ResponseWriter, r *http.Request) {
 		handleIndexerWorkspacePathDELETE(h, w, r)
 	}))
+	mux.HandleFunc("POST /api/ui/indexer/workspaces/{id}/reindex", h.RequireAuthJSON(func(w http.ResponseWriter, r *http.Request) {
+		handleIndexerWorkspaceReindexPOST(h, w, r)
+	}))
+	mux.HandleFunc("POST /api/ui/indexer/reindex-all", h.RequireAuthJSON(func(w http.ResponseWriter, r *http.Request) {
+		handleIndexerReindexAllPOST(h, w, r)
+	}))
+	mux.HandleFunc("GET /api/ui/indexer/corpus/stale", h.RequireAuthJSON(func(w http.ResponseWriter, r *http.Request) {
+		handleIndexerCorpusStaleGET(h, w, r)
+	}))
 }

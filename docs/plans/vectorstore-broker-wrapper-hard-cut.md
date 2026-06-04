@@ -417,7 +417,6 @@ Deterministic gated targets for this matrix:
 - Operator docs are internally consistent with wrapper-first runtime behavior.
 - Migration validation confirms supervised startup, health, logs, and shutdown all work via wrappers.
 - Conformance suite exists and is usable as a gate for future backend drivers.
-- Plan status can move from `draft` to `active` with clear execution readiness and no blocking unknowns.
 
 **Status:** `done`
 

@@ -43,6 +43,20 @@ type Payload struct {
 	ContentSHA256 string `json:"content_sha256,omitempty"`
 	// ClientContentHash is the optional indexer-supplied digest echoed at ingest.
 	ClientContentHash string `json:"client_content_hash,omitempty"`
+	// Manifest chunk_schema 2 fields (required on new points).
+	ChunkIndex    int    `json:"chunk_index,omitempty"`
+	ChunkCount    int    `json:"chunk_count,omitempty"`
+	StartLine     int    `json:"start_line,omitempty"`
+	EndLine       int    `json:"end_line,omitempty"`
+	StartByte     int    `json:"start_byte,omitempty"`
+	EndByte       int    `json:"end_byte,omitempty"`
+	StartCh       int    `json:"start_ch,omitempty"`
+	EndCh         int    `json:"end_ch,omitempty"`
+	StartsMidLine bool   `json:"starts_mid_line,omitempty"`
+	LineCount     int    `json:"line_count,omitempty"`
+	FileBytes     int    `json:"file_bytes,omitempty"`
+	ChunkSchema   int    `json:"chunk_schema,omitempty"`
+	Language      string `json:"language,omitempty"`
 }
 
 // PointPayload is a scroll/search row without an embedded vector.
@@ -79,10 +93,15 @@ type Store interface {
 	Health(ctx context.Context) error
 	Stats(ctx context.Context, collection string) (Stats, error)
 	DeleteBySource(ctx context.Context, collection, source string) error
+	// DeleteCollection removes an entire collection. Implementations should treat a
+	// missing collection as success so purge is idempotent.
+	DeleteCollection(ctx context.Context, collection string) error
 	// ScrollPoints lists points in collection order for corpus inventory. filter
 	// scopes to tenant/project/flavor when non-nil. cursor is empty on the first
 	// page; subsequent calls pass ScrollBatch.NextCursor from the prior page.
 	ScrollPoints(ctx context.Context, collection string, filter *Coords, limit int, cursor string) (ScrollBatch, error)
+	// GetPoints loads payloads for point ids (missing ids are omitted).
+	GetPoints(ctx context.Context, collection string, ids []string) ([]PointPayload, error)
 }
 
 // CollectionName derives a deterministic collection name from coords.

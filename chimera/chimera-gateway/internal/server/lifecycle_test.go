@@ -18,8 +18,6 @@ func TestPhase3_lifecycleFixtureContainsAllMsgs(t *testing.T) {
 	text := string(b)
 	want := []string{
 		"msg=conversation.received",
-		"msg=conversation.merged",
-		"msg=conversation.dedup_hit",
 		"msg=conversation.routing.resolved",
 		"msg=conversation.rag.span",
 		"msg=conversation.rag.skipped",

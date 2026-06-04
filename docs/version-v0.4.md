@@ -143,6 +143,7 @@ For **`model: Chimera-<gateway_semver>`**, the gateway continues to own **routin
 * **Identify “workspace”** — Define the operator-visible handle (e.g. **registered indexer** + roots, or **`tenant_id` / `project_id` / `flavor_id`** triple consistent with *Workspace indexing · 8–10* and *Tenant authentication · 1–2*) used to scope **purge** and **list** actions.
 * **Operations** — At minimum: **purge** (delete vectors/payload for that scope) and clarity on **stop/disable** a specific indexer instance if multiple indexers run; optional **dry-run** or **preview counts** if live storage APIs support it (*Observability · 2*).
 * **Surface** — Gateway **REST** (preferred for parity with ingest/indexer config) and/or **desktop** action that calls the same backend; document **auth** (same gateway token model as ingest).
+* **Execution plan:** [`plans/indexer-embedding-model-and-workspace-purge.md`](plans/indexer-embedding-model-and-workspace-purge.md) Phase 3 — workspace delete drops collection (may ship before full v0.4 purge UI).
 * **Safety** — Confirmations, irreversibility callouts, and docs for **collection naming** (*Workspace indexing · 7*) so operators know what disappears.
 
 **Acceptance**
@@ -350,6 +351,7 @@ From the master **Release roadmap** table:
 ## See also
 
 * [`version-v0.3.md`](version-v0.3.md) - previous version (onboarding, virtual models, setup wizard)
+* [`version-v0.5.md`](version-v0.5.md) - next version (operator desired-state gateway, model-assisted configuration)
 * [`releases-v0.4.x.md`](releases-v0.4.x.md) - patch release notes, once this train ships patches
 * [`plans/indexer.md`](plans/indexer.md) - `chimera-indexer` plan (Phase 7 model-assisted strategy scoped to this release)
 * [`plans/operator-cli.md`](plans/operator-cli.md) - `chimera` operator CLI (config, health, models, chat smoke tests)

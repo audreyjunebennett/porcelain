@@ -83,7 +83,6 @@ Manual: edit a slug `summary` in YAML, regenerate, rebuild gateway, confirm sett
 - Non-English locales.
 - Runtime-editable copy from UI (file + generate only).
 - 100% slug coverage — inventory report tracks remaining string literals.
-- Conversation merge umbrella slug `conversation.merge.failed` — use specific `conversation.merge.*` slugs instead.
 
 ## References
 
