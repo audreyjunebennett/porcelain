@@ -157,6 +157,27 @@ globalThis.ChimeraSettings.Render.mountSumEvlog = function (ctx) {
     return true;
   }
 
+  function sumEvlogIndexerStorageStatsMissingCollection(flat) {
+    if (!flat || typeof flat !== "object") return false;
+    var blob = String(flat.detail != null ? flat.detail : flat.err != null ? flat.err : "")
+      .toLowerCase()
+      .trim();
+    if (!blob) return false;
+    if (blob.indexOf("404") >= 0) return true;
+    var phrases = [
+      "doesn't exist",
+      "does not exist",
+      "not found",
+      "collection missing",
+      "no collection"
+    ];
+    var pi;
+    for (pi = 0; pi < phrases.length; pi++) {
+      if (blob.indexOf(phrases[pi]) >= 0) return true;
+    }
+    return false;
+  }
+
   /** indexer.storage.stats with available:false — often logged at INFO though detail carries HTTP errors. */
   function sumEvlogIndexerStorageStatsUnavailable(flat) {
     if (!flat || typeof flat !== "object") return null;
@@ -186,7 +207,10 @@ globalThis.ChimeraSettings.Render.mountSumEvlog = function (ctx) {
     var ixUnavail = sumEvlogIndexerStorageStatsUnavailable(flat);
     if (ixUnavail) {
       if (ixUnavail.http != null && http == null) http = ixUnavail.http;
-      if (lk !== "ERROR" && http != null && http >= 400) lk = "ERROR";
+      if (sumEvlogIndexerStorageStatsMissingCollection(flat)) {
+        if (lk === "ERROR") lk = "INFO";
+        else if (lk !== "WARN" && lk !== "INFO") lk = "INFO";
+      } else if (lk !== "ERROR" && http != null && http >= 400) lk = "ERROR";
       else if (lk !== "ERROR" && lk !== "WARN") lk = "WARN";
     }
     return { levelKey: lk, http: http };

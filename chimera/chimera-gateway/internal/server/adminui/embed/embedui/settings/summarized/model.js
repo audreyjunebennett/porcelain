@@ -277,6 +277,20 @@ globalThis.ChimeraSettings.Summarized.Model = globalThis.ChimeraSettings.Summari
       if (ixHead) headlinesWithIndexerOrStaleCard[ixHead] = true;
       var domId = deps.indexerCardDomIdFromMeta(metaLive, run.id);
       var seqSig = Hash.eventSeqSignature(run.events);
+      var scopeIng =
+        metaLive.scopeQueueIngestPending != null && !isNaN(Number(metaLive.scopeQueueIngestPending))
+          ? Number(metaLive.scopeQueueIngestPending)
+          : 0;
+      var scopeFan =
+        metaLive.scopeQueueFanoutPending != null && !isNaN(Number(metaLive.scopeQueueFanoutPending))
+          ? Number(metaLive.scopeQueueFanoutPending)
+          : 0;
+      var scopePhase =
+        metaLive.scopeStatusFlat && metaLive.scopeStatusFlat.declarative_state != null
+          ? String(metaLive.scopeStatusFlat.declarative_state).trim()
+          : metaLive.lastDeclaredState != null
+            ? String(metaLive.lastDeclaredState).trim()
+            : "";
       cards.push(
         makeCard(
           domId,
@@ -288,6 +302,16 @@ globalThis.ChimeraSettings.Summarized.Model = globalThis.ChimeraSettings.Summari
             title: ixHead,
             doneSeen: !!metaLive.doneSeen,
             eventCount: seqSig.count,
+            scopePending: scopeIng + scopeFan,
+            scopeTotal:
+              metaLive.scopeWorkspaceTotal != null && !isNaN(Number(metaLive.scopeWorkspaceTotal))
+                ? Number(metaLive.scopeWorkspaceTotal)
+                : null,
+            scopePhase: scopePhase,
+            reindexPending:
+              typeof deps.indexerWorkspaceReindexSig === "function"
+                ? deps.indexerWorkspaceReindexSig(metaLive)
+                : 0,
             workspaceEditing: deps.indexerWorkspaceEditActiveForMeta
               ? !!deps.indexerWorkspaceEditActiveForMeta(metaLive)
               : false

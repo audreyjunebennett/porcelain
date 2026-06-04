@@ -2,12 +2,9 @@ package ingest
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
-	"mime"
-	"mime/multipart"
 	"net/http"
 	"strings"
 	"time"
@@ -19,11 +16,7 @@ import (
 	"github.com/lynn/porcelain/chimera/internal/platform/requestid"
 )
 
-// HandleV1 implements POST /v1/ingest (gateway v0.2). One document per
-// request: either multipart/form-data with a "file" part (and optional
-// "source", "content_hash" form fields) or JSON {"text", "source",
-// "content_hash"}. Tenant is derived from the bearer token; project/flavor
-// from headers (with token / config defaults).
+// HandleV1 implements POST /v1/ingest — manifest-only (application/json ingest.manifest).
 func HandleV1(w http.ResponseWriter, r *http.Request, rt *gruntime.Runtime, log *slog.Logger) {
 	rt.Sync()
 	res, tokStore := rt.Snapshot()
@@ -44,17 +37,19 @@ func HandleV1(w http.ResponseWriter, r *http.Request, rt *gruntime.Runtime, log 
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, res.RAG.MaxIngestBytes)
 
-	source, text, contentHash, err := readIngestBody(r)
-	if err != nil {
+	ct := strings.ToLower(strings.TrimSpace(r.Header.Get("Content-Type")))
+	if !strings.HasPrefix(ct, "application/json") {
+		gwhttp.WriteJSONError(w, http.StatusBadRequest,
+			"manifest ingest requires application/json body (ingest.manifest)", "invalid_request")
+		return
+	}
+	var manifest rag.IngestManifest
+	if err := json.NewDecoder(r.Body).Decode(&manifest); err != nil {
+		gwhttp.WriteJSONError(w, http.StatusBadRequest, fmt.Sprintf("invalid manifest JSON: %v", err), "invalid_request")
+		return
+	}
+	if err := rag.ValidateManifest(&manifest); err != nil {
 		gwhttp.WriteJSONError(w, http.StatusBadRequest, err.Error(), "invalid_request")
-		return
-	}
-	if strings.TrimSpace(text) == "" {
-		gwhttp.WriteJSONError(w, http.StatusBadRequest, "empty document text", "invalid_request")
-		return
-	}
-	if strings.TrimSpace(source) == "" {
-		gwhttp.WriteJSONError(w, http.StatusBadRequest, "missing source", "invalid_request")
 		return
 	}
 
@@ -68,30 +63,21 @@ func HandleV1(w http.ResponseWriter, r *http.Request, rt *gruntime.Runtime, log 
 	if indexRun != "" && !requestid.Valid(indexRun) {
 		indexRun = ""
 	}
-
 	convID := OptionalConversationIDFromHeader(r)
-
 	rid := requestid.FromContext(r.Context())
-	result, err := rt.RAG().Ingest(r.Context(), rag.IngestRequest{
+
+	result, err := rt.RAG().IngestManifest(r.Context(), manifest, coords, rt.OperatorStore(), rag.ManifestIngestRequest{
 		Coords:         coords,
-		Source:         source,
-		Text:           text,
-		ContentHash:    contentHash,
+		Manifest:       manifest,
 		RequestID:      rid,
 		IndexRunID:     indexRun,
 		ConversationID: convID,
 	})
 	if err != nil {
 		if log != nil {
-			args := []any{"msg", "ingest.failed", "tenant", sess.TenantID, "source", source, "err", err, "service", "gateway", "principal_id", sess.TenantID, "timeline_kind", "indexer"}
+			args := []any{"msg", "ingest.failed", "tenant", sess.TenantID, "source", manifest.Source, "err", err, "service", "gateway", "principal_id", sess.TenantID, "timeline_kind", "indexer"}
 			if rid != "" {
 				args = append(args, "request_id", rid)
-			}
-			if indexRun != "" {
-				args = append(args, "index_run_id", indexRun)
-			}
-			if convID != "" {
-				args = append(args, "conversation_id", convID)
 			}
 			log.Error("ingest failed", args...)
 		}
@@ -99,6 +85,10 @@ func HandleV1(w http.ResponseWriter, r *http.Request, rt *gruntime.Runtime, log 
 		return
 	}
 
+	writeIngestResult(w, r, rt, log, sess.TenantID, coords, result, indexRun, convID, rid, manifest.Source, 0)
+}
+
+func writeIngestResult(w http.ResponseWriter, r *http.Request, rt *gruntime.Runtime, log *slog.Logger, tenant string, coords vectorstore.Coords, result rag.IngestResult, indexRun, convID, rid, source string, textBytes int) {
 	w.Header().Set("Content-Type", "application/json")
 	out := map[string]any{
 		"object":         "ingest.result",
@@ -117,8 +107,8 @@ func HandleV1(w http.ResponseWriter, r *http.Request, rt *gruntime.Runtime, log 
 	if log != nil {
 		args := []any{
 			"msg", "ingest.complete",
-			"tenant", sess.TenantID, "source", source, "chunks", result.Chunks,
-			"service", "gateway", "principal_id", sess.TenantID,
+			"tenant", tenant, "source", source, "chunks", result.Chunks,
+			"service", "gateway", "principal_id", tenant,
 			"timeline_kind", "indexer",
 		}
 		if rid != "" {
@@ -137,10 +127,13 @@ func HandleV1(w http.ResponseWriter, r *http.Request, rt *gruntime.Runtime, log 
 		log.Log(r.Context(), lvl, "ingest complete", args...)
 	}
 	if rec := rt.Metrics(); rec != nil {
-		if rag := rt.RAG(); rag != nil {
-			mid := strings.TrimSpace(rag.EmbeddingModel())
+		if ragSvc := rt.RAG(); ragSvc != nil {
+			mid := strings.TrimSpace(ragSvc.EmbeddingModel())
 			if mid != "" {
-				est := len(text) / 4
+				est := textBytes / 4
+				if est < 1 {
+					est = result.Chunks * 128
+				}
 				if est < 1 {
 					est = 1
 				}
@@ -154,75 +147,15 @@ func HandleV1(w http.ResponseWriter, r *http.Request, rt *gruntime.Runtime, log 
 	_ = json.NewEncoder(w).Encode(out)
 }
 
-// readIngestBody returns (source, text, contentHash, err) regardless of input
-// shape (multipart or JSON).
-func readIngestBody(r *http.Request) (string, string, string, error) {
-	ct, params, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
-	switch {
-	case strings.HasPrefix(ct, "multipart/"):
-		return readMultipartIngest(r, params)
-	case ct == "application/json":
-		var doc struct {
-			Text        string `json:"text"`
-			Source      string `json:"source"`
-			ContentHash string `json:"content_hash"`
-		}
-		dec := json.NewDecoder(r.Body)
-		if err := dec.Decode(&doc); err != nil {
-			return "", "", "", fmt.Errorf("invalid JSON body: %w", err)
-		}
-		return strings.TrimSpace(doc.Source), doc.Text, strings.TrimSpace(doc.ContentHash), nil
-	default:
-		return "", "", "", errors.New("unsupported Content-Type; use application/json or multipart/form-data")
+// readManifestBody reads a complete JSON manifest from the request body.
+func readManifestBody(r *http.Request) (rag.IngestManifest, error) {
+	var manifest rag.IngestManifest
+	b, err := io.ReadAll(r.Body)
+	if err != nil {
+		return manifest, err
 	}
-}
-
-func readMultipartIngest(r *http.Request, params map[string]string) (string, string, string, error) {
-	mr := multipart.NewReader(r.Body, params["boundary"])
-	var (
-		source, contentHash string
-		textBuf             strings.Builder
-		gotFile             bool
-	)
-	for {
-		part, err := mr.NextPart()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return "", "", "", fmt.Errorf("multipart: %w", err)
-		}
-		name := part.FormName()
-		switch name {
-		case "file":
-			if source == "" {
-				source = part.FileName()
-			}
-			body, err := io.ReadAll(part)
-			if err != nil {
-				_ = part.Close()
-				return "", "", "", fmt.Errorf("read file part: %w", err)
-			}
-			textBuf.Write(body)
-			gotFile = true
-		case "text":
-			body, err := io.ReadAll(part)
-			if err != nil {
-				_ = part.Close()
-				return "", "", "", fmt.Errorf("read text part: %w", err)
-			}
-			textBuf.Write(body)
-		case "source":
-			body, _ := io.ReadAll(part)
-			source = strings.TrimSpace(string(body))
-		case "content_hash":
-			body, _ := io.ReadAll(part)
-			contentHash = strings.TrimSpace(string(body))
-		}
-		_ = part.Close()
+	if err := json.Unmarshal(b, &manifest); err != nil {
+		return manifest, err
 	}
-	if !gotFile && textBuf.Len() == 0 {
-		return "", "", "", errors.New("multipart body must include a 'file' or 'text' part")
-	}
-	return strings.TrimSpace(source), textBuf.String(), contentHash, nil
+	return manifest, nil
 }

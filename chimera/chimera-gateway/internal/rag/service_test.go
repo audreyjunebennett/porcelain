@@ -74,6 +74,22 @@ func (s *fakeStore) DeleteBySource(_ context.Context, c, src string) error {
 	return nil
 }
 
+func (s *fakeStore) GetPoints(_ context.Context, c string, ids []string) ([]vectorstore.PointPayload, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	byID := map[string]vectorstore.Point{}
+	for _, p := range s.points[c] {
+		byID[p.ID] = p
+	}
+	var out []vectorstore.PointPayload
+	for _, id := range ids {
+		if p, ok := byID[id]; ok {
+			out = append(out, vectorstore.PointPayload{ID: p.ID, Payload: p.Payload})
+		}
+	}
+	return out, nil
+}
+
 func (s *fakeStore) DeleteCollection(_ context.Context, c string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

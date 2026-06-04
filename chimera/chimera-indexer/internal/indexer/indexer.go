@@ -28,7 +28,7 @@ type Indexer struct {
 	syncState *SyncState
 	lastGW    atomic.Pointer[IndexerConfig]
 	// remoteInv is populated from GET /v1/indexer/corpus/inventory during the
-	// initial scan (nil when unavailable). Keys are root-relative source paths.
+	// initial scan (nil when unavailable). Keys are CorpusInventoryKey(project, flavor, rel).
 	remoteInv map[string]CorpusInventoryRow
 
 	// Operator-facing counters (indexer.* structured events / run.done rollup).
@@ -74,6 +74,14 @@ type Indexer struct {
 	obsMu              sync.Mutex
 	lastStorageStatsFP map[string]string
 	lastStateFP        string
+	autoRepairDone     map[string]bool
+
+	// Dynamic supervised roots (Phase 3): updated without restarting RunWatchers.
+	rootsMu      sync.RWMutex
+	cfgMu        sync.RWMutex
+	rootUpdates  chan rootsDelta
+	watchMu      sync.Mutex
+	watchedPaths map[string][]string // root id -> fsnotify-registered directory paths
 }
 
 // Hooks is an optional set of callbacks tests can install to observe and
@@ -98,7 +106,7 @@ func New(cfg Resolved, client *GatewayClient, log *slog.Logger) *Indexer {
 	st, err := OpenSyncState(cfg.SyncStatePath)
 	if err != nil {
 		log.Warn("could not open sync state; continuing without skip cache",
-			"path", cfg.SyncStatePath, "err", err)
+			"path", cfg.SyncStatePath, "store", ResolveSyncStateSQLitePath(cfg.SyncStatePath), "err", err)
 		st = nil
 	}
 	return &Indexer{
@@ -112,6 +120,14 @@ func New(cfg Resolved, client *GatewayClient, log *slog.Logger) *Indexer {
 		skipSummary:   newSkipSummaryTracker(),
 		ingestSummary: newIngestSummaryTracker(),
 	}
+}
+
+// Close releases resources held by the indexer (sync-state SQLite).
+func (ix *Indexer) Close() error {
+	if ix == nil || ix.syncState == nil {
+		return nil
+	}
+	return ix.syncState.Close()
 }
 
 // SetHooks installs test hooks. Must be called before Run.
@@ -196,17 +212,34 @@ func (ix *Indexer) FetchAndLogConfig(ctx context.Context) (*IndexerConfig, error
 // corpus inventory load, and fan-out happen asynchronously inside worker
 // handlers (queue-safe). Returns false if the queue is closed or full.
 func (ix *Indexer) ScheduleInitialScan() bool {
-	ok := ix.queue.Enqueue(WorkItem{
+	return ix.ScheduleScanForRoots(nil, "initial")
+}
+
+// ScheduleScanForRoots enqueues a scan job. When roots is nil or empty, all
+// configured roots are walked; otherwise only the given roots are scanned.
+func (ix *Indexer) ScheduleScanForRoots(roots []Root, scanID string) bool {
+	wi := WorkItem{
 		Kind:   WorkScan,
 		Tier:   TierBulk,
-		ScanID: "initial",
-	})
+		ScanID: scanID,
+	}
+	if len(roots) > 0 {
+		wi.ScanRootIDs = make([]string, len(roots))
+		for i, r := range roots {
+			wi.ScanRootIDs[i] = r.ID
+		}
+	}
+	ok := ix.queue.Enqueue(wi)
 	if ok {
-		ix.log.Info("scheduled initial scan job",
+		n := len(ix.getRoots())
+		if len(roots) > 0 {
+			n = len(roots)
+		}
+		ix.log.Info("scheduled scan job",
 			"msg", "indexer.run.progress",
 			"phase", "scan_scheduled",
-			"scan_id", "initial",
-			"roots", len(ix.cfg.Roots),
+			"scan_id", scanID,
+			"roots", n,
 		)
 	}
 	return ok

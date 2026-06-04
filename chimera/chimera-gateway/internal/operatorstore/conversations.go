@@ -61,6 +61,9 @@ type RetrievalInput struct {
 	Language      string
 	VectorPointID string
 	ContentSHA256 string
+	StartLine     int
+	EndLine       int
+	StartsMidLine bool
 }
 
 // ConversationTurn is a loaded transcript row.
@@ -92,6 +95,9 @@ type ConversationRetrieval struct {
 	Language      string
 	VectorPointID string
 	ContentSHA256 string
+	StartLine     int
+	EndLine       int
+	StartsMidLine bool
 }
 
 // ConversationTranscript is a full thread with turns and retrievals.
@@ -276,11 +282,12 @@ func (s *Store) ReplaceTurnRetrievals(ctx context.Context, turnID string, hits [
 		_, err = tx.ExecContext(ctx, `
 INSERT INTO conversation_retrievals (
 	retrieval_id, turn_id, sort_order, file_path, score, snippet_text, language,
-	vector_point_id, content_sha256
-) VALUES (?,?,?,?,?,?,?,?,?)`,
+	vector_point_id, content_sha256, start_line, end_line, starts_mid_line
+) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
 			rid, turnID, i, strings.TrimSpace(h.FilePath), h.Score,
 			h.SnippetText, strings.TrimSpace(h.Language),
-			strings.TrimSpace(h.VectorPointID), strings.TrimSpace(h.ContentSHA256))
+			strings.TrimSpace(h.VectorPointID), strings.TrimSpace(h.ContentSHA256),
+			h.StartLine, h.EndLine, boolToInt(h.StartsMidLine))
 		if err != nil {
 			return err
 		}
@@ -414,7 +421,7 @@ ORDER BY turn_index ASC, role ASC`, conversationID)
 func (s *Store) listRetrievalsForTurn(ctx context.Context, turnID string) ([]ConversationRetrieval, error) {
 	rows, err := s.db.QueryContext(ctx, `
 SELECT retrieval_id, turn_id, sort_order, file_path, score, snippet_text, language,
-	vector_point_id, content_sha256
+	vector_point_id, content_sha256, start_line, end_line, starts_mid_line
 FROM conversation_retrievals
 WHERE turn_id = ?
 ORDER BY sort_order ASC`, turnID)
@@ -425,10 +432,13 @@ ORDER BY sort_order ASC`, turnID)
 	var out []ConversationRetrieval
 	for rows.Next() {
 		var r ConversationRetrieval
+		var mid int
 		if err := rows.Scan(&r.RetrievalID, &r.TurnID, &r.SortOrder, &r.FilePath, &r.Score,
-			&r.SnippetText, &r.Language, &r.VectorPointID, &r.ContentSHA256); err != nil {
+			&r.SnippetText, &r.Language, &r.VectorPointID, &r.ContentSHA256,
+			&r.StartLine, &r.EndLine, &mid); err != nil {
 			return nil, err
 		}
+		r.StartsMidLine = mid == 1
 		out = append(out, r)
 	}
 	return out, rows.Err()

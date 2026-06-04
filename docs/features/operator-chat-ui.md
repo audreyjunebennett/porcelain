@@ -36,7 +36,7 @@ Operators exercise gateway chat from `/ui/chat` (iframe inside the app shell at 
 - Chat modules stay separated: `gatewayClient.js`, `streamHandler.js`, `render/*`, `state.js`, `app.js` orchestrator.
 - `X-Chimera-Conversation-Id` is client-held and sent on every chat request; aligns with conversation history persistence when turns complete.
 - Workspace scope applies per request from the current selector; it does not retroactively change prior turns.
-- RAG hit text in headers is base64-encoded JSON for UTF-8 safety; client decodes before render.
+- RAG hit text in headers is base64-encoded JSON for UTF-8 safety; client decodes before render. Hits include `start_line`, `end_line`, `starts_mid_line` when indexed with manifest chunk_schema 2.
 - No attachments, system prompts, tools UI, or multi-modal inputs in shipped chat embed.
 
 **Decisions**
@@ -65,7 +65,7 @@ Operators exercise gateway chat from `/ui/chat` (iframe inside the app shell at 
 | `POST /v1/chat/completions` | Chat (stream and non-stream) |
 | Header | `X-Chimera-Conversation-Id` — thread id |
 | Headers | `X-Chimera-Project`, `X-Chimera-Flavor-Id` — optional RAG scope |
-| Response header | `X-Chimera-RAG-Hits` — base64 JSON snippet metadata |
+| Response header | `X-Chimera-RAG-Hits` — base64 JSON snippet metadata (source, text, score, line range, …) |
 | Shell IPC | `postMessage` `{ type: "chimera-chat-action", action: "new"|"open"|"copy-all"|"deleted", … }` |
 
 ## Code map
@@ -95,7 +95,8 @@ Manual: open `/ui` → chat iframe; send a message with a workspace selected; co
 
 - **Copy chat** shell action — `copy-all` handler exists in `app.js` but ribbon removed top-bar **Copy chat**; per-message copy only in UI today.
 - File attachments, tools, images, system prompt editor.
-- Line-number gutter on snippets — planned in [`plans/indexer-manifest-ingest.md`](../plans/indexer-manifest-ingest.md) (not shipped).
+- Snippet summary shows `path · L42–58`; code body uses a line-number gutter with `…` on mid-line chunk starts ([`plans/indexer-manifest-ingest.md`](../plans/indexer-manifest-ingest.md) Phases 4–5).
+- **Stale** badge on snippets when `rag.coherence.mode` is `warn` or `strict` and gateway stale list matches hit `content_sha256` ([`gateway-rag-ingest-and-retrieval.md`](gateway-rag-ingest-and-retrieval.md) P6).
 - Standalone `/ui/chat` without shell lacks ribbon navigation (by design).
 
 ## References

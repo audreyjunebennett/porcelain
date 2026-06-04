@@ -32,6 +32,26 @@
     return key ? key : "";
   }
 
+  function isStorageStatsMissingCollectionDetail(detail) {
+    var d = String(detail != null ? detail : "")
+      .toLowerCase()
+      .trim();
+    if (!d) return false;
+    if (d.indexOf("404") >= 0) return true;
+    var phrases = [
+      "doesn't exist",
+      "does not exist",
+      "not found",
+      "collection missing",
+      "no collection"
+    ];
+    var pi;
+    for (pi = 0; pi < phrases.length; pi++) {
+      if (d.indexOf(phrases[pi]) >= 0) return true;
+    }
+    return false;
+  }
+
   function indexerScopeLabel(flat) {
     var proj =
       flat.ingest_project != null && String(flat.ingest_project).trim() !== ""
@@ -203,6 +223,35 @@
       }
       return base;
     },
+    gateway_operator_workspace_reindex_requested: function (flat, entry) {
+      var base = entry.summary || "Re-index requested";
+      var wid = flat.workspace_id != null ? String(flat.workspace_id) : "";
+      var gen = flat.reindex_generation != null ? String(flat.reindex_generation) : "";
+      var bits = [];
+      if (wid) bits.push("workspace " + wid);
+      if (gen) bits.push("generation " + gen);
+      return bits.length ? base + " · " + bits.join(" · ") : base;
+    },
+    indexer_reindex_requested: function (flat, entry) {
+      var scope = indexerScopeLabel(flat);
+      var gen = flat.generation != null ? String(flat.generation) : "";
+      var roots = numOrDash(flat.roots);
+      var line = "Re-index applied";
+      if (scope) line += " · " + scope;
+      if (gen) line += " · generation " + gen;
+      if (roots != null) line += " · " + roots + " watch root(s) cleared";
+      return line;
+    },
+    indexer_reindex_auto_collection_missing: function (flat, entry) {
+      var scope = indexerScopeLabel(flat);
+      var cleared = numOrDash(flat.roots_cleared);
+      var line = "Search index missing — cleared local skip cache";
+      if (scope) line += " for " + scope;
+      if (cleared != null && cleared > 0) line += " · " + cleared + " root(s)";
+      else if (entry && entry.summary) return entry.summary;
+      line += " · files will re-upload on the next scan";
+      return line;
+    },
     indexer_supervised_watch_shutdown_timeout: function (flat, entry) {
       var base = entry.summary || "Filesystem watchers did not stop after reload";
       if (flat.grace_sec != null) return base + " · grace " + flat.grace_sec + "s";
@@ -233,6 +282,17 @@
     indexer_storage_stats: function (flat, entry) {
       var avail = flat.available === true || flat.available === "true";
       if (!avail) {
+        if (isStorageStatsMissingCollectionDetail(flat.detail)) {
+          var scope = indexerScopeLabel(flat);
+          if (scope) {
+            return (
+              "No search index yet for workspace " +
+              scope +
+              " — files will upload on the next ingest"
+            );
+          }
+          return "No search index yet for this workspace — files will upload on the next ingest";
+        }
         if (flat.detail) {
           return (
             "Could not verify the stored search index — " +

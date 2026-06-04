@@ -13,7 +13,7 @@
 
 ## At a glance
 
-After startup config fetch, the indexer loads remote corpus inventory, schedules a **ScanJob** (not a synchronous per-file enqueue), walks roots with ignore/binary rules, and fans candidates into bounded **FanoutListJob** chunks that enqueue tier-1 ingest work. Fair-share caps prevent one project+flavor from monopolizing the bulk queue when multiple scopes run. Filesystem edits enqueue higher-priority ingest jobs (Write tier 2, Create tier 3). Before upload, the pipeline skips unchanged files using corpus inventory, local JSON sync state, or empty-content checks. Successful ingests persist client and server SHA-256 digests locally.
+After startup config fetch, the indexer loads remote corpus inventory, schedules a **ScanJob** (not a synchronous per-file enqueue), walks roots with ignore/binary rules, and fans candidates into bounded **FanoutListJob** chunks that enqueue tier-1 ingest work. Fair-share caps prevent one project+flavor from monopolizing the bulk queue when multiple scopes run. Filesystem edits enqueue higher-priority ingest jobs (Write tier 2, Create tier 3). Before upload, the pipeline skips unchanged files using corpus inventory, local SQLite sync state, or empty-content checks. Successful ingests persist client and server SHA-256 digests locally (incremental upsert per file).
 
 ## Operator-visible behavior
 
@@ -32,7 +32,7 @@ After startup config fetch, the indexer loads remote corpus inventory, schedules
 - **Fair-share budget** — `per_scope_fanout_budget = floor(cap × p / max(N, 1))` where `p` defaults to 0.75 (`queue_fanout_high_water_mark_percent`) and `N` is distinct scope keys from walk skips ∪ candidates.
 - **`initial_scan_complete`** — Set after scan finishes and fan-out jobs are **queued**, not when all ingests finish.
 - **Scope at discovery time** — Each candidate carries project/flavor from the same `IngestHeaders` rules used at ingest.
-- **Sync state** — JSON file (`sync_state_path`); **O(n) full rewrite** on each successful `Put`; scales poorly beyond a few thousand files.
+- **Sync state** — Indexer-local SQLite (`sync-state.sqlite` beside configured `sync_state_path` when it ends in `.json`); incremental `Put` per file; legacy JSON migrates once to `.bak`.
 
 **Decisions**
 
@@ -48,19 +48,19 @@ After startup config fetch, the indexer loads remote corpus inventory, schedules
 
 **Persistence**
 
-- Sync state: `indexer.sync-state.json` (or path beside `--config` in supervised mode) — map keyed by `root_id + "\x00" + rel_path`.
-- No WAL or SQLite for checkpoints in shipped code.
+- Sync state: `sync-state.sqlite` (resolved from `sync_state_path`; default config still names `indexer.sync-state.json`) — rows keyed by `root_id + "\x00" + rel_path`; optional `chunk_count`, `chunk_schema`.
 
 ## Interfaces
 
 | Surface | Detail |
 |---------|--------|
 | `GET /v1/indexer/corpus/inventory` | Paginated `source`, `content_sha256`, optional `client_content_hash` |
-| `POST /v1/ingest` | Multipart/JSON whole file + scope headers |
-| Session API | `POST /v1/ingest/session`, `PUT …/chunk`, `POST …/complete` |
+| `POST /v1/ingest` | JSON `ingest.manifest` only + scope headers |
+| Session API | `POST /v1/ingest/session`, `POST …/complete` with full manifest JSON (transport chunks optional) |
 | Headers | `X-Chimera-Project`, `X-Chimera-Flavor-Id` per resolved scope |
 | YAML | `workers`, `queue_depth`, `debounce_ms`, `retry_*`, `sync_state_path`, `max_whole_file_bytes`, `queue_fanout_high_water_mark_percent`, `job_skip_log`, `skip_summary_min_interval_ms` |
-| Key log slugs | `indexer.discovery.summary.scope`, `indexer.scan.complete`, `indexer.queue.snapshot`, `indexer.job.ingested`, `indexer.job.skipped.summary`, `indexer.fanout.*` |
+| Key log slugs | `indexer.discovery.summary.scope`, `indexer.scan.complete`, `indexer.queue.snapshot`, `indexer.job.ingested`, `indexer.job.skipped.summary`, `indexer.fanout.*`, `indexer.coherence.stale` (DEBUG, rate-limited per source) |
+| Coherence | `CollectStaleSources`, `PushStaleSources` → `PUT /v1/indexer/corpus/stale` on workspace poll (~30s) |
 
 ## Code map
 
@@ -70,7 +70,9 @@ After startup config fetch, the indexer loads remote corpus inventory, schedules
 | Priority queue | `internal/indexer/queue.go` |
 | Scan + fan-out | `internal/indexer/scan_fanout.go` (`interleaveTaggedCandidatesByScope`, `runScanJob`, `runFanoutList`) |
 | Ingest + skip | `internal/indexer/ingest.go` |
-| Sync state JSON | `internal/indexer/syncstate.go` |
+| Sync state SQLite | `internal/indexer/syncstate.go` |
+| Manifest build + upload | `internal/indexer/manifest.go`, `ingest.go`, `client.go` |
+| Coherence | `internal/indexer/coherence.go`, `coherence_push.go` |
 | Scope merge | `internal/indexer/scope.go` |
 | Walk + ignore | `internal/indexer/walk.go`, ignore matcher packages |
 | Workers | `internal/indexer/workers.go`, `indexer.go` (`ScheduleInitialScan`, `processWorkItem`) |
@@ -87,8 +89,7 @@ Manual: index a tree with 10k+ unchanged files; confirm queue depth stays bounde
 
 ## Out of scope and known gaps
 
-- **Sync-state SQLite + force re-index** — [`plans/indexer-sync-state-sqlite-and-force-reindex.md`](../plans/indexer-sync-state-sqlite-and-force-reindex.md) (all phases `todo`).
-- **Auto-clear sync state on missing Qdrant collection** — planned Phase 5 of that plan; not shipped.
+- **Force re-index** — operator bumps `reindex_generation` via settings or API; indexer poll clears checkpoints (`indexer.reindex.requested`). **Auto-repair** clears sync rows once per scope when storage stats report a missing Qdrant collection (`indexer.reindex.auto_collection_missing`).
 - **Tier-3 delete / fsnotify Remove** — not implemented.
 - **Durable queue** — crash loses pending fan-out remainders.
 - **Integration tests** for queue-full remainder chains under multi-scope contention — partial unit coverage only.

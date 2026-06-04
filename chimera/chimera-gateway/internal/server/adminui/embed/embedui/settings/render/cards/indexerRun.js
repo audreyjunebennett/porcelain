@@ -6,6 +6,8 @@ globalThis.ChimeraSettings.Render = globalThis.ChimeraSettings.Render || {};
 globalThis.ChimeraSettings.Render.Cards = globalThis.ChimeraSettings.Render.Cards || {};
 
 globalThis.ChimeraSettings.Render.Cards.mountFeedLogIndexerRun = function (ctx) {
+  if (!ctx.indexerWorkspaceReindexUntil) ctx.indexerWorkspaceReindexUntil = Object.create(null);
+
   var escapeHtml = ctx.escapeHtml;
   var getFlat = ctx.getFlat;
   var entryCache = ctx.entryCache;
@@ -330,10 +332,11 @@ globalThis.ChimeraSettings.Render.Cards.mountFeedLogIndexerRun = function (ctx) 
         "indexing unavailable";
       return "Waiting for indexing — " + String(reason).replace(/_/g, " ");
     }
-    if (meta && meta.scopeStatusEdgeFlat) {
+    var scopeStatusForSubtitle = meta && (meta.scopeStatusFlat || meta.scopeStatusEdgeFlat);
+    if (scopeStatusForSubtitle) {
       var renderGate = globalThis.ChimeraSettings && ChimeraSettings.Render;
       if (renderGate && typeof renderGate.operatorMessage === "function") {
-        var gateLine = renderGate.operatorMessage(meta.scopeStatusEdgeFlat, { slug: "indexer.scope.status" });
+        var gateLine = renderGate.operatorMessage(scopeStatusForSubtitle, { slug: "indexer.scope.status" });
         if (gateLine && String(gateLine).trim() !== "") return String(gateLine).trim();
       }
     }
@@ -834,6 +837,167 @@ globalThis.ChimeraSettings.Render.Cards.mountFeedLogIndexerRun = function (ctx) 
         ? indexerRunTimelineDedupeKey(meta, bucketId)
         : String(bucketId || "");
     return "ix-" + strHash(dedupeKey);
+  }
+
+  function pruneIndexerWorkspaceReindexUntil() {
+    var m = ctx.indexerWorkspaceReindexUntil;
+    if (!m || typeof m !== "object") return;
+    var now = Date.now();
+    var k;
+    for (k in m) {
+      if (Object.prototype.hasOwnProperty.call(m, k) && (!m[k] || m[k] <= now)) delete m[k];
+    }
+  }
+
+  function indexerWorkspaceReindexActive(wsNumIx) {
+    if (!(wsNumIx > 0)) return false;
+    pruneIndexerWorkspaceReindexUntil();
+    var m = ctx.indexerWorkspaceReindexUntil;
+    return !!(m && m[wsNumIx] && m[wsNumIx] > Date.now());
+  }
+
+  function indexerAnotherWorkspaceReindexActive(wsNumIx) {
+    pruneIndexerWorkspaceReindexUntil();
+    var m = ctx.indexerWorkspaceReindexUntil;
+    if (!m || typeof m !== "object") return false;
+    var now = Date.now();
+    var k;
+    for (k in m) {
+      if (!Object.prototype.hasOwnProperty.call(m, k)) continue;
+      var n = Number(k);
+      if (isNaN(n) || n === wsNumIx) continue;
+      if (m[k] > now) return true;
+    }
+    return false;
+  }
+
+  function markIndexerWorkspaceReindexPending(wsNum, ttlMs) {
+    if (!(wsNum > 0)) return;
+    pruneIndexerWorkspaceReindexUntil();
+    var ms = ttlMs != null && !isNaN(Number(ttlMs)) ? Number(ttlMs) : 120000;
+    ctx.indexerWorkspaceReindexUntil[wsNum] = Date.now() + ms;
+  }
+
+  function clearIndexerWorkspaceReindexPending(wsNum) {
+    if (!(wsNum > 0)) return;
+    var m = ctx.indexerWorkspaceReindexUntil;
+    if (m && typeof m === "object") delete m[wsNum];
+  }
+
+  function indexerWorkspaceNumericIdFromFlat(f) {
+    if (!f) return 0;
+    var findFn = ctx.findOperatorWorkspaceMatchingIndexerMeta;
+    var wsNumFn = ctx.operatorWorkspaceNumericId;
+    if (typeof findFn !== "function" || typeof wsNumFn !== "function") return 0;
+    var wsRaw =
+      f.scope_workspace_id != null
+        ? String(f.scope_workspace_id).trim()
+        : f.workspace_id != null
+          ? String(f.workspace_id).trim()
+          : "";
+    var pseudo = {
+      projectId:
+        f.project_id != null
+          ? String(f.project_id).trim()
+          : f.ingest_project != null
+            ? String(f.ingest_project).trim()
+            : "—",
+      flavorId: f.flavor_id != null ? String(f.flavor_id).trim() : "—",
+      tenantId:
+        f.tenant_id != null
+          ? String(f.tenant_id).trim()
+          : f.principal_id != null
+            ? String(f.principal_id).trim()
+            : "",
+      indexerKey: f.indexer_target_key != null ? String(f.indexer_target_key).trim() : "",
+      workspaceId: wsRaw || "—"
+    };
+    var opWs = findFn(pseudo);
+    if (!opWs) return 0;
+    return wsNumFn(opWs);
+  }
+
+  /** Scoped queue remaining from rollup meta (ingest + fan-out pending). */
+  function indexerScopePendingRemaining(meta) {
+    if (!meta) return null;
+    var qIng =
+      meta.scopeQueueIngestPending != null && !isNaN(Number(meta.scopeQueueIngestPending))
+        ? Number(meta.scopeQueueIngestPending)
+        : null;
+    var qFan =
+      meta.scopeQueueFanoutPending != null && !isNaN(Number(meta.scopeQueueFanoutPending))
+        ? Number(meta.scopeQueueFanoutPending)
+        : null;
+    if (qIng == null && qFan == null) return null;
+    return (qIng != null ? qIng : 0) + (qFan != null ? qFan : 0);
+  }
+
+  function indexerRecentSummaryQueueDrained(meta) {
+    if (!meta) return false;
+    var flats = [meta.lastIngestSummaryFlat, meta.lastSkipSummaryFlat];
+    var i;
+    for (i = 0; i < flats.length; i++) {
+      var f = flats[i];
+      if (!f || f.queue_depth == null || f.queue_depth === "") continue;
+      var qd = Number(f.queue_depth);
+      if (!isNaN(qd) && qd === 0) return true;
+    }
+    return false;
+  }
+
+  /** Logs show this workspace scope is done (watch_idle / idle with no scoped backlog). */
+  function indexerScopeLooksIdle(meta) {
+    if (!meta) return false;
+    var phase = indexerScopeDeclarativePhase(meta);
+    var pRem = indexerScopePendingRemaining(meta);
+    var phaseIdle = phase === "watch_idle" || phase === "idle";
+    if (phaseIdle && (pRem === null || pRem === 0)) return true;
+    if ((pRem === null || pRem === 0) && indexerRecentSummaryQueueDrained(meta)) {
+      return phaseIdle || phase === "backlog" || phase === "initial_scanning";
+    }
+    return false;
+  }
+
+  function syncIndexerReindexPendingFromMeta(meta, wsNumIx) {
+    if (!(wsNumIx > 0) || !indexerScopeLooksIdle(meta)) return;
+    clearIndexerWorkspaceReindexPending(wsNumIx);
+  }
+
+  /** Clear optimistic re-index when live log lines show this scope finished. */
+  function tryClearIndexerReindexFromLogEntry(ent) {
+    if (!ent || !ent.parsed) return;
+    var f = getFlat(ent.parsed);
+    var msg = indexerFlatMsg(f);
+    if (
+      msg !== "indexer.scope.status" &&
+      msg !== "indexer.job.ingested.summary" &&
+      msg !== "indexer.job.skipped.summary"
+    ) {
+      return;
+    }
+    var wsNum = indexerWorkspaceNumericIdFromFlat(f);
+    if (!(wsNum > 0) || !indexerWorkspaceReindexActive(wsNum)) return;
+    if (msg === "indexer.scope.status") {
+      var phase = f.declarative_state != null ? String(f.declarative_state).trim() : "";
+      var fan = Number(f.queue_fanout_files_pending);
+      var ing = Number(f.queue_ingest_pending);
+      var pending = (isNaN(fan) ? 0 : fan) + (isNaN(ing) ? 0 : ing);
+      if ((phase === "watch_idle" || phase === "idle") && pending === 0) {
+        clearIndexerWorkspaceReindexPending(wsNum);
+      }
+      return;
+    }
+    if (f.queue_depth != null && f.queue_depth !== "") {
+      var qd = Number(f.queue_depth);
+      if (!isNaN(qd) && qd === 0) clearIndexerWorkspaceReindexPending(wsNum);
+    }
+  }
+
+  function indexerScopeDeclarativePhase(meta) {
+    if (meta && meta.scopeStatusFlat && meta.scopeStatusFlat.declarative_state != null) {
+      return String(meta.scopeStatusFlat.declarative_state).trim();
+    }
+    return meta && meta.lastDeclaredState ? String(meta.lastDeclaredState).trim() : "";
   }
 
   function indexerScopeProgressTimelineBarHtml(pRem, qTot, doneSeen) {
@@ -1518,7 +1682,16 @@ globalThis.ChimeraSettings.Render.Cards.mountFeedLogIndexerRun = function (ctx) 
       typeof ctx.countErrorSignalsInEntries === "function"
         ? ctx.countErrorSignalsInEntries(sliceRecent(evs, RECENT_CARD_STATUS_N))
         : 0;
-    var declared = meta.lastDeclaredState ? String(meta.lastDeclaredState).trim() : "";
+    syncIndexerReindexPendingFromMeta(meta, wsNumIx);
+
+    var declared = indexerScopeDeclarativePhase(meta);
+    var scopeIdle = indexerScopeLooksIdle(meta);
+    var reindexActive = indexerWorkspaceReindexActive(wsNumIx) && !scopeIdle;
+    var peerDuringReload =
+      wsNumIx > 0 &&
+      indexerAnotherWorkspaceReindexActive(wsNumIx) &&
+      !indexerWorkspaceReindexActive(wsNumIx) &&
+      !scopeIdle;
 
     var qIng =
       meta.scopeQueueIngestPending != null && !isNaN(Number(meta.scopeQueueIngestPending))
@@ -1528,10 +1701,7 @@ globalThis.ChimeraSettings.Render.Cards.mountFeedLogIndexerRun = function (ctx) 
       meta.scopeQueueFanoutPending != null && !isNaN(Number(meta.scopeQueueFanoutPending))
         ? Number(meta.scopeQueueFanoutPending)
         : null;
-    var pRem = null;
-    if (qIng != null || qFan != null) {
-      pRem = (qIng != null ? qIng : 0) + (qFan != null ? qFan : 0);
-    }
+    var pRem = indexerScopePendingRemaining(meta);
     var qTot =
       meta.scopeWorkspaceTotal != null && !isNaN(Number(meta.scopeWorkspaceTotal))
         ? Math.round(Number(meta.scopeWorkspaceTotal))
@@ -1542,9 +1712,11 @@ globalThis.ChimeraSettings.Render.Cards.mountFeedLogIndexerRun = function (ctx) 
         ? { st: "error", cls: "sum-st-error" }
         : doneSeen
           ? { st: "complete", cls: "sum-st-complete" }
+          : reindexActive
+            ? { st: "indexing", cls: "sum-st-indexing" }
           : declared === "recovery"
             ? { st: "recovery", cls: "sum-st-monitor" }
-            : pRem !== null && pRem === 0
+            : pRem !== null && pRem === 0 && !reindexActive
               ? { st: "idle", cls: "sum-st-complete" }
               : declared === "watch_idle" || declared === "idle"
                 ? { st: "waiting", cls: "sum-st-complete" }
@@ -1560,7 +1732,11 @@ globalThis.ChimeraSettings.Render.Cards.mountFeedLogIndexerRun = function (ctx) 
       escapeHtml(titleText) +
       "</span>";
     var backlogLine = "";
-    if (pRem !== null && !isNaN(Number(pRem)) && Number(pRem) === 0) {
+    if (peerDuringReload && pRem != null && pRem > 0) {
+      backlogLine = "Checking files\u2026";
+    } else if (reindexActive && (pRem === null || pRem === 0)) {
+      backlogLine = "Re-indexing\u2026";
+    } else if (pRem !== null && !isNaN(Number(pRem)) && Number(pRem) === 0) {
       backlogLine = "";
     } else if (pRem != null && qTot != null) {
       backlogLine =
@@ -1572,13 +1748,16 @@ globalThis.ChimeraSettings.Render.Cards.mountFeedLogIndexerRun = function (ctx) 
     } else {
       backlogLine = "—";
     }
-    var progressBarHtml = indexerScopeProgressTimelineBarHtml(pRem, qTot, doneSeen);
+    var progressBarRem = peerDuringReload && pRem != null && pRem > 0 ? null : pRem;
+    var progressBarHtml = indexerScopeProgressTimelineBarHtml(progressBarRem, qTot, doneSeen && !reindexActive);
     var captionSpan =
       backlogLine !== ""
         ? '<span class="indexer-scope-caption">' + escapeHtml(backlogLine) + "</span>"
         : "";
     var indexerScopeProgressReady =
       doneSeen ||
+      reindexActive ||
+      peerDuringReload ||
       !!(meta.scopeStatusFlat || meta.scopeStatusEdgeFlat) ||
       (pRem !== null && qTot !== null);
     var progressStack =
@@ -1646,6 +1825,11 @@ globalThis.ChimeraSettings.Render.Cards.mountFeedLogIndexerRun = function (ctx) 
   ctx.indexerCardIdentityKeyFromSnap = indexerCardIdentityKeyFromSnap;
   ctx.indexerCardTitleSortLabel = indexerCardTitleSortLabel;
   ctx.persistIndexerWatchRoots = persistIndexerWatchRoots;
+  ctx.markIndexerWorkspaceReindexPending = markIndexerWorkspaceReindexPending;
+  ctx.clearIndexerWorkspaceReindexPending = clearIndexerWorkspaceReindexPending;
+  ctx.tryClearIndexerReindexFromLogEntry = tryClearIndexerReindexFromLogEntry;
+  ctx.indexerScopeLooksIdle = indexerScopeLooksIdle;
+  ctx.indexerWorkspaceReindexActive = indexerWorkspaceReindexActive;
   ctx.rememberIndexerCardSnapshot = rememberIndexerCardSnapshot;
   ctx.buildIndexerStaleSnapshotCard = buildIndexerStaleSnapshotCard;
   ctx.mergePersistedIndexerWatchRoots = mergePersistedIndexerWatchRoots;

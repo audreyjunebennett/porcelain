@@ -390,6 +390,14 @@ func previewText(s string) string {
 func (s *Service) EmbedDim() int { return s.embedDim }
 
 // TopK / ChunkOverlap accessors for /v1/indexer/config.
+// GetPointPayloads loads Qdrant payloads for point ids in a collection.
+func (s *Service) GetPointPayloads(ctx context.Context, collection string, ids []string) ([]vectorstore.PointPayload, error) {
+	if s == nil || s.store == nil {
+		return nil, errors.New("rag: nil store")
+	}
+	return s.store.GetPoints(ctx, collection, ids)
+}
+
 func (s *Service) ChunkSize() int          { return s.chunkSize }
 func (s *Service) ChunkOverlap() int       { return s.chunkOverlap }
 func (s *Service) TopK() int               { return s.topK }

@@ -2,16 +2,13 @@ package indexer
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"io"
-	"mime"
-	"mime/multipart"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -88,34 +85,23 @@ func newFakeGateway(t *testing.T) *fakeGateway {
 		_, _ = w.Write([]byte(`{"object":"indexer.corpus.inventory","entries":[],"has_more":false,"next_cursor":""}`))
 	})
 	mux.HandleFunc("/v1/ingest", func(w http.ResponseWriter, r *http.Request) {
-		mt, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
-		if err != nil || !strings.HasPrefix(mt, "multipart/") {
-			http.Error(w, "bad ct", http.StatusBadRequest)
+		if !strings.Contains(r.Header.Get("Content-Type"), "application/json") {
+			http.Error(w, "manifest required", http.StatusBadRequest)
 			return
 		}
-		mr := multipart.NewReader(r.Body, params["boundary"])
+		var manifest IngestManifest
+		if err := json.NewDecoder(r.Body).Decode(&manifest); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		rec := ingestRecord{
+			Source:  manifest.Source,
+			Hash:    manifest.ClientContentHash,
 			Project: r.Header.Get("X-Chimera-Project"),
 			Flavor:  r.Header.Get("X-Chimera-Flavor-Id"),
 		}
-		for {
-			p, err := mr.NextPart()
-			if err == io.EOF {
-				break
-			}
-			if err != nil {
-				http.Error(w, err.Error(), 400)
-				return
-			}
-			b, _ := io.ReadAll(p)
-			switch p.FormName() {
-			case "source":
-				rec.Source = string(b)
-			case "content_hash":
-				rec.Hash = string(b)
-			case "file":
-				rec.Body = string(b)
-			}
+		for _, c := range manifest.Chunks {
+			rec.Body += c.Text
 		}
 		g.ingestCalls.Add(1)
 		if g.forceIngest502.Load() || !g.embedOK.Load() {
@@ -131,10 +117,10 @@ func newFakeGateway(t *testing.T) *fakeGateway {
 		}
 		g.ingest = append(g.ingest, rec)
 		g.mu.Unlock()
-		sum := sha256.Sum256([]byte(rec.Body))
-		sha := "sha256:" + hex.EncodeToString(sum[:])
+		sha := manifest.ContentSHA256
+		nChunks := len(manifest.Chunks)
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"object":"ingest.result","tenant_id":"t","project_id":"default","flavor_id":"_","source":"` + rec.Source + `","content_hash":"` + sha + `","content_sha256":"` + sha + `","chunks":1,"collection":"c"}`))
+		_, _ = w.Write([]byte(`{"object":"ingest.result","tenant_id":"t","project_id":"default","flavor_id":"_","source":"` + rec.Source + `","content_hash":"` + sha + `","content_sha256":"` + sha + `","chunks":` + strconv.Itoa(nChunks) + `,"collection":"c"}`))
 	})
 	g.srv = httptest.NewServer(mux)
 	t.Cleanup(g.srv.Close)
@@ -176,6 +162,7 @@ func TestIndexer_OneShotIngestsScannedFiles(t *testing.T) {
 		BinaryNullByteRatio:  0.001,
 	}
 	ix := New(cfg, NewGatewayClient(cfg.GatewayURL, cfg.Token, cfg.RequestTimeout), nil)
+	defer ix.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if !ix.ScheduleInitialScan() {
@@ -237,6 +224,7 @@ func TestIndexer_RetriesTransientFailures(t *testing.T) {
 		BinaryNullByteSample: 1024, BinaryNullByteRatio: 0.001,
 	}
 	ix := New(cfg, NewGatewayClient(cfg.GatewayURL, cfg.Token, cfg.RequestTimeout), nil)
+	defer ix.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if !ix.ScheduleInitialScan() {
@@ -278,6 +266,7 @@ func TestIndexer_PausesAndResumesOnHealth(t *testing.T) {
 		RecoveryIncludeRootHealth: true,
 	}
 	ix := New(cfg, NewGatewayClient(cfg.GatewayURL, cfg.Token, cfg.RequestTimeout), nil)
+	defer ix.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer cancel()
 	if !ix.ScheduleInitialScan() {
@@ -328,6 +317,7 @@ func TestIndexer_ShortCircuitsEmbed502(t *testing.T) {
 		BinaryNullByteRatio:       0.001,
 	}
 	ix := New(cfg, NewGatewayClient(cfg.GatewayURL, cfg.Token, cfg.RequestTimeout), nil)
+	defer ix.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	if !ix.ScheduleInitialScan() {
@@ -370,6 +360,7 @@ func TestIndexer_WaitsForEmbeddingRecovery(t *testing.T) {
 		BinaryNullByteRatio:       0.001,
 	}
 	ix := New(cfg, NewGatewayClient(cfg.GatewayURL, cfg.Token, cfg.RequestTimeout), nil)
+	defer ix.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer cancel()
 	if !ix.ScheduleInitialScan() {
@@ -427,6 +418,7 @@ func TestIndexer_IngestSendsScopedHeaders(t *testing.T) {
 		BinaryNullByteRatio:  0.001,
 	}
 	ix := New(cfg, NewGatewayClient(cfg.GatewayURL, cfg.Token, cfg.RequestTimeout), nil)
+	defer ix.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if !ix.ScheduleInitialScan() {

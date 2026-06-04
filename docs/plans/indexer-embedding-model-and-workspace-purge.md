@@ -4,7 +4,7 @@
 |--------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **Doc kind**                   | `feature-plan`                                                                                                                                                                 |
 | **Owners / areas**             | Gateway RAG, operator UI (`/ui/settings`), indexer service card, vector store, operator SQLite                                                                                 |
-| **Status**                     | `draft`                                                                                                                                                                        |
+| **Status**                     | `shipped`                                                                                                                                                                        |
 | **Targets**                    | Gateway v0.3 setup wizard step 5, gateway v0.5 indexer lifecycle                                                                                                               |
 | **Last updated**               | See git history                                                                                                                                                                |
 | **Supersedes / superseded by** | Extends [`indexer-workspaces-sqlite-gateway-api.md`](indexer-workspaces-sqlite-gateway-api.md); aligns with v0.4 purge theme — may ship earlier for delete-on-workspace-remove |

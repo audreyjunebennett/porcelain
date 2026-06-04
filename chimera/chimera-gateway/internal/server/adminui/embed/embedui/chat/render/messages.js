@@ -110,6 +110,31 @@
     );
   }
 
+  function snippetLineRangeLabel(h) {
+    var Sn = globalThis.ChimeraChat && ChimeraChat.Render && ChimeraChat.Render.Snippet;
+    if (Sn && typeof Sn.formatLineRangeLabel === "function") {
+      return Sn.formatLineRangeLabel(h.start_line, h.end_line);
+    }
+    return "";
+  }
+
+  function ragHitIsStale(h) {
+    var ctx = globalThis.ChimeraChat && ChimeraChat._ragStaleCtx;
+    if (!ctx || ctx.mode === "off") return false;
+    var src = h.source != null ? String(h.source) : "";
+    var idx = h.content_sha256 != null ? String(h.content_sha256).trim() : "";
+    if (!src || !idx || !ctx.map) return false;
+    var ent = ctx.map[src];
+    return !!(ent && String(ent.indexed_sha256 || "").trim() === idx);
+  }
+
+  function renderStaleBadge(h) {
+    if (!ragHitIsStale(h)) return "";
+    return (
+      '<span class="chat-embed-item__stale" title="File changed on disk since this snippet was indexed">Stale</span>'
+    );
+  }
+
   function renderRAGHitItems(hits) {
     if (!hits || !hits.length) return "";
     var snippetFn =
@@ -126,8 +151,15 @@
       var text = h.text != null ? String(h.text) : "";
       var langHint = h.language != null ? String(h.language) : "";
       var score = h.score != null && !isNaN(Number(h.score)) ? Number(h.score) : "";
+      var lineMeta = {
+        start_line: h.start_line,
+        end_line: h.end_line,
+        starts_mid_line: h.starts_mid_line
+      };
+      var lineLbl = snippetLineRangeLabel(h);
+      var srcLabel = lineLbl ? esc(src) + " \u00b7 " + esc(lineLbl) : esc(src);
       var body = snippetFn
-        ? snippetFn(src, text, langHint)
+        ? snippetFn(src, text, langHint, lineMeta)
         : '<pre class="chat-embed-item__snippet chat-embed-item__snippet--plain"><code>' + esc(text) + "</code></pre>";
       items +=
         '<li class="chat-embed-item">' +
@@ -137,8 +169,9 @@
         CHEVRON_ICON +
         "</span>" +
         '<span class="chat-embed-item__source">' +
-        esc(src) +
+        srcLabel +
         "</span>" +
+        renderStaleBadge(h) +
         renderScoreMeta(score) +
         "</summary>" +
         body +

@@ -27,7 +27,7 @@ Durable contracts for new binaries, wrappers, and cross-cutting integration — 
 | [Operator bootstrap and API tokens](operator-bootstrap-and-api-tokens.md) | `/ui/setup`, `api-keys.yaml`, token CRUD API | Bootstrap mode, settings users card | `current` |
 | [Workspace file indexer](indexer.md) | Watches roots, sends files to gateway for embed; supervised child | `chimera-indexer`, gateway RAG, supervisor | `current` |
 | [Indexer workspaces](indexer-workspaces.md) | Operator SQLite workspace CRUD; API-driven watch roots; DB-first settings cards | Operator SQLite, settings UI, indexer poll | `current` |
-| [Indexer ingest pipeline](indexer-ingest-pipeline.md) | Scan/fan-out queue, fair-share bulk, priority watch ingest, JSON sync-state skips | `chimera-indexer` queue, gateway ingest | `current` |
+| [Indexer ingest pipeline](indexer-ingest-pipeline.md) | Scan/fan-out queue, fair-share bulk, priority watch ingest, SQLite sync-state skips | `chimera-indexer` queue, gateway ingest | `current` |
 | [Indexer health and operator logs](indexer-health-and-operator-logs.md) | Embed-aware health, ingest gate, structured JSON logs, quiet INFO + pinning | Gateway health API, servicelogs, settings UI | `current` |
 | [Operator left navigation ribbon](operator-left-navigation-ribbon.md) | Persistent collapsed/expanded ribbon on `/ui`; history, new chat, settings | Gateway embed UI (app shell) | `current` |
 | [Operator workspace search](operator-workspace-search.md) | Workspace-scoped vector search page and API; threshold control, hit excerpts | Gateway embed UI, RAG retrieval | `partial` |

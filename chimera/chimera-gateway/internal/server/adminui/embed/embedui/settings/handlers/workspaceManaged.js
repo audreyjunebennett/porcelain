@@ -161,6 +161,65 @@ globalThis.ChimeraSettings.Handlers.WorkspaceManaged.mount = function (ctx) {
       });
   }
 
+  function reindexManagedWorkspace(wsNum) {
+    var ws =
+      typeof ctx.findOperatorWorkspaceByNumericId === "function"
+        ? ctx.findOperatorWorkspaceByNumericId(wsNum)
+        : null;
+    var label = "";
+    if (ws) {
+      var pid = ws.project_id != null ? String(ws.project_id).trim() : "";
+      var fid = ws.flavor_id != null ? String(ws.flavor_id).trim() : "";
+      label = pid || fid ? pid + (pid && fid ? " / " : "") + fid : "workspace " + wsNum;
+    } else {
+      label = "workspace " + wsNum;
+    }
+    if (
+      !window.confirm(
+        "Re-upload all files in " +
+          label +
+          "? Local skip checkpoints will be cleared and the indexer will re-ingest on the next poll (about 30 seconds). This may take several minutes for large workspaces."
+      )
+    ) {
+      return;
+    }
+    if (typeof ctx.markIndexerWorkspaceReindexPending === "function") {
+      ctx.markIndexerWorkspaceReindexPending(wsNum, 120000);
+    }
+    ctx.summarizedForceFullRebuild = true;
+    if (typeof ctx.scheduleDeferredSummarizedRefresh === "function") {
+      ctx.scheduleDeferredSummarizedRefresh();
+    }
+    fetch("/api/ui/indexer/workspaces/" + wsNum + "/reindex", {
+      method: "POST",
+      credentials: "same-origin"
+    })
+      .then(function (res) {
+        return res.json().then(function (j) {
+          if (!res.ok) throw new Error((j && j.error) || res.statusText || "reindex failed");
+          return j;
+        });
+      })
+      .then(function (j) {
+        var sec =
+          j && j.indexer_poll_seconds != null && !isNaN(Number(j.indexer_poll_seconds))
+            ? Math.round(Number(j.indexer_poll_seconds))
+            : 30;
+        notify(
+          "Re-index requested for " +
+            label +
+            ". The indexer should pick this up within about " +
+            sec +
+            " seconds.",
+          false
+        );
+        return refreshOperatorIndexerWorkspaceStateFromConfig();
+      })
+      .catch(function (err) {
+        notify(err && err.message ? err.message : String(err), true);
+      });
+  }
+
   function deleteManagedWorkspace(wsNum) {
     if (
       !window.confirm(
@@ -191,4 +250,5 @@ globalThis.ChimeraSettings.Handlers.WorkspaceManaged.mount = function (ctx) {
   ctx.refreshWorkspaceManagedPaths = refreshWorkspaceManagedPaths;
   ctx.saveManagedWorkspacePaths = saveManagedWorkspacePaths;
   ctx.deleteManagedWorkspace = deleteManagedWorkspace;
+  ctx.reindexManagedWorkspace = reindexManagedWorkspace;
 };

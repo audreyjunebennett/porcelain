@@ -291,15 +291,22 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminVirtualModels = function (ctx)
   }
 
   function vmSectionHeaderHtml(title, opts) {
-    var parts = vmSectionHeaderParts(title, opts);
-    return parts.summary + parts.trail;
+    return vmSectionHeaderParts(title, opts).summary;
   }
 
-  /** Disclosure label in <summary>; interactive controls live in trail (not inside summary). */
+  /** Disclosure header: toggles live inside <summary> so they stay visible when collapsed. */
   function vmSectionHeaderParts(title, opts) {
     opts = opts || {};
     var controls = opts.controlsHtml != null ? String(opts.controlsHtml) : "";
     var desc = opts.desc != null ? String(opts.desc) : "";
+    var trailInRow = "";
+    if (controls) {
+      trailInRow =
+        '<span class="sum-vm-section__hdr-trail" data-sum-card-no-toggle>' +
+        '<span class="sum-vm-section__trail">' +
+        controls +
+        "</span></span>";
+    }
     var summary =
       '<summary class="sum-vm-section__hdr">' +
       '<span class="sum-vm-section__hdr-row">' +
@@ -308,7 +315,9 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminVirtualModels = function (ctx)
       "</span>" +
       '<span class="sum-vm-section__title"><span class="sum-section-label">' +
       escapeHtml(String(title || "")) +
-      "</span></span></span>";
+      "</span></span>" +
+      trailInRow +
+      "</span>";
     if (desc) {
       summary +=
         '<span class="sum-vm-section__hdr-desc-row">' +
@@ -317,15 +326,7 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminVirtualModels = function (ctx)
         "</p></span>";
     }
     summary += "</summary>";
-    var trail = "";
-    if (controls) {
-      trail =
-        '<div class="sum-vm-section__hdr-trail" data-sum-card-no-toggle>' +
-        '<span class="sum-vm-section__trail">' +
-        controls +
-        "</span></div>";
-    }
-    return { summary: summary, trail: trail };
+    return { summary: summary, trail: "" };
   }
 
   function vmConfigureBtn(action, vmId, title) {

@@ -42,12 +42,12 @@ Install, env vars, YAML keys, and the full structured log slug table remain in t
 |-------|----------|
 | Ingest unit | Whole file (Mode A) under `max_whole_file_bytes`; session + ordered chunks (Mode B) above threshold |
 | Content hash | Client SHA-256 for skip detection; gateway returns authoritative `content_sha256` over ingested UTF-8 bytes; local sync state prefers server digest when present |
-| Startup skip | Paginated `GET /v1/indexer/corpus/inventory` plus local sync-state file |
+| Startup skip | Paginated `GET /v1/indexer/corpus/inventory` per distinct `(project_id, flavor_id)` scope plus local sync-state file |
 | Initial scan | Queued `ScanJob` → chunked `FanoutListJob`s → tier-1 ingest jobs (no synchronous queue flood) |
 | File changes | fsnotify with debounce; Create events tier 3, Write tier 2, bulk scan/fan-out tier 1 |
 | Failure handling | Bounded retries on transient errors; then recovery poll; global **ingest gate** when health reports not ingest-ready |
 | Deletes / renames | **Deferred** — add/update only; no corpus tombstone or delete-by-source in shipped code |
-| Sync state store | **JSON file** at `sync_state_path` (default beside supervised config); full-file rewrite on each successful ingest |
+| Sync state store | **SQLite** at `sync-state.sqlite` (resolved from `sync_state_path`; legacy JSON migrates once) |
 | Model-assisted strategy | **Not shipped** (Phase 7 in master plan) |
 
 **Identity / auth / scoping**
@@ -61,7 +61,7 @@ Install, env vars, YAML keys, and the full structured log slug table remain in t
 | Store | Role |
 |-------|------|
 | Operator SQLite (`operator.sqlite`) | Workspace definitions (gateway-owned) |
-| `indexer.sync-state.json` (or configured path) | Per-file client/server SHA checkpoints for skip-if-unchanged |
+| `sync-state.sqlite` (from `sync_state_path`) | Per-file client/server SHA checkpoints; optional `chunk_count` / `chunk_schema` |
 | In-memory work queue | Scan, fan-out, and ingest jobs; **lost on process restart** |
 
 ## Interfaces
@@ -103,16 +103,34 @@ go test ./chimera/chimera-gateway/internal/operatorstore/...
 
 Manual: enable supervised indexer in `gateway.yaml`, add a workspace path on `/ui/settings`, confirm `indexer.run.start` and scoped ingest lines; stop embedding provider and confirm ingest gate closes with a stable `reason_code`.
 
+## Memory and Windows resources
+
+**Targets (desktop, supervised):** After bulk ingest settles, idle private working set should stay **≤300 MB** per ~1k indexed files across watched roots (validated ~**58 MB** with three warm workspaces post-fix). Peak RAM during a **first-time** full ingest of a large monorepo may still reach **hundreds of MB to ~1 GB** depending on `workers`, file sizes, and manifest chunk count.
+
+**Drivers**
+
+| Driver | Idle retained? | Mitigation |
+|--------|----------------|------------|
+| Manifest ingest spike (4 workers × file + JSON) | Until GC / OS release | `debug.FreeOSMemory()` on transition to `watch_idle`; tune `workers` |
+| fsnotify per directory | Yes | Watches respect the same ignore rules as `Walk` (not raw full tree) |
+| Sync-state SQLite | Yes | Small vs heap; grows with indexed file count |
+| Spurious full re-index on restart | Was yes | `ApplyWorkspacesReindex` baselines generation on first poll without clearing sync |
+
+**Diagnostics:** Task Manager **active private working set** on `chimera-indexer.exe`; correlate with `indexer.state` (`watch_idle`, `queue_depth: 0`) and `indexer.queue.snapshot` in supervised logs. High **handle** counts (>5k) usually mean unignored directory watches—check ignore rules and `ignore_extra`.
+
+**`conhost.exe` (Windows):** Not created by Chimera explicitly. The supervisor attaches **stdout/stderr pipes** to every supervised child (`chimera-gateway`, `chimera-gateway --gateway-backend`, `chimera-indexer`, `chimera-broker`, `chimera-vectorstore`, and the supervisor itself) with `CREATE_NO_WINDOW` (no visible console). Windows often spawns one **Console Window Host** (~800 K) per piped child. Task Manager filters may show only a subset (e.g. gateway + indexer); broker and vectorstore use the same pattern. Harmless for RAM; unrelated to indexer footprint.
+
+**Plan:** [`plans/indexer-memory-usage-analysis.md`](../plans/indexer-memory-usage-analysis.md).
+
 ## Out of scope and known gaps
 
-- **Force re-index / sync-state SQLite** — planned in [`plans/indexer-sync-state-sqlite-and-force-reindex.md`](../plans/indexer-sync-state-sqlite-and-force-reindex.md); still JSON sync state, no UI re-index button.
+- **Re-index all workspaces** — no single settings button; use `POST /api/ui/indexer/reindex-all` or per-workspace **Re-index** on managed workspace cards ([`plans/indexer-sync-state-sqlite-and-force-reindex.md`](../plans/indexer-sync-state-sqlite-and-force-reindex.md) shipped).
 - **Incremental fsnotify root add/remove without session reload** — workspace changes trigger **full watch-session reload** after queue idle (up to ~10 minutes), not in-process `AddRoot`/`RemoveRoot`.
 - **Partial path materialize** — one bad path in a workspace can fail entire `RootsFromWorkspacesResponse` until fixed.
 - **Corpus purge on workspace/path delete** — watches stop after reload; vectors may remain in Qdrant.
 - **Durable offline queue** — paused work is not persisted across crashes.
 - **Delete/rename lifecycle** — undefined beyond best-effort add/update.
 - **Phase 7 model-assisted indexing strategy** — not implemented.
-- **VS Code extension** — future; see master plan.
 
 ## References
 

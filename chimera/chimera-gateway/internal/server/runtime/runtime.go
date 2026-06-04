@@ -15,6 +15,7 @@ import (
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/rag"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/rag/ragembed"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/catalog"
+	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/corpusstale"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/vectorstore/qdrant"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/virtualmodel"
 	indexeradapter "github.com/lynn/porcelain/chimera/chimera-indexer/adapter"
@@ -64,6 +65,8 @@ type Runtime struct {
 
 	indexerStatusMu sync.Mutex
 	indexerStatus   IndexerSupervisorStatus
+
+	corpusStaleStore *corpusstale.Store
 }
 
 // IndexerSupervisorStatus is the gateway-owned view of supervised indexer process health.
@@ -98,6 +101,7 @@ func NewRuntimeWithBrokerOverride(gatewayPath string, log *slog.Logger, brokerBa
 		config.PatchResolvedUpstream(res, brokerBaseURLOverride)
 	}
 	rt := &Runtime{
+		corpusStaleStore: corpusstale.NewStore(),
 		log:                   log,
 		gatewayPath:           gatewayPath,
 		brokerBaseURLOverride: brokerBaseURLOverride,
@@ -122,6 +126,9 @@ func NewRuntimeWithBrokerOverride(gatewayPath string, log *slog.Logger, brokerBa
 		}
 	} else {
 		rt.operator = s
+		if err := operatorstore.ImportSupervisedYAMLRootsIfEmpty(context.Background(), s, "", res.IndexerSupervisedConfigPath, log); err != nil && log != nil {
+			log.Warn("legacy supervised roots import failed", "msg", "gateway.operator.workspaces_import_failed", "err", err)
+		}
 		if err := operatorstore.BootstrapVirtualModels(context.Background(), s, res, log); err != nil {
 			if log != nil {
 				log.Warn("virtual model bootstrap failed", "msg", "gateway.virtual_model.bootstrap_failed", "err", err)
@@ -562,6 +569,14 @@ func (rt *Runtime) CloseOperator() {
 }
 
 // RAG returns the RAG service when enabled, else nil.
+// CorpusStaleStore returns the in-memory indexer stale-source snapshot store.
+func (rt *Runtime) CorpusStaleStore() *corpusstale.Store {
+	if rt == nil {
+		return nil
+	}
+	return rt.corpusStaleStore
+}
+
 func (rt *Runtime) RAG() *rag.Service {
 	rt.mu.RLock()
 	defer rt.mu.RUnlock()

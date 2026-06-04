@@ -24,6 +24,7 @@ globalThis.ChimeraSettings.Handlers.Admin.wire = function (ctx) {
   var refreshWorkspaceManagedPaths = ctx.refreshWorkspaceManagedPaths;
   var saveManagedWorkspacePaths = ctx.saveManagedWorkspacePaths;
   var deleteManagedWorkspace = ctx.deleteManagedWorkspace;
+  var reindexManagedWorkspace = ctx.reindexManagedWorkspace;
 
   if (!globalThis.__ChimeraSettingsWorkspaceDraftUiWired) {
     globalThis.__ChimeraSettingsWorkspaceDraftUiWired = true;
@@ -109,6 +110,12 @@ globalThis.ChimeraSettings.Handlers.Admin.wire = function (ctx) {
             ev.preventDefault();
             ev.stopPropagation();
             deleteManagedWorkspace(wsNumM);
+            return;
+          }
+          if (t.closest(".ws-managed-btn-reindex")) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            if (typeof reindexManagedWorkspace === "function") reindexManagedWorkspace(wsNumM);
             return;
           }
           if (t.closest(".ws-managed-btn-add")) {

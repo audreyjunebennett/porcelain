@@ -47,20 +47,53 @@ globalThis.ChimeraSettings.Summarized.mountRebuildPolicy = function (ctx) {
     return false;
   }
 
+  function activeVirtualModelDraftId(el) {
+    if (!el) return "";
+    if (el.getAttribute) {
+      var fromField = el.getAttribute("data-vm-draft-id");
+      if (fromField) return String(fromField).trim();
+    }
+    if (!el.closest) return "";
+    var card = el.closest(".sum-card--virtual-model-draft");
+    if (!card) return "";
+    if (card.getAttribute) {
+      var fromCard = card.getAttribute("data-virtual-model-draft");
+      if (fromCard) return String(fromCard).trim();
+    }
+    var cardId = card.id || "";
+    if (cardId.indexOf("virtual-model-draft-") === 0) {
+      return cardId.slice("virtual-model-draft-".length);
+    }
+    return "";
+  }
+
+  function virtualModelDraftInteractionActive(el) {
+    var draftId = activeVirtualModelDraftId(el);
+    if (!draftId) return false;
+    var drafts = ctx.virtualModelDrafts;
+    if (!drafts || !drafts.length) return false;
+    for (var vdi = 0; vdi < drafts.length; vdi++) {
+      if (drafts[vdi] && String(drafts[vdi].id) === String(draftId)) return true;
+    }
+    return false;
+  }
+
   function summarizedPanelInteractionBlocksRebuild() {
     if (Date.now() < ctx.sumEvlogPointerSuppressedUntil) return true;
     var a = document.activeElement;
     if (!a || !a.closest) return false;
     if (!a.closest("#panel-summarized")) return false;
     var tag = String(a.tagName || "").toLowerCase();
-    if (tag === "input" || tag === "textarea" || tag === "select") return true;
+    if (tag === "input" || tag === "textarea" || tag === "select") {
+      if (virtualModelDraftInteractionActive(a)) return true;
+      if (!(a.closest && a.closest(".sum-card--virtual-model-draft"))) return true;
+    }
     if (a.classList && a.classList.contains("sum-evlog__search")) return true;
     if (a.matches && a.matches("[data-evlog-filter-status]")) return true;
     var aid = a.id != null ? String(a.id) : "";
     if (aid.indexOf("vm-") === 0 && (tag === "input" || tag === "textarea" || tag === "select")) return true;
     if (a.closest && a.closest(".sum-card--virtual-model")) return true;
-    if (a.closest && a.closest(".sum-card--virtual-model-draft")) return true;
-    if (a.getAttribute && a.getAttribute("data-vm-draft-field")) return true;
+    if (virtualModelDraftInteractionActive(a)) return true;
     return false;
   }
 

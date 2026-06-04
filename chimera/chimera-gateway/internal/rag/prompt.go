@@ -91,8 +91,19 @@ func FormatRetrievedContext(hits []vectorstore.Hit) string {
 		if src == "" {
 			src = "unknown"
 		}
-		fmt.Fprintf(&sb, "%d. `%s` (score=%.3f)\n\n", i+1, src, h.Score)
+		hdr := fmt.Sprintf("%d. `%s`", i+1, src)
+		if lr := formatLineRange(h.Payload.StartLine, h.Payload.EndLine); lr != "" {
+			hdr += " " + lr
+		}
+		fmt.Fprintf(&sb, "%s (score=%.3f)\n\n", hdr, h.Score)
 		text := strings.TrimSpace(h.Payload.Text)
+		if h.Payload.StartsMidLine && text != "" {
+			if idx := strings.IndexByte(text, '\n'); idx >= 0 {
+				text = "…" + text[:idx] + text[idx:]
+			} else {
+				text = "…" + text
+			}
+		}
 		// keep each chunk readable but bounded
 		if len(text) > 4000 {
 			text = text[:4000] + "…"
@@ -101,6 +112,19 @@ func FormatRetrievedContext(hits []vectorstore.Hit) string {
 		sb.WriteString("\n\n")
 	}
 	return strings.TrimRight(sb.String(), "\n") + "\n"
+}
+
+func formatLineRange(start, end int) string {
+	if start <= 0 {
+		return ""
+	}
+	if end <= 0 || end < start {
+		end = start
+	}
+	if start == end {
+		return fmt.Sprintf("L%d", start)
+	}
+	return fmt.Sprintf("L%d–%d", start, end)
 }
 
 // InjectSystemMessage prepends a system role message containing context to the

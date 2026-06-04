@@ -14,13 +14,14 @@ import (
 
 // Workspace is one logical indexer workspace (project + flavor) with watched paths.
 type Workspace struct {
-	ID        int64
-	TenantID  string
-	ProjectID string
-	FlavorID  string
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	Paths     []WorkspacePath
+	ID                int64
+	TenantID          string
+	ProjectID         string
+	FlavorID          string
+	ReindexGeneration int64
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+	Paths             []WorkspacePath
 }
 
 // WorkspacePath is one watched directory belonging to a workspace.
@@ -90,7 +91,7 @@ func (s *Store) ListWorkspaces(ctx context.Context, tenantID string) ([]Workspac
 		return nil, fmt.Errorf("operator store unavailable")
 	}
 	rows, err := s.db.QueryContext(ctx, `
-SELECT id, tenant_id, project_id, flavor_id, created_at, updated_at
+SELECT id, tenant_id, project_id, flavor_id, reindex_generation, created_at, updated_at
 FROM workspaces
 WHERE tenant_id = ?
 ORDER BY id`, tenantID)
@@ -102,7 +103,7 @@ ORDER BY id`, tenantID)
 	for rows.Next() {
 		var w Workspace
 		var ca, ua string
-		if err := rows.Scan(&w.ID, &w.TenantID, &w.ProjectID, &w.FlavorID, &ca, &ua); err != nil {
+		if err := rows.Scan(&w.ID, &w.TenantID, &w.ProjectID, &w.FlavorID, &w.ReindexGeneration, &ca, &ua); err != nil {
 			return nil, err
 		}
 		w.CreatedAt, _ = time.Parse(time.RFC3339Nano, ca)
@@ -205,9 +206,9 @@ func (s *Store) GetWorkspace(ctx context.Context, tenantID string, id int64) (*W
 	var w Workspace
 	var ca, ua string
 	err := s.db.QueryRowContext(ctx, `
-SELECT id, tenant_id, project_id, flavor_id, created_at, updated_at
+SELECT id, tenant_id, project_id, flavor_id, reindex_generation, created_at, updated_at
 FROM workspaces WHERE id = ? AND tenant_id = ?`, id, tenantID).Scan(
-		&w.ID, &w.TenantID, &w.ProjectID, &w.FlavorID, &ca, &ua)
+		&w.ID, &w.TenantID, &w.ProjectID, &w.FlavorID, &w.ReindexGeneration, &ca, &ua)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -419,4 +420,47 @@ func (s *Store) DeletePath(ctx context.Context, tenantID string, pathID int64) e
 		return err
 	}
 	return tx.Commit()
+}
+
+// BumpReindexGeneration increments reindex_generation for a workspace row.
+func (s *Store) BumpReindexGeneration(ctx context.Context, tenantID string, workspaceID int64) (int64, error) {
+	if s == nil || s.db == nil {
+		return 0, fmt.Errorf("operator store unavailable")
+	}
+	now := s.nowRFC3339()
+	res, err := s.db.ExecContext(ctx, `
+UPDATE workspaces
+SET reindex_generation = reindex_generation + 1, updated_at = ?
+WHERE id = ? AND tenant_id = ?`, now, workspaceID, tenantID)
+	if err != nil {
+		return 0, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	if n == 0 {
+		return 0, fmt.Errorf("workspace not found")
+	}
+	var gen int64
+	err = s.db.QueryRowContext(ctx, `
+SELECT reindex_generation FROM workspaces WHERE id = ? AND tenant_id = ?`, workspaceID, tenantID).Scan(&gen)
+	return gen, err
+}
+
+// BumpAllReindexGenerations increments reindex_generation for every workspace in a tenant.
+func (s *Store) BumpAllReindexGenerations(ctx context.Context, tenantID string) (int, error) {
+	if s == nil || s.db == nil {
+		return 0, fmt.Errorf("operator store unavailable")
+	}
+	now := s.nowRFC3339()
+	res, err := s.db.ExecContext(ctx, `
+UPDATE workspaces
+SET reindex_generation = reindex_generation + 1, updated_at = ?
+WHERE tenant_id = ?`, now, tenantID)
+	if err != nil {
+		return 0, err
+	}
+	n, err := res.RowsAffected()
+	return int(n), err
 }

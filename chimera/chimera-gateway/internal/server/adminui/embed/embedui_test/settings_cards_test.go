@@ -323,8 +323,8 @@ func TestLogsCards_virtualModelCard_detailsLayout(t *testing.T) {
 		}
 	}
 	for _, sumInner := range regexp.MustCompile(`<summary class="sum-vm-section__hdr">([\s\S]*?)</summary>`).FindAllStringSubmatch(html, -1) {
-		if strings.Contains(sumInner[1], "<button") {
-			t.Fatalf("virtual model section summary must not contain buttons, got %q", sumInner[1])
+		if strings.Contains(sumInner[1], "<button") && !strings.Contains(sumInner[1], `data-sum-card-no-toggle`) {
+			t.Fatalf("virtual model section summary must not contain buttons outside hdr-trail, got %q", sumInner[1])
 		}
 	}
 	for _, absent := range []string{

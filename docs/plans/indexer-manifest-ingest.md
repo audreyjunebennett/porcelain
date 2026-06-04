@@ -16,13 +16,13 @@ Operators see **workspace snippets in chat with file paths and line ranges** (e.
 
 | Phase                                                                                                      | Outcome                                                                                   | Status |
 |------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------|--------|
-| [Phase 1 — Shared chunk library](#phase-1--shared-chunk-library)                                           | `chimera/internal/chunk` splits text and annotates line/byte spans; golden tests          | `todo` |
-| [Phase 2 — Indexer manifest build and ingest](#phase-2--indexer-manifest-build-and-ingest)                 | Indexer builds manifest per file and uploads via manifest-first ingest API                | `todo` |
-| [Phase 3 — Gateway manifest ingest and segment index](#phase-3--gateway-manifest-ingest-and-segment-index) | Gateway accepts manifest, embeds, upserts Qdrant + operator SQLite segment rows           | `todo` |
-| [Phase 4 — Retrieval, history, and injected context](#phase-4--retrieval-history-and-injected-context)     | Virtual-model RAG returns metadata; history persists lines; system block includes ranges  | `todo` |
-| [Phase 5 — Chat snippet gutter UI](#phase-5--chat-snippet-gutter-ui)                                       | `/ui/chat` renders L42–58 header and left gutter with mid-line `…`                        | `todo` |
-| [Phase 6 — Revision coherence](#phase-6--revision-coherence)                                               | Staleness detection vs live files; operator-visible warn/strict behavior                  | `todo` |
-| [Phase 7 — Tooling and expansion](#phase-7--tooling-and-expansion)                                         | Segment read / context-around tools; indexer or gateway file-serving (see open questions) | `todo` |
+| [Phase 1 — Shared chunk library](#phase-1--shared-chunk-library)                                           | `chimera/internal/chunk` splits text and annotates line/byte spans; golden tests          | `done` |
+| [Phase 2 — Indexer manifest build and ingest](#phase-2--indexer-manifest-build-and-ingest)                 | Indexer builds manifest per file and uploads via manifest-first ingest API                | `done` |
+| [Phase 3 — Gateway manifest ingest and segment index](#phase-3--gateway-manifest-ingest-and-segment-index) | Gateway accepts manifest, embeds, upserts Qdrant + operator SQLite segment rows           | `done` |
+| [Phase 4 — Retrieval, history, and injected context](#phase-4--retrieval-history-and-injected-context)     | Virtual-model RAG returns metadata; history persists lines; system block includes ranges  | `done` |
+| [Phase 5 — Chat snippet gutter UI](#phase-5--chat-snippet-gutter-ui)                                       | `/ui/chat` renders L42–58 header and left gutter with mid-line `…`                        | `done` |
+| [Phase 6 — Revision coherence](#phase-6--revision-coherence)                                               | Staleness detection vs live files; operator-visible warn/strict behavior                  | `done` |
+| [Phase 7 — Tooling and expansion](#phase-7--tooling-and-expansion)                                         | Segment read / context-around tools; indexer or gateway file-serving (see open questions) | `done` |
 | [Phase 8 — Re-index and ship](#phase-8--re-index-and-ship)                                                 | Full workspace re-index; sync-state integration; docs and feature record                  | `todo` |
 
 ---
@@ -288,7 +288,7 @@ Implement **Phase 1 of the sync-state SQLite plan** before or in parallel with P
 - Qdrant point payload includes line/byte fields; scroll/search returns them.
 - Re-ingest same source deletes prior segments for that source efficiently.
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 
@@ -310,7 +310,7 @@ Implement **Phase 1 of the sync-state SQLite plan** before or in parallel with P
 - Saved conversation reload includes line fields on `ragHits`.
 - System message visible in proxy logs / witness at DEBUG only (no full text at INFO).
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 
@@ -333,7 +333,7 @@ Implement **Phase 1 of the sync-state SQLite plan** before or in parallel with P
 - Manual: RAG hit on a known file shows gutter numbers matching manifest.
 - Overlapping chunks from same file may appear twice with overlapping ranges — acceptable.
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 
@@ -356,7 +356,7 @@ Implement **Phase 1 of the sync-state SQLite plan** before or in parallel with P
 - Edit file on disk, do not re-ingest: next chat hit shows stale warn when mode ≥ warn.
 - After re-ingest, badge clears.
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 
@@ -385,7 +385,7 @@ Implement **Phase 1 of the sync-state SQLite plan** before or in parallel with P
 - Integration test: retrieve hit → adjacent API returns overlapping neighbor chunks.
 - Stale source rejected in strict coherence mode.
 
-**Status:** `todo`
+**Status:** `done`
 
 ---
 

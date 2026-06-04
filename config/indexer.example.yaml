@@ -1,23 +1,25 @@
-# chimera-indexer example config (supervised tuning layer).
+# Copy to `indexer.yaml` via `make chimera-indexer-configure` (or `make configure`).
+# Full reference: docs/indexer.md
 #
-# Copy to config/indexer.yaml via `make chimera-indexer-configure` (or `make configure`).
-# Sensitive values stay in the environment:
-#   CHIMERA_GATEWAY_URL   (or set gateway_url below)
-#   CHIMERA_GATEWAY_TOKEN (required; never put tokens in YAML)
+# Comment style in this file:
+#   - Block comments introduce each configuration group.
+#   - Active settings have a short comment on the line above the key.
+#   - Optional overrides appear as commented lines (# key: value) directly under the field they replace.
 #
-# Supervised mode (indexer.supervised.enabled in gateway.yaml):
-#   Watch directories live in the gateway operator store (/ui/settings); this file is tuning only.
-# Standalone mode: set roots to local directories and optional defaults / overrides below.
+# Secrets stay in the environment (never in YAML):
+#   CHIMERA_GATEWAY_URL   — overrides gateway_url when set
+#   CHIMERA_GATEWAY_TOKEN — required for ingest (Bearer token from api-keys.yaml)
 
-# Chimera Gateway base URL — must match gateway.listen_port in config/gateway.yaml (default 3000).
-# NOT the chimera-broker upstream port (8080).
+# Gateway connectivity.
+#
+# Must match gateway.listen_port in config/gateway.yaml (default 3000). Not the broker port (8080).
 gateway_url: "http://127.0.0.1:3000"
 
-# Watched directories. Empty in supervised mode (roots materialize from GET /v1/indexer/workspaces).
+# Watch roots and ingest scope.
+#
+# Supervised mode: leave roots empty; paths come from GET /v1/indexer/workspaces (/ui/settings).
+# Standalone mode: set roots and optional defaults / overrides below.
 roots: []
-
-# Optional corpus scope (sent as X-Chimera-Project / X-Chimera-Flavor-Id on ingest).
-# Use the same values as Continue chat so RAG hits the same collection.
 # defaults:
 #   project_id: "my-app"
 #   flavor_id: "default"
@@ -32,77 +34,55 @@ roots: []
 #     flavor_id: "docs"
 #     workspace_id: "docs"
 
-# Extra ignore patterns (in addition to defaults, .chimeraignore, and .gitignore).
+# Ignore rules (merged with built-in defaults, .chimeraignore, and .gitignore per root).
 ignore_extra:
   - "tmp/"
   - "*.snapshot"
 
-# Maximum ingest retry attempts before workers pause for recovery.
+# Ingest recovery and retries.
+#
+# Workers pause when GET /v1/indexer/storage/health is not ingest-ready, then poll on the interval below.
 retry_max_attempts: 5
-# Base delay between retries in milliseconds.
 retry_base_delay_ms: 500
-# Maximum backoff delay between retries in milliseconds.
 retry_max_delay_ms: 30000
-# How often to poll gateway health while workers are paused, in milliseconds.
 recovery_poll_interval_ms: 30000
-# After a 502/503 embed-classified ingest failure, skip remaining per-file retries and open the ingest gate (default true).
 # retry_short_circuit_on_embed: true
-# Also require GET /health (gateway readiness) before resuming after a pause (default true).
-# Set false to only poll GET /v1/indexer/storage/health.
-# recovery_include_root_health: false
+# recovery_include_root_health: true
 
-# Filesystem debounce for coalescing watch events, in milliseconds.
+# Concurrency and filesystem watch.
 debounce_ms: 750
-# Number of concurrent ingest workers.
 workers: 4
-# Maximum queued work items (bulk + interactive tiers share this cap).
 queue_depth: 1024
-# Fair-share bulk fan-out: percent of queue_depth reserved across scopes (default 75 → p=0.75).
 # queue_fanout_high_water_mark_percent: 75
-# Maximum file size read from disk before skip, in bytes.
-max_file_bytes: 8388608
-# HTTP client timeout for gateway calls, in milliseconds.
-request_timeout_ms: 60000
 
-# Binary sniff for skip-before-upload: bytes sampled from file start (default 8000).
+# File and HTTP limits.
+max_file_bytes: 8388608
+request_timeout_ms: 60000
+# Indexer cap for whole-body manifest ingest; gateway may allow a higher max_whole_file_bytes.
+max_whole_file_bytes: 512000
 # binary_null_byte_sample_bytes: 8000
-# Binary sniff: null-byte ratio threshold (default 0.001).
 # binary_null_byte_ratio: 0.001
 
-# Symlinks are not followed (value ignored; kept for schema compatibility).
-# follow_symlinks: false
+# Local persistence (sync-state.sqlite + optional legacy .json anchor).
+#
+# Path is relative to the process working directory (repo root under chimera-supervisor).
+# SQLite file: sync-state.sqlite in the same directory as this path.
+# Omit sync_state_path to default to indexer.sync-state.json beside this config file.
+sync_state_path: "data/indexer/sync-state.json"
 
-# Poll GET /v1/indexer/storage/stats every N ms for Qdrant point counts (~120000 when omitted).
-# Negative disables periodic storage stats and indexer.state lines.
+# Supervised mode: how often to poll GET /v1/indexer/workspaces for path changes (default 30000).
+# workspaces_poll_interval_ms: 30000
+
+# Operator log verbosity (stderr; supervised --log-json still applies).
+#
+# storage_stats_poll_ms and scope_status_poll_ms: negative disables periodic lines.
 storage_stats_poll_ms: -1
-
-# Emit periodic indexer.scope.status heartbeats every N ms (~45000 when omitted).
-# Negative disables periodic scope status lines (edge-triggered updates still emit).
 scope_status_poll_ms: -1
-# Minimum gap between indexer.scope.active_file lines per scope, in milliseconds (default 2000).
-# scope_active_file_log_min_interval_ms: 2000
-# Emit edge-triggered scope.status every N successful ingests (default 25; negative disables).
-# scope_status_ingest_milestone: 25
-# Minimum gap between edge-triggered scope.status lines per scope, in milliseconds (default 2000).
-# scope_status_edge_min_interval_ms: 2000
-
-# Local sync-state file path (default: next to this YAML under data/gateway/indexer.sync-state.json when supervised).
-sync_state_path: "data/indexer.sync-state.json"
-# Max body size for single POST /v1/ingest; larger files use chunked ingest when the gateway advertises it.
-max_whole_file_bytes: 512000
-
-# Minimum stderr slog level (debug | info | warn | error). CLI --log-level overrides.
 # log_level: info
-
-# Per-file skip/upload verbosity: info | debug | off (operator default: debug).
 job_skip_log: debug
-# Per-file ingest success verbosity: info | debug (operator default: debug).
 job_ingest_log: debug
-# Batched skip rollup at INFO (indexer.job.skipped.summary); default 5000 ms; negative disables.
 # skip_summary_min_interval_ms: 5000
-# Unchanged idle indexer.queue.snapshot INFO heartbeat while workers drain (default 300000 ms = 5 min).
-# Negative disables idle INFO heartbeats (DEBUG only when queue idle and counters unchanged).
+# scope_active_file_log_min_interval_ms: 2000
+# scope_status_ingest_milestone: 25
+# scope_status_edge_min_interval_ms: 2000
 # queue_snapshot_idle_info_interval_ms: 300000
-
-# Deprecated: use job_skip_log instead (true → info, false → debug when job_skip_log unset).
-# verbose_job_logs: true

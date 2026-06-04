@@ -2,6 +2,7 @@ package indexer
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"os"
@@ -22,16 +23,51 @@ func (ix *Indexer) loadRemoteCorpusInventory(ctx context.Context) error {
 	if !strings.HasPrefix(p, "/") {
 		p = "/" + p
 	}
-	m, err := ix.client.FetchCorpusInventoryAll(ctx, p, ix.cfg.DefaultIndexerHeaders())
-	if err != nil {
-		return err
+	scopes := DistinctEffectiveStorageStatsScopes(ix.cfg, gw)
+	if len(scopes) == 0 {
+		return nil
 	}
-	ix.remoteInv = m
-	ix.log.Info("corpus inventory loaded",
-		"msg", "indexer.reconcile.summary",
-		"phase", "inventory_loaded",
-		"remote_source_paths", len(m),
-	)
+	merged := make(map[string]CorpusInventoryRow)
+	var loaded, failed int
+	for _, sc := range scopes {
+		proj := IngestProject(sc)
+		flav := strings.TrimSpace(sc.FlavorID)
+		hdrs := ScopeHTTPHeaders(proj, flav)
+		page, err := ix.client.FetchCorpusInventoryAll(ctx, p, hdrs)
+		if err != nil {
+			failed++
+			if ix.log != nil {
+				ix.log.Warn("corpus inventory fetch failed for scope",
+					"msg", "indexer.reconcile.inventory_scope_failed",
+					"ingest_project", proj,
+					"flavor_id", flav,
+					"indexer_target_key", IndexerKey(ix.tenantIDForLogs(), proj, flav),
+					"err", err,
+				)
+			}
+			continue
+		}
+		for src, row := range page {
+			merged[CorpusInventoryKey(proj, flav, src)] = row
+		}
+		loaded++
+	}
+	if len(merged) == 0 {
+		if failed > 0 {
+			return fmt.Errorf("corpus inventory: %d scope(s) failed, 0 entries loaded", failed)
+		}
+		return nil
+	}
+	ix.remoteInv = merged
+	if ix.log != nil {
+		ix.log.Info("corpus inventory loaded",
+			"msg", "indexer.reconcile.summary",
+			"phase", "inventory_loaded",
+			"remote_source_paths", len(merged),
+			"inventory_scopes_loaded", loaded,
+			"inventory_scopes_failed", failed,
+		)
+	}
 	return nil
 }
 
@@ -123,12 +159,14 @@ func (ix *Indexer) ingestOne(ctx context.Context, j Job, workerID int) error {
 		ix.emitSkippedFile(j, "empty_or_whitespace", "indexer.skip.empty_or_whitespace", "skip ingest: empty or whitespace-only document")
 		return nil
 	}
-	hash, _, err := HashFile(j.AbsPath)
+	normalized, hash, err := ReadNormalizeFile(j.AbsPath)
 	if err != nil {
 		return fmt.Errorf("hash %s: %w", j.RelPath, err)
 	}
+	proj, flav := ix.cfg.IngestHeaders(j.Root, j.RelPath)
 	if ix.remoteInv != nil {
-		if row, ok := ix.remoteInv[j.RelPath]; ok {
+		invKey := CorpusInventoryKey(proj, flav, j.RelPath)
+		if row, ok := ix.remoteInv[invKey]; ok {
 			if row.ClientContentHash != "" && row.ClientContentHash == hash {
 				atomic.AddInt64(&ix.opsSkipCorpusClientHash, 1)
 				ix.noteSkipSummaryUnchanged(j, "unchanged_corpus_client_hash")
@@ -146,7 +184,7 @@ func (ix *Indexer) ingestOne(ctx context.Context, j Job, workerID int) error {
 		}
 	}
 	if ix.syncState != nil {
-		if ent, ok := ix.syncState.Get(j.Key()); ok && ent.ClientSHA == hash {
+		if ent, ok := ix.syncState.Get(j.Key()); ok && ent.ClientSHA == hash && ent.ChunkSchema == manifestChunkSchema {
 			atomic.AddInt64(&ix.opsSkipLocalSync, 1)
 			ix.noteSkipSummaryUnchanged(j, "unchanged_local_sync")
 			ix.emitSkippedFile(j, "unchanged_local_sync", "indexer.skip.unchanged_local_sync", "skip unchanged (sync state)")
@@ -163,24 +201,52 @@ func (ix *Indexer) ingestOne(ctx context.Context, j Job, workerID int) error {
 		return fmt.Errorf("file larger than gateway max_ingest_bytes (%d): %s", maxIngest, j.RelPath)
 	}
 
-	proj, flav := ix.cfg.IngestHeaders(j.Root, j.RelPath)
+	chunkSize, chunkOverlap := 512, 128
+	if gw != nil {
+		if gw.ChunkSize > 0 {
+			chunkSize = gw.ChunkSize
+		}
+		if gw.ChunkOverlap > 0 {
+			chunkOverlap = gw.ChunkOverlap
+		}
+	}
+	manifest, err := BuildManifest(j.RelPath, normalized, hash, chunkSize, chunkOverlap)
+	if err != nil {
+		return err
+	}
+	if ix.log != nil {
+		ix.log.Debug("manifest built",
+			"msg", "indexer.job.manifest_built",
+			"rel", j.RelPath,
+			"chunks", len(manifest.Chunks),
+			"line_count", manifest.LineCount,
+			"file_bytes", manifest.FileBytes,
+		)
+	}
+
+	manifestJSON, err := json.Marshal(manifest)
+	if err != nil {
+		return fmt.Errorf("marshal manifest %s: %w", j.RelPath, err)
+	}
+	chunkCount := len(manifest.Chunks)
 	wholeLimit := ix.effectiveWholeFileLimit(gw)
-	useChunked := gw != nil && strings.TrimSpace(gw.IngestSessionPath) != "" &&
-		wholeLimit < maxIngest && st.Size() > wholeLimit
+	useSession := gw != nil && strings.TrimSpace(gw.IngestSessionPath) != "" &&
+		wholeLimit > 0 && int64(len(manifestJSON)) > wholeLimit
 
 	ix.emitScopeActiveFileIfDue(workerID, j)
 	ix.noteSkipSummaryIngestStarted(j)
 
 	if ix.log != nil && ix.cfg.JobSkipLog != JobSkipLogOff {
-		transport := "whole"
-		if useChunked {
-			transport = "chunked"
+		transport := "manifest"
+		if useSession {
+			transport = "manifest_session"
 		}
 		args := []any{
 			"msg", "indexer.job.upload",
 			"rel", j.RelPath,
 			"bytes", st.Size(),
 			"transport", transport,
+			"chunks", len(manifest.Chunks),
 		}
 		args = append(args, ix.logScopeFieldsForJob(j)...)
 		switch ix.cfg.JobSkipLog {
@@ -192,27 +258,20 @@ func (ix *Indexer) ingestOne(ctx context.Context, j Job, workerID int) error {
 	}
 
 	var res *IngestResponse
-	if useChunked {
-		pol := RetryPolicyFromResolved(ix.cfg)
-		res, err = ix.client.IngestChunked(ctx, j.AbsPath, IngestRequest{
+	pol := RetryPolicyFromResolved(ix.cfg)
+	if useSession {
+		res, err = ix.client.IngestManifestSession(ctx, manifest, IngestRequest{
 			Source:      j.RelPath,
 			ContentHash: hash,
 			Project:     proj,
 			Flavor:      flav,
 		}, gw, pol)
 	} else {
-		var f *os.File
-		f, err = os.Open(j.AbsPath)
-		if err != nil {
-			return fmt.Errorf("open %s: %w", j.RelPath, err)
-		}
-		defer f.Close()
-		res, err = ix.client.Ingest(ctx, IngestRequest{
+		res, err = ix.client.IngestManifestBody(ctx, manifestJSON, IngestRequest{
 			Source:      j.RelPath,
 			ContentHash: hash,
 			Project:     proj,
 			Flavor:      flav,
-			Body:        f,
 		})
 	}
 	if err != nil {
@@ -223,7 +282,13 @@ func (ix *Indexer) ingestOne(ctx context.Context, j Job, workerID int) error {
 		serverSHA = strings.TrimSpace(res.ContentHash)
 	}
 	if ix.syncState != nil && serverSHA != "" {
-		if err := ix.syncState.Put(j.Key(), SyncEntry{ClientSHA: hash, ServerSHA: serverSHA}); err != nil {
+		ent := SyncEntry{
+			ClientSHA:   hash,
+			ServerSHA:   serverSHA,
+			ChunkCount:  chunkCount,
+			ChunkSchema: manifestChunkSchema,
+		}
+		if err := ix.syncState.Put(j.Key(), ent); err != nil {
 			args := []any{
 				"msg", "indexer.sync_state.write_failed",
 				"rel", j.RelPath, "err", err,
@@ -232,9 +297,9 @@ func (ix *Indexer) ingestOne(ctx context.Context, j Job, workerID int) error {
 			ix.log.Warn("sync state write failed", args...)
 		}
 	}
-	mode := "whole"
-	if useChunked {
-		mode = "chunked"
+	mode := "manifest"
+	if useSession {
+		mode = "manifest_session"
 	}
 	atomic.AddInt64(&ix.opsIngestOK, 1)
 	ix.noteSkipSummaryIngestSucceeded(j)

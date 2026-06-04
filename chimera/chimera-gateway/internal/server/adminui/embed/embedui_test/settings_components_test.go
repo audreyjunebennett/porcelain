@@ -2001,6 +2001,42 @@ func TestLogsDerive_collectIndexerRunMeta_scopeStatus(t *testing.T) {
 	}
 }
 
+func TestLogsDerive_collectIndexerRunMeta_scopeStatusHeartbeatWinsOverStaleEdge(t *testing.T) {
+	vm := goja.New()
+	loadIndexerPresentCtx(t, vm)
+	evalJS(t, vm, settingsUIPath(t, "derive", "indexerMetrics.js"))
+
+	rs := `[{"root_id":"r1","path":"/a","ingest_project":"p1","flavor_id":"","indexer_target_key":"ik_one"}]`
+	script := fmt.Sprintf(`
+		var evs = [
+			{ parsed: { rawFlat: {
+				service: "indexer", index_run_id: "runZ", msg: "indexer.run.start",
+				root_ids: "r1", watch_root_paths: ["/a"], root_scopes: %s
+			}}},
+			{ parsed: { rawFlat: {
+				service: "indexer", index_run_id: "runZ", msg: "indexer.scope.status",
+				indexer_target_key: "ik_one", change_reason: "backlog",
+				workspace_files_total: 100, queue_ingest_pending: 0, queue_fanout_files_pending: 50
+			}}},
+			{ parsed: { rawFlat: {
+				service: "indexer", index_run_id: "runZ", msg: "indexer.scope.status",
+				indexer_target_key: "ik_one", change_reason: "heartbeat",
+				workspace_files_total: 100, queue_ingest_pending: 0, queue_fanout_files_pending: 0
+			}}}
+		];
+		function getFlat(p) { return (p && p.rawFlat) || {}; }
+		ChimeraSettings.Derive.collectIndexerRunMeta("ik_one", evs, { getFlat: getFlat });
+	`, strconv.Quote(rs))
+	v, err := vm.RunString(script)
+	if err != nil {
+		t.Fatal(err)
+	}
+	o := v.ToObject(vm)
+	if n := o.Get("scopeQueueFanoutPending"); n == nil || n.Export() != int64(0) {
+		t.Fatalf("scopeQueueFanoutPending=%v want 0 from newest heartbeat", n)
+	}
+}
+
 func TestLogsDerive_indexerPresent_groupKey(t *testing.T) {
 	vm := goja.New()
 	loadIndexerPresentCtx(t, vm)
@@ -2788,8 +2824,11 @@ func TestLogsRender_sumEvlog_indexerStorageStatsUnavailableShowsStatus(t *testin
 		t.Fatal(err)
 	}
 	model := modelV.ToObject(vm)
-	if model.Get("levelKey").String() != "ERROR" {
-		t.Fatalf("levelKey = %q, want ERROR", model.Get("levelKey").String())
+	if model.Get("levelKey").String() == "ERROR" {
+		t.Fatalf("missing collection should not be ERROR, got %q", model.Get("levelKey").String())
+	}
+	if model.Get("levelKey").String() != "INFO" {
+		t.Fatalf("levelKey = %q, want INFO", model.Get("levelKey").String())
 	}
 	if model.Get("http").ToInteger() != 404 {
 		t.Fatalf("http = %v, want 404", model.Get("http"))
@@ -2803,8 +2842,8 @@ func TestLogsRender_sumEvlog_indexerStorageStatsUnavailableShowsStatus(t *testin
 		t.Fatal(err)
 	}
 	status := statusV.String()
-	if !strings.Contains(status, "ERROR") {
-		t.Fatalf("expected ERROR pill in status column, got %q", status)
+	if strings.Contains(status, "ERROR") {
+		t.Fatalf("missing collection should not show ERROR pill, got %q", status)
 	}
 	if !strings.Contains(status, "404") {
 		t.Fatalf("expected 404 HTTP pill in status column, got %q", status)

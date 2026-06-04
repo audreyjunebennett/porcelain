@@ -231,6 +231,9 @@ globalThis.ChimeraSettings.Summarized.mountCardPatch = function (bridge, panel) 
     for (ci = 0; ci < targets.indexerBucketIds.length; ci++) {
       ctx.summarizedDirtyIndexerBucketIds[targets.indexerBucketIds[ci]] = true;
     }
+    if (typeof ctx.tryClearIndexerReindexFromLogEntry === "function") {
+      ctx.tryClearIndexerReindexFromLogEntry(ent);
+    }
   }
 
   function summarizedDirtyCardCount() {

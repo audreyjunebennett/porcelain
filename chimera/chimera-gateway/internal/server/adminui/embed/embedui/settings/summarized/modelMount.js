@@ -72,6 +72,15 @@ globalThis.ChimeraSettings.Summarized.mountModelGlue = function (ctx, bridge) {
       operatorManagedWorkspaceTitleText: ctx.operatorManagedWorkspaceTitleText,
       operatorWorkspaceCoveredByIndexerRuns: ctx.operatorWorkspaceCoveredByIndexerRuns,
       operatorWorkspaceNumericId: ctx.operatorWorkspaceNumericId,
+      indexerWorkspaceReindexSig: function (meta) {
+        if (typeof ctx.indexerWorkspaceReindexActive !== "function") return 0;
+        var opWs =
+          typeof ctx.findOperatorWorkspaceMatchingIndexerMeta === "function"
+            ? ctx.findOperatorWorkspaceMatchingIndexerMeta(meta)
+            : null;
+        if (!opWs || typeof ctx.operatorWorkspaceNumericId !== "function") return 0;
+        return ctx.indexerWorkspaceReindexActive(ctx.operatorWorkspaceNumericId(opWs)) ? 1 : 0;
+      },
       indexerWorkspaceEditActiveForMeta: function (meta) {
         if (ctx.workspaceManagedEditId == null || !ctx.workspaceManagedStaging) return false;
         var opWs =

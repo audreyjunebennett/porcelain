@@ -396,6 +396,29 @@ func NewMux(rt *Runtime, log *slog.Logger, overlay *StatusOverlay, ui *UIOptions
 		}
 		indexerapi.HandleCorpusInventory(w, r, rt, log)
 	})
+	mux.HandleFunc("/v1/indexer/corpus/stale", func(w http.ResponseWriter, r *http.Request) {
+		store := rt.CorpusStaleStore()
+		switch r.Method {
+		case http.MethodGet:
+			indexerapi.HandleCorpusStaleGET(w, r, rt, store)
+		case http.MethodPut:
+			indexerapi.HandleCorpusStalePUT(w, r, rt, store)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+	mux.HandleFunc("/v1/rag/segments", func(w http.ResponseWriter, r *http.Request) {
+		indexerapi.HandleRAGSegmentsGET(w, r, rt)
+	})
+	mux.HandleFunc("/v1/rag/context", func(w http.ResponseWriter, r *http.Request) {
+		indexerapi.HandleRAGContextGET(w, r, rt)
+	})
+	mux.HandleFunc("/v1/rag/adjacent", func(w http.ResponseWriter, r *http.Request) {
+		indexerapi.HandleRAGAdjacentGET(w, r, rt)
+	})
+	mux.HandleFunc("/v1/rag/tools", func(w http.ResponseWriter, r *http.Request) {
+		indexerapi.HandleRAGToolsGET(w, r, rt)
+	})
 
 	adminui.Register(mux, rt, log, ui)
 

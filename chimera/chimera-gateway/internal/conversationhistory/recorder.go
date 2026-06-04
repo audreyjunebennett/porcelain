@@ -219,6 +219,9 @@ func (r *Recorder) retrievalInputs() []operatorstore.RetrievalInput {
 			Language:      lang,
 			VectorPointID: strings.TrimSpace(h.ID),
 			ContentSHA256: strings.TrimSpace(h.Payload.ContentSHA256),
+			StartLine:     h.Payload.StartLine,
+			EndLine:       h.Payload.EndLine,
+			StartsMidLine: h.Payload.StartsMidLine,
 		})
 	}
 	return out

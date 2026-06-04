@@ -55,6 +55,20 @@
     });
   }
 
+  function fetchCorpusStale(ws) {
+    var q = "";
+    if (ws) {
+      if (ws.project_id) q += "project_id=" + encodeURIComponent(String(ws.project_id)) + "&";
+      if (ws.flavor_id) q += "flavor_id=" + encodeURIComponent(String(ws.flavor_id)) + "&";
+    }
+    return fetch("/api/ui/indexer/corpus/stale?" + q.replace(/&$/, ""), { credentials: "same-origin" }).then(
+      function (r) {
+        if (!r.ok) return { coherence_mode: "off", entries: [] };
+        return parseJSON(r);
+      }
+    );
+  }
+
   function workspaceLabel(ws) {
     if (!ws) return "Default";
     var proj = ws.project_id != null ? String(ws.project_id).trim() : "";
@@ -158,6 +172,7 @@
     fetchToken: fetchToken,
     fetchModels: fetchModels,
     fetchWorkspaces: fetchWorkspaces,
+    fetchCorpusStale: fetchCorpusStale,
     chatCompletion: chatCompletion,
     readTurnMetadata: readTurnMetadata,
     workspaceLabel: workspaceLabel,

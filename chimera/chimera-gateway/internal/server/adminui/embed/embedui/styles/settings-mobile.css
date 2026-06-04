@@ -204,9 +204,22 @@
   }
 
   /* Virtual model identity toggles — stack instead of clipping at card edge. */
-  .sum-vm-section--bar > .sum-vm-section__hdr--bar .sum-vm-section__trail {
+  .sum-vm-section--bar > .sum-vm-section__hdr--bar .sum-vm-section__trail,
+  .sum-vm-section > summary.sum-vm-section__hdr .sum-vm-section__hdr-trail .sum-vm-section__trail {
     flex-wrap: wrap;
     justify-content: flex-start;
+  }
+  .sum-vm-section > summary.sum-vm-section__hdr .sum-vm-section__hdr-row {
+    flex-wrap: nowrap;
+  }
+  .sum-vm-section > summary.sum-vm-section__hdr .sum-vm-section__hdr-trail {
+    flex: 0 0 auto;
+    margin-left: auto;
+    padding-left: 0.35rem;
+  }
+  .sum-vm-section > summary.sum-vm-section__hdr .sum-vm-section__hdr-desc-row {
+    padding-left: calc(1.1rem + 0.35rem);
+    padding-right: 0;
   }
   .sum-vm-card-toggles {
     flex-direction: column;

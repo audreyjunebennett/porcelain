@@ -52,7 +52,7 @@ vectorstore:
 
 # Timeouts and background checks against chimera-broker and related probes.
 #
-# Used for GET /health, catalog polling, and upstream chat completion deadlines.
+# Used for GET /health, catalog polling in /ui/logs, and upstream chat completion deadlines.
 health:
   # Timeout (ms) for chimera-broker health and GET /v1/models catalog fetch.
   timeout_ms: 5000
@@ -80,66 +80,82 @@ metrics:
   # sqlite_path: "../data/gateway/metrics.sqlite"
   # migrations_dir: "../migrations/chimera-gateway/metrics"
 
-# Operator database: indexer workspaces (project/flavor paths and supervised state).
+# Operator database: workspaces, conversations, corpus segment index (manifest ingest).
 #
-# Always opened at default paths unless you uncomment overrides below. Separate from metrics.sqlite.
+# Opened at default paths unless you uncomment overrides below. Separate from metrics.sqlite.
 # operator:
 #   sqlite_path: "../data/gateway/operator.sqlite"
 #   migrations_dir: "../migrations/chimera-gateway/operator"
 
 # Operator logs UI: ring-buffer retention for supervised /ui/logs.
 # operator_logs:
-#   indexer_pinned_lines_max: 64  # reserve slots for run.start, scope.status, gate, skip summaries
+#   indexer_pinned_lines_max: 64
 
 # chimera-indexer: file watcher that ingests workspace files into vectorstore via the gateway.
 #
 # When supervised.enabled is true, chimera-supervisor starts the indexer after chimera-broker is
-# healthy. Set CHIMERA_GATEWAY_TOKEN in the environment for authenticated POST /v1/ingest.
+# healthy. Set CHIMERA_GATEWAY_TOKEN in the environment for authenticated ingest.
+# Watch directories are in operator SQLite (/ui/settings), not in indexer YAML.
 # See docs/indexer.md.
 indexer:
   supervised:
     # Start chimera-indexer after chimera-broker is healthy (needs CHIMERA_GATEWAY_TOKEN for ingest).
     enabled: true
-    # By default, JSON logs on stderr are enabled. Set log_json: false to opt out.
+    # JSON structured logs on stderr (filter /ui/settings by source indexer). false = plain text.
     # log_json: false
-    # The gateway can run the indexer provided at the given path.
+    # Optional explicit path to chimera-indexer binary (default: next to gateway or PATH).
     # bin: ""
-    # When the gateway runs the indexer, it writes and reads its configuration from this file.
+    # Indexer tuning YAML passed as --config (relative to this file unless absolute).
     # Created by `make chimera-indexer-configure` from config/indexer.example.yaml.
     config_path: "indexer.yaml"
-    # When the gateway disables RAG it also disables the indexer.
-    # With rag disabled, to run the indexer set this to true.
+    # Allow supervised indexer when rag.enabled is false (default false).
     # start_when_rag_disabled: false
 
-# Retrieval-augmented generation ("RAG"): gateway behavior for knowledge-backed chat.
+# Retrieval-augmented generation ("RAG"): manifest ingest, search, coherence, expansion tools.
 #
-# When enabled, chimera-gateway can index text into vectorstore, search it at chat time,
-# and inject matching snippets into requests to the virtual Chimera model (Chimera-<semver>).
-# vectorstore.* above is where vectors are stored; this block controls embeddings, chunking,
-# search limits, ingest size, and default project/flavor ids.
+# When enabled, the gateway accepts indexer manifest ingest, serves retrieval at chat time,
+# and stores vectors in vectorstore. Indexer chunking uses rag.chunking sizes advertised on
+# GET /v1/indexer/config.
 rag:
   # Master switch: ingest APIs, indexer APIs, chat-time retrieval, and vectorstore health checks.
   enabled: true
-  # How text is turned into vectors (usually via chimera-broker /v1/embeddings).
   embedding:
     # Defaults to broker.base_url when empty.
     # base_url: ""
     path: "/v1/embeddings"
     model: "ollama/nomic-embed-text:latest"
     dim: 768
-  # How documents are split before indexing.
   chunking:
     size: 512
     overlap: 128
-  # How many chunks to fetch from vectorstore per chat request and minimum similarity.
   retrieval:
     top_k: 8
     score_threshold: 0.50
-  # POST /v1/ingest and session ingest size limits.
   ingest:
     max_bytes: 10485760
+    # Single POST /v1/ingest body limit; larger files use session ingest (default: same as max_bytes).
     # max_whole_file_bytes: 2097152
-  # Default X-Chimera-Project / X-Chimera-Flavor-Id when clients omit headers.
   defaults:
     project_id: "default"
     flavor_id: ""
+  # Stale-index warnings in chat (off | warn | strict). strict blocks GET /v1/rag/* expansion.
+  coherence:
+    mode: warn
+  # Workspace expansion APIs: /v1/rag/segments, /context, /adjacent, /tools.
+  tooling:
+    enabled: true
+    # expansion_cache_ttl_seconds: 300
+    # expansion_cache_max_entries: 256
+
+# Internal embedding provider: supervised chimera-embed + llama-server (optional).
+#
+# Off unless enabled. When on, point rag.embedding at the local /v1/embeddings endpoint.
+# internal_embedding:
+#   enabled: false
+#   provider: "internal"
+#   model: "internal/nomic-embed-text"
+#   dim: 768
+#   base_url: "http://127.0.0.1:8090"
+#   model_path: "../data/embedding/models/nomic-embed-text.gguf"
+#   cache_dir: "../data/embedding/cache"
+#   log_level: "info"

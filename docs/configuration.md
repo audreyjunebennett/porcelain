@@ -59,6 +59,9 @@ Provider keys (`GROQ_API_KEY`, `GEMINI_API_KEY`, `OPENAI_API_KEY`, etc.) are **n
 | `rag.enabled` | **true** → ingest, indexer APIs, retrieval, and `GET /health` `checks.vectorstore`. |
 | `rag.embedding.*` | Embedding model/path/dim; `base_url` defaults to `broker.base_url` when empty. |
 | `rag.chunking.*` / `rag.retrieval.*` / `rag.ingest.*` / `rag.defaults.*` | Chunking, search, ingest limits, and default project/flavor ids. |
+| `rag.coherence.mode` | Stale-index behavior: `off`, `warn` (default), or `strict` (blocks `/v1/rag/*` expansion when stale). |
+| `rag.tooling.enabled` | **true** (default) → `/v1/rag/segments`, `/context`, `/adjacent`, `/tools`. |
+| `rag.tooling.expansion_cache_*` | LRU TTL (default 300s) and max entries (default 256) for merged context slices. |
 | `health.upstream_url` | Optional explicit URL for `GET /health` broker probe; default `{broker.base_url}/health`. Deprecated alias: `health.litellm_url`. |
 | `health.timeout_ms` | Timeout for the upstream health request and for `GET /v1/models` upstream list (default **5000**). |
 | `health.chat_timeout_ms` | Timeout for each upstream `POST /v1/chat/completions` attempt (default **300000**). |
@@ -84,14 +87,14 @@ Fresh installs have **zero** virtual models until the operator creates them in s
 
 ### Supervised file indexer (`indexer.supervised`)
 
-Used by `chimera serve` and `locus-desktop`: optional supervision of `chimera-indexer` as a child process after BiFrost is healthy. The child gets `CHIMERA_GATEWAY_URL` and a single merged `--config` file; set `CHIMERA_GATEWAY_TOKEN` in the environment for `POST /v1/ingest`. Operator UI: `/ui/settings` Workspaces section (GET/PUT config, append roots). Behavior and log slugs: **[indexer.md](indexer.md)** (supervised mode); process tree: **[supervisor.md](supervisor.md)**.
+Used by `chimera serve` and `locus-desktop`: optional supervision of `chimera-indexer` as a child process after BiFrost is healthy. The child gets `CHIMERA_GATEWAY_URL` and a single merged `--config` file (tuning only); watch paths live in **operator SQLite** and are polled via `GET /v1/indexer/workspaces`. Set `CHIMERA_GATEWAY_TOKEN` in the environment for ingest. Operator UI: `/ui/settings` Workspaces section. Optional `workspaces_poll_interval_ms` in the supervised YAML (default 30s). Legacy `roots:` in an empty database are imported once at gateway startup. Behavior: **[indexer.md](indexer.md)**, **[indexer-workspaces.md](features/indexer-workspaces.md)**; process tree: **[supervisor.md](supervisor.md)**.
 
 | Field | Description |
 |-------|-------------|
 | `indexer.supervised.enabled` | **true** → start `chimera-indexer` beside the gateway binary (or `indexer.supervised.bin` / `PATH`). Ignored unless `rag.enabled` is **true** or `start_when_rag_disabled` is **true**. |
 | `indexer.supervised.log_json` | Default **true** (omitted = JSON). Passes `--log-json` so the indexer writes structured logs on stderr (filter `/ui/settings` by source `indexer`). Set **false** to opt out. |
 | `indexer.supervised.bin` | Optional explicit path to the `chimera-indexer` executable. Empty → resolve next to the gateway binary or `PATH`. |
-| `indexer.supervised.config_path` | Path to the single merged config passed as `--config` (default `../data/gateway/indexer.supervised.yaml` relative to `gateway.yaml`’s directory). |
+| `indexer.supervised.config_path` | Path to the indexer tuning YAML passed as `--config` (default `indexer.yaml` next to `gateway.yaml`; see `config/indexer.example.yaml`). |
 | `indexer.supervised.start_when_rag_disabled` | **true** → allow starting the supervised indexer when `rag.enabled` is **false** (default **false**). |
 
 ## `config/api-keys.yaml`

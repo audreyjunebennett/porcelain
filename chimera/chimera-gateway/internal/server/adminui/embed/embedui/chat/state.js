@@ -129,14 +129,26 @@
   function formatRAGHitsMarkdown(hits) {
     if (!hits || !hits.length) return "";
     var parts = ["### Workspace Snippets", ""];
+    var lineRange =
+      globalThis.ChimeraChat &&
+      ChimeraChat.Render &&
+      ChimeraChat.Render.Snippet &&
+      typeof ChimeraChat.Render.Snippet.formatLineRangeLabel === "function"
+        ? ChimeraChat.Render.Snippet.formatLineRangeLabel
+        : null;
     for (var i = 0; i < hits.length; i++) {
       var h = hits[i] || {};
       var src = h.source != null ? String(h.source).trim() : "source";
       var text = h.text != null ? String(h.text) : "";
       var score = formatScore(h.score);
       var lang = snippetLanguage(src, h.language);
-      var heading = "#### " + src;
+      var lr = lineRange ? lineRange(h.start_line, h.end_line) : "";
+      var heading = "#### " + src + (lr ? " \u00b7 " + lr : "");
       if (score) heading += " (score: " + score + ")";
+      if (h.starts_mid_line === true || h.starts_mid_line === "true") {
+        var nl = text.indexOf("\n");
+        text = nl >= 0 ? "\u2026" + text.slice(0, nl) + text.slice(nl) : "\u2026" + text;
+      }
       parts.push(heading);
       parts.push("");
       parts.push(codeFence(text, lang));

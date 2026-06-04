@@ -131,9 +131,59 @@
     return '<pre class="chat-embed-item__snippet chat-embed-item__snippet--plain"><code>' + escapeHtml(text) + "</code></pre>";
   }
 
-  function renderSnippet(source, text, languageHint) {
+  function formatLineRangeLabel(startLine, endLine) {
+    var s = Number(startLine);
+    var e = Number(endLine);
+    if (!s || s < 1 || isNaN(s)) return "";
+    if (!e || e < s || isNaN(e)) e = s;
+    return s === e ? "L" + s : "L" + s + "\u2013" + e;
+  }
+
+  function renderGutterSnippet(text, lang, lineMeta) {
+    text = text == null ? "" : String(text);
+    var start = Number(lineMeta && lineMeta.start_line != null ? lineMeta.start_line : 0);
+    var end = Number(lineMeta && lineMeta.end_line != null ? lineMeta.end_line : 0);
+    var mid = !!(lineMeta && (lineMeta.starts_mid_line === true || lineMeta.starts_mid_line === "true"));
+    if (!start || start < 1 || isNaN(start)) {
+      if (lang === "markdown") return renderMarkdownSnippet(text);
+      if (lang) return renderCodeSnippet(text, lang);
+      return renderPlainSnippet(text);
+    }
+    if (!end || end < start || isNaN(end)) end = start;
+    var lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+    var nums = [];
+    var rows = [];
+    var li;
+    for (li = 0; li < lines.length; li++) {
+      var lineNo = start + li;
+      if (lineNo > end) break;
+      var rowText = lines[li];
+      if (li === 0 && mid) rowText = "\u2026" + rowText;
+      nums.push('<span class="chat-snippet-gutter__ln">' + String(lineNo) + "</span>");
+      var inner = lang ? highlightGeneric(rowText, lang) : escapeHtml(rowText);
+      rows.push('<span class="chat-snippet-gutter__row">' + inner + "</span>");
+    }
+    var label = lang ? ' data-lang="' + escapeHtml(lang) + '"' : "";
+    return (
+      '<pre class="chat-embed-item__snippet chat-embed-item__snippet--code chat-embed-item__snippet--gutter">' +
+      '<code class="chat-snippet-gutter"' +
+      label +
+      ">" +
+      '<span class="chat-snippet-gutter__nums" aria-hidden="true">' +
+      nums.join("") +
+      "</span>" +
+      '<span class="chat-snippet-gutter__code">' +
+      rows.join("") +
+      "</span></code></pre>"
+    );
+  }
+
+  function renderSnippet(source, text, languageHint, lineMeta) {
     text = text == null ? "" : String(text);
     var lang = inferLanguage(source, languageHint);
+    if (lineMeta && Number(lineMeta.start_line) > 0) {
+      return renderGutterSnippet(text, lang, lineMeta);
+    }
     if (lang === "markdown") return renderMarkdownSnippet(text);
     if (lang) return renderCodeSnippet(text, lang);
     return renderPlainSnippet(text);
@@ -143,6 +193,7 @@
   globalThis.ChimeraChat.Render = globalThis.ChimeraChat.Render || {};
   globalThis.ChimeraChat.Render.Snippet = {
     inferLanguage: inferLanguage,
+    formatLineRangeLabel: formatLineRangeLabel,
     render: renderSnippet
   };
 })();

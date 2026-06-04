@@ -50,6 +50,26 @@ func TestFormatRetrievedContext(t *testing.T) {
 	}
 }
 
+func TestFormatRetrievedContext_lineRangeAndMidLine(t *testing.T) {
+	hits := []vectorstore.Hit{{
+		ID:    "1",
+		Score: 0.91,
+		Payload: vectorstore.Payload{
+			Source:        "src/main.go",
+			Text:          "partial line\nfull line",
+			StartLine:     42,
+			EndLine:       43,
+			StartsMidLine: true,
+		},
+	}}
+	got := FormatRetrievedContext(hits)
+	for _, want := range []string{"src/main.go", "L42–43", "…partial line", "full line"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("missing %q in: %s", want, got)
+		}
+	}
+}
+
 func TestInjectSystemMessage(t *testing.T) {
 	body := map[string]json.RawMessage{
 		"messages": json.RawMessage(`[{"role":"user","content":"q"}]`),

@@ -24,11 +24,12 @@ type WorkspacesAPIResponse struct {
 
 // WorkspaceAPIEntry is one workspace row from the gateway.
 type WorkspaceAPIEntry struct {
-	WorkspaceID int64              `json:"workspace_id"`
-	ID          int64              `json:"id"`
-	ProjectID   string             `json:"project_id"`
-	FlavorID    string             `json:"flavor_id"`
-	Paths       []WorkspacePathAPI `json:"paths"`
+	WorkspaceID       int64              `json:"workspace_id"`
+	ID                int64              `json:"id"`
+	ProjectID         string             `json:"project_id"`
+	FlavorID          string             `json:"flavor_id"`
+	ReindexGeneration int64              `json:"reindex_generation"`
+	Paths             []WorkspacePathAPI `json:"paths"`
 }
 
 // WorkspacePathAPI is one watched directory under a workspace.

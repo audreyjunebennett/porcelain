@@ -68,6 +68,7 @@ Create a feature record when implementation ships.
 | [embedui-settings-card-cleanup.md](embedui-settings-card-cleanup.md) | Settings feed and card component refactor for consistency |
 | [embedui-feed-log-service-split.md](embedui-feed-log-service-split.md) | Split `feedLogService.js` into service-only + indexer modules; remove dead extraction code |
 | [indexer-manifest-ingest.md](indexer-manifest-ingest.md) | Manifest-only ingest, line-number snippets |
+| [indexer-memory-usage-analysis.md](indexer-memory-usage-analysis.md) | Idle ~1.2 GB RSS on Windows; pprof attribution and mitigations |
 | [indexer-sync-state-sqlite-and-force-reindex.md](indexer-sync-state-sqlite-and-force-reindex.md) | SQLite sync checkpoints, force re-index |
 | [operator-cli.md](operator-cli.md) | `chimeractl` operator CLI |
 | [env-precedence-contract.md](env-precedence-contract.md) | Unified env/config precedence |

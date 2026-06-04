@@ -26,11 +26,13 @@ ingest can authenticate.
   only** (timeouts, workers, ignores, and so on). **Watch directories** are
   **not** read from YAML `roots:` in supervised mode; they come from the
   gateway **`GET /v1/indexer/workspaces`** (operator SQLite), managed in the
-  settings UI (`/ui/settings`). When the supervised file changes on disk, the supervised
-  **`chimera-indexer` process detects the edit** (debounced), stops the
-  current watcher session, and **starts a new session**—**no full desktop
-  restart**. If the indexer binary is stale, or other gateway settings
-  change, you still restart **`chimera-supervisor`/desktop**.
+  settings UI (`/ui/settings`). The indexer **polls** that API every
+  `workspaces_poll_interval_ms` (default **30s**) and applies path add/remove
+  **in-process** (same `index_run_id`, same `RunWatchers` loop). When the
+  supervised YAML file changes on disk, the process reloads **tuning only**
+  in-process (debounced)—**no** desktop restart. Legacy `roots:` in an existing
+  `indexer.supervised.yaml` are imported into operator SQLite once at gateway
+  startup when the workspace table is empty.
 - **Standalone `chimera-indexer`** (no `--config`): unchanged—roots come from
   merged YAML and optional `--root` as before.
 - **Logs:** stderr/stdout are teed into the same ring buffer as BiFrost/Qdrant;
@@ -47,7 +49,8 @@ After a successful `GET /v1/indexer/config`, the logger adds `tenant_id`, `princ
 | `gateway.indexer.config` | After successful `GET /v1/indexer/config` | `gateway_version`, `embedding_model`, `chunk_size`, …; optional `ingest_project` / `flavor_id` from request headers; `defaults_project_id` / `defaults_flavor_id` from gateway `defaults` (helps `/ui/settings` when YAML scope is empty) |
 | `indexer.storage.stats` | Periodic or one-shot (`GET /v1/indexer/storage/stats`) | `collection`, `qdrant_points`, `vector_dim`, `available`, optional `detail` / `err` |
 | `indexer.state` | Same cadence as storage stats polling (watch mode) or one-shot at exit | `state` (`watch_idle`, `backlog`, `uploading`, `recovery`, `initial_scanning`, `idle`), `queue_depth`, `ingest_inflight`, `initial_scan_complete`, `watch_mode`, `recovery`, `qdrant_points_reported` |
-| `indexer.reconcile.summary` | Corpus inventory loaded | `phase`=`inventory_loaded`, `remote_source_paths` |
+| `indexer.reconcile.summary` | Corpus inventory loaded | `phase`=`inventory_loaded`, `remote_source_paths`, `inventory_scopes_loaded`, `inventory_scopes_failed` |
+| `indexer.reconcile.inventory_scope_failed` | One scope’s inventory GET failed | `ingest_project`, `flavor_id`, `err` (other scopes may still load) |
 | `indexer.discovery.summary` | After initial walk of all roots | `candidates_*`, `files_excluded_by_ignore_rules` (same count as `skipped_ignored`), `skipped_ignored_files`, `skipped_ignored_dirs`, other `skipped_*` |
 | `indexer.queue.snapshot` | Run workers start/exit, after initial scan, pause/resume, **`phase`=`worker_drain_tick`** (immediate once + every 30s while draining) | `queue_depth`, `queue_cap`, `workers`, counters below |
 | `indexer.run.progress` | Milestone (unchanged) | e.g. `phase`=`initial_scan`, `candidates_enqueued` |
@@ -169,12 +172,14 @@ also sent on `GET /v1/indexer/config` at startup. Match the same headers (or
 Continue `config.yaml` project/flavor fields) as chat so RAG queries the same
 Qdrant collection the indexer wrote to.
 
-**Phase 4:** Successful ingests record **client** and **server** SHA-256 digests under
-`sync_state_path`. When omitted: **`indexer.sync-state.json` next to the `--config`
-file** if you pass `--config` (e.g. supervised `data/gateway/indexer.sync-state.json`
-alongside `indexer.supervised.yaml`), otherwise `.locus/indexer.sync-state.json`
-under the process working directory. If a file’s client hash matches the last
-recorded value, the indexer **skips** re-upload.
+**Phase 4:** Successful ingests record **client** and **server** SHA-256 digests in
+**`sync-state.sqlite`** (resolved from `sync_state_path`). When the configured path
+ends in `.json`, the store is **`sync-state.sqlite` in the same directory** (e.g.
+`data/indexer/sync-state.sqlite` beside `data/indexer/sync-state.json`). A legacy JSON
+file migrates once on startup and is renamed to `.bak`. When `sync_state_path` is
+omitted: **`indexer.sync-state.json` next to the `--config` file** if you pass
+`--config`, otherwise `.locus/indexer.sync-state.json` under the working directory.
+If a file’s client hash matches the last recorded value, the indexer **skips** re-upload.
 Gateway responses include `content_sha256` (authoritative over UTF-8 text
 bytes ingested). Optional YAML: `max_whole_file_bytes` (caps whole-body mode
 when lower than the gateway), `sync_state_path`.
@@ -292,6 +297,58 @@ chimera-indexer --root ./apps/web --gateway-url http://x:8080     # flag-only
 In watch mode the indexer drains an initial scan, then incrementally ingests
 files reported by `fsnotify` (debounced to coalesce save bursts; default
 debounce 750 ms).
+
+## Revision coherence (manifest Phase 6)
+
+On each workspace poll (~30s), the indexer compares the normalized on-disk hash of each sync-state row to the last ingested `content_sha256`. Drift is logged once per source at DEBUG as `indexer.coherence.stale` and pushed to the gateway via `PUT /v1/indexer/corpus/stale` (scoped by tenant + `X-Chimera-Project` + `X-Chimera-Flavor-Id`).
+
+Gateway config (`gateway.yaml`):
+
+```yaml
+rag:
+  coherence:
+    mode: warn   # off | warn | strict (default warn)
+```
+
+| Mode | Chat UI | Expansion APIs (`/v1/rag/*`) |
+|------|---------|------------------------------|
+| `off` | No stale badge | No stale check |
+| `warn` | **Stale** badge when hit hash matches indexed digest in stale list | Allowed |
+| `strict` | Same badge | 409 `corpus_stale` when stale |
+
+Operators can inspect stale sources at `GET /v1/indexer/corpus/stale` (indexer token) or `/api/ui/indexer/corpus/stale` (UI session).
+
+## Workspace expansion tools (manifest Phase 7)
+
+When `rag.tooling.enabled` is true (default), authenticated clients may call:
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /v1/rag/segments?source=&content_sha256=` | List `corpus_segments` rows for a file version |
+| `GET /v1/rag/context?source=&content_sha256=&line=&before=&after=` | Merge chunk texts for a line window (optional `start_line`/`end_line`) |
+| `GET /v1/rag/adjacent?point_id=&radius=` | Neighbor chunks by `chunk_index` (text from Qdrant) |
+| `GET /v1/rag/tools` | JSON tool definitions for routers / MCP |
+
+Logical tool names (same parameters as REST):
+
+- **workspace_context_around** — `{ source, line, before_lines, after_lines, content_sha256? }`
+- **workspace_adjacent_chunks** — `{ point_id, radius }`
+- **workspace_read_lines** — `{ source, start_line, end_line, content_sha256? }`
+
+Cache: `rag.tooling.expansion_cache_ttl_seconds` (default 300), `expansion_cache_max_entries` (default 256).
+
+## Troubleshooting: memory and handles (Windows)
+
+| Symptom | Likely cause | What to check |
+|---------|--------------|---------------|
+| **~1 GB+ idle** after ingest finished | Full re-index on every restart and/or watches on ignored dirs (`.git`, `node_modules`) | Rebuild current `chimera-indexer`; confirm `indexer.reindex.requested` does **not** fire for all workspaces on first poll after restart; handles should be **hundreds**, not **10k+** |
+| **RSS flat high** 10+ min after `watch_idle` | Go heap retained after bulk spike | Expected to some degree; `watch_idle` triggers `FreeOSMemory`; restart indexer only if needed |
+| **RSS grows only when adding workspaces** | New roots + first ingest for that scope | Normal; warm roots should skip via sync state (`skip_unchanged_local_sync` in summaries) |
+| **Many `conhost.exe`** | Supervised pipe to stderr per child | ~800 K each; parent is gateway/indexer/supervisor—not indexer RAM |
+
+**Healthy idle (reference):** three warm workspaces, **~50–150 MB** private WS, **<2k** handles, logs show `declarative_state: watch_idle` and `queue_depth: 0`.
+
+See [features/indexer.md — Memory](features/indexer.md#memory-and-windows-resources) and plan [`plans/indexer-memory-usage-analysis.md`](plans/indexer-memory-usage-analysis.md).
 
 ## Security notes
 

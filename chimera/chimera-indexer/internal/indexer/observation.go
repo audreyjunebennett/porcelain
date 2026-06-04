@@ -63,7 +63,15 @@ func (ix *Indexer) EmitStorageStatsAndState(ctx context.Context, watchMode bool)
 			total += stats.Points
 			fp := storageStatsFingerprint(stats.Available, stats.Points, stats.VectorDim, stats.Detail, stats.Collection)
 			if !stats.Available {
-				ix.log.Warn("indexer storage stats unavailable",
+				ix.tryAutoRepairMissingCollection(ctx, sc, stats.Detail, itk)
+				level := slog.LevelWarn
+				if isCollectionMissingDetail(stats.Detail) {
+					level = ix.storageStatsObsLevel(itk, fp)
+					if level == slog.LevelWarn {
+						level = slog.LevelInfo
+					}
+				}
+				ix.log.Log(context.Background(), level, "indexer storage stats unavailable",
 					"msg", "indexer.storage.stats",
 					"indexer_target_key", itk,
 					"ingest_project", proj,

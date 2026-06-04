@@ -194,6 +194,7 @@ clean-configure: chimera-clean-configure locus-clean-configure
 
 clean-data:
 	@$(MAKE) --no-print-directory chimera-clean-run CONFIRM=$(CONFIRM)
+	@$(MAKE) --no-print-directory locus-desktop-clean-run
 
 clean-run: chimera-clean-run locus-clean-run
 

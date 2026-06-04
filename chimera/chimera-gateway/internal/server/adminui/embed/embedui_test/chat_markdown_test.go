@@ -160,6 +160,60 @@ func TestChatMessages_renderMessage_assistantCopyInHead(t *testing.T) {
 	}
 }
 
+func TestChatSnippet_render_gutterLineNumbersAndMidLine(t *testing.T) {
+	vm := goja.New()
+	loadChatMarkdown(t, vm)
+
+	out, err := vm.RunString(`
+		ChimeraChat.Render.Snippet.render("src/main.go", "partial\nfull", "go", {
+			start_line: 42,
+			end_line: 43,
+			starts_mid_line: true
+		})
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := out.String()
+	for _, want := range []string{"chat-snippet-gutter", "42", "43", "\u2026", "partial", "full"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("missing %q in %q", want, got)
+		}
+	}
+}
+
+func TestChatMessages_renderMessage_ragHitLineRangeSummary(t *testing.T) {
+	vm := goja.New()
+	loadChatMessages(t, vm)
+
+	out, err := vm.RunString(`
+		ChimeraChat.Render.Messages.renderMessage({
+			id: "a2",
+			role: "assistant",
+			content: "ok",
+			ragHits: [{
+				source: "src/foo.go",
+				text: "line one\\nline two",
+				score: 0.9,
+				language: "go",
+				start_line: 42,
+				end_line: 43,
+				starts_mid_line: false
+			}]
+		})
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := out.String()
+	if !strings.Contains(got, "src/foo.go") || !strings.Contains(got, "L42") {
+		t.Fatalf("expected line range in summary, got %q", got)
+	}
+	if !strings.Contains(got, "chat-snippet-gutter") {
+		t.Fatalf("expected gutter snippet, got %q", got)
+	}
+}
+
 func TestChatMessages_renderMessage_doesNotBleedIntoFooter(t *testing.T) {
 	vm := goja.New()
 	loadChatMessages(t, vm)

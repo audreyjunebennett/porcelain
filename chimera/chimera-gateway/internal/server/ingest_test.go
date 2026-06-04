@@ -22,8 +22,38 @@ import (
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/rag"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/testsupport"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/vectorstore"
+	ichunk "github.com/lynn/porcelain/internal/chunk"
 	"github.com/lynn/porcelain/internal/naming"
 )
+
+func manifestJSONForTest(source, text, clientHash string) string {
+	norm := ichunk.NormalizeNewlines(text)
+	segs := ichunk.Split(norm, 512, 128)
+	sum := sha256.Sum256([]byte(norm))
+	serverHash := "sha256:" + hex.EncodeToString(sum[:])
+	if clientHash == "" {
+		clientHash = serverHash
+	}
+	chunks := make([]rag.ManifestChunk, len(segs))
+	for i, s := range segs {
+		chunks[i] = rag.ManifestChunk{
+			ChunkIndex: i, Text: s.Text, StartLine: s.StartLine, EndLine: s.EndLine,
+			StartByte: s.StartByte, EndByte: s.EndByte, StartCh: s.StartCh, EndCh: s.EndCh,
+			StartsMidLine: s.StartsMidLine,
+		}
+	}
+	lineCount := 1
+	if len(norm) > 0 {
+		lineCount = strings.Count(norm, "\n") + 1
+	}
+	m := rag.IngestManifest{
+		Object: "ingest.manifest", Source: source, ContentSHA256: serverHash,
+		ClientContentHash: clientHash, ChunkSize: 512, ChunkOverlap: 128,
+		ChunkSchema: ichunk.SchemaV2, LineCount: lineCount, FileBytes: len(norm), Chunks: chunks,
+	}
+	b, _ := json.Marshal(m)
+	return string(b)
+}
 
 // inMemoryStore is a minimal vectorstore.Store for handler integration tests.
 type inMemoryStore struct {
@@ -218,7 +248,8 @@ func setupRAGServer(t *testing.T) (*Runtime, *inMemoryStore, *httptest.Server) {
 
 func TestIngest_JSON(t *testing.T) {
 	_, store, srv := setupRAGServer(t)
-	body := `{"source":"docs/readme.md","text":"` + strings.Repeat("alpha ", 50) + `"}`
+	text := strings.Repeat("alpha ", 50)
+	body := manifestJSONForTest("docs/readme.md", text, "")
 	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/v1/ingest", strings.NewReader(body))
 	req.Header.Set("Authorization", "Bearer ingest-tok")
 	req.Header.Set("Content-Type", "application/json")
@@ -252,57 +283,29 @@ func TestIngest_JSON(t *testing.T) {
 	}
 }
 
-func TestIngest_Multipart(t *testing.T) {
-	_, store, srv := setupRAGServer(t)
+func TestIngest_MultipartRejected(t *testing.T) {
+	_, _, srv := setupRAGServer(t)
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
-	w, _ := mw.CreateFormFile("file", "main.go")
-	_, _ = w.Write([]byte(strings.Repeat("hello ", 100)))
-	_ = mw.WriteField("source", "src/main.go")
-	_ = mw.WriteField("content_hash", "sha256:client-supplied")
+	fw, _ := mw.CreateFormFile("file", "main.go")
+	_, _ = fw.Write([]byte("hello"))
 	_ = mw.Close()
-
 	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/v1/ingest", &buf)
 	req.Header.Set("Authorization", "Bearer ingest-tok")
 	req.Header.Set("Content-Type", mw.FormDataContentType())
-	req.Header.Set(HeaderFlavor, "branch-foo")
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer res.Body.Close()
-	if res.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(res.Body)
-		t.Fatalf("status %d body %s", res.StatusCode, b)
-	}
-	var doc map[string]any
-	if err := json.NewDecoder(res.Body).Decode(&doc); err != nil {
-		t.Fatal(err)
-	}
-	if doc["flavor_id"] != "branch-foo" {
-		t.Fatalf("flavor: %+v", doc)
-	}
-	if doc["source"] != "src/main.go" {
-		t.Fatalf("source should be the explicit form field 'src/main.go', got: %+v", doc)
-	}
-	text := strings.Repeat("hello ", 100)
-	sum := sha256.Sum256([]byte(text))
-	want := "sha256:" + hex.EncodeToString(sum[:])
-	if doc["content_hash"] != want || doc["content_sha256"] != want {
-		t.Fatalf("expected server sha for file bytes: content_hash=%v content_sha256=%v want %q", doc["content_hash"], doc["content_sha256"], want)
-	}
-	if doc["client_content_hash"] != "sha256:client-supplied" {
-		t.Fatalf("client_content_hash: %+v", doc["client_content_hash"])
-	}
-	coll, _ := doc["collection"].(string)
-	if len(store.points[coll]) == 0 {
-		t.Fatal("expected points stored")
+	if res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status %d want 400", res.StatusCode)
 	}
 }
 
 func TestIngest_Unauthorized(t *testing.T) {
 	_, _, srv := setupRAGServer(t)
-	body := `{"source":"a","text":"hi"}`
+	body := manifestJSONForTest("a", "hi", "")
 	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/v1/ingest", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	res, err := http.DefaultClient.Do(req)
@@ -352,7 +355,7 @@ func TestIngest_BadBody(t *testing.T) {
 		want int
 	}{
 		{"empty json", "application/json", `{}`, http.StatusBadRequest},
-		{"missing source", "application/json", `{"text":"x"}`, http.StatusBadRequest},
+		{"missing manifest", "application/json", `{"object":"ingest.manifest"}`, http.StatusBadRequest},
 		{"bad ct", "text/plain", "hello", http.StatusBadRequest},
 	}
 	for _, tc := range cases {
@@ -375,8 +378,9 @@ func TestIngest_BadBody(t *testing.T) {
 func TestIngest_ChunkedSession(t *testing.T) {
 	_, _, srv := setupRAGServer(t)
 	payload := strings.Repeat("chunkline\n", 500)
+	manifestBody := manifestJSONForTest("docs/chunked.txt", payload, "")
 
-	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/v1/ingest/session", strings.NewReader(`{"source":"docs/chunked.txt"}`))
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/v1/ingest/session", strings.NewReader(`{"source":"docs/chunked.txt","content_hash":"sha256:00"}`))
 	req.Header.Set("Authorization", "Bearer ingest-tok")
 	req.Header.Set("Content-Type", "application/json")
 	res, err := http.DefaultClient.Do(req)
@@ -401,30 +405,9 @@ func TestIngest_ChunkedSession(t *testing.T) {
 	maxChunk := int64(start.MaxChunkBytes)
 	sid := start.SessionID
 
-	off := 0
-	for idx := 0; off < len(payload); idx++ {
-		end := off + int(maxChunk)
-		if end > len(payload) {
-			end = len(payload)
-		}
-		chunk := payload[off:end]
-		preq, _ := http.NewRequest(http.MethodPut, srv.URL+"/v1/ingest/session/"+sid+"/chunk", strings.NewReader(chunk))
-		preq.Header.Set("Authorization", "Bearer ingest-tok")
-		preq.Header.Set(naming.HeaderChunkIndexTarget, strconv.Itoa(idx))
-		preq.ContentLength = int64(len(chunk))
-		pres, err := http.DefaultClient.Do(preq)
-		if err != nil {
-			t.Fatal(err)
-		}
-		b, _ := io.ReadAll(pres.Body)
-		pres.Body.Close()
-		if pres.StatusCode != http.StatusOK {
-			t.Fatalf("chunk %d status %d: %s", idx, pres.StatusCode, b)
-		}
-		off = end
-	}
+	_ = maxChunk // manifest-first session: no transport chunks required.
 
-	creq, _ := http.NewRequest(http.MethodPost, srv.URL+"/v1/ingest/session/"+sid+"/complete", strings.NewReader("{}"))
+	creq, _ := http.NewRequest(http.MethodPost, srv.URL+"/v1/ingest/session/"+sid+"/complete", strings.NewReader(manifestBody))
 	creq.Header.Set("Authorization", "Bearer ingest-tok")
 	creq.Header.Set("Content-Type", "application/json")
 	cres, err := http.DefaultClient.Do(creq)
@@ -440,7 +423,8 @@ func TestIngest_ChunkedSession(t *testing.T) {
 	if err := json.NewDecoder(cres.Body).Decode(&doc); err != nil {
 		t.Fatal(err)
 	}
-	sum := sha256.Sum256([]byte(payload))
+	norm := ichunk.NormalizeNewlines(payload)
+	sum := sha256.Sum256([]byte(norm))
 	want := "sha256:" + hex.EncodeToString(sum[:])
 	if doc["content_sha256"] != want || doc["content_hash"] != want {
 		t.Fatalf("hashes: %+v want %s", doc, want)
@@ -451,7 +435,7 @@ func TestIngest_JSON_logsConversationIDWhenHeaderPresent(t *testing.T) {
 	var buf strings.Builder
 	lg := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	_, _, srv := setupRAGServerWithLog(t, lg)
-	body := `{"source":"docs/corr.md","text":"` + strings.Repeat("alpha ", 50) + `"}`
+	body := manifestJSONForTest("docs/corr.md", strings.Repeat("alpha ", 50), "")
 	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/v1/ingest", strings.NewReader(body))
 	req.Header.Set("Authorization", "Bearer ingest-tok")
 	req.Header.Set("Content-Type", "application/json")

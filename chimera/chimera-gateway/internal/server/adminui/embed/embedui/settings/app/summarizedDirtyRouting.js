@@ -107,6 +107,13 @@ globalThis.ChimeraSettings.Summarized = globalThis.ChimeraSettings.Summarized ||
   function indexerWorkspaceDirtyMsg(f, msg) {
     if (!msg) return false;
     if (msg === "indexer.run.start" || msg.indexOf("indexer.run.done") === 0) return true;
+    if (
+      msg === "gateway.operator.workspace.reindex_requested" ||
+      msg === "indexer.reindex.requested" ||
+      msg === "indexer.supervised.hot_reload"
+    ) {
+      return true;
+    }
     if (msg === "indexer.job.skipped.summary" || msg === "indexer.job.ingested.summary") return true;
     if (msg.indexOf("indexer.ingest.gate.") === 0) return true;
     if (msg === "indexer.recovery.resumed") return true;

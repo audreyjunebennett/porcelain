@@ -63,7 +63,7 @@ func (ix *Indexer) pendingBulk(scopeKey string) int64 {
 
 // runScanJob performs corpus inventory load, walk per root, scoped discovery logs,
 // and enqueues FanoutListJob shards (tier 1).
-func (ix *Indexer) runScanJob(ctx context.Context, scanID string) error {
+func (ix *Indexer) runScanJob(ctx context.Context, scanID string, scanRootIDs []string) error {
 	if err := ix.loadRemoteCorpusInventory(ctx); err != nil {
 		ix.log.Warn("corpus inventory fetch skipped", "err", err)
 	}
@@ -85,7 +85,21 @@ func (ix *Indexer) runScanJob(ctx context.Context, scanID string) error {
 		ix.log.Debug("skip", args...)
 	}
 
-	for _, r := range ix.cfg.Roots {
+	roots := ix.getRoots()
+	if len(scanRootIDs) > 0 {
+		allow := make(map[string]struct{}, len(scanRootIDs))
+		for _, id := range scanRootIDs {
+			allow[id] = struct{}{}
+		}
+		filtered := make([]Root, 0, len(scanRootIDs))
+		for _, r := range roots {
+			if _, ok := allow[r.ID]; ok {
+				filtered = append(filtered, r)
+			}
+		}
+		roots = filtered
+	}
+	for _, r := range roots {
 		m, err := NewMatcher(r.AbsPath, ix.cfg.IgnoreExtra)
 		if err != nil {
 			return fmt.Errorf("ignore matcher for %s: %w", r.AbsPath, err)
@@ -163,7 +177,7 @@ func (ix *Indexer) runScanJob(ctx context.Context, scanID string) error {
 			truncated = true
 			paths = paths[:maxDiscoveryPathsLogged]
 		}
-		args := []any{
+		infoArgs := []any{
 			"msg", "indexer.discovery.summary.scope",
 			"scan_id", scanID,
 			"tenant_id", tid,
@@ -171,12 +185,14 @@ func (ix *Indexer) runScanJob(ctx context.Context, scanID string) error {
 			"ingest_project", proj,
 			"flavor_id", flav,
 			"indexer_target_key", ik,
-			"rel_paths", paths,
 			"paths_truncated", truncated,
 			"path_sample_count", len(paths),
 		}
-		args = append(args, d.discoveryScopeLogAttrs()...)
-		ix.log.Info("discovery summary (scope)", args...)
+		infoArgs = append(infoArgs, d.discoveryScopeLogAttrs()...)
+		ix.log.Info("discovery summary (scope)", infoArgs...)
+		debugArgs := append([]any(nil), infoArgs...)
+		debugArgs = append(debugArgs, "rel_paths", paths)
+		ix.log.Debug("discovery summary (scope) paths", debugArgs...)
 	}
 
 	meta := FanoutMeta{

@@ -13,6 +13,8 @@
   var HistoryClient = globalThis.ChimeraChat.HistoryClient;
 
   var state = State.createState();
+  state.staleBySource = {};
+  state.coherenceMode = "warn";
   var models = [];
   var workspaces = [];
   var workspaceByKey = {};
@@ -55,10 +57,37 @@
     return null;
   }
 
+  function syncStaleCtx() {
+    globalThis.ChimeraChat = globalThis.ChimeraChat || {};
+    ChimeraChat._ragStaleCtx = {
+      map: state.staleBySource || {},
+      mode: state.coherenceMode || "warn"
+    };
+  }
+
   function paint() {
     if (!viewport) return;
+    syncStaleCtx();
     viewport.innerHTML = MsgRender.renderAll(state.messages);
     scrollTracker.follow();
+  }
+
+  function refreshCorpusStale() {
+    return Gateway.fetchCorpusStale(selectedWorkspace())
+      .then(function (data) {
+        state.coherenceMode =
+          data && data.coherence_mode != null ? String(data.coherence_mode) : "warn";
+        var map = {};
+        var entries = data && Array.isArray(data.entries) ? data.entries : [];
+        var ei;
+        for (ei = 0; ei < entries.length; ei++) {
+          var e = entries[ei] || {};
+          if (e.source != null) map[String(e.source)] = e;
+        }
+        state.staleBySource = map;
+        paint();
+      })
+      .catch(function () {});
   }
 
   function paintAssistantDelta(msg) {
@@ -143,7 +172,10 @@
         console.warn("chat models refresh:", err);
       });
     Gateway.fetchWorkspaces()
-      .then(populateWorkspaces)
+      .then(function (data) {
+        populateWorkspaces(data);
+        return refreshCorpusStale();
+      })
       .catch(function (err) {
         console.warn("chat workspaces refresh:", err);
       });
@@ -431,6 +463,7 @@
   if (workspaceSel) {
     workspaceSel.addEventListener("change", function () {
       state.selectedWorkspaceKey = workspaceSel.value || "";
+      refreshCorpusStale();
     });
   }
   if (sendBtn) sendBtn.addEventListener("click", submitMessage);

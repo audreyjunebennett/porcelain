@@ -214,6 +214,15 @@ globalThis.ChimeraSettings.Render.Cards.mountWorkspaceDraft = function (ctx) {
     });
   }
 
+  function buildManagedWorkspaceReindexBtnHtml(wsNum, titleText) {
+    var lab =
+      titleText && String(titleText).trim()
+        ? "Re-index workspace " + String(titleText).trim()
+        : "Re-index workspace";
+    var btn = iconBtn(null, lab, "sync", "ws-managed-btn-reindex", { "ws-managed-id": String(wsNum) }, false);
+    return btn || "";
+  }
+
   function buildManagedWorkspaceConfigureBtnHtml(wsNum, titleText) {
     var lab =
       titleText && String(titleText).trim()
@@ -241,7 +250,11 @@ globalThis.ChimeraSettings.Render.Cards.mountWorkspaceDraft = function (ctx) {
   function buildManagedWorkspaceToolbarHtml(wsNum, isEdit, titleText) {
     var inner;
     if (isEdit) inner = buildManagedWorkspaceEditToolbarHtml(wsNum);
-    else inner = buildManagedWorkspaceConfigureBtnHtml(wsNum, titleText);
+    else {
+      inner =
+        buildManagedWorkspaceConfigureBtnHtml(wsNum, titleText) +
+        buildManagedWorkspaceReindexBtnHtml(wsNum, titleText);
+    }
     if (ET && typeof ET.toolbarWrapHtml === "function") {
       return (
         '<div data-ui-part="indexer-operator-workspace.toolbar">' +

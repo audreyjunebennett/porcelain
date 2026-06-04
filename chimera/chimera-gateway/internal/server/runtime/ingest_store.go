@@ -299,27 +299,35 @@ func handleIngestSessionComplete(w http.ResponseWriter, r *http.Request, rt *Run
 		gwhttp.WriteJSONError(w, http.StatusForbidden, "session tenant mismatch", "invalid_request")
 		return
 	}
-	if rec.buf.Len() == 0 {
-		delete(store.sessions, id)
-		store.mu.Unlock()
-		gwhttp.WriteJSONError(w, http.StatusBadRequest, "no chunks uploaded", "invalid_request")
-		return
-	}
-	text := rec.buf.String()
 	source := rec.source
-	clientHash := rec.clientHash
 	coords := rec.coords
 	indexRunID := rec.indexRunID
 	convID := rec.conversationID
 	delete(store.sessions, id)
 	store.mu.Unlock()
 
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, res.RAG.MaxIngestBytes))
+	if err != nil {
+		gwhttp.WriteJSONError(w, http.StatusBadRequest, err.Error(), "invalid_request")
+		return
+	}
+	var manifest rag.IngestManifest
+	if err := json.Unmarshal(body, &manifest); err != nil {
+		gwhttp.WriteJSONError(w, http.StatusBadRequest, "complete requires ingest.manifest JSON body", "invalid_request")
+		return
+	}
+	if err := rag.ValidateManifest(&manifest); err != nil {
+		gwhttp.WriteJSONError(w, http.StatusBadRequest, err.Error(), "invalid_request")
+		return
+	}
+	if strings.TrimSpace(manifest.Source) == "" {
+		manifest.Source = source
+	}
+
 	rid := requestid.FromContext(r.Context())
-	result, err := rt.RAG().Ingest(r.Context(), rag.IngestRequest{
+	result, err := rt.RAG().IngestManifest(r.Context(), manifest, coords, rt.OperatorStore(), rag.ManifestIngestRequest{
 		Coords:         coords,
-		Source:         source,
-		Text:           text,
-		ContentHash:    clientHash,
+		Manifest:       manifest,
 		RequestID:      rid,
 		IndexRunID:     indexRunID,
 		ConversationID: convID,
@@ -327,8 +335,8 @@ func handleIngestSessionComplete(w http.ResponseWriter, r *http.Request, rt *Run
 	if err != nil {
 		if log != nil {
 			args := []any{
-				"msg", "scope.chunked.error",
-				"tenant", sess.TenantID, "source", source, "err", err,
+				"msg", "scope.manifest.error",
+				"tenant", sess.TenantID, "source", manifest.Source, "err", err,
 				"service", "gateway", "principal_id", sess.TenantID,
 				"timeline_kind", "indexer",
 			}
@@ -341,7 +349,7 @@ func handleIngestSessionComplete(w http.ResponseWriter, r *http.Request, rt *Run
 			if convID != "" {
 				args = append(args, "conversation_id", convID)
 			}
-			log.Error("chunked ingest failed", args...)
+			log.Error("manifest session ingest failed", args...)
 		}
 		gwhttp.WriteJSONError(w, http.StatusBadGateway, err.Error(), "gateway_upstream")
 		return
@@ -365,7 +373,7 @@ func handleIngestSessionComplete(w http.ResponseWriter, r *http.Request, rt *Run
 	if log != nil {
 		args := []any{
 			"msg", "scope.complete",
-			"tenant", sess.TenantID, "source", source, "chunks", result.Chunks,
+			"tenant", sess.TenantID, "source", manifest.Source, "chunks", result.Chunks,
 			"service", "gateway", "principal_id", sess.TenantID,
 			"timeline_kind", "indexer",
 		}
