@@ -15,15 +15,15 @@ const hitPreviewMaxRunes = 1600
 
 // HitSummary is a compact retrieval hit exposed to operator/chat clients.
 type HitSummary struct {
-	Source         string  `json:"source"`
-	Text           string  `json:"text"`
-	Score          float32 `json:"score"`
-	Language       string  `json:"language,omitempty"`
-	StartLine      int     `json:"start_line,omitempty"`
-	EndLine        int     `json:"end_line,omitempty"`
-	StartsMidLine  bool    `json:"starts_mid_line,omitempty"`
-	ChunkIndex     int     `json:"chunk_index,omitempty"`
-	ContentSHA256  string  `json:"content_sha256,omitempty"`
+	Source        string  `json:"source"`
+	Text          string  `json:"text"`
+	Score         float32 `json:"score"`
+	Language      string  `json:"language,omitempty"`
+	StartLine     int     `json:"start_line,omitempty"`
+	EndLine       int     `json:"end_line,omitempty"`
+	StartsMidLine bool    `json:"starts_mid_line,omitempty"`
+	ChunkIndex    int     `json:"chunk_index,omitempty"`
+	ContentSHA256 string  `json:"content_sha256,omitempty"`
 }
 
 // LanguageFromSource infers a highlight/render language id from a file path or source label.

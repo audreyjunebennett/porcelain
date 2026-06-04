@@ -7,8 +7,8 @@ import (
 
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/corpusstale"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/gwhttp"
-	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/scope"
 	gruntime "github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/runtime"
+	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/scope"
 	"github.com/lynn/porcelain/chimera/internal/config"
 )
 
@@ -35,12 +35,12 @@ func HandleCorpusStaleGET(w http.ResponseWriter, r *http.Request, rt *gruntime.R
 	entries := store.ListScope(sess.TenantID, proj, flav)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"object":          "indexer.corpus.stale",
-		"tenant_id":       sess.TenantID,
-		"project_id":      proj,
-		"flavor_id":       flav,
-		"coherence_mode":  res.RAG.CoherenceMode,
-		"entries":         entries,
+		"object":         "indexer.corpus.stale",
+		"tenant_id":      sess.TenantID,
+		"project_id":     proj,
+		"flavor_id":      flav,
+		"coherence_mode": res.RAG.CoherenceMode,
+		"entries":        entries,
 	})
 }
 

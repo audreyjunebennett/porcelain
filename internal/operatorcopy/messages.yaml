@@ -51,6 +51,8 @@ formatters:
     description: operator UI path add
   gateway_operator_workspace_path_deleted:
     description: operator UI path delete
+  gateway_operator_workspace_reindex_requested:
+    description: workspace_id, reindex_generation after operator reindex POST
   gateway_startup_config_resolved:
     description: filePath, api_keys_path, routingPolicyPath
   gateway_startup_disk_log:
@@ -311,6 +313,11 @@ messages:
     aliases:
       - gateway operator workspace path deleted
     gallery_preview: Watch path removed · C:\repo\old-path
+  - slug: gateway.operator.workspace.reindex_requested
+    formatter: gateway_operator_workspace_reindex_requested
+    aliases:
+      - gateway operator workspace reindex requested
+    gallery_preview: Re-index requested · workspace 3 · generation 2
   - slug: gateway.catalog.fallback_unavailable_model
     formatter: gateway_catalog_fallback_unavailable_model
     gallery_preview: Unavailable model still listed in a configured fallback chain.

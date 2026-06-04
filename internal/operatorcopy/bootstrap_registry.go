@@ -69,6 +69,7 @@ func BootstrapRegistry() *Registry {
 			"indexer_supervised_workspaces_apply_failed":   {Description: "workspace path apply failure"},
 			"gateway_operator_workspace_path_added":        {Description: "operator UI path add"},
 			"gateway_operator_workspace_path_deleted":      {Description: "operator UI path delete"},
+			"gateway_operator_workspace_reindex_requested": {Description: "workspace_id, reindex_generation after operator reindex POST"},
 			"gateway_catalog_fallback_unavailable_model":   {Description: "model_id, source, tenant_id for fallback chain audit"},
 			"indexer_supervised_watch_shutdown_timeout":    {Description: "watch shutdown timeout detail"},
 			"indexer_supervised_session_fatal_exit":        {Description: "session fatal exit detail"},
@@ -226,6 +227,9 @@ func gatewayMessages() []Message {
 		formatted("gateway.operator.workspace.path_deleted", "gateway_operator_workspace_path_deleted",
 			"Watch path removed · C:\\repo\\old-path",
 			"gateway operator workspace path deleted"),
+		formatted("gateway.operator.workspace.reindex_requested", "gateway_operator_workspace_reindex_requested",
+			"Re-index requested · workspace 3 · generation 2",
+			"gateway operator workspace reindex requested"),
 		formatted("gateway.catalog.fallback_unavailable_model", "gateway_catalog_fallback_unavailable_model",
 			"Unavailable model still listed in a configured fallback chain."),
 	}

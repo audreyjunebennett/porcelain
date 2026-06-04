@@ -8,8 +8,8 @@ import (
 
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/gwhttp"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/rag"
-	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/scope"
 	gruntime "github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/runtime"
+	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/scope"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/vectorstore"
 )
 
@@ -67,9 +67,9 @@ func HandleRAGSegmentsGET(w http.ResponseWriter, r *http.Request, rt *gruntime.R
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"object":    "rag.segments",
-		"source":    source,
-		"segments":  rows,
+		"object":   "rag.segments",
+		"source":   source,
+		"segments": rows,
 	})
 }
 

@@ -9,24 +9,24 @@ import (
 
 // CorpusSegmentRow is one indexed chunk stored for tooling lookups.
 type CorpusSegmentRow struct {
-	SegmentID      string
-	TenantID       string
-	ProjectID      string
-	FlavorID       string
-	Source         string
-	ContentSHA256  string
-	ChunkIndex     int
-	ChunkCount     int
-	StartLine      int
-	EndLine        int
-	StartByte      int
-	EndByte        int
-	StartCh        int
-	EndCh          int
-	StartsMidLine  bool
-	VectorPointID  string
-	Language       string
-	CreatedAt      time.Time
+	SegmentID     string
+	TenantID      string
+	ProjectID     string
+	FlavorID      string
+	Source        string
+	ContentSHA256 string
+	ChunkIndex    int
+	ChunkCount    int
+	StartLine     int
+	EndLine       int
+	StartByte     int
+	EndByte       int
+	StartCh       int
+	EndCh         int
+	StartsMidLine bool
+	VectorPointID string
+	Language      string
+	CreatedAt     time.Time
 }
 
 // ReplaceCorpusSegmentsForSource deletes prior segment rows for source (all hashes) and inserts new rows.

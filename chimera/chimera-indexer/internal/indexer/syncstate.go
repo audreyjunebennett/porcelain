@@ -246,4 +246,3 @@ func (s *SyncState) DeleteAll() error {
 	_, err := s.db.Exec(`DELETE FROM sync_entries`)
 	return err
 }
-

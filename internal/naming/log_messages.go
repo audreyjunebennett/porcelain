@@ -43,6 +43,7 @@ const (
 	MsgGatewayStartupConfigResolved             = "gateway.startup.config_resolved"
 	MsgGatewayOperatorWorkspacePathAdded        = "gateway.operator.workspace.path_added"
 	MsgGatewayOperatorWorkspacePathDeleted      = "gateway.operator.workspace.path_deleted"
+	MsgGatewayOperatorWorkspaceReindexRequested = "gateway.operator.workspace.reindex_requested"
 	MsgGatewayCatalogFallbackUnavailableModel   = "gateway.catalog.fallback_unavailable_model"
 	MsgBrokerHttpAccess                         = "broker.http.access"
 	MsgBrokerRateLimit                          = "broker.rate_limit"

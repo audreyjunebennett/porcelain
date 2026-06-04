@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/operatorstore"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/corpusstale"
+	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/operatorstore"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/testsupport"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/vectorstore"
 )

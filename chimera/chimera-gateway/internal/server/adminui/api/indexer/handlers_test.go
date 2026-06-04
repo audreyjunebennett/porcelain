@@ -84,6 +84,22 @@ func (s *purgeTestStore) ScrollPoints(context.Context, string, *vectorstore.Coor
 	return vectorstore.ScrollBatch{}, nil
 }
 
+func (s *purgeTestStore) GetPoints(_ context.Context, c string, ids []string) ([]vectorstore.PointPayload, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	byID := map[string]vectorstore.Point{}
+	for _, p := range s.points[c] {
+		byID[p.ID] = p
+	}
+	var out []vectorstore.PointPayload
+	for _, id := range ids {
+		if p, ok := byID[id]; ok {
+			out = append(out, vectorstore.PointPayload{ID: p.ID, Payload: p.Payload})
+		}
+	}
+	return out, nil
+}
+
 type stubEmbed struct{ dim int }
 
 func (stubEmbed) EmbedBatch(_ context.Context, in []string) ([][]float32, error) {

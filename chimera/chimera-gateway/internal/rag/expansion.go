@@ -254,10 +254,10 @@ func WorkspaceToolDefinitions() []map[string]any {
 			"parameters": map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"source":       map[string]any{"type": "string"},
-					"line":         map[string]any{"type": "integer"},
-					"before_lines": map[string]any{"type": "integer"},
-					"after_lines":  map[string]any{"type": "integer"},
+					"source":         map[string]any{"type": "string"},
+					"line":           map[string]any{"type": "integer"},
+					"before_lines":   map[string]any{"type": "integer"},
+					"after_lines":    map[string]any{"type": "integer"},
 					"content_sha256": map[string]any{"type": "string"},
 				},
 				"required": []string{"source", "line"},
@@ -281,9 +281,9 @@ func WorkspaceToolDefinitions() []map[string]any {
 			"parameters": map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"source":          map[string]any{"type": "string"},
-					"start_line":      map[string]any{"type": "integer"},
-					"end_line":        map[string]any{"type": "integer"},
+					"source":         map[string]any{"type": "string"},
+					"start_line":     map[string]any{"type": "integer"},
+					"end_line":       map[string]any{"type": "integer"},
 					"content_sha256": map[string]any{"type": "string"},
 				},
 				"required": []string{"source", "start_line", "end_line"},

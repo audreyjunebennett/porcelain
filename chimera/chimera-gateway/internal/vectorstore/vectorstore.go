@@ -44,19 +44,19 @@ type Payload struct {
 	// ClientContentHash is the optional indexer-supplied digest echoed at ingest.
 	ClientContentHash string `json:"client_content_hash,omitempty"`
 	// Manifest chunk_schema 2 fields (required on new points).
-	ChunkIndex     int    `json:"chunk_index,omitempty"`
-	ChunkCount     int    `json:"chunk_count,omitempty"`
-	StartLine      int    `json:"start_line,omitempty"`
-	EndLine        int    `json:"end_line,omitempty"`
-	StartByte      int    `json:"start_byte,omitempty"`
-	EndByte        int    `json:"end_byte,omitempty"`
-	StartCh        int    `json:"start_ch,omitempty"`
-	EndCh          int    `json:"end_ch,omitempty"`
-	StartsMidLine  bool   `json:"starts_mid_line,omitempty"`
-	LineCount      int    `json:"line_count,omitempty"`
-	FileBytes      int    `json:"file_bytes,omitempty"`
-	ChunkSchema    int    `json:"chunk_schema,omitempty"`
-	Language       string `json:"language,omitempty"`
+	ChunkIndex    int    `json:"chunk_index,omitempty"`
+	ChunkCount    int    `json:"chunk_count,omitempty"`
+	StartLine     int    `json:"start_line,omitempty"`
+	EndLine       int    `json:"end_line,omitempty"`
+	StartByte     int    `json:"start_byte,omitempty"`
+	EndByte       int    `json:"end_byte,omitempty"`
+	StartCh       int    `json:"start_ch,omitempty"`
+	EndCh         int    `json:"end_ch,omitempty"`
+	StartsMidLine bool   `json:"starts_mid_line,omitempty"`
+	LineCount     int    `json:"line_count,omitempty"`
+	FileBytes     int    `json:"file_bytes,omitempty"`
+	ChunkSchema   int    `json:"chunk_schema,omitempty"`
+	Language      string `json:"language,omitempty"`
 }
 
 // PointPayload is a scroll/search row without an embedded vector.

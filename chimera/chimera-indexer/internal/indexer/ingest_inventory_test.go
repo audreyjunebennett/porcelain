@@ -1,6 +1,9 @@
 package indexer
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 func TestCorpusInventoryKey_scopedPaths(t *testing.T) {
 	t.Parallel()
@@ -20,7 +23,7 @@ func TestLoadRemoteCorpusInventory_requiresRoots(t *testing.T) {
 		client: NewGatewayClient("http://127.0.0.1:1", "tok", 0),
 	}
 	ix.lastGW.Store(&IndexerConfig{CorpusInventoryPath: "/v1/indexer/corpus/inventory"})
-	if err := ix.loadRemoteCorpusInventory(t.Context()); err != nil {
+	if err := ix.loadRemoteCorpusInventory(context.Background()); err != nil {
 		t.Fatalf("no roots: %v", err)
 	}
 	if ix.remoteInv != nil {

@@ -9,13 +9,13 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/corpusstale"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/gatewaymetrics"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/operatorstore"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/providermodels"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/rag"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/rag/ragembed"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/catalog"
-	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/corpusstale"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/vectorstore/qdrant"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/virtualmodel"
 	indexeradapter "github.com/lynn/porcelain/chimera/chimera-indexer/adapter"
@@ -101,7 +101,7 @@ func NewRuntimeWithBrokerOverride(gatewayPath string, log *slog.Logger, brokerBa
 		config.PatchResolvedUpstream(res, brokerBaseURLOverride)
 	}
 	rt := &Runtime{
-		corpusStaleStore: corpusstale.NewStore(),
+		corpusStaleStore:      corpusstale.NewStore(),
 		log:                   log,
 		gatewayPath:           gatewayPath,
 		brokerBaseURLOverride: brokerBaseURLOverride,

@@ -214,4 +214,3 @@ func byteOffsetForRuneStart(s string, runeIndex int) int {
 	}
 	return len(s)
 }
-
