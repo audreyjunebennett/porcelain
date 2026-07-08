@@ -79,7 +79,7 @@ if not HF_TOKEN:
     print("  [!] WARNING: HF_TOKEN not set — diarization will fail. Add to D:\\Rebirth\\.env.", file=sys.stderr)
 PRIMARY_SPEAKER = os.environ.get("MOTOX_PRIMARY_SPEAKER", "Ruby")
 UNKNOWN_SPEAKER = os.environ.get("MOTOX_UNKNOWN_SPEAKER", "friend")
-ENABLE_DIARIZATION = os.environ.get("MOTOX_DIARIZATION", "1") == "1"
+ENABLE_DIARIZATION = os.environ.get("MOTOX_DIARIZATION", "0") == "1"
 
 for directory in (INBOX_DIR, AUDIO_DIR, TRANSCRIPT_DIR, CONVERSATION_DIR, WORK_DIR, ERROR_DIR):
     directory.mkdir(parents=True, exist_ok=True)
@@ -399,20 +399,16 @@ def update_conversation(timestamp, chunk_type, final_audio, classification, tran
         }
         with conversation_path.open("w", encoding="utf-8") as file:
             file.write(f"# Moto X Conversation - {timestamp}\n\n")
-            file.write(f"**Started:** {timestamp}\n\n")
-            file.write(f"**Gap rule:** new conversation after {CONVERSATION_GAP_SECONDS}s without kept audio.\n\n")
     else:
         conversation_path = Path(state["active_path"])
         state["last_activity"] = timestamp
 
     with conversation_path.open("a", encoding="utf-8") as file:
-        file.write(f"## {timestamp} - {chunk_type}\n\n")
-        file.write(f"**Audio:** `{final_audio}`\n\n")
-        file.write(
-            f"**VAD:** speech={classification.get('speech_seconds')}s, "
-            f"rms={classification.get('rms')}, regions={classification.get('speech_regions')}\n\n"
-        )
-        file.write(transcript.strip() + "\n\n")
+        if chunk_type == "speech":
+            file.write(f"## {timestamp}\n\n")
+            file.write(transcript.strip() + "\n\n")
+        else:
+            file.write(f"<!-- {timestamp}: ambient audio kept; rms={classification.get('rms')} -->\n\n")
 
     save_conversation_state(state)
     return {
@@ -434,28 +430,17 @@ def write_transcript(
     conversation_info,
 ):
     md_path = TRANSCRIPT_DIR / f"{timestamp}_{chunk_type}.md"
-    metadata = {
-        "timestamp": timestamp,
-        "type": chunk_type,
-        "speaker": speaker,
-        "audio": str(final_audio),
-        "classification": classification,
-        "whisper": whisper_info,
-        "conversation": conversation_info,
-    }
-
     title = "Moto X speech transcript" if chunk_type == "speech" else "Moto X ambient audio"
     with md_path.open("w", encoding="utf-8") as file:
         file.write(f"# {title} - {timestamp}\n\n")
-        file.write(f"**Type:** {chunk_type}\n\n")
-        file.write(f"**Speaker:** {speaker}\n\n")
-        if conversation_info:
-            file.write(f"**Conversation:** `{conversation_info['path']}`\n\n")
-        file.write(f"**Audio:** `{final_audio}`\n\n")
-        file.write("```json\n")
-        file.write(json.dumps(metadata, indent=2))
-        file.write("\n```\n\n")
-        file.write(transcript.strip() + "\n")
+        if chunk_type == "speech":
+            file.write(transcript.strip() + "\n")
+        else:
+            file.write(
+                "Ambient audio was kept for review. "
+                f"RMS: {classification.get('rms')}; "
+                f"speech seconds: {classification.get('speech_seconds')}.\n"
+            )
     return md_path
 
 
@@ -577,6 +562,8 @@ def receive_audio():
                 whisper_segments, diarization_segments, speaker_mapping
             )
             receiver_log(f"[chunk {timestamp}] diarized: {list(speaker_mapping.values())}")
+        else:
+            transcript = f"**{speaker}:** {transcript.strip()}"
     else:
         transcript = "[ambient audio kept for review: traffic, room tone, music, or other non-silent context]"
         whisper_info = {}
