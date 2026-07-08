@@ -71,7 +71,7 @@ WHISPER_PROMPT = os.environ.get(
 # Gateway auto-ingest config
 GATEWAY_URL            = os.environ.get("CHIMERA_GATEWAY_URL",    "http://localhost:3000")
 GATEWAY_TOKEN          = os.environ.get("CHIMERA_GATEWAY_TOKEN",  "")
-GATEWAY_INGEST_ENABLED = os.environ.get("MOTOX_GATEWAY_INGEST", "1") == "1"
+GATEWAY_INGEST_ENABLED = os.environ.get("MOTOX_GATEWAY_INGEST", "0") == "1"
 
 # Diarization config — token must come from .env or system env
 HF_TOKEN = os.environ.get("HF_TOKEN", "")

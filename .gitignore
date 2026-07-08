@@ -95,6 +95,7 @@ Moto X/Ringtones/
 Moto X/.stfolder
 Moto X/.stversions/
 Moto X/phone-scripts/motox_record_log.md
+Moto X/phone-scripts/receiver_log.md
 Moto X/receiver_log.md
 
 # Windows launcher build artifact (resource.rc is tracked; .syso is compiled output)

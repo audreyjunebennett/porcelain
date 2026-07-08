@@ -1,1 +1,31 @@
-motox_audio_data
+#escape=\
+
+# Receiver output and queued phone audio.
+/motox_audio_data
+/phone-scripts/motox_chunk.aac
+/phone-scripts/motox_unsent
+/phone-scripts/motox_record_log.md
+/phone-scripts/receiver_log.md
+/receiver_log.md
+
+# Phone media and Android-managed folders should not sync through this repo.
+/Alarms
+/alt_autocycle
+/Android
+/bluetooth
+/Download
+/Movies
+/Music
+/Notifications
+/Pictures
+/Podcasts
+/Ringtones
+/RustDesk
+
+# Local/generated clutter.
+/.stversions
+/__pycache__
+/phone-scripts/.stversions
+/phone-scripts/__pycache__
+/desktop.ini
+/phone-scripts/desktop.ini
