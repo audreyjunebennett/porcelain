@@ -574,8 +574,14 @@ DASHBOARD_HTML = r"""<!doctype html>
     #recent { margin: 8vh 0 3rem; }
     .line { margin: 0 0 1.2rem; line-height: 1.45; }
     .time { color: #776f65; font-size: .72rem; margin-bottom: .2rem; }
-    footer { display: flex; justify-content: space-between; align-items: center; }
-    a { color: #aaa195; text-decoration: none; border: 1px solid #302d29; padding: .55rem .75rem; border-radius: 999px; }
+    footer { display: flex; justify-content: space-between; align-items: center; gap: .75rem; }
+    footer .actions { display: flex; gap: .45rem; }
+    a { box-sizing: border-box; color: #aaa195; text-decoration: none; border: 1px solid #302d29; padding: .55rem .75rem; border-radius: 999px; }
+    @media (max-width: 420px) {
+      footer { flex-direction: column; align-items: stretch; gap: .65rem; }
+      footer .actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: .5rem; }
+      footer a { display: block; padding: .55rem .45rem; text-align: center; white-space: nowrap; }
+    }
   </style>
 </head>
 <body><main>
@@ -583,7 +589,7 @@ DASHBOARD_HTML = r"""<!doctype html>
   <h1>Claudia is listening</h1>
   <div class="muted" id="counts">No chunks today yet</div>
   <section id="recent"><p class="muted">Recent words will appear here.</p></section>
-  <footer><span class="muted" id="updated"></span><span><a href="/review">teach Claudia</a> <a id="journal" href="#">today's journal</a></span></footer>
+  <footer><span class="muted" id="updated"></span><span class="actions"><a href="/review">teach Claudia</a><a id="journal" href="#">today's journal</a></span></footer>
 </main>
 <script>
 const escapeHtml = value => String(value).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));

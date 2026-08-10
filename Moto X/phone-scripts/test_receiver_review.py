@@ -49,6 +49,15 @@ class ReceiverReviewApiTests(unittest.TestCase):
         self.assertEqual("review-clip", response.get_json()[0]["capture_id"])
         response.close()
 
+    def test_dashboard_footer_stacks_actions_on_narrow_screens(self):
+        response = self.client.get("/dashboard")
+        self.assertEqual(200, response.status_code)
+        html = response.get_data(as_text=True)
+        self.assertIn('@media (max-width: 420px)', html)
+        self.assertIn('footer .actions { display: grid;', html)
+        self.assertIn('<span class="actions">', html)
+        response.close()
+
     def test_audio_supports_range_requests(self):
         response = self.client.get(
             "/api/motox/review/audio/review-clip", headers={"Range": "bytes=0-9"}
