@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#08070b">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="manifest" href="/dashboard-assets/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/dashboard-assets/apple-touch-icon.png">
+  <link rel="stylesheet" href="/dashboard-assets/review.css">
+  <title>Teach Claudia</title>
+</head>
+<body>
+  <main>
+    <header class="topbar">
+      <a class="back" href="/dashboard" aria-label="Back to Claudia">‹</a>
+      <div>
+        <p class="eyebrow">Moto X memory</p>
+        <h1>Teach Claudia</h1>
+      </div>
+      <button class="quiet" id="refresh" type="button">Refresh</button>
+    </header>
+
+    <section class="progress" aria-label="Labeled audio progress">
+      <div class="progress-heading">
+        <span>Voice library</span><span class="muted">first goal · 5 min each</span>
+      </div>
+      <div id="progress-people" class="people"></div>
+    </section>
+
+    <section class="queue-bar">
+      <label for="group">Review</label>
+      <select id="group"><option value="all">All suggestions</option></select>
+      <span id="position" class="muted">—</span>
+    </section>
+
+    <section id="empty" class="empty" hidden>
+      <p>No review clips are available in this group.</p>
+      <button id="older" type="button">Load older audio</button>
+    </section>
+
+    <article id="card" class="card" hidden>
+      <div class="card-head">
+        <div>
+          <p id="time" class="eyebrow"></p>
+          <p id="guess" class="guess">Unsorted voice</p>
+        </div>
+        <button id="skip" class="quiet" type="button">Skip ›</button>
+      </div>
+
+      <audio id="audio" controls preload="metadata"></audio>
+
+      <p class="instruction">Select words for one turn, or select nothing to label the whole clip.</p>
+      <div id="transcript" class="transcript" tabindex="0" aria-label="Selectable transcript"></div>
+      <div id="selection" class="selection muted">Whole clip selected</div>
+
+      <div class="label-section">
+        <p class="label-title">Who or what is this?</p>
+        <div class="label-grid" id="labels">
+          <button class="label ruby" data-type="speaker" data-label="Ruby">Ruby</button>
+          <button class="label lynn" data-type="speaker" data-label="Lynn">Lynn</button>
+          <button class="label raven" data-type="speaker" data-label="Raven">Raven</button>
+          <button class="label other" data-type="speaker" data-label="Other">Other</button>
+          <button class="label hahli" data-type="sound" data-label="Hahli">Hahli</button>
+          <button class="label lam" data-type="sound" data-label="Lam">Lam</button>
+          <button class="label subtle" data-type="sound" data-label="Television">TV</button>
+          <button class="label subtle" data-type="sound" data-label="Not speech">Not speech</button>
+          <button class="label subtle wide" data-type="overlap" data-label="Overlap">Overlapping voices</button>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="fix" type="button">Fix selected words</button>
+        <button id="next" class="primary" type="button">Next clip</button>
+      </div>
+      <div id="annotations" class="annotations"></div>
+      <p id="notice" class="notice" aria-live="polite"></p>
+    </article>
+  </main>
+
+  <dialog id="fix-dialog">
+    <form method="dialog" id="fix-form">
+      <p class="eyebrow">Correct transcript</p>
+      <p id="original" class="original"></p>
+      <label for="replacement">What should it say?</label>
+      <textarea id="replacement" rows="3" autocomplete="off"></textarea>
+      <div class="dialog-actions">
+        <button value="cancel">Cancel</button>
+        <button class="primary" id="save-fix" value="default">Save correction</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="/dashboard-assets/review.js"></script>
+</body>
+</html>

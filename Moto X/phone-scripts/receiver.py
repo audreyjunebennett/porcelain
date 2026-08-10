@@ -1,6 +1,7 @@
 import hashlib
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -21,10 +22,14 @@ except ImportError:
 import httpx
 import numpy as np
 import torch
-from flask import Flask, request
+from flask import Flask, Response, jsonify, request, send_file, send_from_directory
+
+from motox_review import MotoXReviewStore
+from motox_v1 import MotoXStore, event_from_receiver, legacy_capture_identity
 
 
 APP = Flask(__name__)
+DASHBOARD_ASSET_DIR = Path(__file__).resolve().parent / "dashboard_assets"
 
 BASE_DIR = Path(
     os.environ.get(
@@ -59,6 +64,9 @@ WHISPER_COMPUTE_TYPE = os.environ.get("MOTOX_WHISPER_COMPUTE_TYPE", "float16")
 FFMPEG_BIN = os.environ.get("MOTOX_FFMPEG_BIN", "ffmpeg")
 DEFAULT_SPEAKER = os.environ.get("MOTOX_DEFAULT_SPEAKER", "Ruby")
 CONVERSATION_GAP_SECONDS = int(os.environ.get("MOTOX_CONVERSATION_GAP_SECONDS", "120"))
+V1_ENABLED = os.environ.get("MOTOX_V1_ENABLED", "1") == "1"
+V1_DATABASE = Path(os.environ.get("MOTOX_V1_DATABASE", str(BASE_DIR / "motox_v1.sqlite3")))
+V1_DAILY_DIR = Path(os.environ.get("MOTOX_V1_DAILY_DIR", str(BASE_DIR / "daily")))
 WHISPER_PROMPT = os.environ.get(
     "MOTOX_WHISPER_PROMPT",
     (
@@ -77,12 +85,18 @@ GATEWAY_INGEST_ENABLED = os.environ.get("MOTOX_GATEWAY_INGEST", "0") == "1"
 HF_TOKEN = os.environ.get("HF_TOKEN", "")
 if not HF_TOKEN:
     print("  [!] WARNING: HF_TOKEN not set — diarization will fail. Add to D:\\Rebirth\\.env.", file=sys.stderr)
-PRIMARY_SPEAKER = os.environ.get("MOTOX_PRIMARY_SPEAKER", "Ruby")
 UNKNOWN_SPEAKER = os.environ.get("MOTOX_UNKNOWN_SPEAKER", "friend")
 ENABLE_DIARIZATION = os.environ.get("MOTOX_DIARIZATION", "0") == "1"
 
 for directory in (INBOX_DIR, AUDIO_DIR, TRANSCRIPT_DIR, CONVERSATION_DIR, WORK_DIR, ERROR_DIR):
     directory.mkdir(parents=True, exist_ok=True)
+
+V1_STORE = (
+    MotoXStore(V1_DATABASE, V1_DAILY_DIR, gap_seconds=CONVERSATION_GAP_SECONDS)
+    if V1_ENABLED
+    else None
+)
+REVIEW_STORE = MotoXReviewStore(V1_DATABASE) if V1_STORE is not None else None
 
 print("Loading Silero VAD model...")
 torch.set_num_threads(1)
@@ -124,6 +138,54 @@ def parse_timestamp(timestamp):
 def safe_suffix(filename):
     suffix = Path(filename or "").suffix.lower()
     return suffix if suffix in ALLOWED_SUFFIXES else ".m4a"
+
+
+CAPTURE_ID_RE = re.compile(r"^[A-Za-z0-9_.-]{1,100}$")
+CAPTURE_TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}$")
+
+
+def safe_capture_id(value, fallback):
+    value = (value or "").strip()
+    return value if CAPTURE_ID_RE.fullmatch(value) else fallback
+
+
+def safe_capture_timestamp(value, fallback):
+    value = (value or "").strip()
+    if not CAPTURE_TIMESTAMP_RE.fullmatch(value):
+        return fallback
+    try:
+        parse_timestamp(value)
+    except ValueError:
+        return fallback
+    return value
+
+
+def record_v1_chunk(capture_id, captured_at, kind, classification, audio_path, transcript, speaker):
+    if V1_STORE is None:
+        return None
+    try:
+        result = V1_STORE.record_chunk(
+            event_from_receiver(
+                capture_id,
+                captured_at,
+                kind,
+                classification,
+                audio_path,
+                transcript,
+                speaker,
+            )
+        )
+        if result.get("closed_conversation_id"):
+            receiver_log(
+                f"[chunk {capture_id}] v1 finalized: "
+                f"{result['closed_conversation_id']}"
+            )
+        return result
+    except Exception as exc:
+        # Journal projection is additive during the v1 rollout. Never sacrifice
+        # an audio upload because its projection failed.
+        receiver_log(f"[chunk {capture_id}] v1 journal error: {exc}")
+        return None
 
 
 def run_ffmpeg_to_wav(source_path, wav_path):
@@ -292,11 +354,11 @@ def diarize_audio(wav_tensor):
 
 
 def map_speakers(diarization_segments):
-    """Map pyannote speaker IDs to human names.
+    """Give diarization clusters anonymous display names.
 
-    Heuristic: the speaker with the most total speech time is PRIMARY_SPEAKER
-    (Ruby), since she is wearing the lav mic. Others get UNKNOWN_SPEAKER
-    (friend) if only one other speaker, or friend_1 / friend_2 etc. if several.
+    Identity is a separate evidence-backed layer. Duration, microphone
+    proximity, and ordering never turn an anonymous cluster into Ruby, Lynn,
+    Raven, or another known identity.
     """
     if not diarization_segments:
         return {}
@@ -305,14 +367,11 @@ def map_speakers(diarization_segments):
     for start, end, sp in diarization_segments:
         speech_time[sp] = speech_time.get(sp, 0.0) + (end - start)
 
-    sorted_speakers = sorted(speech_time, key=lambda s: -speech_time[s])
-    n_others = len(sorted_speakers) - 1
-
-    mapping = {sorted_speakers[0]: PRIMARY_SPEAKER}
-    for i, sp in enumerate(sorted_speakers[1:], 1):
-        mapping[sp] = f"friend_{i}" if n_others > 1 else UNKNOWN_SPEAKER
-
-    return mapping
+    sorted_speakers = sorted(speech_time, key=lambda speaker: str(speaker))
+    return {
+        speaker: f"Voice {chr(65 + index)}"
+        for index, speaker in enumerate(sorted_speakers)
+    }
 
 
 def format_diarized_transcript(whisper_segments, diarization_segments, speaker_mapping):
@@ -470,12 +529,12 @@ def _ingest_to_gateway(path: Path, project: str = "transcripts"):
             )
             if resp.status_code == 200:
                 chunks = resp.json().get("chunks", "?")
-                receiver_log(f"✓ gateway ingested {path.name} → {chunks} chunks [{project}]")
+                receiver_log(f"OK gateway ingested {path.name} -> {chunks} chunks [{project}]")
             else:
                 body = (resp.text or "")[:200]
-                receiver_log(f"✗ gateway ingest HTTP {resp.status_code} for {path.name}: {body}")
+                receiver_log(f"ERROR gateway ingest HTTP {resp.status_code} for {path.name}: {body}")
     except Exception as exc:
-        receiver_log(f"✗ gateway ingest failed ({path.name}): {exc}")
+        receiver_log(f"ERROR gateway ingest failed ({path.name}): {exc}")
 
 
 def ingest_if_gateway(path: Path, project: str = "transcripts"):
@@ -486,6 +545,226 @@ def ingest_if_gateway(path: Path, project: str = "transcripts"):
             args=(path, project),
             daemon=True,
         ).start()
+
+
+DASHBOARD_HTML = r"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#09070d">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Claudia">
+  <link rel="manifest" href="/dashboard-assets/manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="32x32" href="/dashboard-assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/dashboard-assets/apple-touch-icon.png">
+  <title>Claudia</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; }
+    body { margin: 0; background: #000; color: #ddd8cf; min-height: 100vh; }
+    main { max-width: 34rem; margin: auto; padding: 8vh 1.25rem 3rem; }
+    header { display: flex; align-items: center; gap: .65rem; color: #a99f91; }
+    #dot { width: .55rem; height: .55rem; border-radius: 50%; background: #777; }
+    #dot.healthy { background: #78b892; box-shadow: 0 0 .6rem #78b89277; }
+    #dot.late { background: #c9a55b; }
+    #dot.stale { background: #b96b68; }
+    h1 { font-size: 1.3rem; font-weight: 500; margin: 1.2rem 0 .2rem; }
+    .muted { color: #776f65; font-size: .82rem; }
+    #recent { margin: 8vh 0 3rem; }
+    .line { margin: 0 0 1.2rem; line-height: 1.45; }
+    .time { color: #776f65; font-size: .72rem; margin-bottom: .2rem; }
+    footer { display: flex; justify-content: space-between; align-items: center; }
+    a { color: #aaa195; text-decoration: none; border: 1px solid #302d29; padding: .55rem .75rem; border-radius: 999px; }
+  </style>
+</head>
+<body><main>
+  <header><span id="dot"></span><span id="health">waiting for a capture</span></header>
+  <h1>Claudia is listening</h1>
+  <div class="muted" id="counts">No chunks today yet</div>
+  <section id="recent"><p class="muted">Recent words will appear here.</p></section>
+  <footer><span class="muted" id="updated"></span><span><a href="/review">teach Claudia</a> <a id="journal" href="#">today's journal</a></span></footer>
+</main>
+<script>
+const escapeHtml = value => String(value).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+const renderTranscript = value => escapeHtml(value)
+  .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
+  .replaceAll('\n', '<br>');
+async function refresh() {
+  try {
+    const [status, recent] = await Promise.all([
+      fetch('/api/motox/status').then(r => r.json()),
+      fetch('/api/motox/recent?limit=4').then(r => r.json())
+    ]);
+    const dot = document.querySelector('#dot');
+    dot.className = status.capture_health;
+    document.querySelector('#health').textContent = status.capture_health === 'healthy' ? 'capture is healthy' : `capture is ${status.capture_health}`;
+    const c = status.today_counts || {};
+    const queue = status.recorder ? ` · ${status.recorder.queue_depth} queued` : '';
+    document.querySelector('#counts').textContent = `${c.speech || 0} speech · ${c.ambient || 0} ambient · ${c.silence || 0} silent${queue}`;
+    document.querySelector('#journal').href = `/api/motox/journal/${status.today}`;
+    document.querySelector('#recent').innerHTML = recent.length ? recent.map(row => `<div class="line"><div class="time">${escapeHtml(row.captured_at.slice(11).replaceAll('-', ':'))}</div>${renderTranscript(row.transcript)}</div>`).join('') : '<p class="muted">Recent words will appear here.</p>';
+    document.querySelector('#updated').textContent = `updated ${new Date().toLocaleTimeString([], {hour:'numeric', minute:'2-digit'})}`;
+  } catch (_) {
+    document.querySelector('#health').textContent = 'receiver unavailable';
+    document.querySelector('#dot').className = 'stale';
+  }
+}
+refresh(); setInterval(refresh, 10000);
+</script></body></html>"""
+
+
+@APP.route("/dashboard-assets/<path:filename>", methods=["GET"])
+def dashboard_asset(filename):
+    return send_from_directory(DASHBOARD_ASSET_DIR, filename, max_age=86400)
+
+
+@APP.route("/dashboard", methods=["GET"])
+def dashboard():
+    return Response(DASHBOARD_HTML, mimetype="text/html")
+
+
+@APP.route("/review", methods=["GET"])
+def motox_review_page():
+    return send_from_directory(DASHBOARD_ASSET_DIR, "review.html")
+
+
+@APP.route("/api/motox/status", methods=["GET"])
+def motox_status():
+    if V1_STORE is None:
+        return jsonify({"error": "Moto X v1 journal is disabled"}), 503
+    return jsonify(V1_STORE.status())
+
+
+@APP.route("/api/motox/recent", methods=["GET"])
+def motox_recent():
+    if V1_STORE is None:
+        return jsonify([])
+    try:
+        limit = int(request.args.get("limit", "4"))
+    except ValueError:
+        limit = 4
+    return jsonify(V1_STORE.recent_transcript(limit))
+
+
+@APP.route("/api/motox/review/candidates", methods=["GET"])
+def motox_review_candidates():
+    if REVIEW_STORE is None:
+        return jsonify({"error": "Moto X review is disabled"}), 503
+    try:
+        limit = int(request.args.get("limit", "24"))
+        target_seconds = float(request.args.get("target_seconds", "300"))
+        before = request.args.get("before") or None
+        group = request.args.get("group") or None
+        if before is not None and not CAPTURE_TIMESTAMP_RE.fullmatch(before):
+            raise ValueError("invalid before timestamp")
+        return jsonify(
+            REVIEW_STORE.candidates(
+                limit=limit,
+                target_seconds=target_seconds,
+                before=before,
+                group=group,
+            )
+        )
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@APP.route("/api/motox/review/progress", methods=["GET"])
+def motox_review_progress():
+    if REVIEW_STORE is None:
+        return jsonify({"error": "Moto X review is disabled"}), 503
+    return jsonify(REVIEW_STORE.progress())
+
+
+@APP.route("/api/motox/review/groups", methods=["GET"])
+def motox_review_groups():
+    if REVIEW_STORE is None:
+        return jsonify({"error": "Moto X review is disabled"}), 503
+    return jsonify(REVIEW_STORE.groups())
+
+
+@APP.route("/api/motox/review/audio/<capture_id>", methods=["GET"])
+def motox_review_audio(capture_id):
+    if REVIEW_STORE is None or not CAPTURE_ID_RE.fullmatch(capture_id):
+        return "audio not found", 404
+    audio_path = REVIEW_STORE.get_audio_path(capture_id)
+    if audio_path is None:
+        return "audio not found", 404
+    try:
+        audio_path.resolve().relative_to(AUDIO_DIR.resolve())
+    except ValueError:
+        return "audio not found", 404
+    return send_file(audio_path, conditional=True, download_name=audio_path.name)
+
+
+@APP.route("/api/motox/review/annotations", methods=["POST"])
+def motox_review_annotation():
+    if REVIEW_STORE is None:
+        return jsonify({"error": "Moto X review is disabled"}), 503
+    payload = request.get_json(silent=True) or {}
+    capture_id = str(payload.get("capture_id", ""))
+    if not CAPTURE_ID_RE.fullmatch(capture_id):
+        return jsonify({"error": "invalid capture id"}), 400
+    try:
+        annotation = REVIEW_STORE.add_annotation(
+            capture_id=capture_id,
+            start_char=int(payload.get("start_char", 0)),
+            end_char=int(payload.get("end_char", 0)),
+            annotation_type=str(payload.get("annotation_type", "")),
+            label=payload.get("label"),
+            replacement_text=payload.get("replacement_text"),
+        )
+        return jsonify(annotation), 201
+    except KeyError:
+        return jsonify({"error": "unknown capture"}), 404
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@APP.route("/api/motox/review/annotations/<annotation_id>", methods=["DELETE"])
+def motox_review_annotation_revert(annotation_id):
+    if REVIEW_STORE is None:
+        return jsonify({"error": "Moto X review is disabled"}), 503
+    if not re.fullmatch(r"[a-f0-9]{32}", annotation_id):
+        return jsonify({"error": "invalid annotation id"}), 400
+    if not REVIEW_STORE.revert_annotation(annotation_id):
+        return jsonify({"error": "active annotation not found"}), 404
+    return jsonify({"ok": True})
+
+
+@APP.route("/api/motox/recorder-status", methods=["POST"])
+def motox_recorder_status():
+    if V1_STORE is None:
+        return jsonify({"error": "Moto X v1 journal is disabled"}), 503
+    payload = request.get_json(silent=True) or {}
+    try:
+        reported_at = safe_capture_timestamp(
+            payload.get("reported_at"), timestamp_now()
+        )
+        queue_depth = max(0, int(payload.get("queue_depth", 0)))
+        cycle = payload.get("cycle_seconds")
+        cycle_seconds = float(cycle) if cycle is not None else None
+        V1_STORE.update_recorder_status(
+            reported_at,
+            str(payload.get("recorder", "unknown"))[:40],
+            queue_depth,
+            cycle_seconds,
+        )
+    except (TypeError, ValueError):
+        return jsonify({"error": "invalid recorder status"}), 400
+    return jsonify({"ok": True})
+
+
+@APP.route("/api/motox/journal/<day>", methods=["GET"])
+def motox_journal(day):
+    if V1_STORE is None:
+        return "Moto X v1 journal is disabled", 503
+    try:
+        content = V1_STORE.journal_text(day)
+    except ValueError:
+        return "invalid date; expected YYYY-MM-DD", 400
+    return Response(content, mimetype="text/markdown")
 
 
 @APP.route("/ping", methods=["GET"])
@@ -499,11 +778,24 @@ def receive_audio():
     if not upload:
         return "no audio", 400
 
-    timestamp = timestamp_now()
+    received_timestamp = timestamp_now()
+    legacy_identity = legacy_capture_identity(upload.filename)
+    legacy_capture_id = legacy_identity[0] if legacy_identity else None
+    legacy_captured_at = legacy_identity[1] if legacy_identity else None
+    captured_at = safe_capture_timestamp(
+        request.form.get("captured_at") or legacy_captured_at, received_timestamp
+    )
+    capture_id = safe_capture_id(
+        request.form.get("capture_id") or legacy_capture_id, captured_at
+    )
+    if V1_STORE is not None and V1_STORE.has_chunk(capture_id):
+        receiver_log(f"[chunk {capture_id}] duplicate upload acknowledged")
+        return "already received", 200
+
     speaker = request.form.get("speaker", DEFAULT_SPEAKER).strip() or DEFAULT_SPEAKER
     suffix = safe_suffix(upload.filename)
-    incoming_path = INBOX_DIR / f"{timestamp}_upload{suffix}"
-    wav_path = WORK_DIR / f"{timestamp}_16k.wav"
+    incoming_path = INBOX_DIR / f"{capture_id}_upload{suffix}"
+    wav_path = WORK_DIR / f"{capture_id}_16k.wav"
     upload.save(incoming_path)
 
     try:
@@ -515,14 +807,14 @@ def receive_audio():
             "ffmpeg was not found on the PC. Install ffmpeg or set "
             "MOTOX_FFMPEG_BIN to the full path of ffmpeg.exe."
         )
-        receiver_log(f"[chunk {timestamp}] {message}")
+        receiver_log(f"[chunk {capture_id}] {message}")
         return message, 500
     if conversion.returncode != 0 or not wav_path.exists() or wav_path.stat().st_size < 1000:
         error_path = ERROR_DIR / incoming_path.name
         incoming_path.replace(error_path)
         if wav_path.exists():
             wav_path.unlink()
-        receiver_log(f"[chunk {timestamp}] ffmpeg failed: {conversion.stderr.strip()}")
+        receiver_log(f"[chunk {capture_id}] ffmpeg failed: {conversion.stderr.strip()}")
         return f"ffmpeg failed: {conversion.stderr.strip()}", 422
 
     wav_tensor = None
@@ -540,15 +832,18 @@ def receive_audio():
         }
 
     chunk_type = classification["type"]
-    receiver_log(f"[chunk {timestamp}] classified as {chunk_type.upper()} {classification}")
+    receiver_log(f"[chunk {capture_id}] classified as {chunk_type.upper()} {classification}")
 
     if chunk_type == "silence":
+        record_v1_chunk(
+            capture_id, captured_at, chunk_type, classification, None, "", speaker
+        )
         incoming_path.unlink(missing_ok=True)
         wav_path.unlink(missing_ok=True)
-        append_silence_log(timestamp, classification)
+        append_silence_log(captured_at, classification)
         return "silence discarded", 200
 
-    final_audio = AUDIO_DIR / f"{timestamp}_{chunk_type}{suffix}"
+    final_audio = AUDIO_DIR / f"{capture_id}_{chunk_type}{suffix}"
     incoming_path.replace(final_audio)
 
     if chunk_type == "speech":
@@ -561,7 +856,7 @@ def receive_audio():
             transcript = format_diarized_transcript(
                 whisper_segments, diarization_segments, speaker_mapping
             )
-            receiver_log(f"[chunk {timestamp}] diarized: {list(speaker_mapping.values())}")
+            receiver_log(f"[chunk {capture_id}] diarized: {list(speaker_mapping.values())}")
         else:
             transcript = f"**{speaker}:** {transcript.strip()}"
     else:
@@ -569,7 +864,7 @@ def receive_audio():
         whisper_info = {}
 
     conversation_info = update_conversation(
-        timestamp,
+        captured_at,
         chunk_type,
         final_audio,
         classification,
@@ -577,7 +872,7 @@ def receive_audio():
         speaker,
     )
     md_path = write_transcript(
-        timestamp,
+        capture_id,
         chunk_type,
         final_audio,
         classification,
@@ -586,13 +881,22 @@ def receive_audio():
         speaker,
         conversation_info,
     )
+    record_v1_chunk(
+        capture_id,
+        captured_at,
+        chunk_type,
+        classification,
+        final_audio,
+        transcript,
+        speaker,
+    )
     wav_path.unlink(missing_ok=True)
 
-    receiver_log(f"[chunk {timestamp}] ✓ saved audio: {final_audio}")
-    receiver_log(f"[chunk {timestamp}] ✓ transcript: {md_path}")
+    receiver_log(f"[chunk {capture_id}] OK saved audio: {final_audio}")
+    receiver_log(f"[chunk {capture_id}] OK transcript: {md_path}")
     if conversation_info:
         conv_path = Path(conversation_info["path"])
-        receiver_log(f"[chunk {timestamp}] ✓ conversation: {conv_path}")
+        receiver_log(f"[chunk {capture_id}] OK conversation: {conv_path}")
         ingest_if_gateway(conv_path, "transcripts")
 
     return "ok", 200

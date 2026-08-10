@@ -79,8 +79,11 @@ Journal_Database/
 
 # Moto X data folders, phone media, Syncthing state (scripts in phone-scripts/ are tracked)
 Moto X/motox_audio_data/
+# Private real-voice enrollment, evaluation, and derived diarization artifacts.
+Moto X/diarization_data/
 Moto X/phone-scripts/motox_chunk.aac
 Moto X/phone-scripts/motox_unsent/
+Moto X/phone-scripts/motox_v2_queue/
 Moto X/alt_autocycle/
 Moto X/Alarms/
 Moto X/Android/
@@ -95,8 +98,14 @@ Moto X/Ringtones/
 Moto X/.stfolder
 Moto X/.stversions/
 Moto X/phone-scripts/motox_record_log.md
+Moto X/phone-scripts/motox_record_v2_log.md
+Moto X/phone-scripts/motox_record_v2.lock
 Moto X/phone-scripts/receiver_log.md
 Moto X/receiver_log.md
+
+# Local generated caches, smoke-test artifacts, and private provider exports.
+.tmp/
+takeout-*.zip
 
 # Windows launcher build artifact (resource.rc is tracked; .syso is compiled output)
 chimera/cmd/porcelain/rsrc.syso

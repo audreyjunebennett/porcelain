@@ -39,3 +39,5 @@ Durable contracts for new binaries, wrappers, and cross-cutting integration — 
 | [Operator provider model availability](operator-provider-model-availability.md) | Tenant-scoped upstream model enable/disable; catalog filter | Operator SQLite, settings provider cards | `current` |
 | [Operator log message registry](operator-log-message-registry.md) | Canonical log slugs + operator copy in YAML; generated JS/Go constants | `internal/operatorcopy`, settings UI | `current` |
 | [Context window admission](context-window-admission.md) | Pre-upstream context/body limits; retriable `request_too_large` fallback | Chat routing, `providerlimits` | `partial` |
+| [Moto X receiver manager](moto-x-receiver-manager.md) | Hidden login startup, failure restart, duplicate protection, and Claudia tray controls | Moto X receiver, Windows | `current` |
+| [Moto X review and corrections](moto-x-review-and-corrections.md) | Phone-first audio review, reversible transcript labels, and anonymous voice-group proposals | Moto X review UI, SQLite, offline audio worker | `partial` |

@@ -4,7 +4,10 @@
 /motox_audio_data
 /phone-scripts/motox_chunk.aac
 /phone-scripts/motox_unsent
+/phone-scripts/motox_v2_queue
 /phone-scripts/motox_record_log.md
+/phone-scripts/motox_record_v2_log.md
+/phone-scripts/motox_record_v2.lock
 /phone-scripts/receiver_log.md
 /receiver_log.md
 

@@ -54,6 +54,7 @@ These plans are complete. Read the linked feature record for as-built behavior.
 | Plan | Feature record(s) |
 |------|-------------------|
 | [operator-embed-ui-mobile-layout.md](operator-embed-ui-mobile-layout.md) | [operator-embed-ui-mobile-layout](../features/operator-embed-ui-mobile-layout.md) (`active` — Phases 1–3 shipped) |
+| [moto-x-roadmap.md](moto-x-roadmap.md) | Active v1: capture integrity, daily journal, status surface, Chimera memory, and Claudia modes |
 
 ---
 
