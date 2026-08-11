@@ -11,6 +11,7 @@ import threading
 import uuid
 from contextlib import contextmanager
 from datetime import datetime
+from math import isfinite
 from pathlib import Path
 from typing import Any
 
@@ -60,6 +61,8 @@ class MotoXReviewStore:
                     start_char INTEGER NOT NULL,
                     end_char INTEGER NOT NULL,
                     selected_text TEXT NOT NULL DEFAULT '',
+                    audio_start_seconds REAL,
+                    audio_end_seconds REAL,
                     annotation_type TEXT NOT NULL,
                     label TEXT,
                     replacement_text TEXT,
@@ -70,6 +73,18 @@ class MotoXReviewStore:
                 )
                 """
             )
+            annotation_columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(review_annotations)")
+            }
+            if "audio_start_seconds" not in annotation_columns:
+                connection.execute(
+                    "ALTER TABLE review_annotations ADD COLUMN audio_start_seconds REAL"
+                )
+            if "audio_end_seconds" not in annotation_columns:
+                connection.execute(
+                    "ALTER TABLE review_annotations ADD COLUMN audio_end_seconds REAL"
+                )
             connection.execute(
                 """
                 CREATE INDEX IF NOT EXISTS idx_review_annotations_capture_active
@@ -226,6 +241,8 @@ class MotoXReviewStore:
         selected_text: str = "",
         label: str | None = None,
         replacement_text: str | None = None,
+        audio_start_seconds: float | None = None,
+        audio_end_seconds: float | None = None,
     ) -> dict[str, Any]:
         annotation_type = str(annotation_type).strip().lower()
         if annotation_type not in ANNOTATION_TYPES:
@@ -237,15 +254,37 @@ class MotoXReviewStore:
 
         with self._write_lock, self._connect() as connection:
             chunk = connection.execute(
-                "SELECT transcript FROM chunks WHERE capture_id = ?", (capture_id,)
+                "SELECT transcript, duration_seconds FROM chunks WHERE capture_id = ?",
+                (capture_id,),
             ).fetchone()
             if not chunk:
                 raise KeyError("unknown capture")
             transcript = chunk["transcript"] or ""
+
+            has_audio_start = audio_start_seconds is not None
+            has_audio_end = audio_end_seconds is not None
+            if has_audio_start != has_audio_end:
+                raise ValueError("audio range requires both start and end times")
+            if has_audio_start:
+                audio_start_seconds = float(audio_start_seconds)
+                audio_end_seconds = float(audio_end_seconds)
+                if not isfinite(audio_start_seconds) or not isfinite(audio_end_seconds):
+                    raise ValueError("audio range times must be finite")
+                duration = max(0.0, float(chunk["duration_seconds"] or 30.0))
+                audio_start_seconds = max(0.0, audio_start_seconds)
+                audio_end_seconds = min(duration, audio_end_seconds)
+                if audio_end_seconds <= audio_start_seconds:
+                    raise ValueError("audio range end must be after its start")
+                audio_start_seconds = round(audio_start_seconds, 3)
+                audio_end_seconds = round(audio_end_seconds, 3)
+
             start_char = max(0, int(start_char))
             end_char = min(len(transcript), int(end_char))
             if end_char <= start_char:
-                start_char, end_char = 0, len(transcript)
+                if has_audio_start:
+                    start_char, end_char = 0, 0
+                else:
+                    start_char, end_char = 0, len(transcript)
             selected_text = transcript[start_char:end_char]
             annotation = {
                 "annotation_id": uuid.uuid4().hex,
@@ -253,6 +292,8 @@ class MotoXReviewStore:
                 "start_char": start_char,
                 "end_char": end_char,
                 "selected_text": selected_text,
+                "audio_start_seconds": audio_start_seconds,
+                "audio_end_seconds": audio_end_seconds,
                 "annotation_type": annotation_type,
                 "label": label,
                 "replacement_text": (
@@ -266,9 +307,9 @@ class MotoXReviewStore:
                 """
                 INSERT INTO review_annotations (
                     annotation_id, capture_id, start_char, end_char, selected_text,
-                    annotation_type, label, replacement_text, source, created_at,
-                    reverted_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    audio_start_seconds, audio_end_seconds, annotation_type, label,
+                    replacement_text, source, created_at, reverted_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 tuple(annotation.values()),
             )
@@ -293,8 +334,20 @@ class MotoXReviewStore:
                 """
                 SELECT a.label, a.capture_id,
                        MAX(COALESCE(c.speech_seconds, c.duration_seconds, 30.0)) AS speech_seconds,
+                       MAX(COALESCE(c.duration_seconds, 30.0)) AS duration_seconds,
                        MAX(length(c.transcript)) AS transcript_chars,
-                       SUM(MAX(1, a.end_char - a.start_char)) AS labeled_chars
+                       SUM(CASE
+                           WHEN a.audio_start_seconds IS NOT NULL
+                            AND a.audio_end_seconds IS NOT NULL
+                           THEN MAX(0.0, a.audio_end_seconds - a.audio_start_seconds)
+                           ELSE 0.0
+                       END) AS timed_seconds,
+                       SUM(CASE
+                           WHEN a.audio_start_seconds IS NULL
+                             OR a.audio_end_seconds IS NULL
+                           THEN MAX(1, a.end_char - a.start_char)
+                           ELSE 0
+                       END) AS labeled_chars
                 FROM review_annotations a
                 JOIN chunks c ON c.capture_id = a.capture_id
                 WHERE a.reverted_at IS NULL
@@ -311,7 +364,11 @@ class MotoXReviewStore:
                     float(row["labeled_chars"] or 0.0)
                     / max(1.0, float(row["transcript_chars"] or 0.0)),
                 )
-                seconds[label] += float(row["speech_seconds"] or 0.0) * fraction
+                estimated = float(row["speech_seconds"] or 0.0) * fraction
+                timed = float(row["timed_seconds"] or 0.0)
+                seconds[label] += min(
+                    float(row["duration_seconds"] or 30.0), timed + estimated
+                )
                 counts[label] += 1
         return {
             label: {"seconds": round(seconds[label], 1), "clips": counts[label]}

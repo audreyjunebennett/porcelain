@@ -1,3 +1,4 @@
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -64,6 +65,83 @@ class MotoXReviewStoreTests(unittest.TestCase):
         self.assertEqual("mine chat", annotation["selected_text"])
         self.assertEqual("Minecraft", annotation["replacement_text"])
         self.assertIn("mine chat", self.review.candidates()[0]["transcript"])
+
+    def test_audio_range_annotation_can_overlap_text_and_counts_exact_time(self):
+        annotation = self.review.add_annotation(
+            capture_id="clip-1",
+            start_char=0,
+            end_char=4,
+            annotation_type="speaker",
+            label="Ruby",
+            audio_start_seconds=3.25,
+            audio_end_seconds=8.75,
+        )
+        self.assertEqual(3.25, annotation["audio_start_seconds"])
+        self.assertEqual(8.75, annotation["audio_end_seconds"])
+        self.assertEqual("Ruby", annotation["selected_text"])
+        self.assertEqual(5.5, self.review.progress()["Ruby"]["seconds"])
+
+        music = self.review.add_annotation(
+            capture_id="clip-1",
+            start_char=0,
+            end_char=0,
+            annotation_type="sound",
+            label="Music",
+            audio_start_seconds=3.25,
+            audio_end_seconds=8.75,
+        )
+        self.assertEqual("", music["selected_text"])
+        annotations = self.review.candidates()[0]["annotations"]
+        self.assertEqual({"Ruby", "Music"}, {row["label"] for row in annotations})
+
+    def test_audio_range_requires_a_forward_finite_pair(self):
+        with self.assertRaises(ValueError):
+            self.review.add_annotation(
+                capture_id="clip-1",
+                start_char=0,
+                end_char=0,
+                annotation_type="sound",
+                label="Music",
+                audio_start_seconds=8,
+                audio_end_seconds=3,
+            )
+
+    def test_existing_annotation_table_migrates_additively(self):
+        root = Path(self.temp.name)
+        database = root / "legacy-review.sqlite3"
+        MotoXStore(database, root / "legacy-daily")
+        connection = sqlite3.connect(database)
+        try:
+            connection.execute(
+                """
+                CREATE TABLE review_annotations (
+                    annotation_id TEXT PRIMARY KEY,
+                    capture_id TEXT NOT NULL,
+                    start_char INTEGER NOT NULL,
+                    end_char INTEGER NOT NULL,
+                    selected_text TEXT NOT NULL DEFAULT '',
+                    annotation_type TEXT NOT NULL,
+                    label TEXT,
+                    replacement_text TEXT,
+                    source TEXT NOT NULL DEFAULT 'human',
+                    created_at TEXT NOT NULL,
+                    reverted_at TEXT
+                )
+                """
+            )
+            connection.commit()
+        finally:
+            connection.close()
+        MotoXReviewStore(database)
+        connection = sqlite3.connect(database)
+        try:
+            columns = {
+                row[1] for row in connection.execute("PRAGMA table_info(review_annotations)")
+            }
+        finally:
+            connection.close()
+        self.assertIn("audio_start_seconds", columns)
+        self.assertIn("audio_end_seconds", columns)
 
     def test_rejects_unknown_labels(self):
         with self.assertRaises(ValueError):

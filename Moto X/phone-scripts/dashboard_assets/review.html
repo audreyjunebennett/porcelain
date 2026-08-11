@@ -50,7 +50,19 @@
 
       <audio id="audio" controls preload="metadata"></audio>
 
-      <p class="instruction">Select words for one turn, or select nothing to label the whole clip.</p>
+      <div class="audio-range-picker" aria-label="Audio time selection">
+        <div class="audio-range-status">
+          <span>Audio selection</span>
+          <strong id="audio-range">Whole clip</strong>
+        </div>
+        <div class="audio-range-actions">
+          <button id="range-start" type="button">Start here</button>
+          <button id="range-end" type="button">End here</button>
+          <button id="range-clear" class="quiet-range" type="button">Clear</button>
+        </div>
+      </div>
+
+      <p class="instruction">Select words, an audio range, or both. Labels can overlap.</p>
       <div id="transcript" class="transcript" tabindex="0" aria-label="Selectable transcript"></div>
       <div id="selection" class="selection muted">Whole clip selected</div>
 
@@ -64,6 +76,7 @@
           <button class="label hahli" data-type="sound" data-label="Hahli">Hahli</button>
           <button class="label lam" data-type="sound" data-label="Lam">Lam</button>
           <button class="label subtle" data-type="sound" data-label="Television">TV</button>
+          <button class="label subtle" data-type="sound" data-label="Music">Music</button>
           <button class="label subtle" data-type="sound" data-label="Not speech">Not speech</button>
           <button class="label subtle wide" data-type="overlap" data-label="Overlap">Overlapping voices</button>
         </div>

@@ -21,6 +21,10 @@ annotations. Model guesses remain separate from accepted human labels.
   original audio with range support for phone seeking.
 - Selecting transcript text scopes the next label or correction. With no text
   selected, the action applies to the complete capture.
+- Audio can also be scoped independently: scrub to a point, set a start, scrub
+  forward, and set an end. A correction may carry a text span, an audio span,
+  both, or neither; multiple labels may overlap the same seconds so speech over
+  music is represented without flattening either event.
 - Quick labels include Ruby, Lynn, Raven, Other, Hahli, Lam, television, not
   speech, overlap, Ruby singing, and played music/song.
 - New people can receive a named speaker profile through an explicit
@@ -52,7 +56,9 @@ Git-ignored `Moto X/diarization_data/` tree. It never assigns household names.
 
 The existing Moto X SQLite database gains two additive tables:
 
-- `review_annotations`: active and reverted human corrections.
+- `review_annotations`: active and reverted human corrections, with optional
+  `audio_start_seconds` and `audio_end_seconds`. Existing databases add these
+  columns in place without rewriting earlier text-only annotations.
 - `review_proposals`: versioned model/cluster guesses and provenance.
 
 The original `chunks.transcript`, source audio, timestamps, and conversation

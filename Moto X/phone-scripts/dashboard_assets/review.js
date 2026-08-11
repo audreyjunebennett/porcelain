@@ -2,6 +2,7 @@ const state = {
   items: [],
   index: 0,
   selection: null,
+  audioSelection: {start: null, end: null},
   group: "all",
   before: null,
 };
@@ -9,10 +10,24 @@ const state = {
 const $ = selector => document.querySelector(selector);
 const transcript = $("#transcript");
 const notice = $("#notice");
+const audio = $("#audio");
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>'"]/g, character => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;",
+  })[character]);
+}
 
 function formatDuration(seconds) {
   const value = Math.max(0, Math.round(Number(seconds) || 0));
   return `${Math.floor(value / 60)}:${String(value % 60).padStart(2, "0")}`;
+}
+
+function formatTimestamp(seconds) {
+  const value = Math.max(0, Number(seconds) || 0);
+  const minutes = Math.floor(value / 60);
+  const remainder = (value % 60).toFixed(1).padStart(4, "0");
+  return `${minutes}:${remainder}`;
 }
 
 function current() { return state.items[state.index]; }
@@ -43,11 +58,63 @@ function renderGroups(groups) {
 
 function renderAnnotations(item) {
   $("#annotations").innerHTML = (item.annotations || []).map(annotation => {
+    const hasAudioRange = annotation.audio_start_seconds != null && annotation.audio_end_seconds != null;
+    const range = hasAudioRange
+      ? `${formatTimestamp(annotation.audio_start_seconds)}–${formatTimestamp(annotation.audio_end_seconds)}`
+      : "";
+    const text = annotation.selected_text ? `“${annotation.selected_text}”` : "";
+    const scope = [range, text].filter(Boolean).join(" · ") || "whole clip";
     const value = annotation.annotation_type === "transcript"
-      ? `“${annotation.selected_text}” → “${annotation.replacement_text}”`
-      : `${annotation.label}: “${annotation.selected_text || "whole clip"}”`;
-    return `<button class="annotation" data-undo="${annotation.annotation_id}" title="Tap to undo">${value} ×</button>`;
+      ? `${scope} → “${annotation.replacement_text}”`
+      : `${annotation.label}: ${scope}`;
+    return `<button class="annotation" data-undo="${escapeHtml(annotation.annotation_id)}" title="Tap to undo">${escapeHtml(value)} ×</button>`;
   }).join("");
+}
+
+function activeAudioRange() {
+  const {start, end} = state.audioSelection;
+  return Number.isFinite(start) && Number.isFinite(end) && end > start
+    ? {start, end}
+    : null;
+}
+
+function renderAudioRange() {
+  const range = activeAudioRange();
+  const start = state.audioSelection.start;
+  $("#audio-range").textContent = range
+    ? `${formatTimestamp(range.start)} – ${formatTimestamp(range.end)}`
+    : Number.isFinite(start)
+      ? `${formatTimestamp(start)} – choose end`
+      : "Whole clip";
+}
+
+function clearAudioRange() {
+  state.audioSelection = {start: null, end: null};
+  renderAudioRange();
+}
+
+function setAudioBoundary(boundary) {
+  const item = current();
+  if (!item) return;
+  const mediaDuration = Number.isFinite(audio.duration) ? audio.duration : item.duration_seconds;
+  const at = Math.max(0, Math.min(Number(audio.currentTime) || 0, Number(mediaDuration) || 30));
+  if (boundary === "start") {
+    state.audioSelection.start = at;
+    if (Number.isFinite(state.audioSelection.end) && state.audioSelection.end <= at) {
+      state.audioSelection.end = null;
+    }
+    setNotice(`Start set at ${formatTimestamp(at)}. Scrub forward and tap End here.`);
+  } else {
+    const start = Number.isFinite(state.audioSelection.start) ? state.audioSelection.start : 0;
+    if (at <= start) {
+      setNotice("The end must be after the selected start.", true);
+      return;
+    }
+    state.audioSelection.start = start;
+    state.audioSelection.end = at;
+    setNotice(`Audio range selected: ${formatTimestamp(start)} – ${formatTimestamp(at)}.`);
+  }
+  renderAudioRange();
 }
 
 function renderCard() {
@@ -63,13 +130,14 @@ function renderCard() {
   empty.hidden = true;
   card.hidden = false;
   state.selection = null;
+  clearAudioRange();
   const when = item.captured_at.replace("_", " · ").replaceAll("-", ":");
   $("#time").textContent = when;
   const proposal = item.proposal;
   $("#guess").textContent = proposal
     ? `${item.review_group} · ${Math.round((proposal.confidence || 0) * 100)}% model guess`
     : "Unsorted · teach me this one";
-  $("#audio").src = `/api/motox/review/audio/${encodeURIComponent(item.capture_id)}`;
+  audio.src = `/api/motox/review/audio/${encodeURIComponent(item.capture_id)}`;
   transcript.textContent = item.transcript;
   $("#selection").textContent = "Whole clip selected";
   $("#position").textContent = `${state.index + 1} of ${state.items.length}`;
@@ -109,8 +177,10 @@ async function saveAnnotation(type, label, replacementText = null) {
   if (!item) return;
   // Dialog focus clears the browser's text selection. Preserve the range that
   // was captured when "Fix selected words" opened.
-  if (replacementText === null) captureSelection();
-  const selection = state.selection || {start: 0, end: item.transcript.length, text: item.transcript};
+  const range = activeAudioRange();
+  const selection = state.selection || (range
+    ? {start: 0, end: 0, text: ""}
+    : {start: 0, end: item.transcript.length, text: item.transcript});
   try {
     const annotation = await requestJson("/api/motox/review/annotations", {
       method: "POST",
@@ -122,6 +192,8 @@ async function saveAnnotation(type, label, replacementText = null) {
         annotation_type: type,
         label,
         replacement_text: replacementText,
+        audio_start_seconds: range?.start ?? null,
+        audio_end_seconds: range?.end ?? null,
       }),
     });
     item.annotations = [...(item.annotations || []), annotation];
@@ -129,7 +201,8 @@ async function saveAnnotation(type, label, replacementText = null) {
     window.getSelection()?.removeAllRanges();
     state.selection = null;
     $("#selection").textContent = "Whole clip selected";
-    setNotice(`${label || "Correction"} saved. Tap the chip below to undo.`);
+    const rangeNotice = range ? ` for ${formatTimestamp(range.start)} – ${formatTimestamp(range.end)}` : "";
+    setNotice(`${label || "Correction"} saved${rangeNotice}. Tap the chip below to undo.`);
     refreshProgress();
   } catch (error) {
     setNotice(error.message, true);
@@ -188,6 +261,12 @@ function nextClip() {
 
 transcript.addEventListener("mouseup", captureSelection);
 transcript.addEventListener("touchend", () => setTimeout(captureSelection, 100));
+$("#range-start").addEventListener("click", () => setAudioBoundary("start"));
+$("#range-end").addEventListener("click", () => setAudioBoundary("end"));
+$("#range-clear").addEventListener("click", () => {
+  clearAudioRange();
+  setNotice("Audio selection cleared; labels will use selected text or the whole clip.");
+});
 $("#labels").addEventListener("click", event => {
   const button = event.target.closest("[data-label]");
   if (button) saveAnnotation(button.dataset.type, button.dataset.label);

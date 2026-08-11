@@ -24,6 +24,7 @@ import numpy as np
 import torch
 from flask import Flask, Response, jsonify, request, send_file, send_from_directory
 
+from motox_journal_view import render_journal_html
 from motox_review import MotoXReviewStore
 from motox_v1 import MotoXStore, event_from_receiver, legacy_capture_identity
 
@@ -608,7 +609,7 @@ async function refresh() {
     const c = status.today_counts || {};
     const queue = status.recorder ? ` · ${status.recorder.queue_depth} queued` : '';
     document.querySelector('#counts').textContent = `${c.speech || 0} speech · ${c.ambient || 0} ambient · ${c.silence || 0} silent${queue}`;
-    document.querySelector('#journal').href = `/api/motox/journal/${status.today}`;
+    document.querySelector('#journal').href = `/journal/${status.today}`;
     document.querySelector('#recent').innerHTML = recent.length ? recent.map(row => `<div class="line"><div class="time">${escapeHtml(row.captured_at.slice(11).replaceAll('-', ':'))}</div>${renderTranscript(row.transcript)}</div>`).join('') : '<p class="muted">Recent words will appear here.</p>';
     document.querySelector('#updated').textContent = `updated ${new Date().toLocaleTimeString([], {hour:'numeric', minute:'2-digit'})}`;
   } catch (_) {
@@ -633,6 +634,31 @@ def dashboard():
 @APP.route("/review", methods=["GET"])
 def motox_review_page():
     return send_from_directory(DASHBOARD_ASSET_DIR, "review.html")
+
+
+@APP.route("/journal/<day>", methods=["GET"])
+def motox_journal_page(day):
+    if V1_STORE is None:
+        return "Moto X v1 journal is disabled", 503
+    try:
+        content = V1_STORE.journal_text(day)
+    except ValueError:
+        return "invalid date; expected YYYY-MM-DD", 400
+    return Response(render_journal_html(content, day), mimetype="text/html")
+
+
+@APP.route("/api/motox/journal-audio/<filename>", methods=["GET"])
+def motox_journal_audio(filename):
+    if Path(filename).name != filename or Path(filename).suffix.lower() not in ALLOWED_SUFFIXES:
+        return "audio not found", 404
+    audio_path = AUDIO_DIR / filename
+    if not audio_path.is_file():
+        return "audio not found", 404
+    try:
+        audio_path.resolve().relative_to(AUDIO_DIR.resolve())
+    except ValueError:
+        return "audio not found", 404
+    return send_file(audio_path, conditional=True, download_name=audio_path.name)
 
 
 @APP.route("/api/motox/status", methods=["GET"])
@@ -720,6 +746,8 @@ def motox_review_annotation():
             annotation_type=str(payload.get("annotation_type", "")),
             label=payload.get("label"),
             replacement_text=payload.get("replacement_text"),
+            audio_start_seconds=payload.get("audio_start_seconds"),
+            audio_end_seconds=payload.get("audio_end_seconds"),
         )
         return jsonify(annotation), 201
     except KeyError:
