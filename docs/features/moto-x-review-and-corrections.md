@@ -19,8 +19,11 @@ annotations. Model guesses remain separate from accepted human labels.
 
 - `/review` requests approximately five-minute review batches and streams the
   original audio with range support for phone seeking.
-- Selecting transcript text scopes the next label or correction. With no text
-  selected, the action applies to the complete capture.
+- New quick-pass transcripts retain word-level timestamps. Selecting words
+  automatically selects and can loop their source-audio interval. Historical
+  clips without timings retain the manual audio-range fallback.
+- A prominent scope banner shows whether the next action targets words, timed
+  audio, both, or the whole clip. Whole-clip labels require confirmation.
 - Audio can also be scoped independently: scrub to a point, set a start, scrub
   forward, and set an end. A correction may carry a text span, an audio span,
   both, or neither; multiple labels may overlap the same seconds so speech over
@@ -31,6 +34,15 @@ annotations. Model guesses remain separate from accepted human labels.
   consent-and-enrollment action. A typed name alone never converts uncertain
   historical audio into that identity.
 - Word corrections preserve both the original machine text and replacement.
+- The review card projects accepted word corrections immediately and provides
+  a **Show original / Show corrected** switch. Original ASR remains immutable.
+- A progressively expandable context drawer loads neighboring speech chunks
+  from the same conversation. Boundary labels record whether a sentence
+  continues before, after, or across both sides of the current capture.
+- **Exclude from memory & training** is a reversible privacy annotation. Active
+  exclusions are omitted from review queues, anonymous grouping, and the
+  Community-1 experiment, recent dashboard text, and regenerated readable
+  journals without deleting source evidence.
 - Every correction can be undone without changing raw audio or the `chunks`
   evidence row.
 - Anonymous model proposals use names such as `Voice group A`. Duration,
@@ -54,12 +66,16 @@ Git-ignored `Moto X/diarization_data/` tree. It never assigns household names.
 
 ## Storage
 
-The existing Moto X SQLite database gains two additive tables:
+The existing Moto X SQLite database uses additive, in-place migrations:
 
 - `review_annotations`: active and reverted human corrections, with optional
   `audio_start_seconds` and `audio_end_seconds`. Existing databases add these
   columns in place without rewriting earlier text-only annotations.
 - `review_proposals`: versioned model/cluster guesses and provenance.
+- `transcription_passes`: versioned quick, checkpoint, boundary, or final ASR
+  hypotheses. A newer pass supersedes only the earlier derived pass.
+- `transcription_words`: exact source-audio time and character anchors for each
+  word in a transcription pass.
 
 The original `chunks.transcript`, source audio, timestamps, and conversation
 records remain unchanged.
@@ -77,10 +93,16 @@ records remain unchanged.
 
 ## Remaining work
 
-- Add word-level ASR timestamps so selected text maps to exact audio spans.
+- Backfill word timestamps for worthwhile historical captures and add a
+  draggable waveform/nudge editor around the shipped text-to-audio sync.
 - Replace clip-level bootstrap groups with turn-level Community-1 diarization.
 - Learn conservative Ruby/Lynn/Raven profiles from accepted clean spans.
+- Resolve the speaker layer as region painting (newer identities replace older
+  identities only where they overlap) while sound labels remain additive.
 - Add timeline-wide editing and corrected journal projection.
+- Implement checkpoint/boundary/final conversation ASR workers. Every final
+  turn must source-map back to capture IDs and seconds so existing corrections
+  can be projected forward instead of being invalidated.
 - Add cat-specific proposals after enough Hahli and Lam examples are labeled.
 - Add singing-versus-played-music corrections, including explicit overlap.
 - Add the consent-based new-speaker enrollment flow for friends and visitors.

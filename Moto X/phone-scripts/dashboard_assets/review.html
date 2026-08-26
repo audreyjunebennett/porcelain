@@ -58,21 +58,36 @@
         <div class="audio-range-actions">
           <button id="range-start" type="button">Start here</button>
           <button id="range-end" type="button">End here</button>
+          <button id="range-loop" class="quiet-range" type="button" aria-pressed="false">Loop off</button>
           <button id="range-clear" class="quiet-range" type="button">Clear</button>
         </div>
       </div>
 
-      <p class="instruction">Select words, an audio range, or both. Labels can overlap.</p>
+      <div id="scope" class="scope whole" aria-live="polite">
+        <span>Applying to</span><strong>WHOLE CLIP</strong>
+      </div>
+      <div class="transcript-toolbar">
+        <p class="instruction">Select words to select and loop their audio automatically.</p>
+        <button id="transcript-version" class="tiny" type="button" hidden>Show original</button>
+      </div>
       <div id="transcript" class="transcript" tabindex="0" aria-label="Selectable transcript"></div>
       <div id="selection" class="selection muted">Whole clip selected</div>
 
       <div class="label-section">
-        <p class="label-title">Who or what is this?</p>
+        <p class="label-title">Who is vocalizing? <span>one identity per region</span></p>
         <div class="label-grid" id="labels">
           <button class="label ruby" data-type="speaker" data-label="Ruby">Ruby</button>
           <button class="label lynn" data-type="speaker" data-label="Lynn">Lynn</button>
           <button class="label raven" data-type="speaker" data-label="Raven">Raven</button>
           <button class="label other" data-type="speaker" data-label="Other">Other</button>
+          <button class="label subtle wide" data-type="speaker" data-label="Unknown person">Unknown person</button>
+          <button class="label subtle wide" data-type="speaker" data-label="Not sure">Not sure</button>
+        </div>
+      </div>
+
+      <div class="label-section">
+        <p class="label-title">What else is audible? <span>may overlap speech</span></p>
+        <div class="label-grid" id="sound-labels">
           <button class="label hahli" data-type="sound" data-label="Hahli">Hahli</button>
           <button class="label lam" data-type="sound" data-label="Lam">Lam</button>
           <button class="label subtle" data-type="sound" data-label="Television">TV</button>
@@ -82,10 +97,23 @@
         </div>
       </div>
 
+      <details class="context" id="context">
+        <summary>Sentence cut off or need more context?</summary>
+        <div class="boundary-actions" id="boundary-labels">
+          <button data-type="boundary" data-label="Continues before">continues before</button>
+          <button data-type="boundary" data-label="Continues after">continues after</button>
+          <button data-type="boundary" data-label="Continues both">both sides</button>
+        </div>
+        <button id="load-context" type="button">Load surrounding conversation</button>
+        <div id="context-items" class="context-items"></div>
+        <button id="more-context" class="quiet" type="button" hidden>Pull in more</button>
+      </details>
+
       <div class="actions">
         <button id="fix" type="button">Fix selected words</button>
         <button id="next" class="primary" type="button">Next clip</button>
       </div>
+      <button id="exclude" class="exclude" type="button">Exclude from memory &amp; training</button>
       <div id="annotations" class="annotations"></div>
       <p id="notice" class="notice" aria-live="polite"></p>
     </article>

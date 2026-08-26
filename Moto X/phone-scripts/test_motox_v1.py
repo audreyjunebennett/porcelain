@@ -95,6 +95,29 @@ class MotoXStoreTests(unittest.TestCase):
         self.assertIn("[Audio](../audio/a.aac)", first)
         self.assertIn("1 ambient context chunk", first)
 
+    def test_transcription_passes_are_versioned_with_word_timestamps(self):
+        self.add("timed", "2026-07-19_02-00-00", "speech", "Hello world")
+        first = self.store.record_transcription_pass(
+            "timed",
+            "Hello world",
+            [
+                {"word": "Hello", "start_seconds": 0.2, "end_seconds": 0.7, "probability": 0.9, "char_start": 0, "char_end": 5},
+                {"word": " world", "start_seconds": 0.8, "end_seconds": 1.2, "probability": 0.8, "char_start": 5, "char_end": 11},
+            ],
+        )
+        second = self.store.record_transcription_pass(
+            "timed", "Hello, world", [], model_version="large-v3-repass"
+        )
+        with self.store._connection() as connection:
+            passes = connection.execute(
+                "SELECT pass_id, is_current FROM transcription_passes WHERE capture_id = 'timed' ORDER BY rowid"
+            ).fetchall()
+            word_count = connection.execute(
+                "SELECT COUNT(*) FROM transcription_words WHERE pass_id = ?", (first,)
+            ).fetchone()[0]
+        self.assertEqual([(first, 0), (second, 1)], [(row[0], row[1]) for row in passes])
+        self.assertEqual(2, word_count)
+
     def test_status_reports_capture_age(self):
         self.add("a", "2026-07-19_01-00-00", "silence")
         healthy = self.store.status(datetime(2026, 7, 19, 1, 0, 45))

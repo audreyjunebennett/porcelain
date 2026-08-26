@@ -5,6 +5,9 @@ const state = {
   audioSelection: {start: null, end: null},
   group: "all",
   before: null,
+  showOriginal: false,
+  loopSelection: false,
+  contextRadius: 2,
 };
 
 const $ = selector => document.querySelector(selector);
@@ -71,6 +74,36 @@ function renderAnnotations(item) {
   }).join("");
 }
 
+function correctedTranscript(item) {
+  let value = item.transcript;
+  const corrections = (item.annotations || [])
+    .filter(row => row.annotation_type === "transcript" && row.replacement_text != null)
+    .sort((left, right) => right.start_char - left.start_char);
+  for (const correction of corrections) {
+    value = value.slice(0, correction.start_char) + correction.replacement_text + value.slice(correction.end_char);
+  }
+  return value;
+}
+
+function scopeDescription() {
+  const item = current();
+  const range = activeAudioRange();
+  if (range && state.selection) {
+    return [`${formatTimestamp(range.start)}–${formatTimestamp(range.end)}`, `“${state.selection.text}”`];
+  }
+  if (range) return [`${formatTimestamp(range.start)}–${formatTimestamp(range.end)}`, "selected audio"];
+  if (state.selection) return ["SELECTED WORDS", `“${state.selection.text}”`];
+  return ["WHOLE CLIP", item ? formatDuration(item.duration_seconds) : ""];
+}
+
+function renderScope() {
+  const [title, detail] = scopeDescription();
+  const whole = !state.selection && !activeAudioRange();
+  const scope = $("#scope");
+  scope.classList.toggle("whole", whole);
+  scope.innerHTML = `<span>Applying to</span><strong>${escapeHtml(title)}</strong><small>${escapeHtml(detail)}</small>`;
+}
+
 function activeAudioRange() {
   const {start, end} = state.audioSelection;
   return Number.isFinite(start) && Number.isFinite(end) && end > start
@@ -86,11 +119,19 @@ function renderAudioRange() {
     : Number.isFinite(start)
       ? `${formatTimestamp(start)} – choose end`
       : "Whole clip";
+  renderScope();
 }
 
 function clearAudioRange() {
   state.audioSelection = {start: null, end: null};
   renderAudioRange();
+}
+
+function setLoop(enabled) {
+  state.loopSelection = Boolean(enabled);
+  const button = $("#range-loop");
+  button.setAttribute("aria-pressed", String(state.loopSelection));
+  button.textContent = state.loopSelection ? "Loop on" : "Loop off";
 }
 
 function setAudioBoundary(boundary) {
@@ -117,6 +158,16 @@ function setAudioBoundary(boundary) {
   renderAudioRange();
 }
 
+function renderTranscript(item) {
+  const corrected = item.corrected_transcript ?? item.transcript;
+  const hasCorrections = corrected !== item.transcript;
+  const button = $("#transcript-version");
+  button.hidden = !hasCorrections;
+  button.textContent = state.showOriginal ? "Show corrected" : "Show original";
+  transcript.textContent = state.showOriginal ? item.transcript : corrected;
+  transcript.classList.toggle("corrected", hasCorrections && !state.showOriginal);
+}
+
 function renderCard() {
   const item = current();
   const card = $("#card");
@@ -130,7 +181,12 @@ function renderCard() {
   empty.hidden = true;
   card.hidden = false;
   state.selection = null;
+  state.showOriginal = false;
+  state.contextRadius = 2;
+  $("#context-items").innerHTML = "";
+  $("#more-context").hidden = true;
   clearAudioRange();
+  setLoop(false);
   const when = item.captured_at.replace("_", " · ").replaceAll("-", ":");
   $("#time").textContent = when;
   const proposal = item.proposal;
@@ -138,10 +194,11 @@ function renderCard() {
     ? `${item.review_group} · ${Math.round((proposal.confidence || 0) * 100)}% model guess`
     : "Unsorted · teach me this one";
   audio.src = `/api/motox/review/audio/${encodeURIComponent(item.capture_id)}`;
-  transcript.textContent = item.transcript;
+  renderTranscript(item);
   $("#selection").textContent = "Whole clip selected";
   $("#position").textContent = `${state.index + 1} of ${state.items.length}`;
   renderAnnotations(item);
+  renderScope();
   setNotice("");
 }
 
@@ -163,6 +220,29 @@ function captureSelection() {
   $("#selection").textContent = state.selection
     ? `Selected: “${state.selection.text}”`
     : "Whole clip selected";
+  if (state.selection) syncAudioToSelectedWords();
+  renderScope();
+}
+
+function syncAudioToSelectedWords() {
+  const item = current();
+  if (!item || !state.selection || !item.words?.length) return;
+  if (!state.showOriginal && item.corrected_transcript !== item.transcript) {
+    setNotice("Show the original transcript to sync edited words to their exact audio.");
+    return;
+  }
+  const selectedWords = item.words.filter(word =>
+    Number(word.char_end) > state.selection.start && Number(word.char_start) < state.selection.end
+  );
+  if (!selectedWords.length) return;
+  state.audioSelection = {
+    start: Number(selectedWords[0].start_seconds),
+    end: Number(selectedWords[selectedWords.length - 1].end_seconds),
+  };
+  audio.currentTime = state.audioSelection.start;
+  setLoop(true);
+  renderAudioRange();
+  setNotice(`Selected words synced to ${formatTimestamp(state.audioSelection.start)}–${formatTimestamp(state.audioSelection.end)}. Press play to loop them.`);
 }
 
 async function requestJson(url, options) {
@@ -181,6 +261,10 @@ async function saveAnnotation(type, label, replacementText = null) {
   const selection = state.selection || (range
     ? {start: 0, end: 0, text: ""}
     : {start: 0, end: item.transcript.length, text: item.transcript});
+  const wholeClip = !state.selection && !range;
+  if (wholeClip && type !== "transcript" && !window.confirm(
+    `Apply “${label}” to the WHOLE ${formatDuration(item.duration_seconds)} clip?`
+  )) return;
   try {
     const annotation = await requestJson("/api/motox/review/annotations", {
       method: "POST",
@@ -197,13 +281,39 @@ async function saveAnnotation(type, label, replacementText = null) {
       }),
     });
     item.annotations = [...(item.annotations || []), annotation];
+    if (type === "transcript") {
+      item.corrected_transcript = correctedTranscript(item);
+      state.showOriginal = false;
+      renderTranscript(item);
+    }
     renderAnnotations(item);
     window.getSelection()?.removeAllRanges();
     state.selection = null;
+    clearAudioRange();
     $("#selection").textContent = "Whole clip selected";
     const rangeNotice = range ? ` for ${formatTimestamp(range.start)} – ${formatTimestamp(range.end)}` : "";
     setNotice(`${label || "Correction"} saved${rangeNotice}. Tap the chip below to undo.`);
     refreshProgress();
+  } catch (error) {
+    setNotice(error.message, true);
+  }
+}
+
+async function loadContext({more = false} = {}) {
+  const item = current();
+  if (!item) return;
+  if (more) state.contextRadius = Math.min(12, state.contextRadius * 2);
+  try {
+    const rows = await requestJson(
+      `/api/motox/review/context/${encodeURIComponent(item.capture_id)}?radius=${state.contextRadius}`
+    );
+    $("#context-items").innerHTML = rows.map(row => {
+      const currentClass = row.capture_id === item.capture_id ? " current" : "";
+      const label = row.capture_id === item.capture_id ? "current clip" : row.captured_at.slice(11).replaceAll("-", ":");
+      return `<article class="context-item${currentClass}"><div><strong>${escapeHtml(label)}</strong><span>${escapeHtml(row.corrected_transcript || row.transcript)}</span></div><audio controls preload="none" src="/api/motox/review/audio/${encodeURIComponent(row.capture_id)}"></audio></article>`;
+    }).join("");
+    $("#more-context").hidden = state.contextRadius >= 12;
+    setNotice(`Showing ${rows.length} connected clip${rows.length === 1 ? "" : "s"}. Labels still attach to the current source clip.`);
   } catch (error) {
     setNotice(error.message, true);
   }
@@ -267,10 +377,21 @@ $("#range-clear").addEventListener("click", () => {
   clearAudioRange();
   setNotice("Audio selection cleared; labels will use selected text or the whole clip.");
 });
-$("#labels").addEventListener("click", event => {
+$("#range-loop").addEventListener("click", () => setLoop(!state.loopSelection));
+audio.addEventListener("timeupdate", () => {
+  const range = activeAudioRange();
+  if (state.loopSelection && range && audio.currentTime >= range.end) {
+    audio.currentTime = range.start;
+    audio.play().catch(() => {});
+  }
+});
+const labelClick = event => {
   const button = event.target.closest("[data-label]");
   if (button) saveAnnotation(button.dataset.type, button.dataset.label);
-});
+};
+$("#labels").addEventListener("click", labelClick);
+$("#sound-labels").addEventListener("click", labelClick);
+$("#boundary-labels").addEventListener("click", labelClick);
 $("#annotations").addEventListener("click", event => {
   const button = event.target.closest("[data-undo]");
   if (button) undo(button.dataset.undo);
@@ -279,15 +400,32 @@ $("#next").addEventListener("click", nextClip);
 $("#skip").addEventListener("click", nextClip);
 $("#older").addEventListener("click", () => loadBatch({older: true}));
 $("#refresh").addEventListener("click", () => loadBatch());
+$("#load-context").addEventListener("click", () => loadContext());
+$("#more-context").addEventListener("click", () => loadContext({more: true}));
+$("#transcript-version").addEventListener("click", () => {
+  state.showOriginal = !state.showOriginal;
+  window.getSelection()?.removeAllRanges();
+  state.selection = null;
+  clearAudioRange();
+  renderTranscript(current());
+  $("#selection").textContent = "Whole clip selected";
+});
+$("#exclude").addEventListener("click", () => saveAnnotation("privacy", "Exclude"));
 $("#group").addEventListener("change", event => {
   state.group = decodeURIComponent(event.target.value);
   state.before = null;
   loadBatch();
 });
 $("#fix").addEventListener("click", () => {
-  captureSelection();
   const item = current();
   if (!item) return;
+  if (!state.showOriginal && item.corrected_transcript !== item.transcript) {
+    state.showOriginal = true;
+    renderTranscript(item);
+    setNotice("Showing the original machine text. Select the words you want to correct, then tap Fix again.");
+    return;
+  }
+  captureSelection();
   const selected = state.selection?.text || item.transcript;
   $("#original").textContent = selected;
   $("#replacement").value = selected;

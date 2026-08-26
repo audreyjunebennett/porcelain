@@ -37,6 +37,13 @@ def recent_speech(database: Path, limit: int) -> list[dict]:
             FROM chunks
             WHERE kind = 'speech' AND audio_path IS NOT NULL
               AND trim(transcript) <> ''
+              AND NOT EXISTS (
+                  SELECT 1 FROM review_annotations excluded
+                  WHERE excluded.capture_id = chunks.capture_id
+                    AND excluded.annotation_type = 'privacy'
+                    AND excluded.label = 'Exclude'
+                    AND excluded.reverted_at IS NULL
+              )
             ORDER BY captured_at DESC, capture_id DESC
             LIMIT ?
             """,

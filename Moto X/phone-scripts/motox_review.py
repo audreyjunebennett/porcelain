@@ -16,11 +16,13 @@ from pathlib import Path
 from typing import Any
 
 
-SPEAKER_LABELS = ("Ruby", "Lynn", "Raven", "Other")
+SPEAKER_LABELS = ("Ruby", "Lynn", "Raven", "Other", "Unknown person", "Not sure")
 SOUND_LABELS = ("Hahli", "Lam", "Television", "Music", "Not speech")
 SPECIAL_LABELS = ("Overlap",)
-ALL_LABELS = SPEAKER_LABELS + SOUND_LABELS + SPECIAL_LABELS
-ANNOTATION_TYPES = ("speaker", "sound", "overlap", "transcript")
+BOUNDARY_LABELS = ("Continues before", "Continues after", "Continues both")
+PRIVACY_LABELS = ("Exclude",)
+ALL_LABELS = SPEAKER_LABELS + SOUND_LABELS + SPECIAL_LABELS + BOUNDARY_LABELS + PRIVACY_LABELS
+ANNOTATION_TYPES = ("speaker", "sound", "overlap", "transcript", "boundary", "privacy")
 
 
 def _now() -> str:
@@ -156,6 +158,95 @@ class MotoXReviewStore:
             result.setdefault(row["capture_id"], dict(row))
         return result
 
+    def _latest_transcriptions(
+        self, connection: sqlite3.Connection, capture_ids: list[str]
+    ) -> dict[str, dict[str, Any]]:
+        if not capture_ids:
+            return {}
+        placeholders = ",".join("?" for _ in capture_ids)
+        passes = connection.execute(
+            f"""
+            SELECT * FROM transcription_passes
+            WHERE is_current = 1 AND capture_id IN ({placeholders})
+            ORDER BY created_at DESC, pass_id DESC
+            """,
+            capture_ids,
+        ).fetchall()
+        result: dict[str, dict[str, Any]] = {}
+        for row in passes:
+            result.setdefault(row["capture_id"], dict(row))
+        pass_ids = [row["pass_id"] for row in result.values()]
+        if pass_ids:
+            word_placeholders = ",".join("?" for _ in pass_ids)
+            words = connection.execute(
+                f"""
+                SELECT * FROM transcription_words
+                WHERE pass_id IN ({word_placeholders})
+                ORDER BY pass_id, word_index
+                """,
+                pass_ids,
+            ).fetchall()
+            by_pass: dict[str, list[dict[str, Any]]] = {}
+            for word in words:
+                by_pass.setdefault(word["pass_id"], []).append(dict(word))
+            for item in result.values():
+                item["words"] = by_pass.get(item["pass_id"], [])
+        return result
+
+    @staticmethod
+    def _corrected_transcript(text: str, annotations: list[dict[str, Any]]) -> str:
+        corrections = [
+            row for row in annotations
+            if row["annotation_type"] == "transcript" and row.get("replacement_text") is not None
+        ]
+        # Applying from right to left preserves the original character anchors.
+        for row in sorted(corrections, key=lambda item: (item["start_char"], item["created_at"]), reverse=True):
+            start = max(0, min(len(text), int(row["start_char"])))
+            end = max(start, min(len(text), int(row["end_char"])))
+            text = text[:start] + str(row["replacement_text"]) + text[end:]
+        return text
+
+    def _decorate_rows(
+        self,
+        rows: list[sqlite3.Row],
+        annotations: dict[str, list[dict[str, Any]]],
+        proposals: dict[str, dict[str, Any]],
+        transcriptions: dict[str, dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        result = []
+        for row in rows:
+            audio_path = Path(row["audio_path"])
+            if not audio_path.is_file():
+                continue
+            item = dict(row)
+            item["duration_seconds"] = float(item["duration_seconds"] or 30.0)
+            item["speech_seconds"] = float(item["speech_seconds"] or 0.0)
+            item_annotations = annotations.get(row["capture_id"], [])
+            transcription = transcriptions.get(row["capture_id"])
+            item["raw_transcript"] = item["transcript"]
+            if transcription:
+                item["transcript"] = transcription["transcript"]
+                item["words"] = transcription.get("words", [])
+                item["transcription_pass"] = {
+                    key: transcription.get(key)
+                    for key in ("pass_id", "pass_kind", "model_name", "model_version", "created_at")
+                }
+            else:
+                item["words"] = []
+                item["transcription_pass"] = None
+            item["annotations"] = item_annotations
+            item["corrected_transcript"] = self._corrected_transcript(
+                item["transcript"], item_annotations
+            )
+            proposal = proposals.get(row["capture_id"])
+            item["proposal"] = proposal
+            item["review_group"] = (
+                (proposal.get("label") or proposal.get("cluster_id")) if proposal else None
+            ) or "Unsorted"
+            item.pop("audio_path", None)
+            result.append(item)
+        return result
+
     def candidates(
         self,
         *,
@@ -186,6 +277,13 @@ class MotoXReviewStore:
                 WHERE kind = 'speech'
                   AND trim(transcript) <> ''
                   AND audio_path IS NOT NULL
+                  AND NOT EXISTS (
+                      SELECT 1 FROM review_annotations excluded
+                      WHERE excluded.capture_id = chunks.capture_id
+                        AND excluded.annotation_type = 'privacy'
+                        AND excluded.label = 'Exclude'
+                        AND excluded.reverted_at IS NULL
+                  )
                   {before_clause}
                 ORDER BY captured_at DESC, capture_id DESC
                 LIMIT 600
@@ -195,31 +293,57 @@ class MotoXReviewStore:
             ids = [row["capture_id"] for row in rows]
             annotations = self._active_annotations(connection, ids)
             proposals = self._latest_proposals(connection, ids)
+            transcriptions = self._latest_transcriptions(connection, ids)
 
+        decorated = self._decorate_rows(rows, annotations, proposals, transcriptions)
         result: list[dict[str, Any]] = []
         accumulated = 0.0
-        for row in rows:
-            audio_path = Path(row["audio_path"])
-            if not audio_path.is_file():
+        for item in decorated:
+            if group and group != "all" and item["review_group"] != group:
                 continue
-            proposal = proposals.get(row["capture_id"])
-            proposed_group = None
-            if proposal:
-                proposed_group = proposal.get("label") or proposal.get("cluster_id")
-            if group and group != "all" and (proposed_group or "Unsorted") != group:
-                continue
-            item = dict(row)
-            item["duration_seconds"] = float(item["duration_seconds"] or 30.0)
-            item["speech_seconds"] = float(item["speech_seconds"] or 0.0)
-            item["annotations"] = annotations.get(row["capture_id"], [])
-            item["proposal"] = proposal
-            item["review_group"] = proposed_group or "Unsorted"
-            item.pop("audio_path", None)
             result.append(item)
             accumulated += item["duration_seconds"]
             if len(result) >= limit or accumulated >= target_seconds:
                 break
         return result
+
+    def context(self, capture_id: str, radius: int = 2) -> list[dict[str, Any]]:
+        """Return expandable neighboring speech from the same conversation."""
+        radius = max(1, min(int(radius), 12))
+        with self._connect() as connection:
+            target = connection.execute(
+                "SELECT conversation_id FROM chunks WHERE capture_id = ?", (capture_id,)
+            ).fetchone()
+            if not target:
+                raise KeyError("unknown capture")
+            if target["conversation_id"] is None:
+                ids = [capture_id]
+            else:
+                ordered = connection.execute(
+                    """
+                    SELECT capture_id FROM chunks
+                    WHERE conversation_id = ? AND kind = 'speech' AND audio_path IS NOT NULL
+                    ORDER BY captured_at, capture_id
+                    """,
+                    (target["conversation_id"],),
+                ).fetchall()
+                all_ids = [row["capture_id"] for row in ordered]
+                index = all_ids.index(capture_id)
+                ids = all_ids[max(0, index - radius): index + radius + 1]
+            placeholders = ",".join("?" for _ in ids)
+            rows = connection.execute(
+                f"""
+                SELECT capture_id, captured_at, duration_seconds, speech_seconds,
+                       audio_path, transcript, conversation_id
+                FROM chunks WHERE capture_id IN ({placeholders})
+                ORDER BY captured_at, capture_id
+                """,
+                ids,
+            ).fetchall()
+            annotations = self._active_annotations(connection, ids)
+            proposals = self._latest_proposals(connection, ids)
+            transcriptions = self._latest_transcriptions(connection, ids)
+        return self._decorate_rows(rows, annotations, proposals, transcriptions)
 
     def get_audio_path(self, capture_id: str) -> Path | None:
         with self._connect() as connection:
@@ -254,7 +378,15 @@ class MotoXReviewStore:
 
         with self._write_lock, self._connect() as connection:
             chunk = connection.execute(
-                "SELECT transcript, duration_seconds FROM chunks WHERE capture_id = ?",
+                """
+                SELECT c.duration_seconds,
+                       COALESCE((
+                           SELECT tp.transcript FROM transcription_passes tp
+                           WHERE tp.capture_id = c.capture_id AND tp.is_current = 1
+                           ORDER BY tp.created_at DESC, tp.pass_id DESC LIMIT 1
+                       ), c.transcript) AS transcript
+                FROM chunks c WHERE c.capture_id = ?
+                """,
                 (capture_id,),
             ).fetchone()
             if not chunk:

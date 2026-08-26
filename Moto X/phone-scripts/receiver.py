@@ -305,14 +305,18 @@ def transcribe_audio(audio_path):
             condition_on_previous_text=False,
             initial_prompt=WHISPER_PROMPT,
             vad_filter=True,
+            word_timestamps=True,
         )
         segments = list(segments_gen)
         text = " ".join(s.text.strip() for s in segments if s.text.strip()).strip()
+        timed_text, words = timed_words_from_segments(segments)
         return (
             text or "[speech detected, but no transcript text returned]",
             {
                 "language": getattr(info, "language", None),
                 "language_probability": getattr(info, "language_probability", None),
+                "timed_text": timed_text,
+                "words": words,
             },
             segments,
         )
@@ -320,6 +324,32 @@ def transcribe_audio(audio_path):
         return "[transcription unavailable: install faster-whisper]", {}, []
     except Exception as exc:
         return f"[transcription error: {exc}]", {}, []
+
+
+def timed_words_from_segments(segments):
+    """Build exact display text plus word/audio offsets from faster-whisper."""
+    text = ""
+    result = []
+    for segment in segments:
+        for word in getattr(segment, "words", None) or []:
+            token = str(getattr(word, "word", ""))
+            if not token:
+                continue
+            if not text:
+                token = token.lstrip()
+            start_char = len(text)
+            text += token
+            result.append(
+                {
+                    "word": token,
+                    "start_seconds": float(getattr(word, "start", 0.0)),
+                    "end_seconds": float(getattr(word, "end", 0.0)),
+                    "probability": getattr(word, "probability", None),
+                    "char_start": start_char,
+                    "char_end": len(text),
+                }
+            )
+    return text.strip(), result
 
 
 def diarize_audio(wav_tensor):
@@ -709,6 +739,19 @@ def motox_review_progress():
     return jsonify(REVIEW_STORE.progress())
 
 
+@APP.route("/api/motox/review/context/<capture_id>", methods=["GET"])
+def motox_review_context(capture_id):
+    if REVIEW_STORE is None or not CAPTURE_ID_RE.fullmatch(capture_id):
+        return jsonify({"error": "review context not found"}), 404
+    try:
+        radius = int(request.args.get("radius", "2"))
+        return jsonify(REVIEW_STORE.context(capture_id, radius))
+    except KeyError:
+        return jsonify({"error": "unknown capture"}), 404
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
 @APP.route("/api/motox/review/groups", methods=["GET"])
 def motox_review_groups():
     if REVIEW_STORE is None:
@@ -924,6 +967,18 @@ def receive_audio():
         transcript,
         speaker,
     )
+    if chunk_type == "speech" and V1_STORE is not None and whisper_info.get("timed_text"):
+        try:
+            V1_STORE.record_transcription_pass(
+                capture_id,
+                whisper_info["timed_text"],
+                whisper_info.get("words", []),
+                pass_kind="quick_chunk",
+                model_name="faster-whisper",
+                model_version=WHISPER_MODEL,
+            )
+        except Exception as exc:
+            receiver_log(f"[chunk {capture_id}] word timestamp storage error: {exc}")
     wav_path.unlink(missing_ok=True)
 
     receiver_log(f"[chunk {capture_id}] OK saved audio: {final_audio}")

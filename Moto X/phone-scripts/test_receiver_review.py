@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 import receiver
 from motox_review import MotoXReviewStore
@@ -49,6 +50,10 @@ class ReceiverReviewApiTests(unittest.TestCase):
         self.assertIn('data-label="Music"', page.get_data(as_text=True))
         self.assertIn('id="range-start"', page.get_data(as_text=True))
         self.assertIn('id="range-end"', page.get_data(as_text=True))
+        self.assertIn('id="transcript-version"', page.get_data(as_text=True))
+        self.assertIn('data-label="Unknown person"', page.get_data(as_text=True))
+        self.assertIn('id="load-context"', page.get_data(as_text=True))
+        self.assertIn('id="exclude"', page.get_data(as_text=True))
         page.close()
         response = self.client.get("/api/motox/review/candidates?limit=1")
         self.assertEqual(200, response.status_code)
@@ -92,6 +97,26 @@ class ReceiverReviewApiTests(unittest.TestCase):
         self.assertEqual(206, response.status_code)
         self.assertEqual(10, len(response.data))
         response.close()
+
+    def test_context_api_returns_current_clip(self):
+        response = self.client.get("/api/motox/review/context/review-clip?radius=2")
+        self.assertEqual(200, response.status_code)
+        self.assertEqual("review-clip", response.get_json()[0]["capture_id"])
+
+    def test_timed_words_preserve_text_and_offsets(self):
+        segments = [
+            SimpleNamespace(
+                words=[
+                    SimpleNamespace(word=" Hello", start=0.2, end=0.6, probability=0.91),
+                    SimpleNamespace(word=",", start=0.6, end=0.7, probability=0.88),
+                    SimpleNamespace(word=" world", start=0.8, end=1.2, probability=0.92),
+                ]
+            )
+        ]
+        text, words = receiver.timed_words_from_segments(segments)
+        self.assertEqual("Hello, world", text)
+        self.assertEqual((0, 5), (words[0]["char_start"], words[0]["char_end"]))
+        self.assertEqual((6, 12), (words[2]["char_start"], words[2]["char_end"]))
 
     def test_annotation_can_be_saved_and_undone(self):
         response = self.client.post(

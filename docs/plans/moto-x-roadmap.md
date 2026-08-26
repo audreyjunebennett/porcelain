@@ -6,7 +6,7 @@
 | **Owners / areas** | Ruby / Moto X, Locus, Chimera, personal memory |
 | **Status** | `active` |
 | **Targets** | Reliable capture, daily memory, directed notes/tags, Porcelain handoff |
-| **Last updated** | 2026-08-01 |
+| **Last updated** | 2026-08-15 |
 | **Supersedes / superseded by** | Old Claudia PWA experiments are historical, not an implementation base |
 | **As-built** | [`Moto X receiver manager`](../features/moto-x-receiver-manager.md); [`Moto X review and corrections`](../features/moto-x-review-and-corrections.md) (`partial`) |
 
@@ -85,6 +85,10 @@ Moto X features should call Chimera through stable APIs and virtual model roles.
 - At exactly 120 seconds without speech, the conversation closes at the last speech time.
 - Ambient audio may attach as context to an open conversation but never starts one or resets its speech clock.
 - Silence can prove that the gap has elapsed but is otherwise discarded from the readable journal.
+- Literal silent capture files are already discarded after VAD classification.
+  Final transcript and note projections should additionally collapse empty
+  turns and non-semantic pauses while preserving timestamps and never deleting
+  speech merely because an ASR pass returned empty text.
 - Duplicate capture IDs do not duplicate journal entries.
 - Daily files are projections of SQLite state and can be rebuilt deterministically.
 - Raw audio and existing transcript/conversation files remain available during migration.
@@ -98,6 +102,18 @@ Thirty-second recorder files are durable capture/transport pieces, not readable 
 3. **Boundary reconciliation pass:** re-transcribe overlapping windows that straddle every 30-second recorder cutoff, then compare the left-chunk, right-chunk, overlap-window, and whole-conversation hypotheses using word timestamps and confidence where available. Stitch repeated words conservatively, recover sentence fragments that were clipped or misheard without future context, and retain a visible uncertain/correction-needed state when the passes materially disagree rather than inventing one seamless sentence.
 4. **Long-open checkpoint:** if speech keeps one conversation open for an extended period, permit a bounded provisional consolidation around every 10–15 minutes so stable earlier turns become readable without falsely closing the conversation. Conversation close still owns the authoritative final pass and may supersede these checkpoint projections atomically.
 5. **Atomic UI projection:** replace provisional fragments with versioned finalized speaker turns without losing anchors back to their original time ranges and audio. Never mutate evidence and never expose a half-replaced conversation while Ruby is reading it.
+6. **Correction projection:** human labels always target source capture IDs plus
+   exact seconds (and source-pass character spans when available). A checkpoint,
+   boundary, or final conversation pass produces an explicit source map. The
+   projection worker carries compatible speaker, sound, privacy, boundary, and
+   transcript corrections onto new turns; disagreements become visible review
+   items rather than silently dropping a correction or forcing it onto the
+   wrong words.
+7. **Expandable review context:** the review UI starts compact but may load
+   progressively larger neighboring capture windows or the whole conversation.
+   Context audio is reference material; annotations remain anchored to their
+   actual source clip/range. Human `continues before/after/both` flags become
+   boundary-pass evaluation cases.
 
 One finalized turn may span several recorder chunks, and one recorder chunk may contain the end of one person's turn and the beginning of another's. Chat bubbles follow complete human turns, not files, Whisper windows, sentences, or arbitrary chunk boundaries. Manual or spoken corrections update a versioned derived turn layer and may later contribute clean enrollment examples; they do not rewrite the captured source or erase the original machine transcript. Preserve the chain **original audio → original machine transcript → corrected transcript**.
 
@@ -156,6 +172,11 @@ record for the as-built contract.
 - FL Studio may assemble one clean reference track per person, but references should not add music, reverb, EQ, aggressive denoising, compression, or other effects that erase the real capture conditions. Keep separate evaluation clips out of enrollment.
 - Use confidence thresholds, temporal smoothing across neighboring turns, and manual correction. Never force an uncertain voice into Ruby, Lynn, or Raven; overlapping speech remains explicitly difficult.
 - Treat cat recognition as a separate sound-event/individual-classification path rather than human diarization. Enroll real Moto X examples for **Hahli** (spelled like the BIONICLE character) and **Lam** (spelled like Aleister Crowley's entity), using pitch, contour, timbre, harmonics, duration, call type, and context rather than sex or pitch alone. Render high-confidence identities as centered cat events and fall back to **unknown cat** or **cat vocalization** instead of guessing.
+- Use a layered sound pipeline rather than forcing one model to solve everything:
+  a general sound-event detector proposes music, television, cat vocalization,
+  traffic, bangs, and other useful events; a cat-specific identity classifier
+  runs only on accepted/proposed cat regions to distinguish Hahli, Lam, or
+  unknown cat. Both remain versioned proposals until reviewed.
 - Treat Ruby singing and externally played songs as distinct editable event types. Singing may coexist with music, so the system must preserve overlap and uncertainty instead of treating every melodic vocal as either ordinary speech or a recording.
 - Let Ruby create a new named speaker profile when a new friend appears, but only through an explicit consent-and-enrollment flow. Until enough accepted examples exist, keep that voice as **Other/Uncertain** rather than guessing from a name or social context.
 - Sound annotations must be narratively useful, not acoustic telemetry. Prefer rare/high-confidence events that affect nearby speech, such as a loud bang followed by a reaction. Collapse or omit repetitive room noise.
@@ -215,6 +236,18 @@ Candidate tasks:
 - Separate explicit commitments, possible ideas, and important facts instead of flattening all extracted text into generic tasks.
 - Produce a calm daily digest of reviewed to-dos, important notes, and things worth remembering while deduplicating repeated mentions.
 - Turn corrections into a reusable rule or an evaluation example.
+- Verify automatically extracted notes, reminders, to-dos, people, and filing
+  suggestions through lightweight accept/edit/dismiss cards. The user should
+  see useful work already proposed rather than manually constructing every
+  note or editing backend artifacts.
+- Support an optional **Pestering Mode** for accepted reminders: when capture is
+  quiet and the configured reminder window is active, surface a gentle prompt
+  without beginning a conversational-agent session. Enforce cooldowns,
+  snooze/dismiss, quiet hours, and no prompting during Oblivious Mode.
+- Show due reminders on the memory home screen as a compact bottom-anchored
+  bubble that survives scrolling. A restrained pulsing red outline may signal
+  urgency, must respect reduced-motion preferences, and must not cover capture
+  health or primary controls.
 
 Implementation constraints:
 
@@ -240,6 +273,9 @@ Implementation constraints:
 - Offer automatic filing for confident decisions and a lightweight review view for uncertain ones.
 - Support rename, recategorize, merge, split, dismiss, correction, and source navigation without a mandatory approval queue.
 - Keep ordinary transcript text even when a phrase also creates metadata. Directed-note extraction is a reversible derived layer, not deletion or rewriting of what Ruby actually said.
+- Keep reminder verification and presentation separate from reminder
+  execution: accepting/editing a suggested reminder creates durable structured
+  state; Pestering Mode and the floating bubble are optional delivery surfaces.
 
 ## Phase 7 — Porcelain / Claudia interaction boundary
 

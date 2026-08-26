@@ -11,6 +11,7 @@ import os
 import re
 import sqlite3
 import threading
+import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
@@ -130,6 +131,32 @@ class MotoXStore:
                 CREATE INDEX IF NOT EXISTS chunks_by_conversation
                     ON chunks(conversation_id, captured_at);
 
+                CREATE TABLE IF NOT EXISTS transcription_passes (
+                    pass_id TEXT PRIMARY KEY,
+                    capture_id TEXT NOT NULL REFERENCES chunks(capture_id),
+                    pass_kind TEXT NOT NULL,
+                    model_name TEXT NOT NULL,
+                    model_version TEXT,
+                    transcript TEXT NOT NULL,
+                    is_current INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+
+                CREATE INDEX IF NOT EXISTS transcription_passes_current
+                    ON transcription_passes(capture_id, pass_kind, is_current, created_at);
+
+                CREATE TABLE IF NOT EXISTS transcription_words (
+                    pass_id TEXT NOT NULL REFERENCES transcription_passes(pass_id),
+                    word_index INTEGER NOT NULL,
+                    word TEXT NOT NULL,
+                    start_seconds REAL NOT NULL,
+                    end_seconds REAL NOT NULL,
+                    probability REAL,
+                    char_start INTEGER NOT NULL,
+                    char_end INTEGER NOT NULL,
+                    PRIMARY KEY (pass_id, word_index)
+                );
+
                 CREATE TABLE IF NOT EXISTS recorder_status (
                     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
                     reported_at TEXT NOT NULL,
@@ -140,6 +167,76 @@ class MotoXStore:
                 """
             )
             conn.commit()
+
+    def record_transcription_pass(
+        self,
+        capture_id: str,
+        transcript: str,
+        words: list[dict[str, Any]],
+        *,
+        pass_kind: str = "quick_chunk",
+        model_name: str = "faster-whisper",
+        model_version: str | None = None,
+    ) -> str:
+        """Append a versioned ASR pass and its source-audio word timings."""
+        pass_id = uuid.uuid4().hex
+        with self._lock, self._connection() as conn:
+            if conn.execute(
+                "SELECT 1 FROM chunks WHERE capture_id = ?", (capture_id,)
+            ).fetchone() is None:
+                raise KeyError("unknown capture")
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute(
+                "UPDATE transcription_passes SET is_current = 0 "
+                "WHERE capture_id = ? AND pass_kind = ? AND is_current = 1",
+                (capture_id, pass_kind),
+            )
+            conn.execute(
+                """
+                INSERT INTO transcription_passes (
+                    pass_id, capture_id, pass_kind, model_name, model_version,
+                    transcript, is_current
+                ) VALUES (?, ?, ?, ?, ?, ?, 1)
+                """,
+                (
+                    pass_id,
+                    capture_id,
+                    pass_kind,
+                    model_name,
+                    model_version,
+                    transcript,
+                ),
+            )
+            rows = []
+            for index, word in enumerate(words):
+                start = max(0.0, float(word["start_seconds"]))
+                end = max(start, float(word["end_seconds"]))
+                char_start = max(0, int(word["char_start"]))
+                char_end = max(char_start, int(word["char_end"]))
+                rows.append(
+                    (
+                        pass_id,
+                        index,
+                        str(word["word"]),
+                        start,
+                        end,
+                        word.get("probability"),
+                        char_start,
+                        char_end,
+                    )
+                )
+            if rows:
+                conn.executemany(
+                    """
+                    INSERT INTO transcription_words (
+                        pass_id, word_index, word, start_seconds, end_seconds,
+                        probability, char_start, char_end
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    rows,
+                )
+            conn.commit()
+        return pass_id
 
     def has_chunk(self, capture_id: str) -> bool:
         with self._connection() as conn:
@@ -283,15 +380,34 @@ class MotoXStore:
         datetime.strptime(day, "%Y-%m-%d")
         return self.daily_dir / f"{day}.md"
 
+    @staticmethod
+    def _privacy_filter(conn: sqlite3.Connection, chunk_alias: str) -> str:
+        exists = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'review_annotations'"
+        ).fetchone()
+        if not exists:
+            return ""
+        return f"""
+            AND NOT EXISTS (
+                SELECT 1 FROM review_annotations excluded
+                WHERE excluded.capture_id = {chunk_alias}.capture_id
+                  AND excluded.annotation_type = 'privacy'
+                  AND excluded.label = 'Exclude'
+                  AND excluded.reverted_at IS NULL
+            )
+        """
+
     def render_day(self, day: str) -> Path:
         path = self.daily_path(day)
         with self._connection() as conn:
+            privacy_filter = self._privacy_filter(conn, "k")
             conversations = conn.execute(
-                """
+                f"""
                 SELECT DISTINCT c.*
                 FROM conversations c
                 JOIN chunks k ON k.conversation_id = c.conversation_id
                 WHERE substr(k.captured_at, 1, 10) = ? AND k.kind = 'speech'
+                {privacy_filter}
                 ORDER BY c.started_at, c.conversation_id
                 """,
                 (day,),
@@ -307,11 +423,13 @@ class MotoXStore:
                 lines.extend(["_No conversations recorded._", ""])
 
             for conversation in conversations:
+                privacy_filter = self._privacy_filter(conn, "chunks")
                 chunks = conn.execute(
-                    """
+                    f"""
                     SELECT * FROM chunks
                     WHERE conversation_id = ?
                       AND substr(captured_at, 1, 10) = ?
+                      {privacy_filter}
                     ORDER BY captured_at, capture_id
                     """,
                     (conversation["conversation_id"], day),
@@ -354,11 +472,13 @@ class MotoXStore:
     def recent_transcript(self, limit: int = 4) -> list[dict[str, Any]]:
         safe_limit = max(1, min(int(limit), 20))
         with self._connection() as conn:
+            privacy_filter = self._privacy_filter(conn, "chunks")
             rows = conn.execute(
-                """
+                f"""
                 SELECT capture_id, captured_at, transcript, speaker, conversation_id
                 FROM chunks
                 WHERE kind = 'speech' AND trim(transcript) <> ''
+                {privacy_filter}
                 ORDER BY captured_at DESC, capture_id DESC
                 LIMIT ?
                 """,

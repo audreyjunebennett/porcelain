@@ -52,6 +52,13 @@ def choose_conversation(database: Path, conversation_id: str | None) -> str:
             FROM chunks
             WHERE kind = 'speech' AND audio_path IS NOT NULL
               AND trim(transcript) <> '' AND conversation_id IS NOT NULL
+              AND NOT EXISTS (
+                  SELECT 1 FROM review_annotations excluded
+                  WHERE excluded.capture_id = chunks.capture_id
+                    AND excluded.annotation_type = 'privacy'
+                    AND excluded.label = 'Exclude'
+                    AND excluded.reverted_at IS NULL
+              )
             GROUP BY conversation_id
             HAVING SUM(COALESCE(speech_seconds, 0)) >= 30
             ORDER BY MAX(captured_at) DESC
@@ -72,6 +79,13 @@ def conversation_captures(database: Path, conversation_id: str) -> list[Capture]
             FROM chunks
             WHERE conversation_id = ? AND kind = 'speech'
               AND audio_path IS NOT NULL AND trim(transcript) <> ''
+              AND NOT EXISTS (
+                  SELECT 1 FROM review_annotations excluded
+                  WHERE excluded.capture_id = chunks.capture_id
+                    AND excluded.annotation_type = 'privacy'
+                    AND excluded.label = 'Exclude'
+                    AND excluded.reverted_at IS NULL
+              )
             ORDER BY captured_at, capture_id
             """,
             (conversation_id,),

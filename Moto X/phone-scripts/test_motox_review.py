@@ -66,6 +66,58 @@ class MotoXReviewStoreTests(unittest.TestCase):
         self.assertEqual("Minecraft", annotation["replacement_text"])
         self.assertIn("mine chat", self.review.candidates()[0]["transcript"])
 
+    def test_word_timed_pass_drives_review_and_projects_corrections(self):
+        journal = MotoXStore(self.database, Path(self.temp.name) / "daily")
+        journal.record_transcription_pass(
+            "clip-1",
+            "Ruby plays mine chat.",
+            [
+                {"word": "Ruby", "start_seconds": 0.1, "end_seconds": 0.5, "probability": 0.9, "char_start": 0, "char_end": 4},
+                {"word": " plays", "start_seconds": 0.5, "end_seconds": 0.9, "probability": 0.9, "char_start": 4, "char_end": 10},
+            ],
+            model_version="large-v3",
+        )
+        self.review.add_annotation(
+            capture_id="clip-1",
+            start_char=11,
+            end_char=20,
+            annotation_type="transcript",
+            replacement_text="Minecraft",
+        )
+        candidate = self.review.candidates()[0]
+        self.assertEqual("Ruby plays mine chat.", candidate["transcript"])
+        self.assertEqual("Ruby plays Minecraft.", candidate["corrected_transcript"])
+        self.assertEqual(2, len(candidate["words"]))
+
+    def test_context_expands_within_conversation(self):
+        journal = MotoXStore(self.database, Path(self.temp.name) / "daily")
+        journal.record_chunk(
+            ChunkEvent(
+                capture_id="clip-2",
+                captured_at="2026-08-08_20-00-30",
+                kind="speech",
+                duration_seconds=30,
+                speech_seconds=8,
+                audio_path=str(self.audio),
+                transcript="The monologue continues.",
+            )
+        )
+        context = self.review.context("clip-1", radius=2)
+        self.assertEqual(["clip-1", "clip-2"], [row["capture_id"] for row in context])
+
+    def test_privacy_exclusion_removes_clip_from_review_queue(self):
+        self.review.add_annotation(
+            capture_id="clip-1",
+            start_char=0,
+            end_char=0,
+            annotation_type="privacy",
+            label="Exclude",
+        )
+        self.assertEqual([], self.review.candidates())
+        journal = MotoXStore(self.database, Path(self.temp.name) / "daily")
+        self.assertEqual([], journal.recent_transcript())
+        self.assertNotIn("Ruby built a mine chat house", journal.journal_text("2026-08-08"))
+
     def test_audio_range_annotation_can_overlap_text_and_counts_exact_time(self):
         annotation = self.review.add_annotation(
             capture_id="clip-1",
