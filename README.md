@@ -108,7 +108,10 @@ make clean
 
 ## Documentation
 
+- **Authority / current release:** [docs/CURRENT.md](docs/CURRENT.md) (**v0.3.3**)
 - **Index:** [docs/README.md](docs/README.md)
+- **As-built features:** [docs/features/README.md](docs/features/README.md)
+- **Open plans:** [docs/plans/README.md](docs/plans/README.md)
 - **Network / Ports:** [docs/network.md](docs/network.md)
 - **Installation:** [docs/installation.md](docs/installation.md)
 - **Configuration:** [docs/configuration.md](docs/configuration.md)
@@ -124,8 +127,9 @@ make clean
 | **v0.1** | [Working notes](docs/version-v0.1.md) |
 | **v0.1.1** | [Tool router, metrics, quotas](docs/version-v0.1.1.md) |
 | **v0.2.0 – v0.2.2** | [Shipped releases + capability plan](docs/version-v0.2.md) |
-| **v0.3.0** | [Working plan — v0.3](docs/version-v0.3.md) |
+| **v0.3.x (current through 0.3.3)** | [Working plan — v0.3](docs/version-v0.3.md) |
 | **v0.4.0** | [Working plan — v0.4](docs/version-v0.4.md) |
+| **v0.5.0** | [Working plan — v0.5](docs/version-v0.5.md) |
 | **Later** | [Release roadmap](docs/chimera.plan.md#release-roadmap) in [docs/chimera.plan.md](docs/chimera.plan.md) |
 
 ## License

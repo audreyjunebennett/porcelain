@@ -6,10 +6,12 @@ This document holds **vision and normative product requirements**. It does **not
 
 | Need | Read |
 |------|------|
+| **What is current / authoritative** | [CURRENT.md](CURRENT.md) |
 | **Install, run, configure** | [docs/README.md](README.md) operator runbooks |
 | **As-built behavior** (routes, invariants, code map) | [features/README.md](features/README.md) |
-| **Delivery history and phase notes** | [plans/README.md](plans/README.md) |
-| **Shipped release trains** | [version-v0.1.md](version-v0.1.md) … [version-v0.4.md](version-v0.4.md) |
+| **Open work** (draft / active plans) | [plans/README.md](plans/README.md) |
+| **Delivery history** | [plans/archive/](plans/archive/README.md) |
+| **Shipped release trains** | [version-v0.1.md](version-v0.1.md) … [version-v0.5.md](version-v0.5.md) |
 | **North-star architecture** (future routing depth) | [design.md](design.md) |
 | **BiFrost upstream reference** | [reference/bifrost-upstream.md](reference/bifrost-upstream.md) |
 

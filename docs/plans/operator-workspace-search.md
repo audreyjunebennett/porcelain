@@ -7,7 +7,7 @@
 | **Status**                     | `active`                                                                                           |
 | **Targets**                    | Gateway v0.3 setup wizard step 6, gateway v0.5 navigation                                          |
 | **Last updated**               | See git history                                                                                    |
-| **Supersedes / superseded by** | Complements [`operator-chat-ui.md`](operator-chat-ui.md); distinct from v0.4 settings search theme |
+| **Supersedes / superseded by** | Complements [`operator-chat-ui.md`](archive/operator-chat-ui.md); distinct from v0.4 settings search theme |
 | **As-built**                   | [`operator-workspace-search.md`](../features/operator-workspace-search.md) (Phases 1–3)            |
 
 ## At a glance

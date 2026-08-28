@@ -7,7 +7,7 @@
 - **chimera-broker** → provider APIs using `GROQ_API_KEY`, `GEMINI_API_KEY`, etc. per `config/bifrost.config.json` (BiFrost-shaped backend config).
 - **RAG (`rag.enabled`)**: **chimera-gateway** → **chimera-vectorstore** for retrieval; **chimera-gateway** ← **chimera-indexer** (or other clients) via `POST /v1/ingest` and indexer APIs. Without RAG, the gateway does not call the vectorstore.
 
-Operator vocabulary and refactor plan: [plans/chimera-gateway-refactor.md](plans/chimera-gateway-refactor.md).
+Operator vocabulary and refactor plan: [plans/chimera-gateway-refactor.md](plans/archive/chimera-gateway-refactor.md).
 
 ## Typical local ports
 
@@ -33,7 +33,7 @@ Wrapper binaries expose a control-plane HTTP surface (`/healthz`, `/readyz`, `/s
 | **chimera-vectorstore** | **127.0.0.1:7740** | **127.0.0.1:6333** HTTP (`6334` gRPC) | `/healthz`, `/readyz`, `/status`, `/metrics`, `/debug/vectorstore/logs`* |
 | **chimera-indexer** | **127.0.0.1:7750** | Worker backend (`chimera-indexer --indexer-backend`) | `/healthz`, `/readyz`, `/status`, `/metrics`, `/debug/broker/logs`* |
 
-\* Debug log ring buffers are disabled by default (`404`) unless explicitly enabled. Path rename across wrappers is tracked in [plans/chimera-gateway-refactor.md](plans/chimera-gateway-refactor.md) open questions.
+\* Debug log ring buffers are disabled by default (`404`) unless explicitly enabled. Path rename across wrappers is tracked in [plans/chimera-gateway-refactor.md](plans/archive/chimera-gateway-refactor.md) open questions.
 
 Wrapper paths by intent:
 

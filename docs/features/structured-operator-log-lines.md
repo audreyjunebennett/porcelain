@@ -6,7 +6,7 @@
 | **Areas** | `internal/wrapper/line`, `*line` normalizers, supervisor ingest, settings UI |
 | **Status** | `current` |
 | **Introduced** | Log presentation + supervisor fidelity trains (2026-05) |
-| **Originated from** | [`plans/log-supervisor-normalization-fidelity.md`](../plans/log-supervisor-normalization-fidelity.md), [`plans/log-presentation-layer.md`](../plans/log-presentation-layer.md) |
+| **Originated from** | [`plans/log-supervisor-normalization-fidelity.md`](../plans/archive/log-supervisor-normalization-fidelity.md), [`plans/log-presentation-layer.md`](../plans/archive/log-presentation-layer.md) |
 | **Related features** | [Operator log message registry](operator-log-message-registry.md), [Operator settings UI](operator-settings-ui.md), [Chimera wrapper binary contract](chimera-wrapper-binary-contract.md) |
 | **Depends on** | Wrapper stdout/stderr capture, `servicelogs` ring buffer |
 | **Last updated** | See git history |
@@ -83,9 +83,9 @@ Table-driven tests include `TestNormalizePayloadSupervisorSecondPass` in gateway
 ## Out of scope and known gaps
 
 - Log **presentation** copy and shapes — see [operator-log-message-registry](operator-log-message-registry.md).
-- Conversation lifecycle slug spec — [`log-conversations`](../plans/log-conversations.md) (historical); behavior surfaced in settings UI feature.
+- Conversation lifecycle slug spec — [`log-conversations`](../plans/archive/log-conversations.md) (historical); behavior surfaced in settings UI feature.
 
 ## References
 
-- Delivery plans: [`log-supervisor-normalization-fidelity.md`](../plans/log-supervisor-normalization-fidelity.md), [`log-presentation-layer.md`](../plans/log-presentation-layer.md)
+- Delivery plans: [`log-supervisor-normalization-fidelity.md`](../plans/archive/log-supervisor-normalization-fidelity.md), [`log-presentation-layer.md`](../plans/archive/log-presentation-layer.md)
 - Settings consumer: [`operator-settings-ui.md`](operator-settings-ui.md)

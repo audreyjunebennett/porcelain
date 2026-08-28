@@ -6,7 +6,7 @@
 | **Areas** | Gateway RAG service, vector store, embedding client, chat path, indexer ingest APIs |
 | **Status** | `current` |
 | **Introduced** | Gateway v0.2 RAG baseline |
-| **Originated from** | [`plans/indexer.md`](../plans/indexer.md), gateway RAG design in [`docs/indexer.md`](../indexer.md) |
+| **Originated from** | [`plans/indexer.md`](../plans/archive/indexer.md), gateway RAG design in [`docs/indexer.md`](../indexer.md) |
 | **Related features** | [Workspace file indexer](indexer.md), [Indexer ingest pipeline](indexer-ingest-pipeline.md), [Operator chat UI](operator-chat-ui.md), [Context window admission](context-window-admission.md), [Gateway chat routing pipeline](gateway-chat-routing-pipeline.md) |
 | **Depends on** | `rag.enabled` in gateway config, vector store, broker embedding catalog |
 | **Last updated** | See git history |

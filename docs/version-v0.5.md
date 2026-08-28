@@ -22,9 +22,9 @@ The same train ships **actionable operator alerts** built from recurring upstrea
 | [Model-assisted configuration](#model-assisted-configuration)                                      | In-context prompt → model reads page guide + live state → proposes or applies fixes via authenticated APIs                              | `todo`  |
 | [Provider and model error alerts](#provider-and-model-error-alerts)                                | Aggregate structured log failures into actionable alerts (keys, availability, fallback regen)                                           | `todo`  |
 | [Optional provider/model probe](#optional-providermodel-probe)                                     | Explicit operator-triggered validation beyond catalog health; not required for setup wizard                                             | `todo`  |
-| [plans/indexer-embedding-model-and-workspace-purge.md](plans/indexer-embedding-model-and-workspace-purge.md) | Operator-selectable embedding model on indexer card; workspace delete drops vector collection                                           | `todo`  |
-| [plans/operator-workspace-search.md](plans/operator-workspace-search.md)                           | Direct workspace search in app shell (not chat-only RAG)                                                                                | `todo`  |
-| [plans/embedui-settings-card-cleanup.md](plans/embedui-settings-card-cleanup.md)                 | Settings feed and card component consistency refactor                                                                                   | `todo`  |
+| [plans/indexer-embedding-model-and-workspace-purge.md](plans/archive/indexer-embedding-model-and-workspace-purge.md) | Operator-selectable embedding model on indexer card; workspace delete drops vector collection                                           | `shipped` |
+| [plans/operator-workspace-search.md](plans/operator-workspace-search.md)                           | Direct workspace search in app shell (not chat-only RAG)                                                                                | `active` |
+| [plans/embedui-settings-card-cleanup.md](plans/archive/embedui-settings-card-cleanup.md)                 | Settings feed and card component consistency refactor                                                                                   | `shipped` |
 
 ***
 
@@ -211,9 +211,9 @@ Each guide should include, at minimum:
 | Model-assisted configuration | End-to-end assist flow with confirm-before-apply; audit logs present                                             |
 | Provider alerts              | Repeated model errors aggregate to one alert with actionable link                                                |
 | Optional probe               | Manual probe updates per-model status; not required for wizard continue                                          |
-| Indexer embedding + purge    | [`plans/indexer-embedding-model-and-workspace-purge.md`](plans/indexer-embedding-model-and-workspace-purge.md) acceptance met |
+| Indexer embedding + purge    | [`plans/indexer-embedding-model-and-workspace-purge.md`](plans/archive/indexer-embedding-model-and-workspace-purge.md) acceptance met |
 | Workspace search             | [`plans/operator-workspace-search.md`](plans/operator-workspace-search.md) acceptance met                        |
-| Settings cleanup             | [`plans/embedui-settings-card-cleanup.md`](plans/embedui-settings-card-cleanup.md) phases shipped               |
+| Settings cleanup             | [`plans/embedui-settings-card-cleanup.md`](plans/archive/embedui-settings-card-cleanup.md) phases shipped               |
 
 ***
 

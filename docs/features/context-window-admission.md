@@ -6,7 +6,7 @@
 | **Areas** | Gateway chat routing, provider limits, virtual model fallback |
 | **Status** | `partial` |
 | **Introduced** | Gateway patch after v0.2 routing baseline (2026-05) |
-| **Originated from** | [`plans/context-window-admission.md`](../plans/context-window-admission.md) |
+| **Originated from** | [`plans/context-window-admission.md`](../plans/archive/context-window-admission.md) |
 | **Related features** | [Operator virtual models](operator-virtual-models.md), [Operator log message registry](operator-log-message-registry.md), [Gateway chat routing pipeline](gateway-chat-routing-pipeline.md) |
 | **Depends on** | `provider-model-limits.yaml`, token estimator, live catalog snapshot |
 | **Last updated** | See git history |
@@ -84,6 +84,6 @@ Manual: send oversized prompt through VM with mixed Groq + Ollama chain; confirm
 
 ## References
 
-- Plan: [`plans/context-window-admission.md`](../plans/context-window-admission.md)
+- Plan: [`plans/context-window-admission.md`](../plans/archive/context-window-admission.md)
 - Example limits: [`config/provider-model-limits.example.yaml`](../../config/provider-model-limits.example.yaml)
 - Virtual model fallback: [Operator virtual models](operator-virtual-models.md)

@@ -6,7 +6,7 @@
 | **Areas** | Gateway catalog, operator SQLite, settings provider cards, virtual models |
 | **Status** | `current` |
 | **Introduced** | Gateway minor after virtual models baseline |
-| **Originated from** | [`plans/provider-model-availability.md`](../plans/provider-model-availability.md) |
+| **Originated from** | [`plans/provider-model-availability.md`](../plans/archive/provider-model-availability.md) |
 | **Related features** | [Operator settings UI](operator-settings-ui.md), [Operator virtual models](operator-virtual-models.md), [Operator chat UI](operator-chat-ui.md) |
 | **Depends on** | Broker catalog snapshot, operator SQLite, UI session tenant |
 | **Last updated** | See git history |
@@ -89,6 +89,6 @@ Manual: mark a fallback-chain model unavailable; confirm it disappears from chat
 
 ## References
 
-- Plan: [`plans/provider-model-availability.md`](../plans/provider-model-availability.md)
+- Plan: [`plans/provider-model-availability.md`](../plans/archive/provider-model-availability.md)
 - Virtual models: [Operator virtual models](operator-virtual-models.md)
 - Free-tier YAML: [`config/provider-free-tier.yaml`](../../config/provider-free-tier.yaml)

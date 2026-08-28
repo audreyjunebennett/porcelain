@@ -99,4 +99,4 @@ BiFrost subprocess rows may join a conversation only if BiFrost exposes `X-Reque
 ## Upstream documentation
 
 - [BiFrost docs](https://docs.getbifrost.ai/)
-- Delivery notes: [plans/upstream-llm-bifrost.md](../plans/upstream-llm-bifrost.md)
+- Delivery notes: [plans/upstream-llm-bifrost.md](../plans/archive/upstream-llm-bifrost.md)

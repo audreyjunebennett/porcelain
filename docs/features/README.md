@@ -1,6 +1,6 @@
 # Feature records — as-built system behavior
 
-**Plans** ([`docs/plans/`](../plans/)) describe what to build and track delivery phases. **Feature records** in this directory describe **what shipped**: behavior, invariants, interfaces, and code entry points. Use them when starting a chat that touches an existing capability, or after implementation to capture decisions from plan + follow-up refinement.
+**Plans** ([`docs/plans/`](../plans/README.md)) describe open work (`draft` / `active`). Completed plans live in [`plans/archive/`](../plans/archive/README.md). **Feature records** in this directory describe **what shipped**: behavior, invariants, interfaces, and code entry points. Authority map: [`CURRENT.md`](../CURRENT.md). Use feature records when starting a chat that touches an existing capability, or after implementation to capture decisions from plan + follow-up refinement.
 
 **New record:** copy [`_template.md`](_template.md) into this folder, rename, fill in, delete the authoring notes, and add a row to the appropriate index below.
 

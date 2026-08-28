@@ -23,7 +23,7 @@ On the **RAG** side, indexers send **manifest ingest** (pre-chunked files with l
 | [Workspace embedding scope (project + flavor)](#workspace-embedding-scope-project--flavor) | Ingest and retrieve by **(user, project, flavor?)**; base + flavored union; multi-workspace pool                                                    | `todo`  |
 | [Indexer manifest ingest (line metadata)](#indexer-manifest-ingest-line-metadata)          | Manifest pre-chunk ingest; line-accurate spans in vector store and chat UI ([`plans/indexer-manifest-ingest.md`](plans/indexer-manifest-ingest.md)) | `todo`  |
 | [Indexer workspace lifecycle and purge](#indexer-workspace-lifecycle-and-purge)            | Operator path to manage indexers and purge vectors for one workspace scope                                                                          | `todo`  |
-| [Indexer Phase 7 — model-assisted strategy](#indexer-phase-7--model-assisted-strategy)     | Optional gateway-mediated indexing recommendations from tree + config summary ([`plans/indexer.md`](plans/indexer.md) Phase 7)                      | `todo`  |
+| [Indexer Phase 7 — model-assisted strategy](#indexer-phase-7--model-assisted-strategy)     | Optional gateway-mediated indexing recommendations from tree + config summary ([`plans/indexer.md`](plans/archive/indexer.md) Phase 7)                      | `todo`  |
 | [Configuration in the desktop or web UI](#configuration-in-the-desktop-or-web-ui)          | Edit supported runtime settings in desktop or web UI, not YAML-only                                                                                 | `todo`  |
 | [plans/env-precedence-contract.md](plans/env-precedence-contract.md)                       | Unified env/config precedence and runtime profiles across binaries                                                                                  | `draft` |
 | [Settings and application search](#settings-and-application-search)                        | Search settings and/or app-wide so operators find controls quickly                                                                                  | `todo`  |
@@ -35,11 +35,11 @@ On the **RAG** side, indexers send **manifest ingest** (pre-chunked files with l
 
 **v0.4** is the **ensemble roadmap** milestone referenced in [`chimera.plan.md`](chimera.plan.md): the point at which **two-phase ensemble**, **triggers**, **streaming error** semantics, and **external human escalation** (including paste-back and session behavior) are **specified and shippable** as a coherent product slice—not partial stubs.
 
-The same train adds **operator-grade RAG housekeeping**: indexers produce embeddings stored **via** the gateway into the **vector database**; **workspace embedding scope (project + flavor)** defines ingestion keys and **base + flavor union** retrieval; operators can **target** a workspace (or indexer registration) for **purge / remove** so retired trees do not leave orphaned vectors. **Peer backends** enable cross-host upstream routing without gateway-to-gateway chaining. **Indexer Phase 7** (model-assisted indexing strategy) is scoped here as an optional operator-facing improvement on top of the shipped indexer baseline ([`plans/indexer.md`](plans/indexer.md) Phases 2–6). It also advances the **desktop (and any web)** shell toward **settings parity**: edit supported configuration **in UI**, with **search** to navigate dense settings and optionally the rest of the app.
+The same train adds **operator-grade RAG housekeeping**: indexers produce embeddings stored **via** the gateway into the **vector database**; **workspace embedding scope (project + flavor)** defines ingestion keys and **base + flavor union** retrieval; operators can **target** a workspace (or indexer registration) for **purge / remove** so retired trees do not leave orphaned vectors. **Peer backends** enable cross-host upstream routing without gateway-to-gateway chaining. **Indexer Phase 7** (model-assisted indexing strategy) is scoped here as an optional operator-facing improvement on top of the shipped indexer baseline ([`plans/indexer.md`](plans/archive/indexer.md) Phases 2–6). It also advances the **desktop (and any web)** shell toward **settings parity**: edit supported configuration **in UI**, with **search** to navigate dense settings and optionally the rest of the app.
 
 For **`model: Chimera-<gateway_semver>`**, the gateway continues to own **routing policy** and the **fallback chain** (*Gateway turn orchestration*); **RAG** remains as in prior versions when enabled. **Per-turn dispatch** evaluates ensemble triggers anew each message (*Gateway runtime · 2*). **Fail-over / fail-fast** within the model chain and peers still apply; **no** gateway-side request queues (*Release roadmap · v0.8*).
 
-**Companion docs:** [`chimera.plan.md`](chimera.plan.md) (requirements: *Ensemble orchestration*, *External human escalation*, *Responsibility split*, *Gateway runtime*, *Chat turn resilience and degradation*, *Workspace indexing and retrieval*, *Indexer live storage API*), [`configuration.md`](configuration.md), [`plans/indexer.md`](plans/indexer.md), [`plans/env-precedence-contract.md`](plans/env-precedence-contract.md) (unified env/config precedence), [`plans/desktop-ui.md`](plans/desktop-ui.md), [`plans/operator-cli.md`](plans/operator-cli.md) (operator CLI for gateway/BiFrost), [`plans/_template.md`](plans/_template.md).
+**Companion docs:** [`chimera.plan.md`](chimera.plan.md) (requirements: *Ensemble orchestration*, *External human escalation*, *Responsibility split*, *Gateway runtime*, *Chat turn resilience and degradation*, *Workspace indexing and retrieval*, *Indexer live storage API*), [`configuration.md`](configuration.md), [`plans/indexer.md`](plans/archive/indexer.md), [`plans/env-precedence-contract.md`](plans/env-precedence-contract.md) (unified env/config precedence), [`plans/desktop-ui.md`](plans/archive/desktop-ui.md), [`plans/operator-cli.md`](plans/operator-cli.md) (operator CLI for gateway/BiFrost), [`plans/_template.md`](plans/_template.md).
 
 ***
 
@@ -121,7 +121,7 @@ For **`model: Chimera-<gateway_semver>`**, the gateway continues to own **routin
 * **Retrieval + UI** — Extend `X-Chimera-RAG-Hits`, system context, conversation history, `/ui/chat` gutter rendering.
 * **Revision coherence** — Staleness vs live file hash; warn/strict modes (toggle placement TBD in plan open questions).
 * **Tooling** — Context-around, adjacent chunks, line read APIs; indexer vs gateway file-serving TBD.
-* **Re-index** — Full re-index all workspaces on ship; coordinate with [`plans/indexer-sync-state-sqlite-and-force-reindex.md`](plans/indexer-sync-state-sqlite-and-force-reindex.md).
+* **Re-index** — Full re-index all workspaces on ship; coordinate with [`plans/indexer-sync-state-sqlite-and-force-reindex.md`](plans/archive/indexer-sync-state-sqlite-and-force-reindex.md).
 
 **Acceptance**
 
@@ -143,7 +143,7 @@ For **`model: Chimera-<gateway_semver>`**, the gateway continues to own **routin
 * **Identify “workspace”** — Define the operator-visible handle (e.g. **registered indexer** + roots, or **`tenant_id` / `project_id` / `flavor_id`** triple consistent with *Workspace indexing · 8–10* and *Tenant authentication · 1–2*) used to scope **purge** and **list** actions.
 * **Operations** — At minimum: **purge** (delete vectors/payload for that scope) and clarity on **stop/disable** a specific indexer instance if multiple indexers run; optional **dry-run** or **preview counts** if live storage APIs support it (*Observability · 2*).
 * **Surface** — Gateway **REST** (preferred for parity with ingest/indexer config) and/or **desktop** action that calls the same backend; document **auth** (same gateway token model as ingest).
-* **Execution plan:** [`plans/indexer-embedding-model-and-workspace-purge.md`](plans/indexer-embedding-model-and-workspace-purge.md) Phase 3 — workspace delete drops collection (may ship before full v0.4 purge UI).
+* **Execution plan:** [`plans/indexer-embedding-model-and-workspace-purge.md`](plans/archive/indexer-embedding-model-and-workspace-purge.md) Phase 3 — workspace delete drops collection (may ship before full v0.4 purge UI).
 * **Safety** — Confirmations, irreversibility callouts, and docs for **collection naming** (*Workspace indexing · 7*) so operators know what disappears.
 
 **Acceptance**
@@ -159,7 +159,7 @@ For **`model: Chimera-<gateway_semver>`**, the gateway continues to own **routin
 
 **Goal:** Give operators an **optional**, **gateway-mediated** way to obtain a **recommended indexing strategy** (ignore patterns, priorities, exclusions) from a **model** or structured endpoint—without embedding inside `chimera-indexer` and without replacing human review of what gets indexed.
 
-**Execution plan:** [`plans/indexer.md`](plans/indexer.md) — **Phase 7 — Model-assisted strategy** (Phases 2–6 are **done**; Phase 7 is the remaining indexer plan item).
+**Execution plan:** [`plans/indexer.md`](plans/archive/indexer.md) — **Phase 7 — Model-assisted strategy** (Phases 2–6 are **done**; Phase 7 is the remaining indexer plan item).
 
 **Scope**
 
@@ -173,7 +173,7 @@ For **`model: Chimera-<gateway_semver>`**, the gateway continues to own **routin
 
 * Documented API or UI flow: operator triggers strategy assist → gateway returns structured recommendation → operator can **preview** and **accept or discard** changes to indexer config.
 * Recommendations never bypass **relative `source`** rules or tenant scoping; secrets and absolute host paths are **not** sent in the assist payload.
-* [`plans/indexer.md`](plans/indexer.md) Phase 7 checklist item marked **done** when the normative contract and at least one operator path ship.
+* [`plans/indexer.md`](plans/archive/indexer.md) Phase 7 checklist item marked **done** when the normative contract and at least one operator path ship.
 
 **Status:** `todo`
 
@@ -207,7 +207,7 @@ For **`model: Chimera-<gateway_semver>`**, the gateway continues to own **routin
 
 * **Settings search** — Filter settings **labels**, **descriptions**, and **section** titles (and optionally **current values** where not secret) to jump to the right control.
 * **Global search (optional scope)** — If shipped in v0.4, define breadth: e.g. settings + **navigation** destinations + **log view** filters; **out** if deferred—then this section is **settings-only** and global search moves to a later version (call out in **Explicitly not** or **Status** above).
-* **Keyboard / UX** — Sensible focus order and shortcut if the platform supports it (document in [`plans/desktop-ui.md`](plans/desktop-ui.md) when implemented).
+* **Keyboard / UX** — Sensible focus order and shortcut if the platform supports it (document in [`plans/desktop-ui.md`](plans/archive/desktop-ui.md) when implemented).
 
 **Acceptance**
 
@@ -259,7 +259,7 @@ Then retrieval must query embeddings from **both**:
 ### Operator story
 
 * **Natural flow:** index “everything I want everywhere” under **project only**; add **flavored** folders or repos later for **sensitive** or **topic-specific** material; flavored chats automatically see **shared baseline** plus **flavor overlay**.
-* **Docs:** Update [`plans/indexer.md`](plans/indexer.md) and [`configuration.md`](configuration.md) when fields for project/flavor per index and per-request workspace lists are fixed.
+* **Docs:** Update [`plans/indexer.md`](plans/archive/indexer.md) and [`configuration.md`](configuration.md) when fields for project/flavor per index and per-request workspace lists are fixed.
 
 ### Relationship to the v0.3 setup wizard
 
@@ -352,7 +352,7 @@ From the master **Release roadmap** table:
 
 * [`version-v0.3.md`](version-v0.3.md) - previous version (onboarding, virtual models, setup wizard)
 * [`version-v0.5.md`](version-v0.5.md) - next version (operator desired-state gateway, model-assisted configuration)
-* [`releases-v0.4.x.md`](releases-v0.4.x.md) - patch release notes, once this train ships patches
-* [`plans/indexer.md`](plans/indexer.md) - `chimera-indexer` plan (Phase 7 model-assisted strategy scoped to this release)
+* Patch release notes — add `releases-v0.4.x.md` once this train ships patches
+* [`plans/indexer.md`](plans/archive/indexer.md) - `chimera-indexer` plan (Phase 7 model-assisted strategy scoped to this release)
 * [`plans/operator-cli.md`](plans/operator-cli.md) - `chimera` operator CLI (config, health, models, chat smoke tests)
 * [`plans/_template.md`](plans/_template.md) - phase-level plan template for implementation breakdowns

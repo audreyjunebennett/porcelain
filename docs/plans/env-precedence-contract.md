@@ -11,7 +11,7 @@
 
 ## At a glance
 
-This plan defines one operator-facing environment/config precedence contract shared by all first-party binaries so startup behavior is predictable. It introduces explicit runtime profiles (secure, team dev, personal/private), including a personal/private flow where the product can generate a gateway key, persist it, and log where it was written without ever logging the key value. The contract is designed to become a reusable startup requirement for portable service wrappers in [`vectorstore-broker-wrapper-hard-cut.md`](vectorstore-broker-wrapper-hard-cut.md).
+This plan defines one operator-facing environment/config precedence contract shared by all first-party binaries so startup behavior is predictable. It introduces explicit runtime profiles (secure, team dev, personal/private), including a personal/private flow where the product can generate a gateway key, persist it, and log where it was written without ever logging the key value. The contract is designed to become a reusable startup requirement for portable service wrappers in [`vectorstore-broker-wrapper-hard-cut.md`](archive/vectorstore-broker-wrapper-hard-cut.md).
 
 | Phase                                                                                            | Outcome                                                                                   | Status |
 |--------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------|--------|
@@ -27,7 +27,7 @@ This plan defines one operator-facing environment/config precedence contract sha
 
 Current binaries are close but not fully uniform in how environment, dotenv, config files, and flags interact. That leads to surprises for operators, especially when launching desktop/supervised flows. A single contract lowers support burden, improves security posture, and creates a reliable startup foundation for wrapper-style portable binaries.
 
-**Related docs:** [`vectorstore-broker-wrapper-hard-cut.md`](vectorstore-broker-wrapper-hard-cut.md), [`v0-3-naming-migration.md`](v0-3-naming-migration.md), [`../configuration.md`](../configuration.md), [`../supervisor.md`](../supervisor.md), [`../installation.md`](../installation.md).
+**Related docs:** [`vectorstore-broker-wrapper-hard-cut.md`](archive/vectorstore-broker-wrapper-hard-cut.md), [`v0-3-naming-migration.md`](archive/v0-3-naming-migration.md), [`../configuration.md`](../configuration.md), [`../supervisor.md`](../supervisor.md), [`../installation.md`](../installation.md).
 
 ---
 
@@ -186,4 +186,4 @@ Current binaries are close but not fully uniform in how environment, dotenv, con
 ## References
 
 - Code: `cmd/chimera-gateway`, `cmd/chimera-supervisor`, `porcelain/chimera/chimera-indexer`, `cmd/chimera`, `internal/config`, `internal/indexer`, `internal/supervisor`, `internal/tokens`
-- Docs: [`vectorstore-broker-wrapper-hard-cut.md`](vectorstore-broker-wrapper-hard-cut.md), [`v0-3-naming-migration.md`](v0-3-naming-migration.md), [`../configuration.md`](../configuration.md), [`../supervisor.md`](../supervisor.md)
+- Docs: [`vectorstore-broker-wrapper-hard-cut.md`](archive/vectorstore-broker-wrapper-hard-cut.md), [`v0-3-naming-migration.md`](archive/v0-3-naming-migration.md), [`../configuration.md`](../configuration.md), [`../supervisor.md`](../supervisor.md)

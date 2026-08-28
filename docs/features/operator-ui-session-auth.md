@@ -6,7 +6,7 @@
 | **Areas** | Gateway admin UI, `/ui/*`, `/api/ui/*`, session store |
 | **Status** | `current` |
 | **Introduced** | Operator settings/chat shell (v0.2+) |
-| **Originated from** | [`plans/operator-conversation-history.md`](../plans/operator-conversation-history.md) Phase 1 |
+| **Originated from** | [`plans/operator-conversation-history.md`](../plans/archive/operator-conversation-history.md) Phase 1 |
 | **Related features** | [Operator conversation history](operator-conversation-history.md), [Operator chat UI](operator-chat-ui.md), [Operator settings UI](operator-settings-ui.md) |
 | **Depends on** | `api-keys.yaml` token validation |
 | **Last updated** | See git history |
@@ -75,5 +75,5 @@ Manual: login at `/ui/login`, confirm `/api/ui/conversations` works without `Aut
 
 ## References
 
-- Delivery plan: [`operator-conversation-history.md`](../plans/operator-conversation-history.md)
+- Delivery plan: [`operator-conversation-history.md`](../plans/archive/operator-conversation-history.md)
 - Token source: [`operator-bootstrap-and-api-tokens.md`](operator-bootstrap-and-api-tokens.md)

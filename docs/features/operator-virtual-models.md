@@ -6,7 +6,7 @@
 | **Areas** | Gateway runtime, operator SQLite, chat routing, settings UI |
 | **Status** | `current` |
 | **Introduced** | Gateway minor after unified operator cards baseline |
-| **Originated from** | [`plans/virtual-models-operator.md`](../plans/virtual-models-operator.md) |
+| **Originated from** | [`plans/virtual-models-operator.md`](../plans/archive/virtual-models-operator.md) |
 | **Related features** | [Operator settings UI](operator-settings-ui.md), [Operator provider model availability](operator-provider-model-availability.md), [Operator chat UI](operator-chat-ui.md), [Context window admission](context-window-admission.md), [Gateway chat routing pipeline](gateway-chat-routing-pipeline.md) |
 | **Depends on** | Operator SQLite, broker catalog, routing policy engine, UI session auth |
 | **Last updated** | See git history |
@@ -108,6 +108,6 @@ Manual: create two VMs with different fallback chains; chat with each; confirm d
 
 ## References
 
-- Plan: [`plans/virtual-models-operator.md`](../plans/virtual-models-operator.md)
+- Plan: [`plans/virtual-models-operator.md`](../plans/archive/virtual-models-operator.md)
 - Provider filtering: [Operator provider model availability](operator-provider-model-availability.md)
 - Settings surface: [Operator settings UI](operator-settings-ui.md)

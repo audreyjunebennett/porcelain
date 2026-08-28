@@ -6,7 +6,7 @@
 | **Areas** | Gateway operator SQLite, chat persistence, gateway embed UI, admin UI session |
 | **Status** | `current` |
 | **Introduced** | Gateway operator shell v0.2 train |
-| **Originated from** | [`plans/operator-conversation-history.md`](../plans/operator-conversation-history.md) |
+| **Originated from** | [`plans/operator-conversation-history.md`](../plans/archive/operator-conversation-history.md) |
 | **Related features** | [Operator chat UI](operator-chat-ui.md), [Operator left navigation ribbon](operator-left-navigation-ribbon.md), [Operator UI session auth](operator-ui-session-auth.md), [Operator SQLite store](operator-sqlite-store.md) |
 | **Depends on** | [Operator UI session auth](operator-ui-session-auth.md), operator SQLite, live chat renderer |
 | **Last updated** | See git history |
@@ -108,6 +108,6 @@ Manual: sign in at `/ui`, send chat messages, open history panel, flag/rename/de
 
 ## References
 
-- Delivery plan: [`plans/operator-conversation-history.md`](../plans/operator-conversation-history.md)
-- Shipped chat UI plan: [`plans/operator-chat-ui.md`](../plans/operator-chat-ui.md)
+- Delivery plan: [`plans/operator-conversation-history.md`](../plans/archive/operator-conversation-history.md)
+- Shipped chat UI plan: [`plans/operator-chat-ui.md`](../plans/archive/operator-chat-ui.md)
 - Operator configuration: [`configuration.md`](../configuration.md)

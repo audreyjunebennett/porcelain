@@ -6,7 +6,7 @@
 | **Areas** | `locus-desktop`, `chimera-supervisor`, packaging |
 | **Status** | `partial` |
 | **Introduced** | v0.4 desktop/supervisor boundary |
-| **Originated from** | [`plans/locus-desktop-supervisor-contract.md`](../plans/locus-desktop-supervisor-contract.md) |
+| **Originated from** | [`plans/locus-desktop-supervisor-contract.md`](../plans/archive/locus-desktop-supervisor-contract.md) |
 | **Related features** | [Chimera wrapper binary contract](chimera-wrapper-binary-contract.md), [Structured operator log lines](structured-operator-log-lines.md) |
 | **Depends on** | Wrapper health/readiness endpoints on supervisor control plane |
 | **Last updated** | See git history |
@@ -93,11 +93,11 @@ Manual: `make locus-desktop-run` — confirm connect-first, login route, owned s
 
 ## Out of scope and known gaps
 
-- **Phase 4 packaging** ([`locus-desktop-supervisor-contract`](../plans/locus-desktop-supervisor-contract.md)) — cross-platform bundle layout enforcement still `todo`.
+- **Phase 4 packaging** ([`locus-desktop-supervisor-contract`](../plans/archive/locus-desktop-supervisor-contract.md)) — cross-platform bundle layout enforcement still `todo`.
 - Curated supervisor arg allowlist — explicitly deferred (pass-through v1).
 
 ## References
 
-- Delivery plan: [`locus-desktop-supervisor-contract.md`](../plans/locus-desktop-supervisor-contract.md)
+- Delivery plan: [`locus-desktop-supervisor-contract.md`](../plans/archive/locus-desktop-supervisor-contract.md)
 - Stack runbook: [`supervisor.md`](../supervisor.md)
 - Packaging: [`packaging.md`](../packaging.md)

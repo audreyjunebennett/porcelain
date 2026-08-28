@@ -6,7 +6,7 @@
 | **Areas** | Gateway operator persistence, migrations, feature stores |
 | **Status** | `current` |
 | **Introduced** | Indexer workspaces Phase 1+ |
-| **Originated from** | [`plans/indexer-workspaces-sqlite-gateway-api.md`](../plans/indexer-workspaces-sqlite-gateway-api.md), [`virtual-models-operator.md`](../plans/virtual-models-operator.md) |
+| **Originated from** | [`plans/indexer-workspaces-sqlite-gateway-api.md`](../plans/archive/indexer-workspaces-sqlite-gateway-api.md), [`virtual-models-operator.md`](../plans/archive/virtual-models-operator.md) |
 | **Related features** | [Indexer workspaces](indexer-workspaces.md), [Operator virtual models](operator-virtual-models.md), [Operator provider model availability](operator-provider-model-availability.md), [Operator conversation history](operator-conversation-history.md) |
 | **Depends on** | Gateway runtime path for `operator.sqlite` |
 | **Last updated** | See git history |
@@ -75,9 +75,9 @@ go test ./chimera/chimera-gateway/internal/operatorstore/...
 ## Out of scope and known gaps
 
 - Indexer sync state — still JSON files (see [indexer.md](indexer.md)); not in operator SQLite.
-- Planned SQLite sync checkpoints — [`indexer-sync-state-sqlite`](../plans/indexer-sync-state-sqlite-and-force-reindex.md) draft.
+- Planned SQLite sync checkpoints — [`indexer-sync-state-sqlite`](../plans/archive/indexer-sync-state-sqlite-and-force-reindex.md) draft.
 
 ## References
 
-- Workspace plan: [`indexer-workspaces-sqlite-gateway-api.md`](../plans/indexer-workspaces-sqlite-gateway-api.md)
-- Virtual models plan: [`virtual-models-operator.md`](../plans/virtual-models-operator.md)
+- Workspace plan: [`indexer-workspaces-sqlite-gateway-api.md`](../plans/archive/indexer-workspaces-sqlite-gateway-api.md)
+- Virtual models plan: [`virtual-models-operator.md`](../plans/archive/virtual-models-operator.md)

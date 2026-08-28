@@ -6,7 +6,7 @@
 | **Areas** | Gateway logs UI, structured log emission, indexer/broker/vectorstore copy |
 | **Status** | `current` |
 | **Introduced** | 2026-05 operator copy refactor |
-| **Originated from** | [`plans/operator-message-registry.md`](../plans/operator-message-registry.md) |
+| **Originated from** | [`plans/operator-message-registry.md`](../plans/archive/operator-message-registry.md) |
 | **Related features** | [Operator settings UI](operator-settings-ui.md), [Indexer health and operator logs](indexer-health-and-operator-logs.md) |
 | **Depends on** | `messages.yaml`, go generate pipeline, settings embed renderers |
 | **Last updated** | See git history |
@@ -86,6 +86,6 @@ Manual: edit a slug `summary` in YAML, regenerate, rebuild gateway, confirm sett
 
 ## References
 
-- Plan: [`plans/operator-message-registry.md`](../plans/operator-message-registry.md)
-- Presentation shapes: [`plans/log-presentation-layer.md`](../plans/log-presentation-layer.md)
+- Plan: [`plans/operator-message-registry.md`](../plans/archive/operator-message-registry.md)
+- Presentation shapes: [`plans/log-presentation-layer.md`](../plans/archive/log-presentation-layer.md)
 - Package README: [`internal/operatorcopy/README.md`](../../internal/operatorcopy/README.md)
