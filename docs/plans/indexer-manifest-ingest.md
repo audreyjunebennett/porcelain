@@ -397,7 +397,7 @@ Implement **Phase 1 of the sync-state SQLite plan** before or in parallel with P
 
 - Coordinate [`indexer-sync-state-sqlite-and-force-reindex.md`](archive/indexer-sync-state-sqlite-and-force-reindex.md) Phase 1–4 minimum: SQLite sync state + **Re-index workspace** button bumps `reindex_generation` → full re-upload.
 - Ship migration note: operators run **Re-index all workspaces** once (or clear sync state + restart indexer).
-- Update [`docs/indexer.md`](../indexer.md), [`docs/version-v0.2.md`](../version-v0.2.md) payload section, [`features/indexer-ingest-pipeline.md`](../features/indexer-ingest-pipeline.md) or new [`features/indexer-manifest-ingest.md`](../features/indexer-manifest-ingest.md).
+- Update [`docs/indexer.md`](../indexer.md), [`docs/version-v0.2.md`](../version-v0.2.md) payload section, and [`features/indexer-ingest-pipeline.md`](../features/indexer-ingest-pipeline.md) (or add a new feature record under [`docs/features/`](../features/README.md) when this ships).
 - Mark plan **shipped**; add **As-built** link in this table.
 
 **Acceptance**

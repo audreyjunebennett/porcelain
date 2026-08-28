@@ -6,7 +6,7 @@
 | **Areas** | Operator SQLite, gateway indexer API, supervised `chimera-indexer`, settings embed UI |
 | **Status** | `current` |
 | **Introduced** | Gateway + indexer minor after v0.2 supervised stack |
-| **Originated from** | [`plans/indexer-workspaces-sqlite-gateway-api.md`](../plans/archive/indexer-workspaces-sqlite-gateway-api.md), [`plans/indexer-workspaces-accurate-reporting.md`](../plans/archive/indexer-workspaces-accurate-reporting.md) |
+| **Originated from** | [`plans/archive/indexer-workspaces-sqlite-gateway-api.md`](../plans/archive/indexer-workspaces-sqlite-gateway-api.md), [`plans/archive/indexer-workspaces-accurate-reporting.md`](../plans/archive/indexer-workspaces-accurate-reporting.md) |
 | **Related features** | [Workspace file indexer](indexer.md), [Indexer ingest pipeline](indexer-ingest-pipeline.md) |
 | **Depends on** | [Operator UI session auth](operator-ui-session-auth.md), operator SQLite migrations, UI session tenant |
 | **Last updated** | See git history |
@@ -90,7 +90,7 @@ Manual: create a workspace with two paths on `/ui/settings`; confirm one card; a
 
 ## Out of scope and known gaps
 
-- **Re-index all** — no dedicated UI control; per-workspace **Re-index** on managed cards calls `POST /api/ui/indexer/workspaces/{id}/reindex` ([`plans/indexer-sync-state-sqlite-and-force-reindex.md`](../plans/archive/indexer-sync-state-sqlite-and-force-reindex.md) shipped).
+- **Re-index all** — no dedicated UI control; per-workspace **Re-index** on managed cards calls `POST /api/ui/indexer/workspaces/{id}/reindex` ([`plans/archive/indexer-sync-state-sqlite-and-force-reindex.md`](../plans/archive/indexer-sync-state-sqlite-and-force-reindex.md) shipped).
 - **Best-effort per-path materialize** — planned in accurate-reporting Phase 4D; **not** implemented.
 - **Corpus purge on workspace delete** — `DELETE /api/ui/indexer/workspaces/{id}` drops the vector collection for `(ingest tenant, project_id, flavor_id)` before removing the SQLite row. Ingest tenant is the authenticated UI session principal (same tenant the indexer uses via API key). If RAG is enabled but purge fails, the workspace row is kept and the API returns 502. Structured log: `gateway.operator.workspace.purged` (success) / `gateway.operator.workspace.purge_failed` (blocked delete).
 - **Removed watch path** — fsnotify stops; sync checkpoints cleared; stale sources pushed via `PUT /v1/indexer/corpus/stale` when possible (not a full collection purge unless the whole workspace is deleted).
@@ -98,6 +98,6 @@ Manual: create a workspace with two paths on `/ui/settings`; confirm one card; a
 
 ## References
 
-- Plans: [`plans/indexer-workspaces-sqlite-gateway-api.md`](../plans/archive/indexer-workspaces-sqlite-gateway-api.md), [`plans/indexer-workspaces-accurate-reporting.md`](../plans/archive/indexer-workspaces-accurate-reporting.md)
+- Plans: [`plans/archive/indexer-workspaces-sqlite-gateway-api.md`](../plans/archive/indexer-workspaces-sqlite-gateway-api.md), [`plans/archive/indexer-workspaces-accurate-reporting.md`](../plans/archive/indexer-workspaces-accurate-reporting.md)
 - Parent feature: [`indexer.md`](indexer.md)
 - Operator guide: [`docs/indexer.md`](../indexer.md) (supervised mode section)

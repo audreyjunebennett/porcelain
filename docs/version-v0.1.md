@@ -28,7 +28,7 @@ Stand up the chimera-gateway in Go in front of BiFrost: chat completions work, t
 
 This document is for **Audrey** (and a Cursor agent helping her) to **explore** what "done enough" for **v0.1** means in practice, how the repo behaves **today**, and which directions are **worth investigating** versus **already decided** in the product plan.
 
-**Tone:** everything under *Explorations* is **optional research**, not a commitment. The authoritative roadmap and locked decisions remain in [`chimera.plan.md`](chimera.plan.md). Normative UI/desktop detail lives in [`plans/desktop-ui.md`](plans/archive/desktop-ui.md).
+**Tone:** everything under *Explorations* is **optional research**, not a commitment. The authoritative roadmap and locked decisions remain in [`chimera.plan.md`](chimera.plan.md). Normative UI/desktop detail lives in [`plans/archive/desktop-ui.md`](plans/archive/desktop-ui.md).
 
 ---
 
@@ -82,7 +82,7 @@ These are the **last mile** items for v0.1 UX and routing, articulated from the 
 
 | Tab       | Purpose                                                                                                                                               |
 |-----------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Main**  | Primary operator surface — welcome, status, or landing agreed with [`plans/desktop-ui.md`](plans/archive/desktop-ui.md) (not only jumping straight to panel). |
+| **Main**  | Primary operator surface — welcome, status, or landing agreed with [`plans/archive/desktop-ui.md`](plans/archive/desktop-ui.md) (not only jumping straight to panel). |
 | **Logs**  | Live tail of gateway + supervised services (feeds §1).                                                                                                |
 | **Admin** | Existing admin console — equivalent to today’s `**/ui/panel`** (and login flow when needed).                                                          |
 
@@ -93,7 +93,7 @@ Implementation options include **native tab UI** around multiple webviews, **one
 
 Making a fast, portable application is important for the v0.1 release as it dictates the framework we are building on top of going forward.
 
-**Default deployment shape:** **Go** `**chimera`** / `**chimera serve**` with **BiFrost** — see [`plans/upstream-llm-bifrost.md`](plans/archive/upstream-llm-bifrost.md) for the phased history.
+**Default deployment shape:** **Go** `**chimera`** / `**chimera serve**` with **BiFrost** — see [`plans/archive/upstream-llm-bifrost.md`](plans/archive/upstream-llm-bifrost.md) for the phased history.
 
 **4c. Vector store without a dedicated Qdrant process**
 

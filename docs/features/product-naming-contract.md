@@ -6,7 +6,7 @@
 | **Areas** | All `chimera-*` / `locus-*` binaries, docs, scripts, HTTP headers |
 | **Status** | `current` |
 | **Introduced** | v0.3 naming hard cut |
-| **Originated from** | [`plans/v0-3-naming-migration.md`](../plans/archive/v0-3-naming-migration.md) |
+| **Originated from** | [`plans/archive/v0-3-naming-migration.md`](../plans/archive/v0-3-naming-migration.md) |
 | **Related features** | [Chimera wrapper binary contract](chimera-wrapper-binary-contract.md) |
 | **Depends on** | None |
 | **Last updated** | See git history |

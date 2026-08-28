@@ -6,7 +6,7 @@
 | **Areas** | Gateway embed UI, chat/RAG metadata, virtual models |
 | **Status** | `current` |
 | **Introduced** | Gateway operator shell v0.2 train |
-| **Originated from** | [`plans/operator-chat-ui.md`](../plans/archive/operator-chat-ui.md) |
+| **Originated from** | [`plans/archive/operator-chat-ui.md`](../plans/archive/operator-chat-ui.md) |
 | **Related features** | [Operator left navigation ribbon](operator-left-navigation-ribbon.md), [Operator conversation history](operator-conversation-history.md), [Operator virtual models](operator-virtual-models.md), [Indexer workspaces](indexer-workspaces.md) |
 | **Depends on** | [Operator UI session auth](operator-ui-session-auth.md), `GET /v1/models`, `POST /v1/chat/completions`, [Gateway RAG](gateway-rag-ingest-and-retrieval.md), indexer workspaces API |
 | **Last updated** | See git history |
@@ -101,7 +101,7 @@ Manual: open `/ui` → chat iframe; send a message with a workspace selected; co
 
 ## References
 
-- Delivery plan: [`plans/operator-chat-ui.md`](../plans/archive/operator-chat-ui.md)
+- Delivery plan: [`plans/archive/operator-chat-ui.md`](../plans/archive/operator-chat-ui.md)
 - Shell: [Operator left navigation ribbon](operator-left-navigation-ribbon.md)
 - Persistence: [Operator conversation history](operator-conversation-history.md)
 - Configuration: [`configuration.md`](../configuration.md)

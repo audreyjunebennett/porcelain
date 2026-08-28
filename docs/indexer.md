@@ -9,7 +9,7 @@ The gateway
 chunks, embeds, and writes vectors to Qdrant, so the indexer never embeds or
 chunks locally.
 
-**As-built contracts:** [features/indexer.md](features/indexer.md), [indexer-workspaces](features/indexer-workspaces.md), [indexer-ingest-pipeline](features/indexer-ingest-pipeline.md). Delivery history: [plans/indexer.md](plans/archive/indexer.md). This document is the operator quick start.
+**As-built contracts:** [features/indexer.md](features/indexer.md), [indexer-workspaces](features/indexer-workspaces.md), [indexer-ingest-pipeline](features/indexer-ingest-pipeline.md). Delivery history: [`plans/archive/indexer.md`](plans/archive/indexer.md). This document is the operator quick start.
 
 ## Supervised mode (`chimera-supervisor` / desktop)
 
@@ -224,7 +224,7 @@ Binary files are also excluded via a NUL-byte sniff over the first ~8 KB.
 
 ## Failure handling
 
-Per [§ Failure handling](plans/indexer.plan.md#failure-handling-normative):
+Per [§ Failure handling](plans/archive/indexer.md#failure-handling-normative):
 
 - Retry transient failures (`5xx`, `408`, `425`, `429`, network errors) with
   bounded exponential backoff (`retry_max_attempts`, `retry_base_delay_ms`,
@@ -348,7 +348,7 @@ Cache: `rag.tooling.expansion_cache_ttl_seconds` (default 300), `expansion_cache
 
 **Healthy idle (reference):** three warm workspaces, **~50–150 MB** private WS, **<2k** handles, logs show `declarative_state: watch_idle` and `queue_depth: 0`.
 
-See [features/indexer.md — Memory](features/indexer.md#memory-and-windows-resources) and plan [`plans/indexer-memory-usage-analysis.md`](plans/archive/indexer-memory-usage-analysis.md).
+See [features/indexer.md — Memory](features/indexer.md#memory-and-windows-resources) and plan [`plans/archive/indexer-memory-usage-analysis.md`](plans/archive/indexer-memory-usage-analysis.md).
 
 ## Security notes
 

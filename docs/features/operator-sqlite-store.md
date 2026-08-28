@@ -6,7 +6,7 @@
 | **Areas** | Gateway operator persistence, migrations, feature stores |
 | **Status** | `current` |
 | **Introduced** | Indexer workspaces Phase 1+ |
-| **Originated from** | [`plans/indexer-workspaces-sqlite-gateway-api.md`](../plans/archive/indexer-workspaces-sqlite-gateway-api.md), [`virtual-models-operator.md`](../plans/archive/virtual-models-operator.md) |
+| **Originated from** | [`plans/archive/indexer-workspaces-sqlite-gateway-api.md`](../plans/archive/indexer-workspaces-sqlite-gateway-api.md), [`virtual-models-operator.md`](../plans/archive/virtual-models-operator.md) |
 | **Related features** | [Indexer workspaces](indexer-workspaces.md), [Operator virtual models](operator-virtual-models.md), [Operator provider model availability](operator-provider-model-availability.md), [Operator conversation history](operator-conversation-history.md) |
 | **Depends on** | Gateway runtime path for `operator.sqlite` |
 | **Last updated** | See git history |

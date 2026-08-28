@@ -75,4 +75,4 @@ After login: app shell **`/ui`**, settings and event log **`/ui/settings`**. See
 - [configuration.md](configuration.md) — gateway YAML, reload
 - [indexer.md](indexer.md) — indexer operator guide
 - [network.md](network.md) — ports and traffic flow
-- Historical delivery: [`plans/vectorstore-broker-wrapper-hard-cut.md`](plans/archive/vectorstore-broker-wrapper-hard-cut.md)
+- Historical delivery: [`plans/archive/vectorstore-broker-wrapper-hard-cut.md`](plans/archive/vectorstore-broker-wrapper-hard-cut.md)

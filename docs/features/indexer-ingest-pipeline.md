@@ -6,7 +6,7 @@
 | **Areas** | `chimera-indexer` queue, scan/fan-out, scope merge, sync state, gateway ingest |
 | **Status** | `current` |
 | **Introduced** | Gateway v0.2 baseline; scan/fan-out queue refactor in later minors |
-| **Originated from** | [`plans/indexer.md`](../plans/archive/indexer.md) Phases 2–4, [`plans/indexer-scan-and-fanout-jobs.md`](../plans/archive/indexer-scan-and-fanout-jobs.md) |
+| **Originated from** | [`plans/archive/indexer.md`](../plans/archive/indexer.md) Phases 2–4, [`plans/archive/indexer-scan-and-fanout-jobs.md`](../plans/archive/indexer-scan-and-fanout-jobs.md) |
 | **Related features** | [Workspace file indexer](indexer.md), [Indexer health and operator logs](indexer-health-and-operator-logs.md) |
 | **Depends on** | Gateway ingest + corpus inventory APIs, local ignore engine |
 | **Last updated** | See git history |
@@ -97,6 +97,6 @@ Manual: index a tree with 10k+ unchanged files; confirm queue depth stays bounde
 
 ## References
 
-- Plans: [`plans/indexer.md`](../plans/archive/indexer.md), [`plans/indexer-scan-and-fanout-jobs.md`](../plans/archive/indexer-scan-and-fanout-jobs.md)
+- Plans: [`plans/archive/indexer.md`](../plans/archive/indexer.md), [`plans/archive/indexer-scan-and-fanout-jobs.md`](../plans/archive/indexer-scan-and-fanout-jobs.md)
 - Operator guide: [`docs/indexer.md`](../indexer.md) (ignore rules, corpus inventory, modes)
 - Parent: [`indexer.md`](indexer.md)

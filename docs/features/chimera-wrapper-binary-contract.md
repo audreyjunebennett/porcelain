@@ -6,7 +6,7 @@
 | **Areas** | `chimera-broker`, `chimera-vectorstore`, `chimera-gateway`, `chimera-indexer`, `chimera-supervisor`, `internal/wrapper` |
 | **Status** | `current` |
 | **Introduced** | Wrapper hard cut (gateway v0.4 naming train) |
-| **Originated from** | [`plans/vectorstore-broker-wrapper-hard-cut.md`](../plans/archive/vectorstore-broker-wrapper-hard-cut.md) |
+| **Originated from** | [`plans/archive/vectorstore-broker-wrapper-hard-cut.md`](../plans/archive/vectorstore-broker-wrapper-hard-cut.md) |
 | **Related features** | [Product naming contract](product-naming-contract.md), [Structured operator log lines](structured-operator-log-lines.md) |
 | **Depends on** | `internal/naming` env prefixes |
 | **Last updated** | See git history |
@@ -101,6 +101,6 @@ go test ./chimera/chimera-supervisor/ -run E2E -count=1
 
 ## References
 
-- Delivery plan (historical): [`plans/vectorstore-broker-wrapper-hard-cut.md`](../plans/archive/vectorstore-broker-wrapper-hard-cut.md)
+- Delivery plan (historical): [`plans/archive/vectorstore-broker-wrapper-hard-cut.md`](../plans/archive/vectorstore-broker-wrapper-hard-cut.md)
 - Operator runbook: [`supervisor.md`](../supervisor.md)
 - Naming env keys: [`product-naming-contract.md`](product-naming-contract.md)

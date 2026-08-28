@@ -6,7 +6,7 @@
 | **Areas** | `locus-desktop`, `chimera-supervisor`, packaging |
 | **Status** | `partial` |
 | **Introduced** | v0.4 desktop/supervisor boundary |
-| **Originated from** | [`plans/locus-desktop-supervisor-contract.md`](../plans/archive/locus-desktop-supervisor-contract.md) |
+| **Originated from** | [`plans/archive/locus-desktop-supervisor-contract.md`](../plans/archive/locus-desktop-supervisor-contract.md) |
 | **Related features** | [Chimera wrapper binary contract](chimera-wrapper-binary-contract.md), [Structured operator log lines](structured-operator-log-lines.md) |
 | **Depends on** | Wrapper health/readiness endpoints on supervisor control plane |
 | **Last updated** | See git history |

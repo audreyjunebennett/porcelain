@@ -6,7 +6,7 @@
 | **Areas** | Gateway embed UI, operator logs, servicelogs, admin cards |
 | **Status** | `current` |
 | **Introduced** | Gateway v0.2 unified operator shell; v0.3 settings route rename |
-| **Originated from** | [`plans/unified-logs-operator-shell.md`](../plans/archive/unified-logs-operator-shell.md), [`plans/embedui-operator-settings-routes.md`](../plans/archive/embedui-operator-settings-routes.md), [`plans/log-presentation-layer.md`](../plans/archive/log-presentation-layer.md), [`plans/log-conversations.md`](../plans/archive/log-conversations.md) |
+| **Originated from** | [`plans/archive/unified-logs-operator-shell.md`](../plans/archive/unified-logs-operator-shell.md), [`plans/archive/embedui-operator-settings-routes.md`](../plans/archive/embedui-operator-settings-routes.md), [`plans/archive/log-presentation-layer.md`](../plans/archive/log-presentation-layer.md), [`plans/archive/log-conversations.md`](../plans/archive/log-conversations.md) |
 | **Related features** | [Operator virtual models](operator-virtual-models.md), [Operator provider model availability](operator-provider-model-availability.md), [Indexer workspaces](indexer-workspaces.md), [Indexer health and operator logs](indexer-health-and-operator-logs.md), [Operator log message registry](operator-log-message-registry.md), [Operator left navigation ribbon](operator-left-navigation-ribbon.md), [Operator embed UI mobile layout](operator-embed-ui-mobile-layout.md) |
 | **Depends on** | UI session auth, servicelogs ring buffer, `/api/ui/state`, `/api/ui/logs` |
 | **Last updated** | See git history |

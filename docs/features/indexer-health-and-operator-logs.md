@@ -6,7 +6,7 @@
 | **Areas** | Gateway indexer health API, `chimera-indexer` recovery, `servicelogs`, settings embed UI |
 | **Status** | `current` |
 | **Introduced** | Gateway + indexer minor after v0.2 Phase 5 observability; health/quiet-logs plan 2026-05 |
-| **Originated from** | [`plans/indexer.md`](../plans/archive/indexer.md) Phase 5, [`plans/indexer-health-and-quiet-logs.md`](../plans/archive/indexer-health-and-quiet-logs.md) |
+| **Originated from** | [`plans/archive/indexer.md`](../plans/archive/indexer.md) Phase 5, [`plans/archive/indexer-health-and-quiet-logs.md`](../plans/archive/indexer-health-and-quiet-logs.md) |
 | **Related features** | [Workspace file indexer](indexer.md), [Indexer ingest pipeline](indexer-ingest-pipeline.md), [Indexer workspaces](indexer-workspaces.md) |
 | **Depends on** | Broker catalog snapshot, vector store health, supervised `--log-json` stderr tee |
 | **Last updated** | See git history |
@@ -99,6 +99,6 @@ Manual: stop embed provider with Qdrant running; confirm health `ok: false`, gat
 
 ## References
 
-- Plans: [`plans/indexer-health-and-quiet-logs.md`](../plans/archive/indexer-health-and-quiet-logs.md), [`plans/indexer.md`](../plans/archive/indexer.md) Phase 5
+- Plans: [`plans/archive/indexer-health-and-quiet-logs.md`](../plans/archive/indexer-health-and-quiet-logs.md), [`plans/archive/indexer.md`](../plans/archive/indexer.md) Phase 5
 - Operator slug reference: [`docs/indexer.md`](../indexer.md)
 - Parent: [`indexer.md`](indexer.md)

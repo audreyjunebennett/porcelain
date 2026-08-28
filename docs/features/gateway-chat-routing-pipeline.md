@@ -6,7 +6,7 @@
 | **Areas** | Gateway chat path, routing, transforms, RAG, fallback, tool router |
 | **Status** | `current` (pipeline shipped; **formal router plugin API** not yet) |
 | **Introduced** | v0.1 routing + v0.1.1 tool router; virtual-model stacks v0.2+ |
-| **Originated from** | [`plans/virtual-models-operator.md`](../plans/archive/virtual-models-operator.md), [`plans/context-window-admission.md`](../plans/archive/context-window-admission.md), [`docs/version-v0.1.1.md`](../version-v0.1.1.md) |
+| **Originated from** | [`plans/archive/virtual-models-operator.md`](../plans/archive/virtual-models-operator.md), [`plans/archive/context-window-admission.md`](../plans/archive/context-window-admission.md), [`docs/version-v0.1.1.md`](../version-v0.1.1.md) |
 | **Related features** | [Operator virtual models](operator-virtual-models.md), [Gateway RAG ingest and retrieval](gateway-rag-ingest-and-retrieval.md), [Context window admission](context-window-admission.md), [Operator provider model availability](operator-provider-model-availability.md) |
 | **Depends on** | Virtual model registry, broker upstream |
 | **Last updated** | See git history |

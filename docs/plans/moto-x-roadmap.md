@@ -53,8 +53,8 @@ Moto X features should call Chimera through stable APIs and virtual model roles.
 
 **Current implementation draft**
 
-- Keep [`record.py`](../../Moto%20X/phone-scripts/record.py) untouched as the historical fallback.
-- Use the physically validated [`record_v2.py`](../../Moto%20X/phone-scripts/record_v2.py) as the active recorder.
+- Keep [`record.py`](../../Moto X/phone-scripts/record.py) untouched as the historical fallback.
+- Use the physically validated [`record_v2.py`](../../Moto X/phone-scripts/record_v2.py) as the active recorder.
 - Keep **30 seconds** as the durable capture and transport unit. It already feels immediate in Ruby's normal use, matches Whisper's natural context window, reduces stop/start gaps and request churn, and is not the unit shown as a chat bubble.
 - Give every chunk a unique capture ID and the time recording began.
 - Finalize audio into a durable phone-side queue before making it uploadable.
@@ -127,8 +127,8 @@ One finalized turn may span several recorder chunks, and one recorder chunk may 
 
 **Current implementation draft**
 
-- [`motox_v1.py`](../../Moto%20X/phone-scripts/motox_v1.py) contains a dependency-light, tested state machine and SQLite journal.
-- [`receiver.py`](../../Moto%20X/phone-scripts/receiver.py) dual-writes into it without making journal failure fatal to audio receipt.
+- [`motox_v1.py`](../../Moto X/phone-scripts/motox_v1.py) contains a dependency-light, tested state machine and SQLite journal.
+- [`receiver.py`](../../Moto X/phone-scripts/receiver.py) dual-writes into it without making journal failure fatal to audio receipt.
 - Generated days live under `motox_audio_data/daily/YYYY-MM-DD.md` by default.
 
 **Acceptance**
