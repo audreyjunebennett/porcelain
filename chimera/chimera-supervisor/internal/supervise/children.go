@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	brokeradapter "github.com/lynn/porcelain/chimera/chimera-broker/adapter"
+	embedadapter "github.com/lynn/porcelain/chimera/chimera-embed/adapter"
 	indexeradapter "github.com/lynn/porcelain/chimera/chimera-indexer/adapter"
 	svconfig "github.com/lynn/porcelain/chimera/chimera-supervisor/internal/config"
 	"github.com/lynn/porcelain/chimera/chimera-supervisor/internal/control"
@@ -108,6 +109,58 @@ func startVectorstoreChild(cfg svconfig.Config, res *gwconfig.Resolved, controlB
 		}
 	}
 	controlState.SetVectorstoreReady(true)
+	return nil
+}
+
+func startEmbedChild(cfg svconfig.Config, res *gwconfig.Resolved, endpoint, controlBaseURL string, logStore *servicelogs.Store, logLevel slog.Level, log *slog.Logger, controlState *control.State, embedProc **exec.Cmd, embedWait *chan error, embedReadyzURL string, stopChildrenFast func()) error {
+	modelPath := strings.TrimSpace(cfg.EmbedModelPath)
+	cacheDir := strings.TrimSpace(cfg.EmbedCacheDir)
+	logLevelHint := ""
+	if res != nil {
+		if modelPath == "" {
+			modelPath = res.InternalEmbedding.ModelPath
+		}
+		if cacheDir == "" {
+			cacheDir = res.InternalEmbedding.CacheDir
+		}
+		logLevelHint = res.InternalEmbedding.LogLevel
+	}
+	args := appendBackendLogLevel(WrapperArgs([]string{
+		"-listen", strings.TrimSpace(cfg.EmbedListen),
+		"-bin", strings.TrimSpace(cfg.EmbedBackendBin),
+		"-endpoint", endpoint,
+		"-model-path", modelPath,
+		"-cache-dir", cacheDir,
+	}), logLevelHint)
+	cmd := exec.Command(strings.TrimSpace(cfg.EmbedBin), args...)
+	cmd.Env = mergeEnv(ChildEnv(controlBaseURL))
+	proc.ApplyNoConsoleWindow(cmd)
+	sink := LogSink(logStore.Writer(servicelogs.SourceChimeraEmbed), embedadapter.ChildLogWriter, logLevel)
+	cmd.Stdout = sink
+	cmd.Stderr = sink
+	if err := cmd.Start(); err != nil {
+		controlState.SetEmbedReady(false)
+		controlState.SetLastError(err.Error())
+		stopChildrenFast()
+		return svconfig.Exitf(1, "start chimera-embed: %v", err)
+	}
+	*embedProc = cmd
+	ch := make(chan error, 1)
+	go func() { ch <- cmd.Wait() }()
+	*embedWait = ch
+	if !cfg.NoWaitEmbed {
+		waitCtx, cancel := context.WithTimeout(context.Background(), cfg.WaitEmbed)
+		err := waitHealthy(waitCtx, embedReadyzURL, cfg.WaitEmbed, log, "chimera-embed")
+		cancel()
+		if err != nil {
+			controlState.SetEmbedReady(false)
+			controlState.SetLastError(err.Error())
+			stopChildrenFast()
+			<-ch
+			return svconfig.Exitf(1, "chimera-embed not healthy: %v", err)
+		}
+	}
+	controlState.SetEmbedReady(true)
 	return nil
 }
 

@@ -33,6 +33,14 @@ type Config struct {
 	BrokerDataDir       string
 	WaitBroker          time.Duration
 	NoWaitBroker        bool
+	EmbedBin            string
+	EmbedBackendBin     string
+	EmbedListen         string
+	EmbedEndpoint       string
+	EmbedModelPath      string
+	EmbedCacheDir       string
+	WaitEmbed           time.Duration
+	NoWaitEmbed         bool
 	VectorstoreBin      string
 	VectorstoreListen   string
 	VectorstoreEndpoint string
@@ -94,6 +102,14 @@ func bindFlags(fs *flag.FlagSet, cfg *Config) {
 	fs.StringVar(&cfg.BrokerDataDir, "broker-data-dir", "data/broker", "broker data path for chimera-broker --data-path")
 	fs.DurationVar(&cfg.WaitBroker, "wait-broker", 60*time.Second, "Max time to poll chimera-broker /readyz before exit")
 	fs.BoolVar(&cfg.NoWaitBroker, "no-wait-broker", false, "Skip chimera-broker readiness poll")
+	fs.StringVar(&cfg.EmbedBin, "embed-bin", DefaultEmbedBin(), "chimera-embed wrapper binary")
+	fs.StringVar(&cfg.EmbedBackendBin, "embed-backend-bin", DefaultLlamaServerBin(), "operator-supplied llama-server binary")
+	fs.StringVar(&cfg.EmbedListen, "embed-listen", naming.DefaultEmbedListen, "chimera-embed wrapper listen host:port")
+	fs.StringVar(&cfg.EmbedEndpoint, "embed-endpoint", "", "llama-server endpoint override host:port (default: internal_embedding.base_url)")
+	fs.StringVar(&cfg.EmbedModelPath, "embed-model-path", "", "GGUF model path override")
+	fs.StringVar(&cfg.EmbedCacheDir, "embed-cache-dir", "", "llama-server working/cache directory override")
+	fs.DurationVar(&cfg.WaitEmbed, "wait-embed", 120*time.Second, "Max time to poll chimera-embed /readyz before exit")
+	fs.BoolVar(&cfg.NoWaitEmbed, "no-wait-embed", false, "Skip chimera-embed readiness poll")
 	fs.StringVar(&cfg.VectorstoreBin, "vectorstore-bin", DefaultVectorstoreBin(), "chimera-vectorstore wrapper binary")
 	fs.StringVar(&cfg.VectorstoreListen, "vectorstore-listen", naming.DefaultVectorstoreListen, "chimera-vectorstore wrapper listen host:port")
 	fs.StringVar(&cfg.VectorstoreEndpoint, "vectorstore-endpoint", naming.DefaultVectorstoreEndpoint, "vectorstore backend endpoint host:port for chimera-vectorstore --endpoint")

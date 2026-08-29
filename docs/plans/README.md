@@ -36,7 +36,6 @@ No complete feature record yet (or exploration only). Create or update a feature
 | [indexer-manifest-ingest.md](indexer-manifest-ingest.md) | Manifest-only ingest, line-number snippets |
 | [env-precedence-contract.md](env-precedence-contract.md) | Unified env/config precedence |
 | [operator-cli.md](operator-cli.md) | `chimeractl` / operator CLI |
-| [internal-embedding-provider-exploration.md](internal-embedding-provider-exploration.md) | Exploration — not a product feature |
 
 ---
 
@@ -69,6 +68,7 @@ No complete feature record yet (or exploration only). Create or update a feature
 | [remove-legacy-gateway-routing.md](archive/remove-legacy-gateway-routing.md) | [operator-virtual-models](../features/operator-virtual-models.md), [gateway chat routing pipeline](../features/gateway-chat-routing-pipeline.md) |
 | [provider-model-availability.md](archive/provider-model-availability.md) | [operator-provider-model-availability](../features/operator-provider-model-availability.md) |
 | [context-window-admission.md](archive/context-window-admission.md) | [context-window-admission](../features/context-window-admission.md) (`partial`) |
+| [internal-embedding-provider.md](archive/internal-embedding-provider.md) | [internal embedding provider](../features/internal-embedding-provider.md) |
 | [adminui-filesystem-dev-mode.md](archive/adminui-filesystem-dev-mode.md) | [operator-ui-filesystem-dev-mode](../features/operator-ui-filesystem-dev-mode.md) |
 
 ### Platform contracts

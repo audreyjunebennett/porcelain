@@ -12,6 +12,7 @@ import (
 const (
 	ComponentVectorstore = naming.ProductVectorstoreName
 	ComponentBroker      = naming.ProductBrokerName
+	ComponentEmbed       = naming.ProductEmbedName
 	ComponentSupervisor  = naming.ProductSupervisorName
 	ComponentGateway     = naming.ProductGatewayBinName
 	ComponentIndexer     = naming.ProductIndexerBinName
@@ -20,19 +21,21 @@ const (
 var AllowedComponents = map[string]struct{}{
 	ComponentVectorstore: {},
 	ComponentBroker:      {},
+	ComponentEmbed:       {},
 	ComponentSupervisor:  {},
 	ComponentGateway:     {},
 	ComponentIndexer:     {},
 }
 
 var AllowedBackendNames = map[string]struct{}{
-	naming.ProductQdrantBinName: {},
-	"bifrost":                   {}, // chimera-broker binary-mode upstream (BiFrost)
-	naming.ProductBrokerName:    {}, // legacy alias for older status payloads
-	"milvus":                    {},
-	"weaviate":                  {},
-	"redis_vector":              {},
-	"custom":                    {},
+	naming.ProductQdrantBinName:      {},
+	naming.ProductLlamaServerBinName: {},
+	"bifrost":                        {}, // chimera-broker binary-mode upstream (BiFrost)
+	naming.ProductBrokerName:         {}, // legacy alias for older status payloads
+	"milvus":                         {},
+	"weaviate":                       {},
+	"redis_vector":                   {},
+	"custom":                         {},
 }
 
 var AllowedBackendModes = map[string]struct{}{
@@ -57,8 +60,10 @@ const (
 const (
 	DebugBrokerLogsPath              = "/debug/broker/logs"
 	DebugVectorstoreLogsPath         = "/debug/vectorstore/logs"
+	DebugEmbedLogsPath               = "/debug/embed/logs"
 	DebugEnableBrokerLogsEnvKey      = "DEBUG__ENABLE_BROKER_LOGS"
 	DebugEnableVectorstoreLogsEnvKey = "DEBUG__ENABLE_VECTORSTORE_LOGS"
+	DebugEnableEmbedLogsEnvKey       = "DEBUG__ENABLE_EMBED_LOGS"
 	DebugAllowRemoteEnv              = "DEBUG__ALLOW_REMOTE"
 	DebugAllowRemoteFlag             = "--debug-allow-remote"
 )
@@ -109,6 +114,7 @@ var AllowedEndpointMetricLabels = map[string]string{
 	"/metrics":                "metrics",
 	"/debug/broker/logs":      "debug_broker_logs",
 	"/debug/vectorstore/logs": "debug_vectorstore_logs",
+	"/debug/embed/logs":       "debug_embed_logs",
 }
 
 // DebugLogsPath returns the ring-buffer debug endpoint for a wrapper component.
@@ -116,6 +122,8 @@ func DebugLogsPath(component string) string {
 	switch component {
 	case ComponentVectorstore:
 		return DebugVectorstoreLogsPath
+	case ComponentEmbed:
+		return DebugEmbedLogsPath
 	default:
 		return DebugBrokerLogsPath
 	}
@@ -126,6 +134,8 @@ func DebugEnableEnvKey(component string) string {
 	switch component {
 	case ComponentVectorstore:
 		return DebugEnableVectorstoreLogsEnvKey
+	case ComponentEmbed:
+		return DebugEnableEmbedLogsEnvKey
 	default:
 		return DebugEnableBrokerLogsEnvKey
 	}

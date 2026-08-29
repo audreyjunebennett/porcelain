@@ -33,6 +33,22 @@ func handleEmbeddingGET(h *handler.Handler, w http.ResponseWriter, r *http.Reque
 
 	model := strings.TrimSpace(res.RAG.EmbeddingModel)
 	dim := res.RAG.EmbeddingDim
+	if res.InternalEmbedding.Enabled && config.UsesInternalProvider(model, res.InternalEmbedding) {
+		resp := operatorapi.RAGEmbeddingGetResponse{
+			Model:          model,
+			Dim:            dim,
+			Status:         "ok",
+			ModelInCatalog: true,
+			Candidates: []operatorapi.RAGEmbeddingCandidate{{
+				ID:              res.InternalEmbedding.Model,
+				EmbeddingLikely: true,
+				KnownDim:        res.InternalEmbedding.Dim,
+			}},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+		return
+	}
 	snap := catalogSnapshotForEmbedding(r.Context(), h.RT, h.Log)
 	now := time.Now()
 	fresh := snap != nil && snap.IsFresh(now, catalog.CatalogSnapshotFreshness)
@@ -84,25 +100,34 @@ func handleEmbeddingPUT(h *handler.Handler, w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	snap := catalogSnapshotForEmbedding(r.Context(), h.RT, h.Log)
-	now := time.Now()
-	if snap == nil || !snap.IsFresh(now, catalog.CatalogSnapshotFreshness) {
-		writeEmbeddingError(w, http.StatusServiceUnavailable, "model catalog stale or unavailable")
-		return
-	}
-	if !snap.OK {
-		writeEmbeddingError(w, http.StatusServiceUnavailable, strings.TrimSpace(snap.FetchErr))
-		return
-	}
-	if !snap.HasModel(model) {
-		writeEmbeddingError(w, http.StatusBadRequest, "model not in live catalog")
-		return
-	}
-
-	dim, err := resolveEmbeddingDim(r.Context(), h.RT, res, model)
-	if err != nil {
-		writeEmbeddingError(w, http.StatusBadRequest, err.Error())
-		return
+	var dim int
+	if res.InternalEmbedding.Enabled {
+		if !strings.EqualFold(model, res.InternalEmbedding.Model) {
+			writeEmbeddingError(w, http.StatusBadRequest, "disable internal_embedding before selecting a broker embedding model")
+			return
+		}
+		dim = res.InternalEmbedding.Dim
+	} else {
+		snap := catalogSnapshotForEmbedding(r.Context(), h.RT, h.Log)
+		now := time.Now()
+		if snap == nil || !snap.IsFresh(now, catalog.CatalogSnapshotFreshness) {
+			writeEmbeddingError(w, http.StatusServiceUnavailable, "model catalog stale or unavailable")
+			return
+		}
+		if !snap.OK {
+			writeEmbeddingError(w, http.StatusServiceUnavailable, strings.TrimSpace(snap.FetchErr))
+			return
+		}
+		if !snap.HasModel(model) {
+			writeEmbeddingError(w, http.StatusBadRequest, "model not in live catalog")
+			return
+		}
+		var err error
+		dim, err = resolveEmbeddingDim(r.Context(), h.RT, res, model)
+		if err != nil {
+			writeEmbeddingError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 	}
 
 	gwPath := h.RT.GatewayPath()

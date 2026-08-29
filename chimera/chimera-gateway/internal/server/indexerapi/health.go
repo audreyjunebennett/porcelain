@@ -2,15 +2,18 @@ package indexerapi
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/brokeradmin"
+	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/rag/ragembed"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/adminui/api/providers"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/adminui/apirut"
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/catalog"
 	gruntime "github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/runtime"
+	gwconfig "github.com/lynn/porcelain/chimera/internal/config"
 	"github.com/lynn/porcelain/internal/naming"
 )
 
@@ -104,6 +107,11 @@ func buildEmbeddingCheck(ctx context.Context, rt *gruntime.Runtime, log *slog.Lo
 		return out, false
 	}
 
+	res, _ := rt.Snapshot()
+	if res != nil && gwconfig.UsesInternalProvider(modelID, res.InternalEmbedding) {
+		return buildInternalEmbeddingCheck(ctx, rt, modelID, res, out)
+	}
+
 	snap := catalogSnapshotForIndexerHealth(ctx, rt, log)
 	now := time.Now()
 	fresh := snap != nil && snap.IsFresh(now, catalog.CatalogSnapshotFreshness)
@@ -171,6 +179,27 @@ func buildEmbeddingCheck(ctx context.Context, rt *gruntime.Runtime, log *slog.Lo
 	default:
 		return out, true
 	}
+}
+
+func buildInternalEmbeddingCheck(ctx context.Context, _ *gruntime.Runtime, modelID string, res *gwconfig.Resolved, out map[string]any) (map[string]any, bool) {
+	out["provider"] = res.InternalEmbedding.Provider
+	out["model_in_catalog"] = true
+	probeCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	dim, err := ragembed.ProbeDim(probeCtx, res.RAG.EmbeddingURL(res.UpstreamBaseURL), "", modelID, nil)
+	if err == nil && dim != res.RAG.EmbeddingDim {
+		err = fmt.Errorf("embedding dimension %d does not match configured dimension %d", dim, res.RAG.EmbeddingDim)
+	}
+	if err != nil {
+		out["ok"] = false
+		out["status"] = "unavailable"
+		out["reason_code"] = ReasonEmbedProviderDown
+		out["provider_state"] = "down"
+		out["detail"] = err.Error()
+		return out, false
+	}
+	out["provider_state"] = "up"
+	return out, true
 }
 
 func catalogSnapshotForIndexerHealth(ctx context.Context, rt *gruntime.Runtime, log *slog.Logger) *catalog.CatalogSnapshot {

@@ -11,6 +11,7 @@ In UI, logs, supervisor output, and this doc set, use **Chimera product names**:
 | **chimera-gateway** | Client-facing API, routing, RAG orchestration, operator UI |
 | **chimera-broker** | LLM relay (supervised wrapper around the OpenAI-compatible backend) |
 | **chimera-vectorstore** | Vector retrieval for RAG (supervised wrapper around the storage backend) |
+| **chimera-embed** | Optional internal embedding wrapper around operator-supplied llama-server |
 | **chimera-indexer** | File ingest into collections scoped by workspace |
 
 **Config file keys** use `broker.*`, top-level `vectorstore.*`, and `rag.*` (orchestration) in `gateway.yaml`. **`GET /status`** exposes `broker` and `vectorstore` blocks; nested debug fields name the wrapped storage/relay implementation only.
@@ -58,6 +59,11 @@ Provider keys (`GROQ_API_KEY`, `GEMINI_API_KEY`, `OPENAI_API_KEY`, etc.) are **n
 | `vectorstore.api_key` | Optional API key for the vector store HTTP API. |
 | `rag.enabled` | **true** → ingest, indexer APIs, retrieval, and `GET /health` `checks.vectorstore`. |
 | `rag.embedding.*` | Embedding model/path/dim; `base_url` defaults to `broker.base_url` when empty. |
+| `internal_embedding.enabled` | **true** → supervise the local embedding backend and override resolved `rag.embedding.base_url`, `model`, and `dim`; default **false**. |
+| `internal_embedding.provider` / `model` / `dim` | Internal embedding identity and expected output dimension. Defaults: `internal`, `nomic-embed-text`, `768`. |
+| `internal_embedding.base_url` | Direct OpenAI-compatible llama-server root URL. Default `http://127.0.0.1:8090`. |
+| `internal_embedding.model_path` | Operator-provisioned GGUF model path; relative paths resolve from the directory containing `gateway.yaml`. Required when enabled. |
+| `internal_embedding.cache_dir` | llama-server working/cache directory; relative paths resolve from the directory containing `gateway.yaml`. |
 | `rag.chunking.*` / `rag.retrieval.*` / `rag.ingest.*` / `rag.defaults.*` | Chunking, search, ingest limits, and default project/flavor ids. |
 | `rag.coherence.mode` | Stale-index behavior: `off`, `warn` (default), or `strict` (blocks `/v1/rag/*` expansion when stale). |
 | `rag.tooling.enabled` | **true** (default) → `/v1/rag/segments`, `/context`, `/adjacent`, `/tools`. |
@@ -73,6 +79,8 @@ Provider keys (`GROQ_API_KEY`, `GEMINI_API_KEY`, `OPENAI_API_KEY`, etc.) are **n
 | `metrics.migrations_dir` | Directory containing `NNNNNN_description.sql` migration files (default `../migrations/chimera-gateway/metrics`). Migrations run **once at startup**; see `docs/plans/version-v0.1.1.md` §3.6. |
 
 Reload: change file and **save** (mtime update). On reload, if token paths change, those stores are re-opened.
+
+Enabling internal embedding changes the resolved gateway RAG target immediately on config load, but process lifecycle is supervisor-owned: restart the supervised stack after changing `internal_embedding` settings. Porcelain does not download `llama-server` or model weights; supply the backend with `-embed-backend-bin` (or place it beside the supervisor/on `PATH`) and provision the GGUF path. See [Internal embedding provider](features/internal-embedding-provider.md).
 
 ### Chat routing (virtual models)
 

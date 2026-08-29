@@ -8,12 +8,12 @@
 | **Introduced** | Gateway v0.2 RAG baseline |
 | **Originated from** | [`plans/archive/indexer.md`](../plans/archive/indexer.md), gateway RAG design in [`docs/indexer.md`](../indexer.md) |
 | **Related features** | [Workspace file indexer](indexer.md), [Indexer ingest pipeline](indexer-ingest-pipeline.md), [Operator chat UI](operator-chat-ui.md), [Context window admission](context-window-admission.md), [Gateway chat routing pipeline](gateway-chat-routing-pipeline.md) |
-| **Depends on** | `rag.enabled` in gateway config, vector store, broker embedding catalog |
+| **Depends on** | `rag.enabled` in gateway config, vector store, broker embedding catalog or internal embedding provider |
 | **Last updated** | See git history |
 
 ## At a glance
 
-When `rag.enabled` is true, the gateway runs a shared **RAG service** that chunks ingested text, embeds via the broker catalog model, upserts vectors into tenant/project/flavor **collections**, and retrieves top‑k chunks at chat time to inject a system message. The **indexer never embeds locally** — it sends file bytes to gateway ingest APIs. Chat clients and the operator UI scope retrieval with `X-Chimera-Project` / `X-Chimera-Flavor-Id` (or workspace-derived coords). Successful chat turns expose snippet metadata on `X-Chimera-RAG-Hits`.
+When `rag.enabled` is true, the gateway runs a shared **RAG service** that chunks ingested text, embeds through either the broker catalog model or the configured [internal embedding provider](internal-embedding-provider.md), upserts vectors into tenant/project/flavor **collections**, and retrieves top‑k chunks at chat time to inject a system message. The **indexer never embeds locally** — it sends file bytes to gateway ingest APIs. Chat clients and the operator UI scope retrieval with `X-Chimera-Project` / `X-Chimera-Flavor-Id` (or workspace-derived coords). Successful chat turns expose snippet metadata on `X-Chimera-RAG-Hits`.
 
 ## Operator-visible behavior
 
@@ -54,7 +54,7 @@ When `rag.enabled` is true, the gateway runs a shared **RAG service** that chunk
 | `GET /v1/indexer/corpus/inventory` | Skip detection for indexer |
 | `POST /v1/chat/completions` | Retrieves when RAG enabled + scope present |
 | Headers | `X-Chimera-Project`, `X-Chimera-Flavor-Id`; response `X-Chimera-RAG-Hits` (base64 JSON) |
-| Config | `gateway.yaml` → `rag.enabled`, `rag.qdrant.*`, thresholds, size limits |
+| Config | `gateway.yaml` → `rag.enabled`, `rag.embedding.*`, optional `internal_embedding.*`, thresholds, size limits |
 
 ## Code map
 

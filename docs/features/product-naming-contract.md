@@ -30,7 +30,9 @@ Operators see Chimera names in the UI, logs, CLI help, and packaging. Config pat
 | `ProductGatewayBinName` | `chimera-gateway` | Gateway wrapper |
 | `ProductBrokerName` | `chimera-broker` | LLM broker wrapper |
 | `ProductVectorstoreName` | `chimera-vectorstore` | Vector store wrapper |
+| `ProductEmbedName` | `chimera-embed` | Internal embedding wrapper |
 | `ProductIndexerBinName` | `chimera-indexer` | Workspace indexer |
+| `ProductLlamaServerBinName` | `llama-server` | Upstream embedding server binary (wrapper `--bin`) |
 | `ProductQdrantBinName` | `qdrant` | Upstream vectorstore binary (wrapper `--bin`) |
 | `ProductBifrostHTTPBinName` | `bifrost-http` | Upstream broker binary (install scripts) |
 
@@ -41,6 +43,7 @@ Operators see Chimera names in the UI, logs, CLI help, and packaging. Config pat
 | `GATEWAY__*` | `chimera-gateway` wrapper |
 | `BROKER__*` | `chimera-broker` wrapper |
 | `VECTORSTORE__*` | `chimera-vectorstore` wrapper |
+| `EMBED__*` | `chimera-embed` wrapper |
 | `CHIMERA_*` | Cross-stack targets (`CHIMERA_GATEWAY_URL`, `CHIMERA_GATEWAY_TOKEN`, `CHIMERA_GATEWAY_CONFIG`, `CHIMERA_BROKER_API_KEY`, `CHIMERA_SUPERVISOR_CONTROL_URL`, `CHIMERA_ADMINUI_ROOT`) |
 | `LOCUS_DESKTOP_*` | Desktop trace/log dir |
 

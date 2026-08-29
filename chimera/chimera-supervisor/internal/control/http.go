@@ -126,7 +126,7 @@ func Handler(state *State, logStore *servicelogs.Store, onShutdown func()) http.
 	}))
 	mux.HandleFunc("/status", withMetrics("status", func(w http.ResponseWriter, _ *http.Request) {
 		s := state.Snapshot()
-		restarts := s.BrokerRestarts + s.VectorstoreRestarts
+		restarts := s.BrokerRestarts + s.VectorstoreRestarts + s.EmbedRestarts
 		status := ContractStatus(s)
 		details := map[string]any{
 			"children": map[string]any{
@@ -141,6 +141,12 @@ func Handler(state *State, logStore *servicelogs.Store, onShutdown func()) http.
 					"ready":    s.VectorstoreReady,
 					"restarts": s.VectorstoreRestarts,
 					"endpoint": s.VectorstoreEndpoint,
+				},
+				"embed": map[string]any{
+					"required": s.EmbedRequired,
+					"ready":    s.EmbedReady,
+					"restarts": s.EmbedRestarts,
+					"endpoint": s.EmbedEndpoint,
 				},
 			},
 		}
@@ -201,7 +207,7 @@ func Handler(state *State, logStore *servicelogs.Store, onShutdown func()) http.
 	}))
 	mux.HandleFunc(contract.MetricsPath, withMetrics("metrics", func(w http.ResponseWriter, _ *http.Request) {
 		s := state.Snapshot()
-		restarts := s.BrokerRestarts + s.VectorstoreRestarts
+		restarts := s.BrokerRestarts + s.VectorstoreRestarts + s.EmbedRestarts
 		backendUp := 1
 		if !Ready(s) {
 			backendUp = 0

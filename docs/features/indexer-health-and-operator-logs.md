@@ -8,12 +8,12 @@
 | **Introduced** | Gateway + indexer minor after v0.2 Phase 5 observability; health/quiet-logs plan 2026-05 |
 | **Originated from** | [`plans/archive/indexer.md`](../plans/archive/indexer.md) Phase 5, [`plans/archive/indexer-health-and-quiet-logs.md`](../plans/archive/indexer-health-and-quiet-logs.md) |
 | **Related features** | [Workspace file indexer](indexer.md), [Indexer ingest pipeline](indexer-ingest-pipeline.md), [Indexer workspaces](indexer-workspaces.md) |
-| **Depends on** | Broker catalog snapshot, vector store health, supervised `--log-json` stderr tee |
+| **Depends on** | Broker catalog snapshot or internal embed probe, vector store health, supervised `--log-json` stderr tee |
 | **Last updated** | See git history |
 
 ## At a glance
 
-The gateway answers **“can ingest succeed?”** for the indexer—not merely “is Qdrant up?”—via structured checks on vector store reachability and configured embedding model presence in the live catalog. When either check fails, the indexer opens a process-wide **ingest gate** so workers stop dequeuing ingest jobs instead of hammering 502 responses. Recovery waits until `IngestReady()` before resuming. Supervised runs emit JSON **slog** on stderr with stable `msg` slugs; default log profiles keep INFO readable through batched skip summaries and edge-triggered `indexer.scope.status` lines while per-file trace stays at DEBUG. Critical lifecycle lines are pinned in the gateway log ring so heavy traffic cannot evict `indexer.run.start`.
+The gateway answers **“can ingest succeed?”** for the indexer—not merely “is Qdrant up?”—via structured checks on vector store reachability plus either configured embedding model presence in the live broker catalog or a direct probe of the internal embedding endpoint. When either check fails, the indexer opens a process-wide **ingest gate** so workers stop dequeuing ingest jobs instead of hammering 502 responses. Recovery waits until `IngestReady()` before resuming. Supervised runs emit JSON **slog** on stderr with stable `msg` slugs; default log profiles keep INFO readable through batched skip summaries and edge-triggered `indexer.scope.status` lines while per-file trace stays at DEBUG. Critical lifecycle lines are pinned in the gateway log ring so heavy traffic cannot evict `indexer.run.start`.
 
 ## Operator-visible behavior
 
@@ -51,7 +51,7 @@ Full slug tables and YAML knobs: [`docs/indexer.md`](../indexer.md).
 
 **Identity / auth / scoping**
 
-- Health and stats are Bearer-scoped like ingest; embedding check uses gateway runtime catalog snapshot and provider classification (same family as provider health UI).
+- Health and stats are Bearer-scoped like ingest. External embedding checks use the gateway runtime catalog snapshot and provider classification; internal embedding checks call `/v1/embeddings` directly and verify the configured dimension.
 
 ## Interfaces
 
@@ -91,7 +91,6 @@ Manual: stop embed provider with Qdrant running; confirm health `ok: false`, gat
 
 ## Out of scope and known gaps
 
-- **Lightweight embed probe POST** on health endpoint — not implemented; catalog + provider classification only.
 - **Remote log shipping** (Splunk, etc.) — in-process ring buffer only.
 - **Replacing gateway ingest metrics** with indexer-reported truth — gateway/Qdrant remain authoritative for stored corpus.
 - **Storage-stats empty collection** — friendly operator copy and INFO-level event log for expected 404; indexer auto-clears sync checkpoints once per scope when collection is missing.

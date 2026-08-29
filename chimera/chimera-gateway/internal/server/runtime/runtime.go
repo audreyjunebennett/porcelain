@@ -592,13 +592,15 @@ func (rt *Runtime) SetRAGForTest(s *rag.Service) {
 }
 
 // buildRAGService constructs a vectorstore + embedding-backed Service from resolved
-// config. The upstream API key (env-resolved at runtime) is used as the bearer
-// for embeddings since the gateway plan colocates embed under the upstream
-// LLM proxy in v0.2.
+// config. Broker-routed embeddings use the upstream API key; the supervised
+// internal endpoint is local and must not receive the broker credential.
 func buildRAGService(res *config.Resolved, log *slog.Logger) (*rag.Service, error) {
-	apiKey := strings.TrimSpace(os.Getenv(res.UpstreamAPIKeyEnv))
-	if apiKey == "" {
-		apiKey = strings.TrimSpace(res.UpstreamAPIKey)
+	apiKey := ""
+	if !res.InternalEmbedding.Enabled {
+		apiKey = strings.TrimSpace(os.Getenv(res.UpstreamAPIKeyEnv))
+		if apiKey == "" {
+			apiKey = strings.TrimSpace(res.UpstreamAPIKey)
+		}
 	}
 	emb := ragembed.New(res.RAG.EmbeddingURL(res.UpstreamBaseURL), apiKey, res.RAG.EmbeddingModel)
 	store := qdrant.New(res.RAG.QdrantURL, res.RAG.QdrantAPIKey)

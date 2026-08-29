@@ -24,7 +24,7 @@ import (
 	"github.com/lynn/porcelain/chimera/internal/tokens"
 )
 
-// Run supervises gateway, broker, vectorstore wrappers, and optional indexer until ctx is canceled.
+// Run supervises gateway, broker, vectorstore, optional embed, and optional indexer until ctx is canceled.
 func Run(ctx context.Context, cfg svconfig.Config, version, commit string) error {
 	path := strings.TrimSpace(cfg.ConfigPath)
 	if path == "" {
@@ -46,6 +46,13 @@ func Run(ctx context.Context, cfg svconfig.Config, version, commit string) error
 	if err != nil {
 		return svconfig.Exitf(1, "load gateway.yaml: %v", err)
 	}
+	embedEndpoint := strings.TrimSpace(cfg.EmbedEndpoint)
+	if res.InternalEmbedding.Enabled && embedEndpoint == "" {
+		embedEndpoint, err = res.InternalEmbedding.Endpoint()
+		if err != nil {
+			return svconfig.Exitf(1, "%v", err)
+		}
+	}
 
 	log.Info("supervisor startup seed", "msg", "chimera-supervisor.startup.seed")
 	rootCtx, stopRoot := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
@@ -59,6 +66,8 @@ func Run(ctx context.Context, cfg svconfig.Config, version, commit string) error
 	controlState := control.NewState()
 	controlState.SetVersions(version, commit)
 	controlState.SetRequired(true, vectorstoreWrapperBin != "")
+	controlState.SetEmbedRequired(res.InternalEmbedding.Enabled)
+	controlState.SetEmbedEndpoint(embedEndpoint)
 	controlState.SetEndpoints(strings.TrimSpace(cfg.BrokerEndpoint), strings.TrimSpace(cfg.VectorstoreEndpoint))
 	controlState.SetOperatorUI(gatewayPublicURLFromResolved(res), bootstrap)
 	controlListen := strings.TrimSpace(cfg.Listen)
@@ -86,6 +95,10 @@ func Run(ctx context.Context, cfg svconfig.Config, version, commit string) error
 	if vectorstoreWrapperBin != "" {
 		vectorstoreReadyzURL = fmt.Sprintf("http://%s/readyz", strings.TrimSpace(cfg.VectorstoreListen))
 	}
+	embedReadyzURL := ""
+	if res.InternalEmbedding.Enabled {
+		embedReadyzURL = fmt.Sprintf("http://%s/readyz", strings.TrimSpace(cfg.EmbedListen))
+	}
 	gatewayReadyzURL := fmt.Sprintf("http://%s/readyz", strings.TrimSpace(cfg.GatewayListen))
 	brokerReadyzURL := fmt.Sprintf("http://%s/readyz", strings.TrimSpace(cfg.BrokerListen))
 
@@ -94,6 +107,8 @@ func Run(ctx context.Context, cfg svconfig.Config, version, commit string) error
 		gatewayWaitErr  chan error
 		vectorstoreProc *exec.Cmd
 		vectorstoreWait chan error
+		embedProc       *exec.Cmd
+		embedWait       chan error
 		brokerProc      *exec.Cmd
 		brokerWaitErr   chan error
 		indexerProc     *exec.Cmd
@@ -112,6 +127,7 @@ func Run(ctx context.Context, cfg svconfig.Config, version, commit string) error
 			ShutdownChildren(log, shutdownGrace,
 				Child{Name: "gateway", Cmd: gatewayProc, WaitCh: gatewayWaitErr},
 				Child{Name: "vectorstore", Cmd: vectorstoreProc, WaitCh: vectorstoreWait},
+				Child{Name: "embed", Cmd: embedProc, WaitCh: embedWait},
 				Child{Name: "broker", Cmd: brokerProc, WaitCh: brokerWaitErr},
 				Child{Name: "indexer", Cmd: indexerProc, WaitCh: indexerWait},
 			)
@@ -121,7 +137,7 @@ func Run(ctx context.Context, cfg svconfig.Config, version, commit string) error
 	stopChildrenFast := func() {
 		supervisedShutdownOnce.Do(func() {
 			stopIndexer()
-			KillWrapperFamilies(gatewayProc, brokerProc, vectorstoreProc)
+			KillWrapperFamilies(gatewayProc, brokerProc, vectorstoreProc, embedProc)
 		})
 	}
 
@@ -131,6 +147,14 @@ func Run(ctx context.Context, cfg svconfig.Config, version, commit string) error
 		// gateway readiness cannot succeed until those backends are up.
 		if vectorstoreWrapperBin != "" {
 			if err := startVectorstoreChild(cfg, res, controlBaseURL, logStore, logLevel, log, controlState, vectorstoreWrapperBin, &vectorstoreProc, &vectorstoreWait, vectorstoreReadyzURL, stopChildrenFast); err != nil {
+				return err
+			}
+		}
+		if res.InternalEmbedding.Enabled {
+			if strings.TrimSpace(cfg.EmbedBin) == "" {
+				return svconfig.Exitf(1, "internal_embedding.enabled but no chimera-embed wrapper was configured")
+			}
+			if err := startEmbedChild(cfg, res, embedEndpoint, controlBaseURL, logStore, logLevel, log, controlState, &embedProc, &embedWait, embedReadyzURL, stopChildrenFast); err != nil {
 				return err
 			}
 		}
@@ -158,6 +182,9 @@ func Run(ctx context.Context, cfg svconfig.Config, version, commit string) error
 	brokerclient.RunSupervisedChildHealthMonitor(rootCtx, log, "broker", brokerReadyzURL, 15*time.Second, 30*time.Second, !cfg.NoWaitBroker)
 	if vectorstoreReadyzURL != "" {
 		brokerclient.RunSupervisedChildHealthMonitor(rootCtx, log, "vectorstore", vectorstoreReadyzURL, 15*time.Second, 30*time.Second, !cfg.NoWaitVectorstore)
+	}
+	if embedReadyzURL != "" {
+		brokerclient.RunSupervisedChildHealthMonitor(rootCtx, log, "embed", embedReadyzURL, 15*time.Second, 30*time.Second, !cfg.NoWaitEmbed)
 	}
 	<-rootCtx.Done()
 	stopChildrenGraceful()

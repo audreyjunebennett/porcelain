@@ -37,6 +37,7 @@ The settings event log and conversation timelines consume these normalized lines
 | `gatewayline` | `chimera-gateway` backend process |
 | `brokerline` | `chimera-broker` wrapper + BiFrost upstream |
 | `vectorstoreline` | `chimera-vectorstore` wrapper + Qdrant upstream |
+| `embedline` | `chimera-embed` wrapper + llama-server upstream |
 | `indexerline` | `chimera-indexer` |
 | `supervisorline` | `chimera-supervisor` control plane |
 
@@ -65,7 +66,7 @@ The settings event log and conversation timelines consume these normalized lines
 | Core line writer + reorder | `chimera/internal/wrapper/line/core.go`, `record.go` |
 | Timestamps / upstream detail | `chimera/internal/wrapper/line/timestamp.go`, `upstream.go` |
 | Gateway normalizer | `chimera/internal/gatewayline/writer.go` |
-| Broker / vectorstore / indexer / supervisor | `chimera/chimera-broker/internal/brokerline/`, `chimera-vectorstore/internal/vectorstoreline/`, `chimera-indexer/internal/indexerline/`, `chimera-supervisor/internal/supervisorline/` |
+| Broker / vectorstore / embed / indexer / supervisor | `chimera/chimera-broker/internal/brokerline/`, `chimera-vectorstore/internal/vectorstoreline/`, `chimera-embed/internal/embedline/`, `chimera-indexer/internal/indexerline/`, `chimera-supervisor/internal/supervisorline/` |
 | Supervisor tee + second pass | `chimera/chimera-supervisor/internal/supervise/` (`LogSink`) |
 | Operator buffer | `chimera/internal/servicelogs/store.go` |
 | Message registry | `internal/operatorcopy/` |
