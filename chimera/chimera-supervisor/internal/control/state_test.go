@@ -28,12 +28,24 @@ func TestContractStatus(t *testing.T) {
 			want: "degraded",
 		},
 		{
+			name: "embed required unready",
+			in: Snapshot{
+				BrokerRequired: true,
+				BrokerReady:    true,
+				EmbedRequired:  true,
+				EmbedReady:     false,
+			},
+			want: "degraded",
+		},
+		{
 			name: "all required ready",
 			in: Snapshot{
 				BrokerRequired:      true,
 				BrokerReady:         true,
 				VectorstoreRequired: true,
 				VectorstoreReady:    true,
+				EmbedRequired:       true,
+				EmbedReady:          true,
 			},
 			want: "ok",
 		},

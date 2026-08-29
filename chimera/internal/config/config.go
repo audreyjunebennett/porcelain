@@ -50,6 +50,8 @@ type Resolved struct {
 	// RAG holds gateway v0.2 retrieval-augmented-generation settings; RAG.Enabled
 	// gates ingest, indexer REST, retrieval, and the /health Qdrant probe.
 	RAG RAG
+	// InternalEmbedding configures the opt-in supervised chimera-embed runtime.
+	InternalEmbedding InternalEmbedding
 
 	// IndexerSupervised* configures optional chimera-index child under chimera serve / desktop (v0.5).
 	IndexerSupervisedEnabled              bool
@@ -135,8 +137,9 @@ type gatewayDoc struct {
 		SQLitePath    string `yaml:"sqlite_path"`
 		MigrationsDir string `yaml:"migrations_dir"`
 	} `yaml:"operator"`
-	Vectorstore vectorstoreDoc `yaml:"vectorstore"`
-	RAG         ragDoc         `yaml:"rag"`
+	Vectorstore       vectorstoreDoc       `yaml:"vectorstore"`
+	RAG               ragDoc               `yaml:"rag"`
+	InternalEmbedding internalEmbeddingDoc `yaml:"internal_embedding"`
 
 	Indexer struct {
 		Supervised struct {
@@ -330,6 +333,11 @@ func LoadGatewayYAML(filePath string, log *slog.Logger) (*Resolved, error) {
 	}
 
 	rag := doc.RAG.effective(doc.Vectorstore)
+	internalEmbedding := doc.InternalEmbedding.effective(baseDir)
+	if err := internalEmbedding.Validate(); err != nil {
+		return nil, err
+	}
+	applyInternalEmbeddingToRAG(&rag, internalEmbedding)
 	if err := rag.Validate(); err != nil {
 		if log != nil {
 			log.Error("rag config invalid; disabling RAG", "msg", "rag.config.invalid", "err", err)
@@ -388,6 +396,7 @@ func LoadGatewayYAML(filePath string, log *slog.Logger) (*Resolved, error) {
 		ProviderLimitsPath:                    limitsPath,
 		ProviderLimitsSpec:                    limitsSpec,
 		RAG:                                   rag,
+		InternalEmbedding:                     internalEmbedding,
 		WitnessSampleMaxChars:                 witnessMax,
 		WitnessSampleForceAtDebug:             witnessForceDebug,
 		IndexerSupervisedEnabled:              idxSupEnabled,

@@ -433,8 +433,11 @@ func (r *Runtime) routes() http.Handler {
 	mux.HandleFunc(contract.MetricsPath, r.withMetrics("metrics", r.handleMetrics))
 	debugPath := contract.DebugLogsPath(r.cfg.Component)
 	debugMetric := "debug_broker_logs"
-	if r.cfg.Component == contract.ComponentVectorstore {
+	switch r.cfg.Component {
+	case contract.ComponentVectorstore:
 		debugMetric = "debug_vectorstore_logs"
+	case contract.ComponentEmbed:
+		debugMetric = "debug_embed_logs"
 	}
 	mux.HandleFunc(debugPath, r.withMetrics(debugMetric, r.handleDebugLogs))
 	return mux

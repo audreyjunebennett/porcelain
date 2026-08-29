@@ -3,7 +3,7 @@
 | Field | Value |
 |-------|-------|
 | **Doc kind** | `platform-contract` |
-| **Areas** | `chimera-broker`, `chimera-vectorstore`, `chimera-gateway`, `chimera-indexer`, `chimera-supervisor`, `internal/wrapper` |
+| **Areas** | `chimera-broker`, `chimera-vectorstore`, `chimera-embed`, `chimera-gateway`, `chimera-indexer`, `chimera-supervisor`, `internal/wrapper` |
 | **Status** | `current` |
 | **Introduced** | Wrapper hard cut (gateway v0.4 naming train) |
 | **Originated from** | [`plans/archive/vectorstore-broker-wrapper-hard-cut.md`](../plans/archive/vectorstore-broker-wrapper-hard-cut.md) |
@@ -42,7 +42,7 @@ Operators and the settings UI see **Chimera component names** (`chimera-broker`,
 | `40` | Dependency error |
 | `50` | Internal error |
 
-**Status payload** (`StatusPayload` in contract) — required fields: `component`, `backend_name`, `backend_mode`, `status` (`ok` \| `degraded` \| `error`), `timestamp` (RFC3339), `version.wrapper`. Allowed `component` values: `chimera-vectorstore`, `chimera-broker`, `chimera-supervisor`, `chimera-gateway`, `chimera-indexer`.
+**Status payload** (`StatusPayload` in contract) — required fields: `component`, `backend_name`, `backend_mode`, `status` (`ok` \| `degraded` \| `error`), `timestamp` (RFC3339), `version.wrapper`. Allowed `component` values: `chimera-vectorstore`, `chimera-broker`, `chimera-embed`, `chimera-supervisor`, `chimera-gateway`, `chimera-indexer`.
 
 **Ready line** — emitted once per successful readiness transition:
 
@@ -59,17 +59,18 @@ Operators and the settings UI see **Chimera component names** (`chimera-broker`,
 | Driver interface | `wrapper/runtime.Adapter`: `Start`, `ReadyURL`, `MetricsURL`, `BackendName` |
 | Metrics | `chimera_wrapper_up`, `chimera_backend_up`, `chimera_backend_restarts_total`, bounded `endpoint` labels |
 | Debug ring buffer | Default 10_000 lines or 1 MB |
-| Readiness probes (binary v1) | broker → `GET /models` 200; vectorstore → `GET /collections` 200 |
+| Readiness probes (binary v1) | broker → `GET /models` 200; vectorstore → `GET /collections` 200; embed → `GET /health` 200 |
 
 ## Interfaces
 
 | Surface | Detail |
 |---------|--------|
-| HTTP | `GET /healthz`, `GET /readyz`, `GET /metrics`, optional `GET /status`, gated `GET /debug/broker/logs` or `/debug/vectorstore/logs` |
+| HTTP | `GET /healthz`, `GET /readyz`, `GET /metrics`, optional `GET /status`, gated component debug logs |
 | Env (broker) | `BROKER__LISTEN`, `BROKER__BIN`, `BROKER__ENDPOINT`, `BROKER__DATA_PATH`, `BROKER__TIMEOUTS__*` — see [product naming](product-naming-contract.md) |
 | Env (vectorstore) | `VECTORSTORE__*` — same shape |
+| Env (embed) | `EMBED__LISTEN`, `EMBED__BIN`, `EMBED__ENDPOINT`, `EMBED__MODEL_PATH`, `EMBED__CACHE_DIR`, `EMBED__CONTEXT_SIZE`, `EMBED__GPU_LAYERS`, `EMBED__POOLING` |
 | Env (gateway wrapper) | `GATEWAY__LISTEN`, `GATEWAY__BIN`, `GATEWAY__BACKEND_LISTEN`, … |
-| Debug gates | `DEBUG__ENABLE_BROKER_LOGS`, `DEBUG__ENABLE_VECTORSTORE_LOGS`, `DEBUG__ALLOW_REMOTE` |
+| Debug gates | `DEBUG__ENABLE_BROKER_LOGS`, `DEBUG__ENABLE_VECTORSTORE_LOGS`, `DEBUG__ENABLE_EMBED_LOGS`, `DEBUG__ALLOW_REMOTE` |
 
 ## Code map
 
@@ -77,7 +78,7 @@ Operators and the settings UI see **Chimera component names** (`chimera-broker`,
 |---------|----------|
 | Contract constants, validation | `chimera/internal/wrapper/contract/contract.go` |
 | Shared runtime (HTTP, lifecycle, metrics) | `chimera/internal/wrapper/runtime/runtime.go` |
-| Reference implementations | `chimera/chimera-broker/main.go`, `chimera-vectorstore/main.go`, `chimera-gateway/main.go`, `chimera-indexer/main.go` |
+| Reference implementations | `chimera/chimera-broker/main.go`, `chimera-vectorstore/main.go`, `chimera-embed/main.go`, `chimera-gateway/main.go`, `chimera-indexer/main.go` |
 | Backend adapters | `chimera/chimera-broker/adapter/`, `chimera-vectorstore/adapter/`, … |
 | Supervisor spawns wrappers | `chimera/chimera-supervisor/internal/supervise/children.go` |
 | Env key names | `internal/naming/contracts.go` |
@@ -89,6 +90,7 @@ go test ./chimera/internal/wrapper/contract/...
 go test ./chimera/internal/wrapper/runtime/...
 go test ./chimera/chimera-broker/ -run E2E -count=1
 go test ./chimera/chimera-vectorstore/ -run E2E -count=1
+go test ./chimera/chimera-embed/ -run E2E -count=1
 go test ./chimera/chimera-gateway/ -run E2E -count=1
 go test ./chimera/chimera-supervisor/ -run E2E -count=1
 ```

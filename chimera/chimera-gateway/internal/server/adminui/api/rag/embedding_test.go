@@ -21,7 +21,7 @@ import (
 	"github.com/lynn/porcelain/internal/operatorapi"
 )
 
-func testRAGEmbeddingEnv(t *testing.T, embedModel string) (*http.ServeMux, *handler.Handler, *gruntime.Runtime, string, *httptest.Server) {
+func testRAGEmbeddingEnv(t *testing.T, embedModel string, internalEnabled ...bool) (*http.ServeMux, *handler.Handler, *gruntime.Runtime, string, *httptest.Server) {
 	t.Helper()
 	dir := t.TempDir()
 	gwPath := filepath.Join(dir, naming.GatewayConfigFileTarget)
@@ -47,6 +47,9 @@ func testRAGEmbeddingEnv(t *testing.T, embedModel string) (*http.ServeMux, *hand
 		"vectorstore:\n  url: \"http://127.0.0.1:6333\"\n" +
 		"rag:\n  enabled: true\n  embedding:\n    model: \"" + embedModel + "\"\n    dim: 8\n" +
 		"  chunking:\n    size: 128\n    overlap: 32\n  ingest:\n    max_bytes: 10485760\n  defaults:\n    project_id: \"default\"\n"
+	if len(internalEnabled) > 0 && internalEnabled[0] {
+		raw += "internal_embedding:\n  enabled: true\n  provider: \"internal\"\n  model: \"internal/nomic-embed-text\"\n  dim: 8\n  base_url: \"" + upstream.URL + "\"\n  model_path: \"./model.gguf\"\n"
+	}
 	if err := os.WriteFile(gwPath, []byte(raw), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -82,6 +85,26 @@ func testRAGEmbeddingEnv(t *testing.T, embedModel string) (*http.ServeMux, *hand
 		t.Fatal(err)
 	}
 	return mux, h, rt, sid, upstream
+}
+
+func TestRAGEmbeddingInternalGETAndPUT(t *testing.T) {
+	mux, h, _, sid, _ := testRAGEmbeddingEnv(t, "ollama/nomic-embed-text:latest", true)
+	rec := embeddingRequest(t, mux, http.MethodGet, nil, h.CookieName(), sid)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var resp operatorapi.RAGEmbeddingGetResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Model != "internal/nomic-embed-text" || !resp.ModelInCatalog || len(resp.Candidates) != 1 {
+		t.Fatalf("resp=%+v", resp)
+	}
+
+	rec = embeddingRequest(t, mux, http.MethodPut, operatorapi.RAGEmbeddingPutRequest{Model: "ollama/nomic-embed-text:latest"}, h.CookieName(), sid)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "disable internal_embedding") {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
 }
 
 func embeddingRequest(t *testing.T, mux *http.ServeMux, method string, body any, cookieName, sid string) *httptest.ResponseRecorder {

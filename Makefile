@@ -5,6 +5,7 @@ CHIMERA_INDEX_BIN := chimera-indexer
 CHIMERA_SUPERVISOR_BIN := chimera-supervisor
 CHIMERA_BROKER_BIN := chimera-broker
 CHIMERA_VECTORSTORE_BIN := chimera-vectorstore
+CHIMERA_EMBED_BIN := chimera-embed
 CHIMERA_RUNTIME_DIR := chimera
 CHIMERA_RUNTIME_BIN_DIR := $(CHIMERA_RUNTIME_DIR)/bin
 CHIMERA_RUNTIME_DEPS_DIR := $(CHIMERA_RUNTIME_DIR)/.deps
@@ -13,6 +14,7 @@ CHIMERA_ADMINUI_EMBED_DIR := chimera/chimera-gateway/internal/server/adminui/emb
 CHIMERA_CMD_SUPERVISOR := ./chimera/chimera-supervisor
 CHIMERA_CMD_BROKER := ./chimera/chimera-broker
 CHIMERA_CMD_VECTORSTORE := ./chimera/chimera-vectorstore
+CHIMERA_CMD_EMBED := ./chimera/chimera-embed
 LOCUS_CMD_DESKTOP := ./locus/locus-desktop
 CHIMERA_CMD_TOKENCOUNT := ./chimera/cmd/tokencount
 CHIMERA_CMD_INDEXER := ./chimera/chimera-indexer
@@ -44,11 +46,13 @@ ifeq ($(OS),Windows_NT)
   CHIMERA_SUPERVISOR_BUILD_OUT := $(CHIMERA_RUNTIME_BIN_DIR)/$(CHIMERA_SUPERVISOR_BIN).exe
   CHIMERA_BROKER_BUILD_OUT := $(CHIMERA_RUNTIME_BIN_DIR)/$(CHIMERA_BROKER_BIN).exe
   CHIMERA_VECTORSTORE_BUILD_OUT := $(CHIMERA_RUNTIME_BIN_DIR)/$(CHIMERA_VECTORSTORE_BIN).exe
+  CHIMERA_EMBED_BUILD_OUT := $(CHIMERA_RUNTIME_BIN_DIR)/$(CHIMERA_EMBED_BIN).exe
   CHIMERA_INDEXER_BUILD_OUT := $(CHIMERA_RUNTIME_BIN_DIR)/$(CHIMERA_INDEX_BIN).exe
   CHIMERA_GATEWAY_STAGE_OUT := $(BIN_STAGE_DIR)/$(CHIMERA_GATEWAY_BIN).exe
   CHIMERA_SUPERVISOR_STAGE_OUT := $(BIN_STAGE_DIR)/$(CHIMERA_SUPERVISOR_BIN).exe
   CHIMERA_BROKER_STAGE_OUT := $(BIN_STAGE_DIR)/$(CHIMERA_BROKER_BIN).exe
   CHIMERA_VECTORSTORE_STAGE_OUT := $(BIN_STAGE_DIR)/$(CHIMERA_VECTORSTORE_BIN).exe
+  CHIMERA_EMBED_STAGE_OUT := $(BIN_STAGE_DIR)/$(CHIMERA_EMBED_BIN).exe
   CHIMERA_INDEXER_STAGE_OUT := $(BIN_STAGE_DIR)/$(CHIMERA_INDEX_BIN).exe
   CHIMERA_BROKER_RUNTIME_BIN := $(CHIMERA_RUNTIME_BIN_DIR)/bifrost-http.exe
   CHIMERA_VECTORSTORE_RUNTIME_BIN := $(CHIMERA_RUNTIME_BIN_DIR)/qdrant.exe
@@ -63,11 +67,13 @@ else
   CHIMERA_SUPERVISOR_BUILD_OUT := $(CHIMERA_RUNTIME_BIN_DIR)/$(CHIMERA_SUPERVISOR_BIN)
   CHIMERA_BROKER_BUILD_OUT := $(CHIMERA_RUNTIME_BIN_DIR)/$(CHIMERA_BROKER_BIN)
   CHIMERA_VECTORSTORE_BUILD_OUT := $(CHIMERA_RUNTIME_BIN_DIR)/$(CHIMERA_VECTORSTORE_BIN)
+  CHIMERA_EMBED_BUILD_OUT := $(CHIMERA_RUNTIME_BIN_DIR)/$(CHIMERA_EMBED_BIN)
   CHIMERA_INDEXER_BUILD_OUT := $(CHIMERA_RUNTIME_BIN_DIR)/$(CHIMERA_INDEX_BIN)
   CHIMERA_GATEWAY_STAGE_OUT := $(BIN_STAGE_DIR)/$(CHIMERA_GATEWAY_BIN)
   CHIMERA_SUPERVISOR_STAGE_OUT := $(BIN_STAGE_DIR)/$(CHIMERA_SUPERVISOR_BIN)
   CHIMERA_BROKER_STAGE_OUT := $(BIN_STAGE_DIR)/$(CHIMERA_BROKER_BIN)
   CHIMERA_VECTORSTORE_STAGE_OUT := $(BIN_STAGE_DIR)/$(CHIMERA_VECTORSTORE_BIN)
+  CHIMERA_EMBED_STAGE_OUT := $(BIN_STAGE_DIR)/$(CHIMERA_EMBED_BIN)
   CHIMERA_INDEXER_STAGE_OUT := $(BIN_STAGE_DIR)/$(CHIMERA_INDEX_BIN)
   CHIMERA_BROKER_RUNTIME_BIN := $(CHIMERA_RUNTIME_BIN_DIR)/bifrost-http
   CHIMERA_VECTORSTORE_RUNTIME_BIN := $(CHIMERA_RUNTIME_BIN_DIR)/qdrant
@@ -104,6 +110,7 @@ endef
 	chimera-supervisor-build chimera-supervisor-run chimera-supervisor-test chimera-supervisor-test-unit chimera-supervisor-test-e2e \
 	chimera-broker-install chimera-broker-build chimera-broker-run chimera-broker-test chimera-broker-test-unit chimera-broker-test-e2e \
 	chimera-vectorstore-install chimera-vectorstore-build chimera-vectorstore-run chimera-vectorstore-test chimera-vectorstore-test-unit chimera-vectorstore-test-e2e \
+	chimera-embed-build chimera-embed-test chimera-embed-test-unit chimera-embed-test-e2e \
 	chimera-indexer-build chimera-indexer-run chimera-indexer-install chimera-indexer-configure chimera-indexer-test chimera-indexer-test-unit chimera-indexer-test-e2e \
 	locus-install locus-build locus-run locus-test locus-vet-if-enabled locus-test-if-enabled \
 	locus-test-unit-if-enabled locus-test-e2e-if-enabled \
@@ -209,8 +216,9 @@ chimera-install:
 	@$(MAKE) --no-print-directory chimera-vectorstore-install
 
 chimera-build:
-	$(call step_msg,Building Chimera products (broker, gateway, indexer, supervisor, vectorstore))
+	$(call step_msg,Building Chimera products (broker, embed, gateway, indexer, supervisor, vectorstore))
 	@$(MAKE) --no-print-directory chimera-broker-build
+	@$(MAKE) --no-print-directory chimera-embed-build
 	@$(MAKE) --no-print-directory chimera-gateway-build
 	@$(MAKE) --no-print-directory chimera-indexer-build
 	@$(MAKE) --no-print-directory chimera-supervisor-build
@@ -222,13 +230,14 @@ chimera-configure:
 
 chimera-run:
 	@echo [STEP] Running Chimera via supervisor
-	@$(GITBASH) -lc '"$(CHIMERA_SUPERVISOR_STAGE_OUT)" -broker-bin "$(CHIMERA_BROKER_STAGE_OUT)" -vectorstore-bin "$(CHIMERA_VECTORSTORE_STAGE_OUT)" $(ARGS)'
+	@$(GITBASH) -lc '"$(CHIMERA_SUPERVISOR_STAGE_OUT)" -broker-bin "$(CHIMERA_BROKER_STAGE_OUT)" -vectorstore-bin "$(CHIMERA_VECTORSTORE_STAGE_OUT)" -embed-bin "$(CHIMERA_EMBED_STAGE_OUT)" $(ARGS)'
 
 chimera-test:
 	@echo [STEP] Testing Chimera products
 	@$(MAKE) --no-print-directory chimera-gateway-test
 	@$(MAKE) --no-print-directory chimera-supervisor-test
 	@$(MAKE) --no-print-directory chimera-broker-test
+	@$(MAKE) --no-print-directory chimera-embed-test
 	@$(MAKE) --no-print-directory chimera-vectorstore-test
 	@$(MAKE) --no-print-directory chimera-indexer-test
 
@@ -237,6 +246,7 @@ chimera-test-unit:
 	@$(MAKE) --no-print-directory chimera-gateway-test-unit
 	@$(MAKE) --no-print-directory chimera-supervisor-test-unit
 	@$(MAKE) --no-print-directory chimera-broker-test-unit
+	@$(MAKE) --no-print-directory chimera-embed-test-unit
 	@$(MAKE) --no-print-directory chimera-vectorstore-test-unit
 	@$(MAKE) --no-print-directory chimera-indexer-test-unit
 
@@ -245,6 +255,7 @@ chimera-test-e2e:
 	@$(MAKE) --no-print-directory chimera-gateway-test-e2e
 	@$(MAKE) --no-print-directory chimera-supervisor-test-e2e
 	@$(MAKE) --no-print-directory chimera-broker-test-e2e
+	@$(MAKE) --no-print-directory chimera-embed-test-e2e
 	@$(MAKE) --no-print-directory chimera-vectorstore-test-e2e
 	@$(MAKE) --no-print-directory chimera-indexer-test-e2e
 
@@ -425,6 +436,24 @@ chimera-supervisor-clean-configure:
 
 chimera-supervisor-clean-run:
 	$(GITBASH) scripts/clean-product.sh supervisor run $(CONFIRM)
+
+# --- Chimera embed ---
+chimera-embed-build:
+	@echo [STEP] Building Chimera embed executable and staging artifact
+	@$(GITBASH) -lc 'mkdir -p "$(CHIMERA_RUNTIME_BIN_DIR)"'
+	@go build -o "$(CHIMERA_EMBED_BUILD_OUT)" $(CHIMERA_CMD_EMBED)
+	@$(MAKE) stage-bin-dir
+	@$(GITBASH) -lc 'cp -f "$(CHIMERA_EMBED_BUILD_OUT)" "$(CHIMERA_EMBED_STAGE_OUT)"'
+
+chimera-embed-test: chimera-embed-test-unit chimera-embed-test-e2e
+
+chimera-embed-test-unit:
+	@echo [STEP] Running Chimera embed unit tests
+	@go test $(CHIMERA_CMD_EMBED)/... $(RACE_GATEWAY) -run Test -skip E2E -count=1
+
+chimera-embed-test-e2e:
+	@echo [STEP] Running Chimera embed end-to-end tests
+	@go test $(CHIMERA_CMD_EMBED) $(RACE_GATEWAY) -run E2E -count=1
 
 # --- Chimera vectorstore ---
 chimera-vectorstore-install:

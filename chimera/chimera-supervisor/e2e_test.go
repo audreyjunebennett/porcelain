@@ -103,7 +103,7 @@ type supervisorProc struct {
 	stderr bytes.Buffer
 }
 
-func startSupervisorProcess(t *testing.T, supervisorBin, fakeWrapper string, args []string, extraEnv map[string]string) *supervisorProc {
+func startSupervisorProcess(t *testing.T, supervisorBin, fakeWrapper string, args []string, extraEnv map[string]string, internalEmbedding ...bool) *supervisorProc {
 	t.Helper()
 	dir := t.TempDir()
 	gatewayPath := filepath.Join(dir, "gateway.yaml")
@@ -120,6 +120,10 @@ func startSupervisorProcess(t *testing.T, supervisorBin, fakeWrapper string, arg
 		"health:\n  timeout_ms: 1000\n  chat_timeout_ms: 60000\n" +
 		"paths:\n  tokens: \"" + strings.ReplaceAll(tokensPath, "\\", "/") + "\"\n  routing_policy: \"" + strings.ReplaceAll(routingPath, "\\", "/") + "\"\n" +
 		"routing:\n  fallback_chain:\n    - \"fake/model\"\n"
+	embedEndpoint := "127.0.0.1:" + allocPort(t)
+	if len(internalEmbedding) > 0 && internalEmbedding[0] {
+		raw += "internal_embedding:\n  enabled: true\n  provider: \"internal\"\n  model: \"internal/nomic-embed-text\"\n  dim: 3\n  base_url: \"http://" + embedEndpoint + "\"\n  model_path: \"./fake.gguf\"\n"
+	}
 	if err := os.WriteFile(gatewayPath, []byte(raw), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -128,6 +132,7 @@ func startSupervisorProcess(t *testing.T, supervisorBin, fakeWrapper string, arg
 	gatewayListen := "127.0.0.1:" + allocPort(t)
 	brokerListen := "127.0.0.1:" + allocPort(t)
 	vectorstoreListen := "127.0.0.1:" + allocPort(t)
+	embedListen := "127.0.0.1:" + allocPort(t)
 	base := []string{
 		"-config", gatewayPath,
 		"-listen", listen,
@@ -144,6 +149,14 @@ func startSupervisorProcess(t *testing.T, supervisorBin, fakeWrapper string, arg
 		"-vectorstore-data-path", filepath.Join(dir, "vectorstore-data"),
 		"-wait-broker", "5s",
 		"-wait-vectorstore", "5s",
+	}
+	if len(internalEmbedding) > 0 && internalEmbedding[0] {
+		base = append(base,
+			"-embed-bin", fakeWrapper,
+			"-embed-listen", embedListen,
+			"-embed-endpoint", embedEndpoint,
+			"-wait-embed", "5s",
+		)
 	}
 	base = append(base, args...)
 
@@ -316,6 +329,37 @@ func TestE2E_Supervisor_003_BrokerStartFailureExitsNonZero(t *testing.T) {
 	}
 }
 
+func TestE2E_Supervisor_004_InternalEmbeddingChildIsRequiredAndReady(t *testing.T) {
+	supervisorBin, fakeWrapper := ensureSupervisorE2EBinaries(t)
+	p := startSupervisorProcess(t, supervisorBin, fakeWrapper, nil, map[string]string{
+		"FAKE_WRAPPER_START_READY": "1",
+	}, true)
+	t.Cleanup(func() { stopSupervisor(t, p) })
+
+	base := "http://" + flagValue(p.cmd.Args, "-listen")
+	waitForStatus(t, base+"/readyz", http.StatusOK, 10*time.Second)
+	response, err := http.Get(base + "/status")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	var doc struct {
+		Details struct {
+			Children map[string]struct {
+				Required bool `json:"required"`
+				Ready    bool `json:"ready"`
+			} `json:"children"`
+		} `json:"details"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&doc); err != nil {
+		t.Fatal(err)
+	}
+	embed := doc.Details.Children["embed"]
+	if !embed.Required || !embed.Ready {
+		t.Fatalf("embed child status=%+v", embed)
+	}
+}
+
 const fakeWrapperSource = `package main
 
 import (
@@ -343,6 +387,9 @@ func main() {
 	var _bin string
 	var _endpoint string
 	var _data string
+	var _model string
+	var _cache string
+	var _logLevel string
 	var _config string
 	var _upstream string
 	fs := flag.NewFlagSet("fake-wrapper", flag.ContinueOnError)
@@ -351,6 +398,9 @@ func main() {
 	fs.StringVar(&_bin, "bin", "", "")
 	fs.StringVar(&_endpoint, "endpoint", "", "")
 	fs.StringVar(&_data, "data-path", "", "")
+	fs.StringVar(&_model, "model-path", "", "")
+	fs.StringVar(&_cache, "cache-dir", "", "")
+	fs.StringVar(&_logLevel, "log-level", "", "")
 	fs.StringVar(&_config, "config", "", "")
 	fs.StringVar(&_upstream, "broker-override", "", "")
 	_ = fs.Bool("debug-forward-upstream", false, "")

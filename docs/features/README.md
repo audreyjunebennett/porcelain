@@ -18,6 +18,7 @@ Durable contracts for new binaries, wrappers, and cross-cutting integration — 
 | [Operator SQLite store](operator-sqlite-store.md) | `operator.sqlite`, migrations, shared persistence for UI features | `internal/operatorstore` | `current` |
 | [Operator UI filesystem dev mode](operator-ui-filesystem-dev-mode.md) | `CHIMERA_ADMINUI_ROOT` serves embed UI from disk on loopback | Gateway embed assets | `current` |
 | [Gateway chat routing pipeline](gateway-chat-routing-pipeline.md) | Tool router, RAG inject, policy pick, fallback loop; extensibility target for routers | Gateway chat path | `current` |
+| [Internal embedding provider](internal-embedding-provider.md) | Opt-in supervised `chimera-embed` + `llama-server` for gateway RAG embeddings | Gateway, indexer health, supervisor | `current` |
 
 ## Operator features
 

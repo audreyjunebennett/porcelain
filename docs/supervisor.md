@@ -1,6 +1,6 @@
 # Supervised stack (`chimera-supervisor`)
 
-One command starts the **Chimera wrapper stack**: optional `chimera-vectorstore`, `chimera-broker`, `chimera-gateway`, and optional `chimera-indexer`. Each managed service is a **wrapper binary** that supervises its upstream backend behind a shared contract (health, readiness, lifecycle, structured logs). **SIGINT** / **SIGTERM** triggers graceful shutdown of the control plane and managed children.
+One command starts the **Chimera wrapper stack**: optional `chimera-vectorstore`, optional internal `chimera-embed`, `chimera-broker`, `chimera-gateway`, and optional `chimera-indexer`. Each managed service is a **wrapper binary** that supervises its upstream backend behind a shared contract (health, readiness, lifecycle, structured logs). **SIGINT** / **SIGTERM** triggers graceful shutdown of the control plane and managed children.
 
 **Platform contracts (read before adding binaries):**
 
@@ -15,13 +15,14 @@ One command starts the **Chimera wrapper stack**: optional `chimera-vectorstore`
 |-------|------|
 | **`chimera-supervisor`** | Parent orchestrator; control HTTP plane (`/healthz`, `/readyz`, `/status`, `/shutdown`); tees child logs into `servicelogs` ring buffer. |
 | **`chimera-vectorstore`** | Wrapper around upstream vector store (default `qdrant` via `--bin`); exposes Chimera listen addr; translates `VECTORSTORE__*` env. |
+| **`chimera-embed`** (optional) | Wrapper around an operator-supplied `llama-server` and GGUF embedding model; enabled by `internal_embedding.enabled`. |
 | **`chimera-broker`** | Wrapper around upstream LLM broker (BiFrost `bifrost-http` via `--bin`); exposes Chimera listen addr; translates `BROKER__*` env. |
 | **`chimera-gateway`** | Wrapper around gateway backend process; operator UI at `/ui/*`; merges config, RAG, chat, operator SQLite. |
 | **`chimera-indexer`** (optional) | Workspace file watcher; polls gateway for SQLite workspace list; ingest via gateway APIs. |
 
-The supervisor **does not** exec upstream `qdrant` or `bifrost-http` directly — only Chimera wrapper binaries. Upstream paths are passed to wrappers as `--bin`.
+The supervisor **does not** exec upstream `qdrant`, `llama-server`, or `bifrost-http` directly — only Chimera wrapper binaries. Upstream paths are passed to wrappers as `--bin`.
 
-Gateway upstream URL is wired to the supervised broker endpoint. When `rag.enabled` is true, the gateway uses the supervised vector store.
+Gateway upstream URL is wired to the supervised broker endpoint. When `rag.enabled` is true, the gateway uses the supervised vector store. When `internal_embedding.enabled` is true, the supervisor starts `chimera-embed` before the gateway and rewires the resolved RAG embedding target to its llama-server endpoint.
 
 ## Obtaining binaries
 
@@ -45,10 +46,13 @@ Run `./chimera-supervisor -h` for the full list. Typical overrides:
 | `-gateway-bin` | Path to `chimera-gateway` wrapper |
 | `-broker-bin` | Path to `chimera-broker` wrapper |
 | `-vectorstore-bin` | Path to `chimera-vectorstore` wrapper |
+| `-embed-bin` | Path to `chimera-embed` wrapper |
+| `-embed-backend-bin` | Path to the operator-supplied `llama-server` binary |
+| `-embed-model-path` | Optional override for the configured GGUF model path |
 | `-indexer-bin` | Path to `chimera-indexer` (when supervised indexer enabled) |
 | `-config` | Gateway YAML path (default `config/gateway.yaml`) |
 
-Wrapper-specific tuning uses `GATEWAY__*`, `BROKER__*`, `VECTORSTORE__*` env vars — see [product naming contract](features/product-naming-contract.md).
+Wrapper-specific tuning uses `GATEWAY__*`, `BROKER__*`, `VECTORSTORE__*`, and `EMBED__*` env vars — see [product naming contract](features/product-naming-contract.md).
 
 ## Make targets
 
@@ -66,7 +70,7 @@ After login: app shell **`/ui`**, settings and event log **`/ui/settings`**. See
 ## Manual checklist
 
 1. `make chimera-install` and `make chimera-supervisor-build`.
-2. Run `make chimera-supervisor-run`; confirm supervisor `/readyz` and gateway `/health`.
+2. If internal embedding is enabled, provision `llama-server` and the configured GGUF model, then run `make chimera-supervisor-run`; confirm supervisor `/readyz` and gateway `/health`.
 3. Open `/ui/login` (or use `locus-desktop`).
 4. SIGINT the supervisor; confirm wrapper children exit (no orphan upstream processes).
 
@@ -74,5 +78,6 @@ After login: app shell **`/ui`**, settings and event log **`/ui/settings`**. See
 
 - [configuration.md](configuration.md) — gateway YAML, reload
 - [indexer.md](indexer.md) — indexer operator guide
+- [Internal embedding provider](features/internal-embedding-provider.md) — config, lifecycle, and health behavior
 - [network.md](network.md) — ports and traffic flow
 - Historical delivery: [`plans/archive/vectorstore-broker-wrapper-hard-cut.md`](plans/archive/vectorstore-broker-wrapper-hard-cut.md)

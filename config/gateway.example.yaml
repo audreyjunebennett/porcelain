@@ -149,7 +149,10 @@ rag:
 
 # Internal embedding provider: supervised chimera-embed + llama-server (optional).
 #
-# Off unless enabled. When on, point rag.embedding at the local /v1/embeddings endpoint.
+# Off unless enabled. When on, the resolved RAG embedding model, dimension, and base URL
+# are taken from this block; the broker/Ollama embedding catalog is not used.
+# chimera-supervisor starts chimera-embed, which starts an operator-supplied llama-server
+# and GGUF model. Relative model/cache paths resolve from this gateway.yaml directory.
 # internal_embedding:
 #   enabled: false
 #   provider: "internal"
