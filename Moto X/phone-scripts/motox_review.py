@@ -6,11 +6,15 @@ This module stores model proposals and human corrections as additive layers.
 
 from __future__ import annotations
 
+import copy
+import math
 import sqlite3
+import struct
 import threading
 import uuid
+from collections import Counter, defaultdict
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 from math import isfinite
 from pathlib import Path
 from typing import Any
@@ -23,10 +27,53 @@ BOUNDARY_LABELS = ("Continues before", "Continues after", "Continues both")
 PRIVACY_LABELS = ("Exclude",)
 ALL_LABELS = SPEAKER_LABELS + SOUND_LABELS + SPECIAL_LABELS + BOUNDARY_LABELS + PRIVACY_LABELS
 ANNOTATION_TYPES = ("speaker", "sound", "overlap", "transcript", "boundary", "privacy")
+IDENTITY_LABELS = ("Ruby", "Lynn", "Raven")
+MIN_IDENTIFICATION_SECONDS = 1.5
+MAX_IDENTIFICATION_SECONDS = 8.0
 
 
 def _now() -> str:
     return datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def _normalized(values: list[float]) -> list[float]:
+    vector = [float(value) for value in values]
+    if not vector or any(not isfinite(value) for value in vector):
+        raise ValueError("speaker embedding must contain finite values")
+    magnitude = math.sqrt(sum(value * value for value in vector))
+    if magnitude <= 1e-12:
+        raise ValueError("speaker embedding cannot be empty")
+    return [value / magnitude for value in vector]
+
+
+def _pack_embedding(values: list[float]) -> tuple[bytes, int]:
+    vector = _normalized(values)
+    return struct.pack(f"<{len(vector)}f", *vector), len(vector)
+
+
+def _unpack_embedding(blob: bytes, dimension: int) -> list[float]:
+    if dimension <= 0 or len(blob) != dimension * 4:
+        raise ValueError("invalid stored speaker embedding")
+    return list(struct.unpack(f"<{dimension}f", blob))
+
+
+def _mean_embedding(vectors: list[list[float]]) -> list[float]:
+    dimension = len(vectors[0])
+    mean = [
+        sum(vector[index] for vector in vectors) / len(vectors)
+        for index in range(dimension)
+    ]
+    return _normalized(mean)
+
+
+def _cosine(left: list[float], right: list[float]) -> float:
+    return sum(a * b for a, b in zip(left, right))
+
+
+def _range_overlap(
+    left_start: float, left_end: float, right_start: float, right_end: float
+) -> float:
+    return max(0.0, min(left_end, right_end) - max(left_start, right_start))
 
 
 class MotoXReviewStore:
@@ -68,6 +115,7 @@ class MotoXReviewStore:
                     annotation_type TEXT NOT NULL,
                     label TEXT,
                     replacement_text TEXT,
+                    speaker_turn_id TEXT,
                     source TEXT NOT NULL DEFAULT 'human',
                     created_at TEXT NOT NULL,
                     reverted_at TEXT,
@@ -86,6 +134,10 @@ class MotoXReviewStore:
             if "audio_end_seconds" not in annotation_columns:
                 connection.execute(
                     "ALTER TABLE review_annotations ADD COLUMN audio_end_seconds REAL"
+                )
+            if "speaker_turn_id" not in annotation_columns:
+                connection.execute(
+                    "ALTER TABLE review_annotations ADD COLUMN speaker_turn_id TEXT"
                 )
             connection.execute(
                 """
@@ -116,6 +168,39 @@ class MotoXReviewStore:
                 """
                 CREATE INDEX IF NOT EXISTS idx_review_proposals_capture_type
                 ON review_proposals(capture_id, proposal_type, created_at)
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS review_speaker_turns (
+                    turn_id TEXT PRIMARY KEY,
+                    capture_id TEXT NOT NULL,
+                    conversation_id TEXT,
+                    audio_start_seconds REAL NOT NULL,
+                    audio_end_seconds REAL NOT NULL,
+                    cluster_id TEXT NOT NULL,
+                    embedding BLOB NOT NULL,
+                    embedding_dim INTEGER NOT NULL,
+                    quality REAL NOT NULL DEFAULT 0,
+                    embedding_model TEXT NOT NULL,
+                    embedding_version TEXT,
+                    diarization_model TEXT,
+                    source_id TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY (capture_id) REFERENCES chunks(capture_id)
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_review_speaker_turns_capture
+                ON review_speaker_turns(capture_id, audio_start_seconds)
+                """
+            )
+            connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_review_speaker_turns_model
+                ON review_speaker_turns(embedding_model, embedding_dim, quality)
                 """
             )
             connection.execute("PRAGMA optimize")
@@ -355,6 +440,366 @@ class MotoXReviewStore:
         path = Path(row["audio_path"])
         return path if path.is_file() else None
 
+    def add_speaker_turns(
+        self,
+        turns: list[dict[str, Any]],
+        *,
+        embedding_model: str,
+        embedding_version: str | None,
+        diarization_model: str | None,
+        source_id: str,
+    ) -> int:
+        """Store source-mapped diarized turns and normalized voice embeddings.
+
+        ``turn_id`` values are deterministic in the importer, so importing the
+        same report again updates its derived rows instead of duplicating them.
+        """
+
+        embedding_model = str(embedding_model).strip()
+        source_id = str(source_id).strip()
+        if not embedding_model or not source_id:
+            raise ValueError("speaker turn provenance is required")
+        created_at = _now()
+        rows = []
+        for turn in turns:
+            turn_id = str(turn.get("turn_id", "")).strip()
+            capture_id = str(turn.get("capture_id", "")).strip()
+            cluster_id = str(turn.get("cluster_id", "")).strip()
+            start = float(turn.get("audio_start_seconds", 0.0))
+            end = float(turn.get("audio_end_seconds", 0.0))
+            quality = float(turn.get("quality", 0.0))
+            if not turn_id or not capture_id or not cluster_id:
+                continue
+            if not all(isfinite(value) for value in (start, end, quality)):
+                raise ValueError("speaker turn times and quality must be finite")
+            if start < 0 or end <= start:
+                raise ValueError("speaker turn range is invalid")
+            blob, dimension = _pack_embedding(list(turn.get("embedding") or []))
+            rows.append(
+                (
+                    turn_id,
+                    capture_id,
+                    turn.get("conversation_id"),
+                    round(start, 3),
+                    round(end, 3),
+                    cluster_id,
+                    blob,
+                    dimension,
+                    max(0.0, min(1.0, quality)),
+                    embedding_model,
+                    embedding_version,
+                    diarization_model,
+                    source_id,
+                    created_at,
+                )
+            )
+        if not rows:
+            return 0
+        with self._write_lock, self._connect() as connection:
+            capture_ids = sorted({row[1] for row in rows})
+            existing = set()
+            for offset in range(0, len(capture_ids), 900):
+                batch = capture_ids[offset:offset + 900]
+                placeholders = ",".join("?" for _ in batch)
+                existing.update(
+                    row["capture_id"]
+                    for row in connection.execute(
+                        f"SELECT capture_id FROM chunks WHERE capture_id IN ({placeholders})",
+                        batch,
+                    )
+                )
+            rows = [row for row in rows if row[1] in existing]
+            connection.executemany(
+                """
+                INSERT INTO review_speaker_turns (
+                    turn_id, capture_id, conversation_id, audio_start_seconds,
+                    audio_end_seconds, cluster_id, embedding, embedding_dim,
+                    quality, embedding_model, embedding_version,
+                    diarization_model, source_id, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(turn_id) DO UPDATE SET
+                    capture_id = excluded.capture_id,
+                    conversation_id = excluded.conversation_id,
+                    audio_start_seconds = excluded.audio_start_seconds,
+                    audio_end_seconds = excluded.audio_end_seconds,
+                    cluster_id = excluded.cluster_id,
+                    embedding = excluded.embedding,
+                    embedding_dim = excluded.embedding_dim,
+                    quality = excluded.quality,
+                    embedding_model = excluded.embedding_model,
+                    embedding_version = excluded.embedding_version,
+                    diarization_model = excluded.diarization_model,
+                    source_id = excluded.source_id,
+                    created_at = excluded.created_at
+                """,
+                rows,
+            )
+        return len(rows)
+
+    @staticmethod
+    def _speaker_labels_for_turns(
+        turns: list[dict[str, Any]], annotations: list[dict[str, Any]]
+    ) -> dict[str, str]:
+        labels: dict[str, str] = {}
+        turns_by_capture: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for turn in turns:
+            turns_by_capture[turn["capture_id"]].append(turn)
+        for annotation in annotations:
+            if annotation["annotation_type"] != "speaker":
+                continue
+            label = annotation.get("label")
+            if label not in SPEAKER_LABELS:
+                continue
+            direct_turn = annotation.get("speaker_turn_id")
+            if direct_turn:
+                labels[str(direct_turn)] = str(label)
+                continue
+            start = annotation.get("audio_start_seconds")
+            end = annotation.get("audio_end_seconds")
+            if start is None or end is None:
+                continue
+            start, end = float(start), float(end)
+            for turn in turns_by_capture.get(annotation["capture_id"], []):
+                duration = turn["audio_end_seconds"] - turn["audio_start_seconds"]
+                overlap = _range_overlap(
+                    turn["audio_start_seconds"],
+                    turn["audio_end_seconds"],
+                    start,
+                    end,
+                )
+                if duration > 0 and overlap / duration >= 0.65:
+                    labels[turn["turn_id"]] = str(label)
+        return labels
+
+    def identification_candidates(
+        self, *, limit: int = 24, exclude_turn_ids: set[str] | None = None
+    ) -> list[dict[str, Any]]:
+        """Rank exact diarized turns by expected speaker-learning value.
+
+        Human answers build per-person embedding centroids. The queue then
+        favors clean turns near the boundary between the two closest verified
+        household voices, while spreading bootstrap questions across clusters.
+        """
+
+        limit = max(1, min(int(limit), 100))
+        excluded = set(exclude_turn_ids or ())
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT t.*, c.captured_at, c.duration_seconds,
+                       c.speech_seconds, c.audio_path, c.transcript,
+                       c.conversation_id AS chunk_conversation_id
+                FROM review_speaker_turns t
+                JOIN chunks c ON c.capture_id = t.capture_id
+                WHERE c.kind = 'speech' AND c.audio_path IS NOT NULL
+                  AND trim(c.transcript) <> ''
+                  AND (t.audio_end_seconds - t.audio_start_seconds) BETWEEN ? AND ?
+                  AND NOT EXISTS (
+                      SELECT 1 FROM review_annotations privacy
+                      WHERE privacy.capture_id = c.capture_id
+                        AND privacy.annotation_type = 'privacy'
+                        AND privacy.label = 'Exclude'
+                        AND privacy.reverted_at IS NULL
+                  )
+                ORDER BY t.created_at DESC, t.turn_id
+                """,
+                (MIN_IDENTIFICATION_SECONDS, MAX_IDENTIFICATION_SECONDS),
+            ).fetchall()
+            turns = []
+            for row in rows:
+                item = dict(row)
+                if item["turn_id"] in excluded or not Path(item["audio_path"]).is_file():
+                    continue
+                try:
+                    item["vector"] = _unpack_embedding(
+                        item.pop("embedding"), int(item["embedding_dim"])
+                    )
+                except ValueError:
+                    continue
+                turns.append(item)
+            annotations = [
+                dict(row)
+                for row in connection.execute(
+                    """
+                    SELECT * FROM review_annotations
+                    WHERE reverted_at IS NULL AND annotation_type = 'speaker'
+                    ORDER BY created_at, annotation_id
+                    """
+                ).fetchall()
+            ]
+
+            labels = self._speaker_labels_for_turns(turns, annotations)
+            compatible_vectors: dict[
+                tuple[str, str | None, int], dict[str, list[list[float]]]
+            ] = defaultdict(lambda: defaultdict(list))
+            cluster_votes: dict[str, Counter[str]] = defaultdict(Counter)
+            global_examples: Counter[str] = Counter()
+            for turn in turns:
+                label = labels.get(turn["turn_id"])
+                if label:
+                    cluster_votes[turn["cluster_id"]][label] += 1
+                if label not in IDENTITY_LABELS:
+                    continue
+                key = (
+                    turn["embedding_model"],
+                    turn["embedding_version"],
+                    int(turn["embedding_dim"]),
+                )
+                compatible_vectors[key][label].append(turn["vector"])
+                global_examples[label] += 1
+
+            centroids = {
+                key: {
+                    label: _mean_embedding(vectors)
+                    for label, vectors in by_label.items()
+                }
+                for key, by_label in compatible_vectors.items()
+            }
+
+            ranked = []
+            for turn in turns:
+                if turn["turn_id"] in labels:
+                    continue
+                key = (
+                    turn["embedding_model"],
+                    turn["embedding_version"],
+                    int(turn["embedding_dim"]),
+                )
+                profile = centroids.get(key, {})
+                similarities = {
+                    label: _cosine(turn["vector"], centroid)
+                    for label, centroid in profile.items()
+                }
+                votes = cluster_votes.get(turn["cluster_id"], Counter())
+                if votes:
+                    voted_label, voted_count = votes.most_common(1)[0]
+                    if voted_label in similarities:
+                        purity = voted_count / sum(votes.values())
+                        similarities[voted_label] += 0.08 * purity
+                scored_labels = sorted(
+                    similarities, key=lambda label: similarities[label], reverse=True
+                )
+                if len(scored_labels) >= 2:
+                    alternatives = scored_labels[:2]
+                    margin = similarities[alternatives[0]] - similarities[alternatives[1]]
+                    uncertainty = 1.0 - min(1.0, abs(margin) * 5.0)
+                    learning_stage = "compare"
+                    reason = "Closest verified voices; this answer sharpens their boundary."
+                elif len(scored_labels) == 1:
+                    remaining = sorted(
+                        (label for label in IDENTITY_LABELS if label != scored_labels[0]),
+                        key=lambda label: (global_examples[label], IDENTITY_LABELS.index(label)),
+                    )
+                    alternatives = [scored_labels[0], remaining[0]]
+                    uncertainty = 0.85
+                    learning_stage = "expand"
+                    reason = f"Checking against {scored_labels[0]}'s verified examples."
+                else:
+                    alternatives = sorted(
+                        IDENTITY_LABELS,
+                        key=lambda label: (global_examples[label], IDENTITY_LABELS.index(label)),
+                    )[:2]
+                    uncertainty = 1.0
+                    learning_stage = "bootstrap"
+                    reason = "Building the first verified voice references."
+                cluster_purity = 0.0
+                if votes:
+                    cluster_purity = votes.most_common(1)[0][1] / sum(votes.values())
+                quality = max(0.0, min(1.0, float(turn["quality"])))
+                priority = uncertainty * 0.68 + quality * 0.32 - cluster_purity * 0.18
+                turn["identification"] = {
+                    "turn_id": turn["turn_id"],
+                    "audio_start_seconds": turn["audio_start_seconds"],
+                    "audio_end_seconds": turn["audio_end_seconds"],
+                    "duration_seconds": round(
+                        turn["audio_end_seconds"] - turn["audio_start_seconds"], 3
+                    ),
+                    "alternatives": alternatives,
+                    "prompt": f"{alternatives[0]} or {alternatives[1]}?",
+                    "reason": reason,
+                    "learning_stage": learning_stage,
+                    "profile_examples": {
+                        label: global_examples[label] for label in IDENTITY_LABELS
+                    },
+                    "cluster_id": turn["cluster_id"],
+                }
+                turn["priority"] = priority
+                ranked.append(turn)
+
+            ranked.sort(
+                key=lambda turn: (
+                    turn["priority"],
+                    turn["quality"],
+                    turn["captured_at"],
+                    turn["turn_id"],
+                ),
+                reverse=True,
+            )
+            # Bootstrap across distinct diarization clusters before repeating
+            # one cluster. This avoids replacing "latest clips" with another
+            # repetitive queue.
+            diverse = []
+            repeated = []
+            seen_clusters = set()
+            for turn in ranked:
+                if turn["cluster_id"] in seen_clusters:
+                    repeated.append(turn)
+                else:
+                    diverse.append(turn)
+                    seen_clusters.add(turn["cluster_id"])
+            selected = (diverse + repeated)[:limit]
+            capture_ids = list(dict.fromkeys(turn["capture_id"] for turn in selected))
+            if not capture_ids:
+                return []
+            placeholders = ",".join("?" for _ in capture_ids)
+            chunk_rows = connection.execute(
+                f"""
+                SELECT capture_id, captured_at, duration_seconds, speech_seconds,
+                       audio_path, transcript, conversation_id
+                FROM chunks WHERE capture_id IN ({placeholders})
+                """,
+                capture_ids,
+            ).fetchall()
+            active = self._active_annotations(connection, capture_ids)
+            proposals = self._latest_proposals(connection, capture_ids)
+            transcriptions = self._latest_transcriptions(connection, capture_ids)
+
+        decorated = self._decorate_rows(chunk_rows, active, proposals, transcriptions)
+        by_capture = {item["capture_id"]: item for item in decorated}
+        result = []
+        for turn in selected:
+            base = by_capture.get(turn["capture_id"])
+            if not base:
+                continue
+            item = copy.deepcopy(base)
+            question = turn["identification"]
+            selected_words = [
+                word
+                for word in item.get("words", [])
+                if float(word["end_seconds"]) > question["audio_start_seconds"]
+                and float(word["start_seconds"]) < question["audio_end_seconds"]
+            ]
+            if selected_words:
+                question["start_char"] = int(selected_words[0]["char_start"])
+                question["end_char"] = int(selected_words[-1]["char_end"])
+                question["selected_text"] = item["transcript"][
+                    question["start_char"]:question["end_char"]
+                ]
+            else:
+                question["start_char"] = 0
+                question["end_char"] = 0
+                question["selected_text"] = ""
+            try:
+                started = datetime.strptime(item["captured_at"], "%Y-%m-%d_%H-%M-%S")
+                question["occurred_at"] = (
+                    started + timedelta(seconds=question["audio_start_seconds"])
+                ).isoformat(timespec="milliseconds")
+            except ValueError:
+                question["occurred_at"] = item["captured_at"]
+            item["identification"] = question
+            result.append(item)
+        return result
+
     def add_annotation(
         self,
         *,
@@ -367,6 +812,7 @@ class MotoXReviewStore:
         replacement_text: str | None = None,
         audio_start_seconds: float | None = None,
         audio_end_seconds: float | None = None,
+        speaker_turn_id: str | None = None,
     ) -> dict[str, Any]:
         annotation_type = str(annotation_type).strip().lower()
         if annotation_type not in ANNOTATION_TYPES:
@@ -392,6 +838,24 @@ class MotoXReviewStore:
             if not chunk:
                 raise KeyError("unknown capture")
             transcript = chunk["transcript"] or ""
+
+            speaker_turn_id = str(speaker_turn_id or "").strip() or None
+            if speaker_turn_id:
+                if annotation_type != "speaker":
+                    raise ValueError("speaker turn can only receive a speaker label")
+                turn = connection.execute(
+                    """
+                    SELECT capture_id, audio_start_seconds, audio_end_seconds
+                    FROM review_speaker_turns WHERE turn_id = ?
+                    """,
+                    (speaker_turn_id,),
+                ).fetchone()
+                if not turn or turn["capture_id"] != capture_id:
+                    raise ValueError("speaker turn does not match the capture")
+                # The server, rather than the browser, owns the exact region
+                # used as a training example.
+                audio_start_seconds = float(turn["audio_start_seconds"])
+                audio_end_seconds = float(turn["audio_end_seconds"])
 
             has_audio_start = audio_start_seconds is not None
             has_audio_end = audio_end_seconds is not None
@@ -431,6 +895,7 @@ class MotoXReviewStore:
                 "replacement_text": (
                     replacement_text.strip() if replacement_text is not None else None
                 ),
+                "speaker_turn_id": speaker_turn_id,
                 "source": "human",
                 "created_at": _now(),
                 "reverted_at": None,
@@ -440,8 +905,8 @@ class MotoXReviewStore:
                 INSERT INTO review_annotations (
                     annotation_id, capture_id, start_char, end_char, selected_text,
                     audio_start_seconds, audio_end_seconds, annotation_type, label,
-                    replacement_text, source, created_at, reverted_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    replacement_text, speaker_turn_id, source, created_at, reverted_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 tuple(annotation.values()),
             )

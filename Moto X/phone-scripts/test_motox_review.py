@@ -3,6 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from build_identification_turns import merge_turns
 from motox_review import MotoXReviewStore
 from motox_v1 import ChunkEvent, MotoXStore
 
@@ -194,6 +195,7 @@ class MotoXReviewStoreTests(unittest.TestCase):
             connection.close()
         self.assertIn("audio_start_seconds", columns)
         self.assertIn("audio_end_seconds", columns)
+        self.assertIn("speaker_turn_id", columns)
 
     def test_rejects_unknown_labels(self):
         with self.assertRaises(ValueError):
@@ -223,6 +225,125 @@ class MotoXReviewStoreTests(unittest.TestCase):
         candidate = self.review.candidates()[0]
         self.assertEqual("Voice group A", candidate["review_group"])
         self.assertEqual([], candidate["annotations"])
+
+    def test_adaptive_identification_asks_for_an_exact_uncertain_turn(self):
+        ruby_turn = "a" * 32
+        lynn_turn = "b" * 32
+        uncertain_turn = "c" * 32
+        stored = self.review.add_speaker_turns(
+            [
+                {
+                    "turn_id": ruby_turn,
+                    "capture_id": "clip-1",
+                    "conversation_id": "conversation-1",
+                    "audio_start_seconds": 1.0,
+                    "audio_end_seconds": 4.0,
+                    "cluster_id": "report-1/SPEAKER_00",
+                    "embedding": [1.0, 0.0, 0.0],
+                    "quality": 0.9,
+                },
+                {
+                    "turn_id": lynn_turn,
+                    "capture_id": "clip-1",
+                    "conversation_id": "conversation-1",
+                    "audio_start_seconds": 5.0,
+                    "audio_end_seconds": 8.0,
+                    "cluster_id": "report-1/SPEAKER_01",
+                    "embedding": [0.0, 1.0, 0.0],
+                    "quality": 0.9,
+                },
+                {
+                    "turn_id": uncertain_turn,
+                    "capture_id": "clip-1",
+                    "conversation_id": "conversation-1",
+                    "audio_start_seconds": 10.25,
+                    "audio_end_seconds": 14.25,
+                    "cluster_id": "report-1/SPEAKER_02",
+                    "embedding": [1.0, 1.0, 0.0],
+                    "quality": 1.0,
+                },
+            ],
+            embedding_model="test-embedding",
+            embedding_version="1",
+            diarization_model="test-diarization",
+            source_id="report-1",
+        )
+        self.assertEqual(3, stored)
+        ruby = self.review.add_annotation(
+            capture_id="clip-1",
+            start_char=0,
+            end_char=0,
+            annotation_type="speaker",
+            label="Ruby",
+            audio_start_seconds=0,
+            audio_end_seconds=0.5,
+            speaker_turn_id=ruby_turn,
+        )
+        self.assertEqual((1.0, 4.0), (ruby["audio_start_seconds"], ruby["audio_end_seconds"]))
+        self.review.add_annotation(
+            capture_id="clip-1",
+            start_char=0,
+            end_char=0,
+            annotation_type="speaker",
+            label="Lynn",
+            speaker_turn_id=lynn_turn,
+        )
+
+        candidates = self.review.identification_candidates()
+        self.assertEqual(1, len(candidates))
+        question = candidates[0]["identification"]
+        self.assertEqual(uncertain_turn, question["turn_id"])
+        self.assertEqual("Ruby or Lynn?", question["prompt"])
+        self.assertEqual((10.25, 14.25), (
+            question["audio_start_seconds"], question["audio_end_seconds"]
+        ))
+        self.assertEqual({"Ruby": 1, "Lynn": 1, "Raven": 0}, question["profile_examples"])
+
+    def test_identification_turn_answer_is_reversible_and_reenters_queue(self):
+        turn_id = "d" * 32
+        self.review.add_speaker_turns(
+            [{
+                "turn_id": turn_id,
+                "capture_id": "clip-1",
+                "audio_start_seconds": 2.0,
+                "audio_end_seconds": 6.0,
+                "cluster_id": "report-2/SPEAKER_00",
+                "embedding": [0.5, 0.5],
+                "quality": 0.8,
+            }],
+            embedding_model="test-embedding",
+            embedding_version="1",
+            diarization_model="test-diarization",
+            source_id="report-2",
+        )
+        self.assertEqual(turn_id, self.review.identification_candidates()[0]["identification"]["turn_id"])
+        annotation = self.review.add_annotation(
+            capture_id="clip-1",
+            start_char=0,
+            end_char=0,
+            annotation_type="speaker",
+            label="Not sure",
+            speaker_turn_id=turn_id,
+        )
+        self.assertEqual([], self.review.identification_candidates())
+        self.assertTrue(self.review.revert_annotation(annotation["annotation_id"]))
+        self.assertEqual(turn_id, self.review.identification_candidates()[0]["identification"]["turn_id"])
+
+    def test_diarization_fragments_merge_into_question_sized_turns(self):
+        turns = merge_turns(
+            [
+                {"capture_id": "clip-1", "speaker_cluster": "A", "source_start": 1.0, "source_end": 2.0},
+                {"capture_id": "clip-1", "speaker_cluster": "A", "source_start": 2.2, "source_end": 4.5},
+                {"capture_id": "clip-1", "speaker_cluster": "B", "source_start": 5.0, "source_end": 5.4},
+                {"capture_id": "clip-1", "speaker_cluster": "A", "source_start": 6.0, "source_end": 18.0},
+            ],
+            min_seconds=1.5,
+            max_seconds=8.0,
+            merge_gap=0.35,
+        )
+        self.assertEqual(2, len(turns))
+        self.assertEqual((1.0, 4.5), (turns[0]["source_start"], turns[0]["source_end"]))
+        self.assertEqual(4.0, turns[1]["source_end"] - turns[1]["source_start"])
 
 
 if __name__ == "__main__":

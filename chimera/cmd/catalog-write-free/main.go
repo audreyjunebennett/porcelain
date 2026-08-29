@@ -39,46 +39,9 @@ func main() {
 
 	client := &http.Client{Timeout: *timeout}
 
-	groqBody, err := freecatalog.FetchURL(ctx, client, *groqURL)
+	entries, err := freecatalog.FetchPublicEntries(ctx, client, *groqURL, *geminiURL)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "catalog-write-free: fetch groq: %v\n", err)
-		os.Exit(1)
-	}
-	gemBody, err := freecatalog.FetchURL(ctx, client, *geminiURL)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "catalog-write-free: fetch gemini: %v\n", err)
-		os.Exit(1)
-	}
-
-	var entries []freecatalog.Entry
-	for _, row := range freecatalog.ParseGroqRateLimitRows(string(groqBody)) {
-		bf := freecatalog.ToGroqBiFrost(row.SourceID)
-		if bf == "" {
-			continue
-		}
-		lim := row.GroqLimits
-		entries = append(entries, freecatalog.Entry{
-			Provider:   "groq",
-			SourceID:   row.SourceID,
-			BiFrostID:  bf,
-			SourcePage: *groqURL,
-			Groq:       &lim,
-		})
-	}
-	for _, src := range freecatalog.ParseGeminiPricingFreeInputModels(string(gemBody)) {
-		bf := freecatalog.ToGeminiBiFrost(src)
-		if bf == "" {
-			continue
-		}
-		entries = append(entries, freecatalog.Entry{
-			Provider:   "gemini",
-			SourceID:   src,
-			BiFrostID:  bf,
-			SourcePage: *geminiURL,
-		})
-	}
-	if len(entries) == 0 {
-		fmt.Fprintf(os.Stderr, "catalog-write-free: no models extracted (page layout may have changed)\n")
+		fmt.Fprintf(os.Stderr, "catalog-write-free: %v\n", err)
 		os.Exit(1)
 	}
 

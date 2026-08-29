@@ -73,6 +73,7 @@ echo "  make catalog-fetch-available          fetch available models from chimer
 echo "  make catalog-available                alias for catalog-fetch-available"
 echo "  make catalog-limits                   seed context_window in provider-model-limits.yaml"
 echo "  make catalog-calculate                intersection of free and available models"
+echo "  make catalog-review                   generate safe provider/model proposals + diffs"
 echo "  make contracts-[generate|check]       generate|check data type and log msg contracts"
 echo
 echo "  make release-install                  install GoReleaser + release hook deps"
@@ -91,4 +92,3 @@ echo "  make test                             validate correctness and behavior"
 echo "  make clean                            cleans workspace completely (requires CONFIRM=1)"
 echo "  make clean-data                       remove Chimera + locus-desktop runtime data (requires CONFIRM=1)"
 echo
-

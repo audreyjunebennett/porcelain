@@ -34,6 +34,22 @@ class ReceiverReviewApiTests(unittest.TestCase):
         self.original_v1_store = receiver.V1_STORE
         self.original_audio_dir = receiver.AUDIO_DIR
         receiver.REVIEW_STORE = MotoXReviewStore(database)
+        self.speaker_turn_id = "e" * 32
+        receiver.REVIEW_STORE.add_speaker_turns(
+            [{
+                "turn_id": self.speaker_turn_id,
+                "capture_id": "review-clip",
+                "audio_start_seconds": 4.0,
+                "audio_end_seconds": 8.0,
+                "cluster_id": "api-report/SPEAKER_00",
+                "embedding": [1.0, 0.0],
+                "quality": 1.0,
+            }],
+            embedding_model="test-embedding",
+            embedding_version="1",
+            diarization_model="test-diarization",
+            source_id="api-report",
+        )
         receiver.V1_STORE = journal
         receiver.AUDIO_DIR = self.audio_dir
         self.client = receiver.APP.test_client()
@@ -54,11 +70,41 @@ class ReceiverReviewApiTests(unittest.TestCase):
         self.assertIn('data-label="Unknown person"', page.get_data(as_text=True))
         self.assertIn('id="load-context"', page.get_data(as_text=True))
         self.assertIn('id="exclude"', page.get_data(as_text=True))
+        self.assertIn('value="identify"', page.get_data(as_text=True))
         page.close()
         response = self.client.get("/api/motox/review/candidates?limit=1")
         self.assertEqual(200, response.status_code)
         self.assertEqual("review-clip", response.get_json()[0]["capture_id"])
         response.close()
+
+    def test_identification_api_returns_and_accepts_exact_turn(self):
+        response = self.client.get("/api/motox/review/identification?limit=1")
+        self.assertEqual(200, response.status_code)
+        candidate = response.get_json()[0]
+        question = candidate["identification"]
+        self.assertEqual(self.speaker_turn_id, question["turn_id"])
+        self.assertEqual((4.0, 8.0), (
+            question["audio_start_seconds"], question["audio_end_seconds"]
+        ))
+        response.close()
+
+        saved = self.client.post(
+            "/api/motox/review/annotations",
+            json={
+                "capture_id": "review-clip",
+                "start_char": 0,
+                "end_char": 0,
+                "annotation_type": "speaker",
+                "label": "Ruby",
+                "speaker_turn_id": self.speaker_turn_id,
+            },
+        )
+        self.assertEqual(201, saved.status_code)
+        self.assertEqual((4.0, 8.0), (
+            saved.get_json()["audio_start_seconds"], saved.get_json()["audio_end_seconds"]
+        ))
+        saved.close()
+        self.assertEqual([], self.client.get("/api/motox/review/identification").get_json())
 
     def test_dashboard_footer_stacks_actions_on_narrow_screens(self):
         response = self.client.get("/dashboard")

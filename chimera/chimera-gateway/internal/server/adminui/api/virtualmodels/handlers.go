@@ -14,6 +14,7 @@ import (
 	"github.com/lynn/porcelain/chimera/chimera-gateway/internal/server/adminui/handler"
 	"github.com/lynn/porcelain/chimera/internal/brokerclient"
 	"github.com/lynn/porcelain/chimera/internal/config"
+	"github.com/lynn/porcelain/chimera/internal/modelcatalog"
 	"github.com/lynn/porcelain/internal/operatorapi"
 )
 
@@ -399,7 +400,20 @@ func handleGeneratePOST(h *handler.Handler, w http.ResponseWriter, r *http.Reque
 		http.Error(w, "no models left after operator availability filter", http.StatusBadRequest)
 		return
 	}
-	chain := routinggen.OrderFallbackChain(pool)
+	pool, capabilityDecisions := modelcatalog.FilterGeneralCandidates(pool)
+	if len(pool) == 0 {
+		http.Error(w, "no general text/chat models left after capability filter", http.StatusBadRequest)
+		return
+	}
+	preference := body.PreferredModels
+	if len(preference) == 0 {
+		preference = vm.FallbackChain
+	}
+	localFirst := true
+	if body.LocalFirst != nil {
+		localFirst = *body.LocalFirst
+	}
+	chain := modelcatalog.OrderByPreference(pool, preference, localFirst)
 	routeYAML, err := routinggen.BuildRoutingPolicyYAML(chain)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -427,8 +441,22 @@ func handleGeneratePOST(h *handler.Handler, w http.ResponseWriter, r *http.Reque
 		FallbackChain:       chain,
 		RoutingPolicyYAML:   string(routeYAML),
 		ModelsBrokerCatalog: len(ids),
-		ModelsUsed:          len(pool),
+		ModelsUsed:          len(chain),
+		ModelDecisions:      operatorModelDecisions(capabilityDecisions),
 	})
+}
+
+func operatorModelDecisions(in []modelcatalog.Decision) []operatorapi.ModelDecision {
+	out := make([]operatorapi.ModelDecision, 0, len(in))
+	for _, decision := range in {
+		out = append(out, operatorapi.ModelDecision{
+			ModelID: decision.ModelID,
+			Status:  string(decision.Status),
+			Role:    decision.Role,
+			Reason:  decision.Reason,
+		})
+	}
+	return out
 }
 
 func handleEvaluatePOST(h *handler.Handler, w http.ResponseWriter, r *http.Request) {

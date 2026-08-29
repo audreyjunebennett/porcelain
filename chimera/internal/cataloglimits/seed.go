@@ -70,12 +70,28 @@ func LoadCatalogContextLengths(path string) (map[string]int64, error) {
 
 // CatalogModelIDs returns all model ids from catalog-available.snapshot.yaml.
 func CatalogModelIDs(path string) ([]string, error) {
-	catalog, err := LoadCatalogContextLengths(path)
+	raw, err := os.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read catalog %s: %w", path, err)
 	}
-	out := make([]string, 0, len(catalog))
-	for id := range catalog {
+	var doc struct {
+		Data []map[string]any `yaml:"data"`
+	}
+	if err := yaml.Unmarshal(raw, &doc); err != nil {
+		return nil, fmt.Errorf("parse catalog %s: %w", path, err)
+	}
+	seen := make(map[string]struct{}, len(doc.Data))
+	out := make([]string, 0, len(doc.Data))
+	for _, row := range doc.Data {
+		id, _ := row["id"].(string)
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
 		out = append(out, id)
 	}
 	sort.Strings(out)

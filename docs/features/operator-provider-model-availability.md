@@ -13,7 +13,7 @@
 
 ## At a glance
 
-Each operator tenant can mark individual broker-reported upstream models **available** or **unavailable** in operator SQLite. The gateway filters `GET /v1/models`, virtual-model **Generate from catalog**, and runtime fallback chains to **available** models only; skipped unavailable entries emit scoped warnings. Provider cards on `/ui/settings` expose **Configure** edit mode with per-model toggles and a **Apply free tier** assist (Groq/Gemini) seeded from `config/provider-free-tier.yaml`. New broker models default to **available** when no row exists.
+Each operator tenant can mark individual broker-reported upstream models **available** or **unavailable** in operator SQLite. The gateway filters `GET /v1/models`, virtual-model **Generate from catalog**, and runtime fallback chains to **available** models only; skipped unavailable entries emit scoped warnings. Provider cards on `/ui/settings` expose **Configure** edit mode with per-model toggles and a **Apply free tier** assist (Groq/Gemini) seeded from `config/provider-free-tier.yaml`. New broker models default to **available** when no row exists. Operator-run `make catalog-review` keeps live availability, public free-plan evidence, capability, context, throughput ceilings, and local/cloud policy as separate fields and writes proposal files plus diffs without replacing active YAML or SQLite state.
 
 ## Operator-visible behavior
 
@@ -22,6 +22,7 @@ Each operator tenant can mark individual broker-reported upstream models **avail
 - **Apply free tier** (Groq/Gemini) — Sets availability from YAML allowlist intersection; **Ollama** button is no-op (all local models treated available).
 - **Chat model list** — Unavailable models disappear from `/v1/models` for the tenant.
 - **Virtual model warnings** — VM detail API returns `fallback_unavailable` when saved chain references unavailable ids; runtime skips them with log warnings.
+- **Refresh preview** — `make catalog-review` fetches live BiFrost availability and current official Groq/Gemini evidence, enriches local Ollama metadata, and emits ignored `*.generated.yaml` / `*.proposal.yaml` files for review.
 
 ## System behavior and contracts
 
@@ -42,6 +43,7 @@ Each operator tenant can mark individual broker-reported upstream models **avail
 | Runtime fallback | Skips unavailable with warning slug (e.g. catalog fallback unavailable) |
 | Ollama free-tier assist | Hidden/disabled — all models available |
 | Persistence | `provider_model_config` + `provider_model_availability` tables |
+| Catalog refresh | Operator-run proposal only; never writes active YAML or availability rows |
 
 **Persistence**
 
@@ -69,6 +71,7 @@ Each operator tenant can mark individual broker-reported upstream models **avail
 | Catalog filter | `internal/server/catalog/availablemodels.go`, `handleV1Models` |
 | Settings UI | `embed/embedui/settings/handlers/admin.js`, provider card renderers |
 | VM integration | `api/virtualmodels/handlers.go` (`fallback_unavailable`), chat fallback loop |
+| Refresh review | `cmd/catalog-review`, `internal/catalogreview`, `internal/modelcatalog` |
 | Tests | `ui_virtual_model_generate_test.go`, provider handler tests |
 
 ## Verification
@@ -76,14 +79,16 @@ Each operator tenant can mark individual broker-reported upstream models **avail
 ```bash
 go test ./chimera/chimera-gateway/internal/server/ -run ProviderModel
 go test ./chimera/chimera-gateway/internal/operatorstore/ -run ProviderModel
+go test ./chimera/internal/catalogreview ./chimera/internal/modelcatalog
 ```
 
 Manual: mark a fallback-chain model unavailable; confirm it disappears from chat models and VM card shows warning; chat still succeeds via next fallback entry.
 
 ## Out of scope and known gaps
 
-- Changing broker discovery or `make catalog-free` generation.
+- Automatic refresh scheduling or automatic application of generated proposals.
 - Provider rate limits (`provider-model-limits.yaml` TPM/RPM — separate from availability).
+- Persisting actual remaining quota from provider response headers.
 - Tags/groups/cost tiers in `metadata_json` (schema reserved).
 - Removing legacy free-tier toggle from global routing cards entirely.
 

@@ -20,6 +20,9 @@ chimera/config/bifrost.config.json
 config/catalog-free-tier.snapshot.yaml
 config/catalog-available.snapshot.yaml
 config/provider-free-tier.generated.yaml
+config/provider-model-limits.generated.yaml
+config/catalog-review.proposal.yaml
+config/coding-virtual-model.proposal.yaml
 
 # Packaging and release artifacts
 dist/

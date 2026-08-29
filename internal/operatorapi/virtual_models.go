@@ -70,8 +70,10 @@ type VirtualModelListResponse struct {
 
 // VirtualModelGenerateRequest is POST /api/ui/virtual-models/{id}/routing/generate.
 type VirtualModelGenerateRequest struct {
-	ProviderPrefix string `json:"provider_prefix,omitempty"`
-	Save           bool   `json:"save"`
+	ProviderPrefix  string   `json:"provider_prefix,omitempty"`
+	PreferredModels []string `json:"preferred_models,omitempty"`
+	LocalFirst      *bool    `json:"local_first,omitempty"`
+	Save            bool     `json:"save"`
 }
 
 // RoutingRuleDefinitionSummary is one catalog entry.

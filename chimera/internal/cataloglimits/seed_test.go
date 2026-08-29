@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/lynn/porcelain/chimera/internal/providerlimits"
@@ -222,5 +223,22 @@ providers:
 	}
 	if fast.ContextWindow == nil || *fast.ContextWindow != 8192 {
 		t.Fatalf("context_window: %+v", fast.ContextWindow)
+	}
+}
+
+func TestCatalogModelIDsIncludesModelsWithoutContextLength(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "catalog.yaml")
+	raw := []byte("data:\n  - id: ollama/qwen:8b\n  - id: ollama/embed:latest\n    context_length: 8192\n")
+	if err := os.WriteFile(path, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := CatalogModelIDs(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"ollama/embed:latest", "ollama/qwen:8b"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %v want %v", got, want)
 	}
 }

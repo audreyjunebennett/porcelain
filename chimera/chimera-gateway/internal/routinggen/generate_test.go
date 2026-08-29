@@ -18,14 +18,14 @@ func TestExtractCatalogModelIDs(t *testing.T) {
 	}
 }
 
-func TestOrderFallbackChain_ollamaLast(t *testing.T) {
+func TestOrderFallbackChain_localFirstThenLexical(t *testing.T) {
 	in := []string{"ollama/small", "groq/llama-3.3-70b-versatile", "groq/llama-3.1-8b-instant"}
 	out := OrderFallbackChain(in)
-	if out[0] != "groq/llama-3.3-70b-versatile" {
-		t.Fatalf("want 70b first, got %v", out)
+	if out[0] != "ollama/small" {
+		t.Fatalf("want local model first, got %v", out)
 	}
-	if out[len(out)-1] != "ollama/small" {
-		t.Fatalf("want ollama last, got %v", out)
+	if out[1] != "groq/llama-3.1-8b-instant" || out[2] != "groq/llama-3.3-70b-versatile" {
+		t.Fatalf("want lexical cloud remainder, got %v", out)
 	}
 }
 
@@ -70,5 +70,12 @@ func TestBuildRoutingPolicyYAML_validates(t *testing.T) {
 	}
 	if err := routing.ValidatePolicyYAML(b); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestPickLongTurnModelPreservesOperatorPreference(t *testing.T) {
+	got := PickLongTurnModel([]string{"ollama/qwen:8b", "groq/openai/gpt-oss-120b"})
+	if got != "ollama/qwen:8b" {
+		t.Fatalf("got %q", got)
 	}
 }

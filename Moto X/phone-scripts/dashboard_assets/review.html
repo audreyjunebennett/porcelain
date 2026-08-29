@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <link rel="manifest" href="/dashboard-assets/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/dashboard-assets/apple-touch-icon.png">
-  <link rel="stylesheet" href="/dashboard-assets/review.css">
+  <link rel="stylesheet" href="/dashboard-assets/review.css?v=20260826-smart-identification">
   <title>Teach Claudia</title>
 </head>
 <body>
@@ -29,13 +29,17 @@
     </section>
 
     <section class="queue-bar">
-      <label for="group">Review</label>
-      <select id="group"><option value="all">All suggestions</option></select>
+      <label for="mode">Mode</label>
+      <select id="mode">
+        <option value="identify">Smart identification</option>
+        <option value="browse">Browse clips</option>
+      </select>
+      <select id="group" aria-label="Suggestion group" hidden><option value="all">All suggestions</option></select>
       <span id="position" class="muted">—</span>
     </section>
 
     <section id="empty" class="empty" hidden>
-      <p>No review clips are available in this group.</p>
+      <p id="empty-message">No review clips are available in this group.</p>
       <button id="older" type="button">Load older audio</button>
     </section>
 
@@ -44,6 +48,7 @@
         <div>
           <p id="time" class="eyebrow"></p>
           <p id="guess" class="guess">Unsorted voice</p>
+          <p id="learning-reason" class="learning-reason" hidden></p>
         </div>
         <button id="skip" class="quiet" type="button">Skip ›</button>
       </div>
@@ -55,7 +60,7 @@
           <span>Audio selection</span>
           <strong id="audio-range">Whole clip</strong>
         </div>
-        <div class="audio-range-actions">
+        <div id="audio-range-actions" class="audio-range-actions">
           <button id="range-start" type="button">Start here</button>
           <button id="range-end" type="button">End here</button>
           <button id="range-loop" class="quiet-range" type="button" aria-pressed="false">Loop off</button>
@@ -67,14 +72,14 @@
         <span>Applying to</span><strong>WHOLE CLIP</strong>
       </div>
       <div class="transcript-toolbar">
-        <p class="instruction">Select words to select and loop their audio automatically.</p>
+        <p id="instruction" class="instruction">Select words to select and loop their audio automatically.</p>
         <button id="transcript-version" class="tiny" type="button" hidden>Show original</button>
       </div>
       <div id="transcript" class="transcript" tabindex="0" aria-label="Selectable transcript"></div>
       <div id="selection" class="selection muted">Whole clip selected</div>
 
       <div class="label-section">
-        <p class="label-title">Who is vocalizing? <span>one identity per region</span></p>
+        <p id="speaker-prompt" class="label-title">Who is vocalizing? <span>one identity per region</span></p>
         <div class="label-grid" id="labels">
           <button class="label ruby" data-type="speaker" data-label="Ruby">Ruby</button>
           <button class="label lynn" data-type="speaker" data-label="Lynn">Lynn</button>
@@ -132,6 +137,6 @@
     </form>
   </dialog>
 
-  <script src="/dashboard-assets/review.js"></script>
+  <script src="/dashboard-assets/review.js?v=20260826-smart-identification"></script>
 </body>
 </html>

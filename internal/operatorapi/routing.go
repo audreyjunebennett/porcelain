@@ -25,6 +25,15 @@ type RoutingGenerateResponse struct {
 	ModelsUsed          int                  `json:"models_used"`
 	RoutingPolicyYAML   string               `json:"routing_policy_yaml"`
 	Routing             RoutingPolicySummary `json:"routing,omitempty"`
+	ModelDecisions      []ModelDecision      `json:"model_decisions,omitempty"`
+}
+
+// ModelDecision explains why catalog generation included, excluded, or skipped one model.
+type ModelDecision struct {
+	ModelID string `json:"model_id"`
+	Status  string `json:"status"`
+	Role    string `json:"role"`
+	Reason  string `json:"reason"`
 }
 
 // RoutingEvaluateRequest is POST /api/ui/virtual-models/{id}/routing/evaluate body.

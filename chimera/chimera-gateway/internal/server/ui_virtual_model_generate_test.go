@@ -27,8 +27,9 @@ func TestUIVirtualModelGenerate_filtersBySessionTenantAvailability(t *testing.T)
 		case "/v1/models":
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"object":"list","data":[
-				{"id":"groq/free","object":"model"},
-				{"id":"groq/paid","object":"model"}
+				{"id":"groq/qwen/free","object":"model"},
+				{"id":"groq/qwen/paid","object":"model"},
+				{"id":"groq/whisper-large-v3","object":"model"}
 			]}`))
 		default:
 			http.NotFound(w, r)
@@ -38,7 +39,7 @@ func TestUIVirtualModelGenerate_filtersBySessionTenantAvailability(t *testing.T)
 
 	dir := t.TempDir()
 	gwPath := filepath.Join(dir, naming.GatewayConfigFileTarget)
-	writeGateway(t, gwPath, broker.URL, []string{"groq/free"}, "")
+	writeGateway(t, gwPath, broker.URL, []string{"groq/qwen/free"}, "")
 	tokPath := filepath.Join(dir, naming.APIKeysFileTarget)
 	writeTokens(t, tokPath, "gw-vm-gen", "tenant-a")
 	routePath := filepath.Join(dir, naming.RoutingPolicyFileTarget)
@@ -47,15 +48,16 @@ func TestUIVirtualModelGenerate_filtersBySessionTenantAvailability(t *testing.T)
 	}
 
 	rt := mustRuntime(t, gwPath)
-	seedChimeraTestVM(t, rt, "0.1.0", []string{"groq/free"})
-	rt.SetCatalogSnapshot(catalog.NewTestSnapshotWithModels(time.Now(), []string{"groq/free", "groq/paid"}))
+	seedChimeraTestVM(t, rt, "0.1.0", []string{"groq/qwen/free"})
+	rt.SetCatalogSnapshot(catalog.NewTestSnapshotWithModels(time.Now(), []string{"groq/qwen/free", "groq/qwen/paid", "groq/whisper-large-v3"}))
 	st := rt.OperatorStore()
 	if st == nil {
 		t.Fatal("operator store required")
 	}
 	if err := st.ReplaceProviderModelAvailability(context.Background(), "tenant-a", "groq", map[string]bool{
-		"groq/free": true,
-		"groq/paid": false,
+		"groq/qwen/free":        true,
+		"groq/qwen/paid":        false,
+		"groq/whisper-large-v3": true,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -77,15 +79,22 @@ func TestUIVirtualModelGenerate_filtersBySessionTenantAvailability(t *testing.T)
 		t.Fatalf("generate status=%d body=%s", genRes.StatusCode, b)
 	}
 	var out struct {
-		OK            bool     `json:"ok"`
-		FallbackChain []string `json:"fallback_chain"`
-		ModelsUsed    int      `json:"models_used"`
+		OK             bool     `json:"ok"`
+		FallbackChain  []string `json:"fallback_chain"`
+		ModelsUsed     int      `json:"models_used"`
+		ModelDecisions []struct {
+			ModelID string `json:"model_id"`
+			Status  string `json:"status"`
+		} `json:"model_decisions"`
 	}
 	if err := json.NewDecoder(genRes.Body).Decode(&out); err != nil {
 		t.Fatal(err)
 	}
-	if !out.OK || out.ModelsUsed != 1 || len(out.FallbackChain) != 1 || out.FallbackChain[0] != "groq/free" {
-		t.Fatalf("expected only groq/free in generated chain: %+v", out)
+	if !out.OK || out.ModelsUsed != 1 || len(out.FallbackChain) != 1 || out.FallbackChain[0] != "groq/qwen/free" {
+		t.Fatalf("expected only groq/qwen/free in generated chain: %+v", out)
+	}
+	if len(out.ModelDecisions) != 2 || out.ModelDecisions[1].ModelID != "groq/whisper-large-v3" || out.ModelDecisions[1].Status != "excluded" {
+		t.Fatalf("expected explainable specialist exclusion: %+v", out.ModelDecisions)
 	}
 }
 

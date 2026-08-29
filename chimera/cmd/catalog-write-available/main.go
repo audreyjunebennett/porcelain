@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"sort"
 	"strings"
@@ -27,6 +29,8 @@ func main() {
 	outPath := flag.String("out", defaultOut, "output YAML path")
 	timeout := flag.Duration("timeout", 30*time.Second, "HTTP client timeout for GET /v1/models")
 	apiKey := flag.String("api-key", defaultKey, "Bearer token (default: env CHIMERA_BROKER_API_KEY)")
+	ollamaBaseURL := flag.String("ollama-base-url", envOr("OLLAMA_BASE_URL", "http://127.0.0.1:11434"), "Ollama root URL used to enrich local context/capabilities")
+	enrichOllama := flag.Bool("enrich-ollama", true, "query Ollama /api/show for local context length and capabilities")
 	flag.Parse()
 
 	ctx, cancel := context.WithTimeout(context.Background(), *timeout+5*time.Second)
@@ -48,6 +52,12 @@ func main() {
 
 	data, _ := payload["data"].([]any)
 	obj, _ := payload["object"].(string)
+	if *enrichOllama {
+		client := &http.Client{Timeout: *timeout}
+		for _, warning := range enrichOllamaCatalog(ctx, client, *ollamaBaseURL, data) {
+			fmt.Fprintf(os.Stderr, "catalog-write-available: warning: %s\n", warning)
+		}
+	}
 
 	doc := struct {
 		FormatVersion int    `yaml:"format_version"`
@@ -88,6 +98,83 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Fprintf(os.Stderr, "catalog-write-available: wrote %d models -> %s\n", len(data), *outPath)
+}
+
+func enrichOllamaCatalog(ctx context.Context, client *http.Client, baseURL string, data []any) []string {
+	baseURL = strings.TrimSuffix(strings.TrimSpace(baseURL), "/")
+	if baseURL == "" {
+		return []string{"Ollama enrichment skipped: empty base URL"}
+	}
+	if client == nil {
+		client = &http.Client{Timeout: 10 * time.Second}
+	}
+	var warnings []string
+	for _, item := range data {
+		row, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		id, _ := row["id"].(string)
+		if !strings.HasPrefix(id, "ollama/") {
+			continue
+		}
+		model := strings.TrimSpace(strings.TrimPrefix(id, "ollama/"))
+		requestBody, _ := json.Marshal(map[string]any{"model": model, "verbose": true})
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/api/show", bytes.NewReader(requestBody))
+		if err != nil {
+			warnings = append(warnings, id+": "+err.Error())
+			continue
+		}
+		req.Header.Set("Content-Type", "application/json")
+		res, err := client.Do(req)
+		if err != nil {
+			warnings = append(warnings, id+": Ollama /api/show: "+err.Error())
+			continue
+		}
+		// Ollama /api/show may include a large template/license block; keep a bounded but
+		// generous limit so valid model metadata is not truncated before JSON decoding.
+		body, readErr := io.ReadAll(io.LimitReader(res.Body, 16<<20))
+		res.Body.Close()
+		if readErr != nil || res.StatusCode < 200 || res.StatusCode >= 300 {
+			warnings = append(warnings, fmt.Sprintf("%s: Ollama /api/show status=%d read_err=%v", id, res.StatusCode, readErr))
+			continue
+		}
+		var show struct {
+			ModelInfo    map[string]any `json:"model_info"`
+			Capabilities []string       `json:"capabilities"`
+		}
+		if err := json.Unmarshal(body, &show); err != nil {
+			warnings = append(warnings, id+": parse Ollama /api/show: "+err.Error())
+			continue
+		}
+		for key, value := range show.ModelInfo {
+			if !strings.HasSuffix(strings.ToLower(key), ".context_length") {
+				continue
+			}
+			if n, ok := catalogInt64(value); ok && n > 0 {
+				row["context_length"] = n
+				break
+			}
+		}
+		if len(show.Capabilities) > 0 {
+			row["capabilities"] = show.Capabilities
+		}
+		row["capability_source"] = baseURL + "/api/show"
+	}
+	return warnings
+}
+
+func catalogInt64(value any) (int64, bool) {
+	switch n := value.(type) {
+	case float64:
+		return int64(n), true
+	case int64:
+		return n, true
+	case int:
+		return int64(n), true
+	default:
+		return 0, false
+	}
 }
 
 func envOr(key, def string) string {

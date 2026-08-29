@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/lynn/porcelain/chimera/internal/modelcatalog"
 	"github.com/lynn/porcelain/chimera/internal/providerlimits"
 	"gopkg.in/yaml.v3"
 )
@@ -76,20 +77,11 @@ func modelScore(id string) int {
 	return s
 }
 
-// OrderFallbackChain sorts ids: higher modelScore first; stable tie-break by id.
+// OrderFallbackChain is retained for callers that do not yet pass operator preferences.
+// It uses the explicit safe default privacy policy (local first) and lexical ordering;
+// model-name/parameter-size scoring is intentionally not used for fallback generation.
 func OrderFallbackChain(ids []string) []string {
-	if len(ids) == 0 {
-		return nil
-	}
-	out := append([]string(nil), ids...)
-	sort.SliceStable(out, func(i, j int) bool {
-		si, sj := modelScore(out[i]), modelScore(out[j])
-		if si != sj {
-			return si > sj
-		}
-		return out[i] < out[j]
-	})
-	return out
+	return modelcatalog.OrderByPreference(ids, nil, true)
 }
 
 const maxRecommendedRouterModels = 8
@@ -139,29 +131,15 @@ func routerRank(id string, limits *providerlimits.Config) float64 {
 	return sizeTerm + rpmBonus + tpmBonus + hostedBonus
 }
 
-// PickLongTurnModel chooses a rule target for long user messages (strongest hosted, else strongest overall).
+// PickLongTurnModel follows the explicit fallback preference. Context admission happens before
+// send and can advance to the next chain entry; generation does not guess quality from the name.
 func PickLongTurnModel(ids []string) string {
-	if len(ids) == 0 {
-		return ""
-	}
-	var hosted []string
 	for _, id := range ids {
-		if !strings.HasPrefix(id, "ollama/") {
-			hosted = append(hosted, id)
+		if strings.TrimSpace(id) != "" {
+			return id
 		}
 	}
-	pool := hosted
-	if len(pool) == 0 {
-		pool = append([]string(nil), ids...)
-	}
-	best := pool[0]
-	bestS := modelScore(best)
-	for _, id := range pool[1:] {
-		if s := modelScore(id); s > bestS {
-			best, bestS = id, s
-		}
-	}
-	return best
+	return ""
 }
 
 // PickAmbiguousDefault uses the highest-priority entry in the ordered chain (no cross-provider bias).

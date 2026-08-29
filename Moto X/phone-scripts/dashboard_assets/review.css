@@ -10,6 +10,7 @@
   --purple: #9c7bd8;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body { margin: 0; background: var(--bg); color: var(--ink); min-height: 100vh; }
 button, select, textarea { font: inherit; }
 button, select { min-height: 44px; }
@@ -29,11 +30,13 @@ h1 { margin: .12rem 0 0; font-size: 1.35rem; font-weight: 650; }
 .person-head { display: flex; justify-content: space-between; gap: .3rem; font-size: .75rem; margin-bottom: .32rem; }
 .meter { height: 4px; border-radius: 99px; overflow: hidden; background: #292331; }
 .meter span { display: block; height: 100%; border-radius: inherit; background: var(--purple); }
-.queue-bar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .7rem; margin: 1rem 0; font-size: .8rem; }
+.queue-bar { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr) auto; align-items: center; gap: .7rem; margin: 1rem 0; font-size: .8rem; }
+.queue-bar select[hidden] { display: none; }
 select { width: 100%; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: .5rem .7rem; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 22px; padding: 1rem; box-shadow: 0 18px 50px #0006; }
 .card-head { display: flex; justify-content: space-between; align-items: start; }
 .guess { margin: .25rem 0 0; color: var(--mint); font-size: .85rem; }
+.learning-reason { margin: .25rem 0 0; color: #91869a; font-size: .72rem; line-height: 1.35; }
 audio { width: 100%; height: 48px; margin: .9rem 0 .65rem; }
 .audio-range-picker { padding: .7rem; border: 1px solid #26212c; border-radius: 14px; background: #0b090e; }
 .audio-range-status { display: flex; justify-content: space-between; gap: .75rem; margin-bottom: .55rem; color: var(--muted); font-size: .75rem; }
@@ -51,6 +54,7 @@ audio { width: 100%; height: 48px; margin: .9rem 0 .65rem; }
 .tiny { min-height: 32px; padding: .3rem .55rem; border-radius: 999px; color: #cbbbd4; font-size: .7rem; white-space: nowrap; }
 .transcript { min-height: 7.5rem; padding: 1rem; background: #0b090e; border: 1px solid #26212c; border-radius: 15px; font-size: 1.08rem; line-height: 1.62; white-space: pre-wrap; user-select: text; -webkit-user-select: text; }
 .transcript.corrected { border-color: #493a55; }
+.smart-identification .transcript { min-height: 0; color: #b9afbf; font-size: .9rem; }
 .transcript::selection, .transcript *::selection { background: #7254ae; color: white; }
 .selection { min-height: 1.4rem; padding: .45rem .2rem 0; font-size: .75rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .label-section { margin-top: 1rem; }
@@ -61,6 +65,7 @@ audio { width: 100%; height: 48px; margin: .9rem 0 .65rem; }
 .label.ruby { border-color: #7755b8; background: #2a1e3c; }
 .label.lynn { border-color: #4e896d; background: #162b23; }
 .label.raven { border-color: #a46f54; background: #302017; }
+.label.suggested { outline: 2px solid var(--mint); outline-offset: 1px; }
 .label.other, .label.subtle { color: #b8b0be; }
 .label.hahli { border-color: #9d758e; background: #2e1f2a; }
 .label.lam { border-color: #557e9d; background: #192834; }
@@ -79,6 +84,7 @@ audio { width: 100%; height: 48px; margin: .9rem 0 .65rem; }
 .context-item audio { height: 36px; margin: 0; }
 #more-context { width: 100%; margin-top: .4rem; }
 .actions { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; margin-top: .8rem; }
+.smart-identification .actions { grid-template-columns: 1fr; }
 .exclude { width: 100%; min-height: 38px; margin-top: .55rem; border-color: transparent; background: transparent; color: #806f78; font-size: .7rem; }
 .primary { background: var(--ink); color: #161119; border-color: var(--ink); font-weight: 700; }
 .annotations { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .8rem; }
@@ -92,6 +98,8 @@ dialog label { display: block; font-size: .8rem; color: var(--muted); margin-bot
 textarea { width: 100%; resize: vertical; color: var(--ink); background: #0d0a10; border: 1px solid var(--line); border-radius: 12px; padding: .8rem; }
 .dialog-actions { display: flex; justify-content: end; gap: .6rem; margin-top: .8rem; }
 @media (max-width: 370px) {
+  .queue-bar { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .queue-bar #group { grid-column: 2; }
   .label-grid { grid-template-columns: repeat(3, 1fr); }
   .label.wide { grid-column: span 2; }
   .audio-range-actions { grid-template-columns: 1fr 1fr; }

@@ -109,7 +109,7 @@ endef
 	locus-test-unit-if-enabled locus-test-e2e-if-enabled \
 	locus-desktop-install locus-desktop-build locus-desktop-run locus-desktop-dev-ui chimera-supervisor-dev-ui \
 	locus-desktop-test locus-desktop-test-unit locus-desktop-test-e2e \
-	tokencount-file catalog-free catalog-available config-provider-free-tier catalog-limits \
+	tokencount-file catalog-free catalog-available config-provider-free-tier catalog-limits catalog-review \
 	release-install release-build release-package \
 	fmt fmt-check vet vet-desktop test precommit operator-contracts-generate operator-contracts-check
 
@@ -572,7 +572,7 @@ catalog-fetch-free:
 		-out "$(if $(OUT),$(OUT),config/catalog-free-tier.snapshot.yaml)" \
 		$(if $(INTERSECT),-intersect "$(INTERSECT)",)
 
-# GET BiFrost /v1/models and write YAML (running BiFrost; env BIFROST_BASE_URL, Chimera_UPSTREAM_API_KEY).
+# GET BiFrost /v1/models and write YAML (running BiFrost; env BIFROST_BASE_URL, CHIMERA_BROKER_API_KEY).
 # Override OUT=path (default config/catalog-available.snapshot.yaml).
 catalog-fetch-available:
 	go run ./chimera/cmd/catalog-write-available \
@@ -601,6 +601,16 @@ catalog-calculate: catalog-available
 		-provider-free-tier-out "$(if $(PROVIDER_FT_OUT),$(PROVIDER_FT_OUT),config/provider-free-tier.generated.yaml)"
 
 config-provider-free-tier: catalog-calculate
+
+# Safe end-to-end refresh: fetch live availability, enrich local Ollama capability/context,
+# fetch current official public-plan evidence, and write proposals only. Active YAML and
+# operator SQLite are read-only. The final two commands display review-before-replace diffs.
+# Optional: OPERATOR_SQLITE=path (default data/gateway/operator.sqlite).
+catalog-review: catalog-available
+	go run ./chimera/cmd/catalog-review \
+		-operator-sqlite "$(if $(OPERATOR_SQLITE),$(OPERATOR_SQLITE),data/gateway/operator.sqlite)"
+	-git diff --no-index -- config/provider-free-tier.yaml config/provider-free-tier.generated.yaml
+	-git diff --no-index -- config/provider-model-limits.yaml config/provider-model-limits.generated.yaml
 
 # --- Release (install → build → package) ---
 

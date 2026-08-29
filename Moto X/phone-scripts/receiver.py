@@ -739,6 +739,26 @@ def motox_review_progress():
     return jsonify(REVIEW_STORE.progress())
 
 
+@APP.route("/api/motox/review/identification", methods=["GET"])
+def motox_review_identification():
+    if REVIEW_STORE is None:
+        return jsonify({"error": "Moto X review is disabled"}), 503
+    try:
+        limit = int(request.args.get("limit", "24"))
+        excluded = {
+            value for value in request.args.getlist("exclude")
+            if re.fullmatch(r"[a-f0-9]{32}", value)
+        }
+        return jsonify(
+            REVIEW_STORE.identification_candidates(
+                limit=limit,
+                exclude_turn_ids=excluded,
+            )
+        )
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
 @APP.route("/api/motox/review/context/<capture_id>", methods=["GET"])
 def motox_review_context(capture_id):
     if REVIEW_STORE is None or not CAPTURE_ID_RE.fullmatch(capture_id):
@@ -791,6 +811,7 @@ def motox_review_annotation():
             replacement_text=payload.get("replacement_text"),
             audio_start_seconds=payload.get("audio_start_seconds"),
             audio_end_seconds=payload.get("audio_end_seconds"),
+            speaker_turn_id=payload.get("speaker_turn_id"),
         )
         return jsonify(annotation), 201
     except KeyError:

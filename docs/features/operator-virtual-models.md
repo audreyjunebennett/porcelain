@@ -19,7 +19,7 @@ Operators create **virtual models** in operator SQLite—each with a client-faci
 
 - **Virtual model cards** on `/ui/settings` — list, create, edit metadata, enable/disable, delete.
 - **Routing stack editors** — Fallback chain (required), routing policy YAML (toggleable), tool router models + confidence (toggleable). These configure the [chat routing pipeline](gateway-chat-routing-pipeline.md); cards do not execute routing themselves.
-- **Generate from catalog** — Builds fallback or policy from **available** upstream models only (respects provider availability).
+- **Generate from catalog** — Builds fallback or policy from **available general text/chat** upstream models only. Embedding, audio/TTS/transcription, image-generation, safety/guard, reranker, robotics, and capability-unknown endpoints are excluded or skipped with per-model reasons. Existing fallback order is treated as operator preference; remaining models use deterministic local-first then lexical order instead of parameter-size name scoring.
 - **Evaluate / preview** — Dry-run policy against sample message text without sending chat.
 - **Scoped logs** — Card expanded panel shows routing, fallback, and tool-router events for that model id.
 - **Chat selector** — Enabled public virtual models appear in `/ui/chat` model dropdown alongside upstream ids.
@@ -32,7 +32,7 @@ Operators create **virtual models** in operator SQLite—each with a client-faci
 - Virtual models persist in **operator SQLite** (`virtual_models` and attachment tables); not in `gateway.yaml` for new config.
 - Client protocol unchanged: callers send one `model` string on chat/completions.
 - Each VM compiles routing policy into `routing.InMemoryPolicy` at registry reload.
-- Fallback walk skips unavailable models (provider availability), quota/context limits, and retriable upstream errors.
+- Fallback walk skips unavailable models (provider availability), quota/context limits, and retriable upstream errors. Generated chains are capability-filtered before save; manually edited chains remain operator-controlled.
 - Structured logs include `virtual_model_id` on routing resolution and fallback attempts.
 - RAG remains **gateway-global** for v1 (not per-virtual-model scoped).
 
@@ -42,7 +42,7 @@ Operators create **virtual models** in operator SQLite—each with a client-faci
 |-------|----------|
 | Model id format | `{Name}-{Version}` stored unique per tenant |
 | Bootstrap | Seed routing-rule catalog only; **no** YAML import into SQLite |
-| Fallback | Required non-empty chain; generate uses available catalog only |
+| Fallback | Required non-empty chain; generate uses capability-filtered available catalog, preserves explicit preference, and defaults unranked models local-first |
 | Routing rules | Shared policy YAML body per VM; first matching `when.min_message_chars` wins |
 | Tool router | Optional; `router_models[]`, `confidence_threshold`, enable flag |
 | Reload | Registry refresh after CRUD via `ReloadVirtualModels` |
@@ -71,7 +71,7 @@ Operators create **virtual models** in operator SQLite—each with a client-faci
 | `PUT /api/ui/virtual-models/{id}/fallback` | Save fallback chain |
 | `PUT /api/ui/virtual-models/{id}/routing-policy` | Save policy YAML + enable flag |
 | `PUT /api/ui/virtual-models/{id}/tool-router` | Save tool router config |
-| `POST /api/ui/virtual-models/{id}/routing/generate` | Generate stack from catalog |
+| `POST /api/ui/virtual-models/{id}/routing/generate` | Generate stack from catalog; accepts optional `preferred_models` and `local_first`, returns `model_decisions` |
 | `POST /api/ui/virtual-models/{id}/routing/evaluate` | Dry-run policy |
 | `GET /v1/models` | Includes enabled virtual models |
 | `POST /v1/chat/completions` | Resolves `body.model` through VM registry |
@@ -105,6 +105,7 @@ Manual: create two VMs with different fallback chains; chat with each; confirm d
 - Per-virtual-model RAG / workspace scope.
 - Shared routing-rule definition catalog (reusable named rules across VMs) — VM stores policy YAML directly today.
 - Rate-limit policy per VM.
+- Provider response-header remaining-quota persistence; admission currently uses configured ceilings plus locally observed usage.
 
 ## References
 

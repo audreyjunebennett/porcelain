@@ -3,11 +3,13 @@ const state = {
   index: 0,
   selection: null,
   audioSelection: {start: null, end: null},
+  mode: "identify",
   group: "all",
   before: null,
   showOriginal: false,
   loopSelection: false,
   contextRadius: 2,
+  seenTurnIds: new Set(),
 };
 
 const $ = selector => document.querySelector(selector);
@@ -31,6 +33,20 @@ function formatTimestamp(seconds) {
   const minutes = Math.floor(value / 60);
   const remainder = (value % 60).toFixed(1).padStart(4, "0");
   return `${minutes}:${remainder}`;
+}
+
+function formatCapturedAt(value) {
+  const source = String(value);
+  const capture = source.match(/^(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})$/);
+  const parsed = capture
+    ? new Date(...capture.slice(1).map((part, index) => Number(part) - (index === 1 ? 1 : 0)))
+    : new Date(source);
+  if (!Number.isNaN(parsed.valueOf())) {
+    return parsed.toLocaleString(undefined, {
+      month: "short", day: "numeric", hour: "numeric", minute: "2-digit", second: "2-digit",
+    });
+  }
+  return source.replace("_", " · ");
 }
 
 function current() { return state.items[state.index]; }
@@ -127,6 +143,19 @@ function clearAudioRange() {
   renderAudioRange();
 }
 
+function restoreIdentificationRange() {
+  const identification = current()?.identification;
+  if (!identification) {
+    clearAudioRange();
+    return;
+  }
+  state.audioSelection = {
+    start: Number(identification.audio_start_seconds),
+    end: Number(identification.audio_end_seconds),
+  };
+  renderAudioRange();
+}
+
 function setLoop(enabled) {
   state.loopSelection = Boolean(enabled);
   const button = $("#range-loop");
@@ -159,6 +188,13 @@ function setAudioBoundary(boundary) {
 }
 
 function renderTranscript(item) {
+  if (item.identification) {
+    transcript.textContent = item.identification.selected_text
+      || "No word-timed excerpt is available for this older capture. Identify the voice from the selected audio; the full transcript remains in Browse clips.";
+    transcript.classList.remove("corrected");
+    $("#transcript-version").hidden = true;
+    return;
+  }
   const corrected = item.corrected_transcript ?? item.transcript;
   const hasCorrections = corrected !== item.transcript;
   const button = $("#transcript-version");
@@ -175,28 +211,67 @@ function renderCard() {
   if (!item) {
     card.hidden = true;
     empty.hidden = false;
-    $("#position").textContent = "0 clips";
+    $("#position").textContent = state.mode === "identify" ? "0 questions" : "0 clips";
+    $("#empty-message").textContent = state.mode === "identify"
+      ? "No unlabeled diarized turns are ready yet. Import a diarization report, or switch to Browse clips."
+      : "No review clips are available in this group.";
+    $("#older").hidden = state.mode === "identify";
     return;
   }
   empty.hidden = true;
   card.hidden = false;
+  $("#older").hidden = state.mode === "identify";
   state.selection = null;
   state.showOriginal = false;
   state.contextRadius = 2;
   $("#context-items").innerHTML = "";
   $("#more-context").hidden = true;
-  clearAudioRange();
-  setLoop(false);
-  const when = item.captured_at.replace("_", " · ").replaceAll("-", ":");
-  $("#time").textContent = when;
+  const identification = item.identification;
+  card.classList.toggle("smart-identification", Boolean(identification));
+  if (identification) {
+    state.audioSelection = {
+      start: Number(identification.audio_start_seconds),
+      end: Number(identification.audio_end_seconds),
+    };
+    renderAudioRange();
+    setLoop(true);
+  } else {
+    clearAudioRange();
+    setLoop(false);
+  }
+  $("#time").textContent = identification
+    ? `${formatCapturedAt(identification.occurred_at)} · source ${formatTimestamp(identification.audio_start_seconds)}–${formatTimestamp(identification.audio_end_seconds)}`
+    : formatCapturedAt(item.captured_at);
   const proposal = item.proposal;
-  $("#guess").textContent = proposal
-    ? `${item.review_group} · ${Math.round((proposal.confidence || 0) * 100)}% model guess`
-    : "Unsorted · teach me this one";
+  $("#guess").textContent = identification
+    ? `${identification.prompt} · ${identification.duration_seconds.toFixed(1)} seconds`
+    : proposal
+      ? `${item.review_group} · ${Math.round((proposal.confidence || 0) * 100)}% model guess`
+      : "Unsorted · teach me this one";
+  $("#learning-reason").hidden = !identification;
+  $("#learning-reason").textContent = identification?.reason || "";
+  $("#audio-range-actions").hidden = Boolean(identification);
+  $("#instruction").textContent = identification
+    ? "This exact diarized turn is selected and will loop while it plays."
+    : "Select words to select and loop their audio automatically.";
+  $("#speaker-prompt").innerHTML = identification
+    ? `${escapeHtml(identification.prompt)} <span>Other and Not sure are always okay</span>`
+    : "Who is vocalizing? <span>one identity per region</span>";
+  document.querySelectorAll("#labels [data-label]").forEach(button => {
+    button.classList.toggle("suggested", Boolean(identification?.alternatives.includes(button.dataset.label)));
+  });
   audio.src = `/api/motox/review/audio/${encodeURIComponent(item.capture_id)}`;
   renderTranscript(item);
-  $("#selection").textContent = "Whole clip selected";
-  $("#position").textContent = `${state.index + 1} of ${state.items.length}`;
+  $("#selection").textContent = identification
+    ? identification.selected_text
+      ? `Turn text: “${identification.selected_text}”`
+      : "Exact audio turn selected"
+    : "Whole clip selected";
+  $("#position").textContent = state.mode === "identify"
+    ? `Question ${state.index + 1}`
+    : `${state.index + 1} of ${state.items.length}`;
+  $("#next").textContent = identification ? "Skip for now" : "Next clip";
+  $("#fix").hidden = Boolean(identification);
   renderAnnotations(item);
   renderScope();
   setNotice("");
@@ -216,6 +291,10 @@ function selectionInsideTranscript() {
 }
 
 function captureSelection() {
+  if (current()?.identification) {
+    setNotice("Smart identification keeps this diarized turn's exact audio boundary.");
+    return;
+  }
   state.selection = selectionInsideTranscript();
   $("#selection").textContent = state.selection
     ? `Selected: “${state.selection.text}”`
@@ -278,6 +357,7 @@ async function saveAnnotation(type, label, replacementText = null) {
         replacement_text: replacementText,
         audio_start_seconds: range?.start ?? null,
         audio_end_seconds: range?.end ?? null,
+        speaker_turn_id: type === "speaker" ? item.identification?.turn_id ?? null : null,
       }),
     });
     item.annotations = [...(item.annotations || []), annotation];
@@ -292,8 +372,13 @@ async function saveAnnotation(type, label, replacementText = null) {
     clearAudioRange();
     $("#selection").textContent = "Whole clip selected";
     const rangeNotice = range ? ` for ${formatTimestamp(range.start)} – ${formatTimestamp(range.end)}` : "";
-    setNotice(`${label || "Correction"} saved${rangeNotice}. Tap the chip below to undo.`);
-    refreshProgress();
+    await refreshProgress();
+    if (item.identification && type === "speaker") {
+      await loadBatch();
+      setNotice(`${label} learned from ${item.identification.duration_seconds.toFixed(1)} seconds. The next question was re-ranked.`);
+    } else {
+      setNotice(`${label || "Correction"} saved${rangeNotice}. Tap the chip below to undo.`);
+    }
   } catch (error) {
     setNotice(error.message, true);
   }
@@ -338,19 +423,28 @@ async function refreshProgress() {
 }
 
 async function loadBatch({older = false} = {}) {
-  setNotice("Loading review clips…");
-  const params = new URLSearchParams({limit: "40", target_seconds: "300"});
-  if (state.group !== "all") params.set("group", state.group);
-  if (older && state.before) params.set("before", state.before);
+  const identify = state.mode === "identify";
+  setNotice(identify ? "Choosing the next useful voice question…" : "Loading review clips…");
+  const params = new URLSearchParams({limit: "40"});
+  let candidateUrl;
+  if (identify) {
+    for (const turnId of state.seenTurnIds) params.append("exclude", turnId);
+    candidateUrl = `/api/motox/review/identification?${params}`;
+  } else {
+    params.set("target_seconds", "300");
+    if (state.group !== "all") params.set("group", state.group);
+    if (older && state.before) params.set("before", state.before);
+    candidateUrl = `/api/motox/review/candidates?${params}`;
+  }
   try {
     const [items, progress, groups] = await Promise.all([
-      requestJson(`/api/motox/review/candidates?${params}`),
+      requestJson(candidateUrl),
       requestJson("/api/motox/review/progress"),
       requestJson("/api/motox/review/groups"),
     ]);
     state.items = items;
     state.index = 0;
-    if (items.length) state.before = items[items.length - 1].captured_at;
+    if (!identify && items.length) state.before = items[items.length - 1].captured_at;
     renderProgress(progress);
     renderGroups(groups);
     renderCard();
@@ -361,9 +455,11 @@ async function loadBatch({older = false} = {}) {
 
 function nextClip() {
   if (!state.items.length) return;
+  const identification = current()?.identification;
+  if (identification) state.seenTurnIds.add(identification.turn_id);
   state.index += 1;
   if (state.index >= state.items.length) {
-    loadBatch({older: true});
+    loadBatch({older: !identification});
   } else {
     renderCard();
   }
@@ -385,6 +481,10 @@ audio.addEventListener("timeupdate", () => {
     audio.play().catch(() => {});
   }
 });
+audio.addEventListener("loadedmetadata", () => {
+  const range = activeAudioRange();
+  if (range) audio.currentTime = range.start;
+});
 const labelClick = event => {
   const button = event.target.closest("[data-label]");
   if (button) saveAnnotation(button.dataset.type, button.dataset.label);
@@ -399,21 +499,33 @@ $("#annotations").addEventListener("click", event => {
 $("#next").addEventListener("click", nextClip);
 $("#skip").addEventListener("click", nextClip);
 $("#older").addEventListener("click", () => loadBatch({older: true}));
-$("#refresh").addEventListener("click", () => loadBatch());
+$("#refresh").addEventListener("click", () => {
+  state.seenTurnIds.clear();
+  loadBatch();
+});
 $("#load-context").addEventListener("click", () => loadContext());
 $("#more-context").addEventListener("click", () => loadContext({more: true}));
 $("#transcript-version").addEventListener("click", () => {
   state.showOriginal = !state.showOriginal;
   window.getSelection()?.removeAllRanges();
   state.selection = null;
-  clearAudioRange();
+  restoreIdentificationRange();
   renderTranscript(current());
-  $("#selection").textContent = "Whole clip selected";
+  $("#selection").textContent = current()?.identification
+    ? "Exact audio turn selected"
+    : "Whole clip selected";
 });
 $("#exclude").addEventListener("click", () => saveAnnotation("privacy", "Exclude"));
 $("#group").addEventListener("change", event => {
   state.group = decodeURIComponent(event.target.value);
   state.before = null;
+  loadBatch();
+});
+$("#mode").addEventListener("change", event => {
+  state.mode = event.target.value;
+  state.before = null;
+  state.seenTurnIds.clear();
+  $("#group").hidden = state.mode === "identify";
   loadBatch();
 });
 $("#fix").addEventListener("click", () => {
