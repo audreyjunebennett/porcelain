@@ -6,7 +6,7 @@
 | **Areas** | All `chimera-*` / `locus-*` binaries, docs, scripts, HTTP headers |
 | **Status** | `current` |
 | **Introduced** | v0.3 naming hard cut |
-| **Originated from** | [`plans/v0-3-naming-migration.md`](../plans/v0-3-naming-migration.md) |
+| **Originated from** | [`plans/archive/v0-3-naming-migration.md`](../plans/archive/v0-3-naming-migration.md) |
 | **Related features** | [Chimera wrapper binary contract](chimera-wrapper-binary-contract.md) |
 | **Depends on** | None |
 | **Last updated** | See git history |
@@ -72,7 +72,7 @@ Includes `X-Chimera-Project`, `X-Chimera-Flavor-Id`, `X-Chimera-RAG-Hits`, `X-Ch
 | Go constants | `internal/naming/contracts.go` |
 | Codegen | `internal/naming/cmd/gencontracts/` |
 | Locus shared names | `internal/locus/res.go` (desktop runtime files, bridge names) |
-| Migration map | [`migration-v0-3-naming.md`](../migration-v0-3-naming.md) |
+| Migration map | [`v0-3-naming-migration.md`](../plans/archive/v0-3-naming-migration.md) |
 
 ## Code map
 
@@ -96,6 +96,6 @@ go test ./internal/naming/...
 
 ## References
 
-- Delivery plan: [`v0-3-naming-migration.md`](../plans/v0-3-naming-migration.md)
-- Operator migration: [`migration-v0-3-naming.md`](../migration-v0-3-naming.md)
+- Delivery plan: [`v0-3-naming-migration.md`](../plans/archive/v0-3-naming-migration.md)
+- Operator migration notes: [`v0-3-naming-migration.md`](../plans/archive/v0-3-naming-migration.md)
 - Wrapper env details: [`chimera-wrapper-binary-contract.md`](chimera-wrapper-binary-contract.md)

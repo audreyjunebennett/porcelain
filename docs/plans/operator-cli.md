@@ -20,7 +20,7 @@ Give operators a small command-line tool, `chimeractl`, that confirms the gatewa
 
 ---
 
-This document plans a **separate operator-facing CLI** for health checks and BiFrost-oriented setup (Groq, Gemini, Ollama). It is distinct from the `chimera` gateway/supervisor binary built by `make chimera-build` ([`cmd/chimera`](../cmd/chimera)), to keep a small **read-only / config** tool separate from the long-running server.
+This document plans a **separate operator-facing CLI** for health checks and BiFrost-oriented setup (Groq, Gemini, Ollama). It is distinct from the `chimera` gateway/supervisor binary built by `make chimera-build` (`chimera` / supervisor binaries via the root Makefile), to keep a small **read-only / config** tool separate from the long-running server.
 
 **Related docs:** [`supervisor.md`](../supervisor.md), [`reference/bifrost-upstream.md`](../reference/bifrost-upstream.md), [`configuration.md`](../configuration.md).
 
@@ -44,8 +44,8 @@ Releases below are **plan milestones** for `chimeractl` and the **gateway/BiFros
 
 **Gateway and BiFrost**
 
-- Ship [`config/bifrost.config.json`](../config/bifrost.config.json) with **`config_store` enabled** so BiFrost persists provider config and exposes the management APIs this CLI uses.
-- **Stop using environment variables** as the primary way to inject Groq/Gemini (and related) secrets into BiFrost for the default stack: operators use `chimeractl` (or the BiFrost UI/API) instead of `GROQ_API_KEY` / `GEMINI_API_KEY` in `.env` / the shell. Update [`env.example`](../env.example), [`supervisor.md`](../supervisor.md), and [`reference/bifrost-upstream.md`](../reference/bifrost-upstream.md) accordingly when implementing.
+- Ship [`config/chimera-broker.config.json`](../../config/chimera-broker.config.json) with **`config_store` enabled** so BiFrost persists provider config and exposes the management APIs this CLI uses.
+- **Stop using environment variables** as the primary way to inject Groq/Gemini (and related) secrets into BiFrost for the default stack: operators use `chimeractl` (or the BiFrost UI/API) instead of `GROQ_API_KEY` / `GEMINI_API_KEY` in `.env` / the shell. Update [`env.example`](../../env.example), [`supervisor.md`](../supervisor.md), and [`reference/bifrost-upstream.md`](../reference/bifrost-upstream.md) accordingly when implementing.
 
 ### Version 0.8
 
@@ -86,7 +86,7 @@ Rationale: one repo, one `go.mod`, no second module unless release packaging lat
 
 ## Makefile
 
-Add targets alongside existing gateway/GUI rules ([`Makefile`](../Makefile)):
+Add targets alongside existing gateway/GUI rules ([`Makefile`](../../Makefile)):
 
 | Target             | Behavior                                                                                                                                                         |
 |--------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -94,9 +94,9 @@ Add targets alongside existing gateway/GUI rules ([`Makefile`](../Makefile)):
 | `make cli-run`     | `go run ./cmd/chimeractl` — pass through extra args, e.g. `make cli-run ARGS='health'`.                                                                          |
 | `make cli-install` | `go install ./cmd/chimeractl` so the binary lands in `$GOBIN` or `$GOPATH/bin` (document that this must be on `PATH`). Optional later: `PREFIX=` install script. |
 
-**Also update** [`scripts/print-make-help.sh`](../scripts/print-make-help.sh) and `.PHONY` list so `make help` documents the new targets.
+**Also update** [`scripts/make-help.sh`](../../scripts/make-help.sh) and `.PHONY` list so `make help` documents the new targets.
 
-**`make clean`:** Decide whether to remove `chimeractl[.exe]` (align with removing `chimera[.exe]` in [`scripts/clean.sh`](../scripts/clean.sh)); recommended **yes** for consistency.
+**`make clean`:** Decide whether to remove `chimeractl[.exe]` (align with removing `chimera[.exe]` in [`scripts/clean.sh`](../../scripts/clean.sh)); recommended **yes** for consistency.
 
 ---
 
@@ -177,7 +177,7 @@ Shipped in **v0.1**; URLs and optional Bearer token stay at defaults until **v0.
 
 Operator commands that mutate provider keys or Ollama **must** use BiFrost’s **management HTTP APIs** (e.g. `POST /api/providers/{provider}/keys`, updates for existing keys, and Ollama URL via the provider/key schema in BiFrost’s OpenAPI for the `chimera/deps.lock` pin). See [BiFrost “Setting Up”](https://docs.getbifrost.ai/quickstart/gateway/setting-up).
 
-**Prerequisite (v0.1):** [`config/bifrost.config.json`](../config/bifrost.config.json) (copied into the BiFrost app dir on `chimera serve` startup) **must** include `config_store` enabled (e.g. SQLite under the BiFrost data directory) so configuration persists and admin routes behave as documented. Without `config_store`, file-only mode does not support this workflow. **v0.1** lands the config-store bootstrap together with `chimeractl` and removes reliance on provider env vars for the default stack ([§ Version 0.1](#version-01)).
+**Prerequisite (v0.1):** [`config/chimera-broker.config.json`](../../config/chimera-broker.config.json) (copied into the BiFrost app dir on `chimera serve` startup) **must** include `config_store` enabled (e.g. SQLite under the BiFrost data directory) so configuration persists and admin routes behave as documented. Without `config_store`, file-only mode does not support this workflow. **v0.1** lands the config-store bootstrap together with `chimeractl` and removes reliance on provider env vars for the default stack ([§ Version 0.1](#version-01)).
 
 **CLI config:** `bifrost_url` plus optional credentials for dashboard/admin auth ([`reference/bifrost-upstream.md`](../reference/bifrost-upstream.md) remains the reference for env-vs-file nuances in **static** JSON; runtime changes go through the API once `config_store` is on).
 
@@ -187,7 +187,7 @@ Operator commands that mutate provider keys or Ollama **must** use BiFrost’s *
 
 ## Dependencies
 
-- `gopkg.in/yaml.v3` — already in [`go.mod`](../go.mod); required for **v0.8** YAML config loading. **v0.1** may omit YAML paths entirely until v0.8.
+- `gopkg.in/yaml.v3` — already in [`go.mod`](../../go.mod); required for **v0.8** YAML config loading. **v0.1** may omit YAML paths entirely until v0.8.
 - Stdlib `flag` (or small helper later) for **v0.8** CLI overrides; **v0.1** subcommands need only enough parsing for `health`, `provider set-key`, `ollama set-url`.
 - No extra runtime dependency for HTTP (`net/http`).
 
@@ -223,7 +223,7 @@ Operator commands that mutate provider keys or Ollama **must** use BiFrost’s *
 
 - [ ] Add `cmd/chimeractl`: `health`, `provider set-key` (groq, gemini), `ollama set-url`; **hard-coded** `gateway_url` / `bifrost_url` (and token default empty).
 - [ ] Add Makefile targets + `clean.sh` + `print-make-help.sh` updates.
-- [ ] Enable `config_store` in [`config/bifrost.config.json`](../config/bifrost.config.json); remove default-stack reliance on provider **environment variables**; refresh `env.example` and docs.
+- [ ] Enable `config_store` in [`config/chimera-broker.config.json`](../../config/chimera-broker.config.json); remove default-stack reliance on provider **environment variables**; refresh `env.example` and docs.
 - [ ] Implement BiFrost management API client (`internal/bifrostapi` or equivalent) against pinned OpenAPI.
 - [ ] Tests for health command; manual or mocked BiFrost API tests.
 
@@ -235,4 +235,4 @@ Operator commands that mutate provider keys or Ollama **must** use BiFrost’s *
 
 ---
 
-*Plan status: **draft for implementation** — v0.1 first; v0.8 adds layered config. Gateway defaults today: [`config/gateway.yaml`](../config/gateway.yaml).*
+*Plan status: **draft for implementation** — v0.1 first; v0.8 adds layered config. Gateway defaults today: [`config/gateway.example.yaml`](../../config/gateway.example.yaml).*

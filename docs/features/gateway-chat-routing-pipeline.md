@@ -6,7 +6,7 @@
 | **Areas** | Gateway chat path, routing, transforms, RAG, fallback, tool router |
 | **Status** | `current` (pipeline shipped; **formal router plugin API** not yet) |
 | **Introduced** | v0.1 routing + v0.1.1 tool router; virtual-model stacks v0.2+ |
-| **Originated from** | [`plans/virtual-models-operator.md`](../plans/virtual-models-operator.md), [`plans/context-window-admission.md`](../plans/context-window-admission.md), [`docs/version-v0.1.1.md`](../version-v0.1.1.md) |
+| **Originated from** | [`plans/archive/virtual-models-operator.md`](../plans/archive/virtual-models-operator.md), [`plans/archive/context-window-admission.md`](../plans/archive/context-window-admission.md), [`docs/version-v0.1.1.md`](../version-v0.1.1.md) |
 | **Related features** | [Operator virtual models](operator-virtual-models.md), [Gateway RAG ingest and retrieval](gateway-rag-ingest-and-retrieval.md), [Context window admission](context-window-admission.md), [Operator provider model availability](operator-provider-model-availability.md) |
 | **Depends on** | Virtual model registry, broker upstream |
 | **Last updated** | See git history |
@@ -154,4 +154,4 @@ Manual: configure VM with short-context + long-context models in fallback; send 
 - Virtual model config: [`operator-virtual-models.md`](operator-virtual-models.md)
 - Tool router plan: [`docs/version-v0.1.1.md`](../version-v0.1.1.md)
 - Context admission: [`context-window-admission.md`](context-window-admission.md)
-- Delivery plan: [`virtual-models-operator.md`](../plans/virtual-models-operator.md)
+- Delivery plan: [`virtual-models-operator.md`](../plans/archive/virtual-models-operator.md)

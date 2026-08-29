@@ -28,7 +28,7 @@ Stand up the chimera-gateway in Go in front of BiFrost: chat completions work, t
 
 This document is for **Audrey** (and a Cursor agent helping her) to **explore** what "done enough" for **v0.1** means in practice, how the repo behaves **today**, and which directions are **worth investigating** versus **already decided** in the product plan.
 
-**Tone:** everything under *Explorations* is **optional research**, not a commitment. The authoritative roadmap and locked decisions remain in [`chimera.plan.md`](chimera.plan.md). Normative UI/desktop detail lives in [`plans/desktop-ui.md`](plans/desktop-ui.md).
+**Tone:** everything under *Explorations* is **optional research**, not a commitment. The authoritative roadmap and locked decisions remain in [`chimera.plan.md`](chimera.plan.md). Normative UI/desktop detail lives in [`plans/archive/desktop-ui.md`](plans/archive/desktop-ui.md).
 
 ---
 
@@ -54,7 +54,7 @@ The gateway is a **small Go** service in front of **BiFrost** (OpenAI-compatible
 - **Desktop shell** (optional build): `go build -tags desktop`** produces a binary whose **default no-subcommand** path runs **supervisor + gateway + webview** (`cmd/chimera/default_mode_desktop.go`, `webview_desktop.go`). `**chimera desktop`**, `**chimera serve`, `--headless`, and `chimera-gateway` behave as documented in `chimera help**`. The webview **opens the panel URL** derived from the listen address (`cmd/chimera/serve.go` → `panelURLFromListenAddr`); unauthenticated users are **redirected** to `**/ui/login`**.
 - **Supervisor children** (BiFrost, Qdrant): subprocess **stdout/stderr** are wired to `**os.Stdout` / `os.Stderr`** (`internal/supervisor/bifrost.go`, `qdrant.go`), so all service logs go to the **same console** as the gateway. On **Windows**, a **desktop** build can still show a **console window** (and users report an extra command window alongside the webview); hiding that console and surfacing logs only in-app is **not** done yet (see below).
 
-**Default local stack:** `**make up`** or `**go run ./cmd/chimera serve` with `./bin/bifrost-http` after `make chimera-install` (or `make install` for desktop OS deps too), plus provider env keys for `config/bifrost.config.json`. Desktop: `make desktop-build` / `make desktop-run**` per [`gui-testing.md`](gui-testing.md).
+**Default local stack:** `**make up`** or `**go run ./cmd/chimera serve` with `./bin/bifrost-http` after `make chimera-install` (or `make install` for desktop OS deps too), plus provider env keys for `config/bifrost.config.json`. Desktop: `make desktop-build` / `make desktop-run**` (see [installation.md](installation.md) and [supervisor.md](supervisor.md)).
 
 ---
 
@@ -82,7 +82,7 @@ These are the **last mile** items for v0.1 UX and routing, articulated from the 
 
 | Tab       | Purpose                                                                                                                                               |
 |-----------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Main**  | Primary operator surface — welcome, status, or landing agreed with [`plans/desktop-ui.md`](plans/desktop-ui.md) (not only jumping straight to panel). |
+| **Main**  | Primary operator surface — welcome, status, or landing agreed with [`plans/archive/desktop-ui.md`](plans/archive/desktop-ui.md) (not only jumping straight to panel). |
 | **Logs**  | Live tail of gateway + supervised services (feeds §1).                                                                                                |
 | **Admin** | Existing admin console — equivalent to today’s `**/ui/panel`** (and login flow when needed).                                                          |
 
@@ -93,7 +93,7 @@ Implementation options include **native tab UI** around multiple webviews, **one
 
 Making a fast, portable application is important for the v0.1 release as it dictates the framework we are building on top of going forward.
 
-**Default deployment shape:** **Go** `**chimera`** / `**chimera serve**` with **BiFrost** — see [`plans/upstream-llm-bifrost.md`](plans/upstream-llm-bifrost.md) for the phased history.
+**Default deployment shape:** **Go** `**chimera`** / `**chimera serve**` with **BiFrost** — see [`plans/archive/upstream-llm-bifrost.md`](plans/archive/upstream-llm-bifrost.md) for the phased history.
 
 **4c. Vector store without a dedicated Qdrant process**
 

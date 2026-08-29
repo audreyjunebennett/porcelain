@@ -7,7 +7,7 @@
 | **Status**                     | `draft`                                                                                                                                                                   |
 | **Targets**                    | Gateway v0.4 ([`version-v0.4.md`](../version-v0.4.md))                                                                                                                    |
 | **Last updated**               | See git history                                                                                                                                                           |
-| **Supersedes / superseded by** | Replaces gateway-only chunking at ingest (v0.2 baseline). Complements [`indexer-sync-state-sqlite-and-force-reindex.md`](indexer-sync-state-sqlite-and-force-reindex.md). |
+| **Supersedes / superseded by** | Replaces gateway-only chunking at ingest (v0.2 baseline). Complements [`indexer-sync-state-sqlite-and-force-reindex.md`](archive/indexer-sync-state-sqlite-and-force-reindex.md). |
 | **As-built**                   | None — link to [`docs/features/`](../features/README.md) when shipped                                                                                                     |
 
 ## At a glance
@@ -33,7 +33,7 @@ Today the indexer uploads **whole files**; the gateway runs `chunk.Split` and st
 
 This plan moves chunking and span annotation to the **indexer**, makes **manifest ingest the only path**, and stores **per-chunk metadata** in Qdrant and operator SQLite for UI, coherence, and tools. It targets **gateway v0.4** and assumes **two operators only** — no legacy ingest or conversation migration.
 
-**Related docs:** [`features/indexer-ingest-pipeline.md`](../features/indexer-ingest-pipeline.md), [`features/indexer-workspaces.md`](../features/indexer-workspaces.md), [`features/operator-conversation-history.md`](../features/operator-conversation-history.md), [`plans/indexer-sync-state-sqlite-and-force-reindex.md`](indexer-sync-state-sqlite-and-force-reindex.md), [`version-v0.2.md`](../version-v0.2.md) (prior payload minimum).
+**Related docs:** [`features/indexer-ingest-pipeline.md`](../features/indexer-ingest-pipeline.md), [`features/indexer-workspaces.md`](../features/indexer-workspaces.md), [`features/operator-conversation-history.md`](../features/operator-conversation-history.md), [`plans/indexer-sync-state-sqlite-and-force-reindex.md`](archive/indexer-sync-state-sqlite-and-force-reindex.md), [`version-v0.2.md`](../version-v0.2.md) (prior payload minimum).
 
 **Non-goals (v1 of this plan)**
 
@@ -173,7 +173,7 @@ CREATE INDEX idx_corpus_segments_line
 
 | Store                               | Owner   | Purpose                                                                                                                                                                                                                     |
 |-------------------------------------|---------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `sync-state.sqlite` (indexer)       | Indexer | Per-file **skip/re-ingest** checkpoints (`client_sha256`, `server_sha256`, optional `chunk_count`, `chunk_schema`) — see [`indexer-sync-state-sqlite-and-force-reindex.md`](indexer-sync-state-sqlite-and-force-reindex.md) |
+| `sync-state.sqlite` (indexer)       | Indexer | Per-file **skip/re-ingest** checkpoints (`client_sha256`, `server_sha256`, optional `chunk_count`, `chunk_schema`) — see [`indexer-sync-state-sqlite-and-force-reindex.md`](archive/indexer-sync-state-sqlite-and-force-reindex.md) |
 | `corpus_segments` (operator.sqlite) | Gateway | **Tooling / line lookup** and neighbor queries by `(source, content_sha256, chunk_index)`                                                                                                                                   |
 | Qdrant                              | Gateway | Vector search + payload copy for retrieval                                                                                                                                                                                  |
 
@@ -395,9 +395,9 @@ Implement **Phase 1 of the sync-state SQLite plan** before or in parallel with P
 
 **Deliverables**
 
-- Coordinate [`indexer-sync-state-sqlite-and-force-reindex.md`](indexer-sync-state-sqlite-and-force-reindex.md) Phase 1–4 minimum: SQLite sync state + **Re-index workspace** button bumps `reindex_generation` → full re-upload.
+- Coordinate [`indexer-sync-state-sqlite-and-force-reindex.md`](archive/indexer-sync-state-sqlite-and-force-reindex.md) Phase 1–4 minimum: SQLite sync state + **Re-index workspace** button bumps `reindex_generation` → full re-upload.
 - Ship migration note: operators run **Re-index all workspaces** once (or clear sync state + restart indexer).
-- Update [`docs/indexer.md`](../indexer.md), [`docs/version-v0.2.md`](../version-v0.2.md) payload section, [`features/indexer-ingest-pipeline.md`](../features/indexer-ingest-pipeline.md) or new [`features/indexer-manifest-ingest.md`](../features/indexer-manifest-ingest.md).
+- Update [`docs/indexer.md`](../indexer.md), [`docs/version-v0.2.md`](../version-v0.2.md) payload section, and [`features/indexer-ingest-pipeline.md`](../features/indexer-ingest-pipeline.md) (or add a new feature record under [`docs/features/`](../features/README.md) when this ships).
 - Mark plan **shipped**; add **As-built** link in this table.
 
 **Acceptance**

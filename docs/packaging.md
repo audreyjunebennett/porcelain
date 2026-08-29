@@ -82,7 +82,7 @@ Qdrant is **Apache-2.0**. Archives redistribute the official prebuilt binary fro
 
 ## Desktop UI (WebView)
 
-Native panel UI: `make locus-desktop-build` → `locus-desktop`. GoReleaser archives use **CGO_ENABLED=0** (no WebView). Use `make release-package` for a double-clickable desktop stack. See [gui-testing.md](gui-testing.md).
+Native panel UI: `make locus-desktop-build` → `locus-desktop`. GoReleaser archives use **CGO_ENABLED=0** (no WebView). Use `make release-package` for a double-clickable desktop stack. See [installation.md](installation.md) and [supervisor.md](supervisor.md).
 
 ## Follow-ups
 

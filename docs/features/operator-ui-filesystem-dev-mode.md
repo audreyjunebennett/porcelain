@@ -6,7 +6,7 @@
 | **Areas** | Gateway embed UI assets, local developer workflow |
 | **Status** | `current` |
 | **Introduced** | Gateway / operator UI v0.3 |
-| **Originated from** | [`plans/adminui-filesystem-dev-mode.md`](../plans/adminui-filesystem-dev-mode.md) |
+| **Originated from** | [`plans/archive/adminui-filesystem-dev-mode.md`](../plans/archive/adminui-filesystem-dev-mode.md) |
 | **Related features** | [Operator settings UI](operator-settings-ui.md), [Locus desktop ↔ supervisor](locus-desktop-supervisor.md) |
 | **Depends on** | Loopback gateway listen addr |
 | **Last updated** | See git history |
@@ -69,4 +69,4 @@ Manual: set env, edit a CSS file, refresh `/ui/settings` without rebuilding gate
 
 ## References
 
-- Delivery plan: [`adminui-filesystem-dev-mode.md`](../plans/adminui-filesystem-dev-mode.md)
+- Delivery plan: [`adminui-filesystem-dev-mode.md`](../plans/archive/adminui-filesystem-dev-mode.md)

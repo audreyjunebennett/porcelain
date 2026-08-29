@@ -98,11 +98,11 @@ Decisions still pending. Remove this section once everything is resolved.
 
 ## Authoring notes (delete before publishing)
 
-These notes are the authoring contract for new plans. Copy this file into `docs/plans/` (same folder only — no subfolders), rename it, and fill it in. Do not invent a different layout.
+These notes are the authoring contract for new plans. Copy this file into `docs/plans/` (open-work folder only — not `archive/`), rename it, and fill it in. Do not invent a different layout.
 
 **Workflow.** When asked to create, draft, start, or add a plan: copy [`_template.md`](_template.md) to a new file under `docs/plans/`, replace placeholders, then delete this section in the published doc. After creating a plan from chat, mention the new path so the operator can open it.
 
-When a plan reaches **`shipped`**, add an **As-built** link to a feature record in [`docs/features/`](../features/README.md) (copy [`docs/features/_template.md`](../features/_template.md) if one does not exist yet). Feature records hold as-built behavior; plans stay as delivery history.
+When a plan reaches **`shipped`** or **`done`**, add an **As-built** link to a feature record in [`docs/features/`](../features/README.md) (copy [`docs/features/_template.md`](../features/_template.md) if one does not exist yet), update [`plans/README.md`](README.md), and **move the file to [`archive/`](archive/)**. Feature records hold as-built behavior; archived plans stay as delivery history.
 
 **File name.** Lower-case, hyphenated, no `.plan.md` suffix — e.g. `docs/plans/scoped-feature-name.md`. The H1 (`# Plan: …`) should match the file name’s intent.
 

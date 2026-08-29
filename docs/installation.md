@@ -165,7 +165,7 @@ Edit files under `embedui/`, then refresh `/ui/settings` in the browser or deskt
 
 You still need `make chimera-gateway-build` when changing Go handlers or running `make operator-contracts-generate` after `internal/naming` edits.
 
-Details: [`plans/adminui-filesystem-dev-mode.md`](plans/adminui-filesystem-dev-mode.md) and [`embedui/settings/README.md`](../chimera/chimera-gateway/internal/server/adminui/embed/embedui/settings/README.md).
+Details: [`plans/archive/adminui-filesystem-dev-mode.md`](plans/archive/adminui-filesystem-dev-mode.md) and [`embedui/settings/README.md`](../chimera/chimera-gateway/internal/server/adminui/embed/embedui/settings/README.md).
 
 ## Next steps
 
