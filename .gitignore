@@ -105,6 +105,9 @@ Moto X/phone-scripts/motox_record_v2_log.md
 Moto X/phone-scripts/motox_record_v2.lock
 Moto X/phone-scripts/receiver_log.md
 Moto X/receiver_log.md
+/Moto X/DCIM/
+/Moto X/phone-scripts/*.sync-conflict-*.md
+/Moto X/phone-scripts/~syncthing~*.tmp
 
 # Local generated caches, smoke-test artifacts, and private provider exports.
 .tmp/
