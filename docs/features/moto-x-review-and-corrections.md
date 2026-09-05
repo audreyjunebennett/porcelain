@@ -56,6 +56,11 @@ Ruby/Lynn/Raven profiles instead of walking backward through recent clips.
 - Smart identification considers only 1.5–8 second diarized regions, loops the
   exact region, and keeps **Other** and **Not sure** available even when the two
   nearest verified profiles are shown in the question.
+- Smart identification is a two-step choice: select an identity, then use
+  **Confirm <identity> & next**. Ambiguous or overlapping speech can be marked
+  **Not sure / mixed voices** instead of forcing an identity into training.
+- Sound-only labels such as television, music, cats, or overlapping voices do
+  not require a speaker answer; use **Next clip** after saving them.
 - Accepted smart-identification answers are anchored to a deterministic turn
   ID plus source capture seconds. Undoing the answer removes it from the learned
   profile and makes that turn eligible for review again.

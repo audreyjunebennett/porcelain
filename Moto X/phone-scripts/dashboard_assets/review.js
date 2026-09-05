@@ -10,6 +10,7 @@ const state = {
   loopSelection: false,
   contextRadius: 2,
   seenTurnIds: new Set(),
+  pendingSpeakerLabel: null,
 };
 
 const $ = selector => document.querySelector(selector);
@@ -222,6 +223,7 @@ function renderCard() {
   card.hidden = false;
   $("#older").hidden = state.mode === "identify";
   state.selection = null;
+  state.pendingSpeakerLabel = null;
   state.showOriginal = false;
   state.contextRadius = 2;
   $("#context-items").innerHTML = "";
@@ -258,7 +260,16 @@ function renderCard() {
     ? `${escapeHtml(identification.prompt)} <span>Other and Not sure are always okay</span>`
     : "Who is vocalizing? <span>one identity per region</span>";
   document.querySelectorAll("#labels [data-label]").forEach(button => {
+    if (button.dataset.label === "Not sure") {
+      button.textContent = identification ? "Not sure / mixed voices" : "Not sure";
+    }
     button.classList.toggle("suggested", Boolean(identification?.alternatives.includes(button.dataset.label)));
+    button.classList.toggle("pending", Boolean(
+      identification && state.pendingSpeakerLabel === button.dataset.label
+    ));
+    button.setAttribute("aria-pressed", String(
+      Boolean(identification && state.pendingSpeakerLabel === button.dataset.label)
+    ));
   });
   audio.src = `/api/motox/review/audio/${encodeURIComponent(item.capture_id)}`;
   renderTranscript(item);
@@ -270,8 +281,15 @@ function renderCard() {
   $("#position").textContent = state.mode === "identify"
     ? `Question ${state.index + 1}`
     : `${state.index + 1} of ${state.items.length}`;
-  $("#next").textContent = identification ? "Skip for now" : "Next clip";
+  $("#next").textContent = "Next clip";
+  $("#next").className = identification ? "" : "primary";
   $("#fix").hidden = Boolean(identification);
+  $("#next").hidden = false;
+  $("#confirm-speaker").hidden = !identification;
+  $("#confirm-speaker").textContent = state.pendingSpeakerLabel
+    ? `Confirm ${state.pendingSpeakerLabel} & next`
+    : "Choose a voice first";
+  $("#confirm-speaker").disabled = !state.pendingSpeakerLabel;
   renderAnnotations(item);
   renderScope();
   setNotice("");
@@ -465,6 +483,29 @@ function nextClip() {
   }
 }
 
+function chooseSpeaker(label) {
+  const item = current();
+  if (!item?.identification) return;
+  state.pendingSpeakerLabel = label;
+  document.querySelectorAll("#labels [data-label]").forEach(button => {
+    const pending = button.dataset.label === label;
+    button.classList.toggle("pending", pending);
+    button.setAttribute("aria-pressed", String(pending));
+  });
+  $("#confirm-speaker").disabled = false;
+  $("#confirm-speaker").textContent = `Confirm ${label} & next`;
+  setNotice(`${label} selected. Confirm when you're ready.`);
+}
+
+async function confirmSpeakerAndNext() {
+  const label = state.pendingSpeakerLabel;
+  if (!label) {
+    setNotice("Choose the voice you hear first.", true);
+    return;
+  }
+  await saveAnnotation("speaker", label);
+}
+
 transcript.addEventListener("mouseup", captureSelection);
 transcript.addEventListener("touchend", () => setTimeout(captureSelection, 100));
 $("#range-start").addEventListener("click", () => setAudioBoundary("start"));
@@ -487,7 +528,12 @@ audio.addEventListener("loadedmetadata", () => {
 });
 const labelClick = event => {
   const button = event.target.closest("[data-label]");
-  if (button) saveAnnotation(button.dataset.type, button.dataset.label);
+  if (!button) return;
+  if (current()?.identification && button.dataset.type === "speaker") {
+    chooseSpeaker(button.dataset.label);
+    return;
+  }
+  saveAnnotation(button.dataset.type, button.dataset.label);
 };
 $("#labels").addEventListener("click", labelClick);
 $("#sound-labels").addEventListener("click", labelClick);
@@ -498,6 +544,7 @@ $("#annotations").addEventListener("click", event => {
 });
 $("#next").addEventListener("click", nextClip);
 $("#skip").addEventListener("click", nextClip);
+$("#confirm-speaker").addEventListener("click", confirmSpeakerAndNext);
 $("#older").addEventListener("click", () => loadBatch({older: true}));
 $("#refresh").addEventListener("click", () => {
   state.seenTurnIds.clear();

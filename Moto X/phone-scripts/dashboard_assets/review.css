@@ -66,6 +66,7 @@ audio { width: 100%; height: 48px; margin: .9rem 0 .65rem; }
 .label.lynn { border-color: #4e896d; background: #162b23; }
 .label.raven { border-color: #a46f54; background: #302017; }
 .label.suggested { outline: 2px solid var(--mint); outline-offset: 1px; }
+.label.pending { outline: 3px solid var(--ink); outline-offset: 2px; box-shadow: 0 0 0 4px var(--purple); }
 .label.other, .label.subtle { color: #b8b0be; }
 .label.hahli { border-color: #9d758e; background: #2e1f2a; }
 .label.lam { border-color: #557e9d; background: #192834; }
