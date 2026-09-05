@@ -144,6 +144,37 @@ func TestFeedSmoke_buildServiceCard_chimeraBroker(t *testing.T) {
 	}
 }
 
+func TestFeedSmoke_providerUpCopyDescribesCatalogEvidence(t *testing.T) {
+	vm := goja.New()
+	loadFeedSmokeStack(t, vm)
+	_, err := vm.RunString(`
+		var ctx = globalThis.__feedSmokeCtx;
+		ctx.adminStateCache.providers.gemini = { key_configured: true };
+		ctx.chimeraBrokerProviderSnapshot = {
+			fetchedClientMs: Date.now(),
+			data: { providers: [{ id: "gemini", state: "up" }] }
+		};
+		var providerPill = String(ctx.adminProviderAvailabilityHtml("gemini"));
+		if (providerPill.indexOf("catalog live") < 0) {
+			throw new Error("provider pill must say catalog live: " + providerPill);
+		}
+		if (providerPill.indexOf("Generation has not been tested") < 0) {
+			throw new Error("provider pill must explain the evidence limit: " + providerPill);
+		}
+		if (providerPill.indexOf("reachable") >= 0) {
+			throw new Error("provider pill must not imply an inference check: " + providerPill);
+		}
+
+		var brokerStrip = String(ctx.chimeraBrokerProviderHealthStripHtml([], {}));
+		if (brokerStrip.indexOf("catalog live") < 0) {
+			throw new Error("broker provider strip must say catalog live: " + brokerStrip);
+		}
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestFeedSmoke_buildServiceCard_allCoreServices(t *testing.T) {
 	vm := goja.New()
 	loadFeedSmokeStack(t, vm)

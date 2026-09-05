@@ -21,7 +21,7 @@ Configuration and observability live on **`/ui/settings`**: collapsible **summar
 - **Settings embed mode** — `?embed=1` hides standalone chrome; shell posts `chimera-settings-activate` on load.
 - **Summarized view (default)** — Cards for gateway version/health, usage metrics, API tokens, dynamic provider cards (Groq, Gemini, Ollama, …), virtual model cards, legacy global routing cards (where still wired), and indexer workspace cards fed from SQLite + structured indexer logs.
 - **Event log** — Filter by app source and level; **Summary** shows registry-driven one-liners; **Detailed** shows parsed field grid. Conversation-scoped rows group routing, RAG, upstream relay, tools, and merge/dedup lifecycle (`conversation.*` slugs).
-- **Provider cards** — Keys, model counts, availability summary, scoped log streams; **Configure** enters edit mode for per-model availability (see provider availability feature).
+- **Provider cards** — Keys, model counts, availability summary, scoped log streams; **Configure** enters edit mode for per-model availability (see provider availability feature). Provider connectivity copy is evidence-scoped: **catalog live** means the provider appeared in a fresh live model catalog, not that Porcelain completed a generation request.
 - **Virtual model cards** — CRUD, enable/disable, fallback/routing/tool-router editors, generate-from-catalog, scoped routing logs.
 - **Indexer section** — Workspace CRUD, supervised YAML tuning, summarized progress cards (see indexer feature docs).
 - **Component gallery** — `/ui/settings/gallery` for design-01 primitives (development aid).

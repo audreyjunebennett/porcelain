@@ -328,14 +328,26 @@ globalThis.ChimeraSettings.Render.Cards.mountAdminShared = function (ctx) {
       st = "unknown";
     }
     var map = {
-      up: { variant: "ok", label: "reachable" },
+      up: {
+        variant: "ok",
+        label: "catalog live",
+        title: "Provider appears in the latest live model catalog. Generation has not been tested."
+      },
       key_missing: { variant: "warn", label: "key missing" },
-      down: { variant: "down", label: "offline" },
+      down: {
+        variant: "down",
+        label: "catalog unavailable",
+        title: "Provider is absent from the latest live model catalog or model discovery failed."
+      },
       unknown: { variant: "unknown", label: "configured" },
       not_configured: { variant: "not_configured", label: "not configured" }
     };
     var meta = map[st] || map.unknown;
-    return sgOpHealthPillHtml(meta.label, meta.variant);
+    var title = meta.title || "";
+    if (hp && hp.error) {
+      title += (title ? " " : "") + "Latest detail: " + String(hp.error);
+    }
+    return sgOpHealthPillHtml(meta.label, meta.variant, { title: title });
   }
 
   function adminProviderModelCount(providerId) {

@@ -24,8 +24,8 @@ globalThis.ChimeraSettings.Render.Cards.ServiceFeed.mountBroker = function (deps
 
   function chimeraBrokerProviderHealthResolve(arr) {
     var stateLabel = {
-      up: "reachable",
-      down: "offline",
+      up: "catalog live",
+      down: "catalog unavailable",
       key_missing: "key missing",
       unknown: "configured",
       not_configured: "not configured"
@@ -93,8 +93,8 @@ globalThis.ChimeraSettings.Render.Cards.ServiceFeed.mountBroker = function (deps
         var cap = list.length > 3 ? 3 : list.length;
         trackTitle =
           list.length > 3
-            ? "Provider probe status (first " + cap + " of " + list.length + ")"
-            : "Provider probe status";
+            ? "Provider catalog status (first " + cap + " of " + list.length + ")"
+            : "Provider catalog status";
         for (var ci = 0; ci < cap; ci++) {
           var entC = list[ci] || {};
           var stC = entC.state && stateLabel[entC.state] != null ? entC.state : "unknown";
@@ -153,7 +153,7 @@ globalThis.ChimeraSettings.Render.Cards.ServiceFeed.mountBroker = function (deps
     }
     return (
       rootOpen +
-      '<div class="sum-bf-prov-health-track" title="One segment per configured provider, colored by latest health probe">' +
+      '<div class="sum-bf-prov-health-track" title="One segment per configured provider, based on live model discovery; generation is not tested">' +
       trackParts.join("") +
       '</div><div class="sum-bf-prov-health-labels">' +
       labelParts.join("") +
