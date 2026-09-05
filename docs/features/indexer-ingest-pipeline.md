@@ -17,7 +17,7 @@ After startup config fetch, the indexer loads remote corpus inventory, schedules
 
 ## Operator-visible behavior
 
-- **Initial indexing** — Large trees progress without silently dropping files at queue capacity; logs show per-scope discovery summaries (`indexer.discovery.summary.scope`), scan complete (`indexer.scan.complete`), and periodic queue snapshots.
+- **Initial indexing** — Large trees progress without silently dropping files at queue capacity; logs show per-scope discovery summaries (`indexer.discovery.summary.scope`), scan complete (`indexer.scan.complete`), and periodic queue snapshots. Built-in ignores exclude Python virtual-environment directories named `.venv*` or `venv*`, including project-specific names such as `.venv-motox`.
 - **Multi-workspace fairness** — With several scopes, candidate ordering is **round-robin interleaved** by `(project, flavor)` before fan-out so one root does not block others in logs or scheduling.
 - **Live edits** — Saving a file triggers debounced re-ingest ahead of bulk backlog.
 - **Skips** — At default supervised settings, unchanged files roll up into `indexer.job.skipped.summary` INFO lines (~5s windows), not thousands of per-file INFO lines.
