@@ -112,6 +112,7 @@ Moto X/receiver_log.md
 # Local generated caches, smoke-test artifacts, and private provider exports.
 .tmp/
 takeout-*.zip
+/.codex-remote-attachments/
 
 # Windows launcher build artifact (resource.rc is tracked; .syso is compiled output)
 chimera/cmd/porcelain/rsrc.syso

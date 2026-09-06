@@ -26,6 +26,7 @@
 /RustDesk
 
 # Local/generated clutter.
+/.codex-remote-attachments
 /.stversions
 /__pycache__
 /phone-scripts/.stversions
