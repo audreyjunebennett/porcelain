@@ -36,7 +36,7 @@ RECORD_LOG = os.environ.get(
 )
 SAMPLE_RATE = os.environ.get("MOTOX_SAMPLE_RATE", "44100")
 BITRATE = os.environ.get("MOTOX_AUDIO_BITRATE", "128000")
-SPEAKER_LABEL = os.environ.get("MOTOX_SPEAKER", "Ruby")
+SPEAKER_LABEL = os.environ.get("MOTOX_SPEAKER", "Unsorted")
 CONNECT_TIMEOUT = int(os.environ.get("MOTOX_CONNECT_TIMEOUT", "10"))
 UPLOAD_TIMEOUT = int(os.environ.get("MOTOX_UPLOAD_TIMEOUT", "180"))
 

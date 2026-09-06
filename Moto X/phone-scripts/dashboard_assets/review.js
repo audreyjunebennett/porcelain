@@ -17,6 +17,7 @@ const state = {
   waveform: null,
   waveformToken: 0,
   pendingSpeakerLabel: null,
+  pendingNonSpeakerLabels: new Map(),
 };
 
 const $ = selector => document.querySelector(selector);
@@ -64,15 +65,6 @@ function setNotice(message, error = false) {
   notice.style.color = error ? "#e0928d" : "";
 }
 
-function renderProgress(progress) {
-  const people = ["Ruby", "Lynn", "Raven"];
-  $("#progress-people").innerHTML = people.map(name => {
-    const value = progress[name] || {seconds: 0, clips: 0};
-    const percent = Math.min(100, (value.seconds / 300) * 100);
-    return `<div class="person"><div class="person-head"><span>${name}</span><span class="muted">${formatDuration(value.seconds)}</span></div><div class="meter"><span style="width:${percent}%"></span></div></div>`;
-  }).join("");
-}
-
 function renderGroups(groups) {
   const select = $("#group");
   const active = select.value || state.group;
@@ -91,6 +83,9 @@ function annotationsForCurrentCard(item) {
   return (item.annotations || []).filter(annotation => {
     if (annotation.speaker_turn_id) {
       return annotation.speaker_turn_id === identification.turn_id;
+    }
+    if (annotation.audio_start_seconds == null && annotation.audio_end_seconds == null) {
+      return true;
     }
     const annotationStart = Number(annotation.audio_start_seconds);
     const annotationEnd = Number(annotation.audio_end_seconds);
@@ -127,9 +122,19 @@ function renderIdentificationAction() {
     return;
   }
   button.hidden = false;
-  if (state.pendingSpeakerLabel) {
+  const pendingSounds = [...state.pendingNonSpeakerLabels.values()];
+  if (state.pendingSpeakerLabel && pendingSounds.length) {
+    button.disabled = false;
+    button.textContent = `Confirm ${state.pendingSpeakerLabel} + ${pendingSounds.length} sound${pendingSounds.length === 1 ? "" : "s"} & next`;
+  } else if (state.pendingSpeakerLabel) {
     button.disabled = false;
     button.textContent = `Confirm ${state.pendingSpeakerLabel} & next`;
+  } else if (pendingSounds.length === 1) {
+    button.disabled = false;
+    button.textContent = `Confirm ${pendingSounds[0].label} & next`;
+  } else if (pendingSounds.length > 1) {
+    button.disabled = false;
+    button.textContent = `Confirm ${pendingSounds.length} sounds & next`;
   } else if (hasSavedNonSpeakerLabel()) {
     button.disabled = false;
     button.textContent = "Confirm sound only & next";
@@ -144,13 +149,16 @@ function renderIdentificationLabels() {
   if (!item?.identification) return;
   const annotations = annotationsForCurrentCard(item);
   document.querySelectorAll("#sound-labels [data-label]").forEach(button => {
+    const key = `${button.dataset.type}:${button.dataset.label}`;
     const saved = annotations.some(annotation =>
       annotation.annotation_type === button.dataset.type
       && annotation.label === button.dataset.label
     );
+    const pending = state.pendingNonSpeakerLabels.has(key);
     button.classList.toggle("saved", saved);
+    button.classList.toggle("pending", pending);
     button.disabled = saved;
-    button.setAttribute("aria-pressed", String(saved));
+    button.setAttribute("aria-pressed", String(saved || pending));
   });
 }
 
@@ -547,6 +555,7 @@ function renderCard() {
   $("#older").hidden = state.mode === "identify";
   state.selection = null;
   state.pendingSpeakerLabel = null;
+  state.pendingNonSpeakerLabels.clear();
   state.showOriginal = false;
   state.contextRadius = 2;
   $("#context-items").innerHTML = "";
@@ -666,7 +675,12 @@ async function requestJson(url, options) {
   return body;
 }
 
-async function saveAnnotation(type, label, replacementText = null) {
+async function saveAnnotation(type, label, replacementText = null, options = {}) {
+  const {
+    advanceIdentificationSpeaker = true,
+    preserveScope = false,
+    quiet = false,
+  } = options;
   const item = current();
   if (!item) return;
   // Dialog focus clears the browser's text selection. Preserve the range that
@@ -704,27 +718,28 @@ async function saveAnnotation(type, label, replacementText = null) {
     renderAnnotations(item);
     renderIdentificationLabels();
     renderIdentificationAction();
-    window.getSelection()?.removeAllRanges();
-    state.selection = null;
-    if (item.identification) {
-      if (range) {
-        state.audioSelection = {start: range.start, end: range.end};
-        syncTranscriptToAudioRange();
-        renderAudioRange();
-      } else if (wholeClip) {
-        clearAudioRange();
-        configureTrimWindow();
-        setLoop(false);
+    if (!preserveScope) {
+      window.getSelection()?.removeAllRanges();
+      state.selection = null;
+      if (item.identification) {
+        if (range) {
+          state.audioSelection = {start: range.start, end: range.end};
+          syncTranscriptToAudioRange();
+          renderAudioRange();
+        } else if (wholeClip) {
+          clearAudioRange();
+          configureTrimWindow();
+          setLoop(false);
+        } else {
+          restoreIdentificationRange();
+        }
       } else {
-        restoreIdentificationRange();
+        clearAudioRange();
+        renderTranscript(item);
       }
-    } else {
-      clearAudioRange();
-      renderTranscript(item);
     }
     const rangeNotice = range ? ` for ${formatTimestamp(range.start)} – ${formatTimestamp(range.end)}` : "";
-    await refreshProgress();
-    if (item.identification && type === "speaker") {
+    if (advanceIdentificationSpeaker && item.identification && type === "speaker") {
       state.seenTurnIds.add(item.identification.turn_id);
       state.seenCaptureIds.add(item.capture_id);
       state.identifiedThisSession += 1;
@@ -733,11 +748,13 @@ async function saveAnnotation(type, label, replacementText = null) {
       await loadBatch();
       const acceptedSeconds = Number(annotation.audio_end_seconds) - Number(annotation.audio_start_seconds);
       setNotice(`${label} learned from ${acceptedSeconds.toFixed(1)} clean seconds. The next question was re-ranked.`);
-    } else {
+    } else if (!quiet) {
       setNotice(`${label || "Correction"} saved${rangeNotice}. Tap the chip below to undo.`);
     }
+    return annotation;
   } catch (error) {
     setNotice(error.message, true);
+    return null;
   }
 }
 
@@ -770,15 +787,9 @@ async function undo(annotationId) {
     renderIdentificationLabels();
     renderIdentificationAction();
     setNotice("Correction undone.");
-    refreshProgress();
   } catch (error) {
     setNotice(error.message, true);
   }
-}
-
-async function refreshProgress() {
-  const progress = await requestJson("/api/motox/review/progress");
-  renderProgress(progress);
 }
 
 async function loadBatch({older = false} = {}) {
@@ -797,15 +808,13 @@ async function loadBatch({older = false} = {}) {
     candidateUrl = `/api/motox/review/candidates?${params}`;
   }
   try {
-    const [items, progress, groups] = await Promise.all([
+    const [items, groups] = await Promise.all([
       requestJson(candidateUrl),
-      requestJson("/api/motox/review/progress"),
       requestJson("/api/motox/review/groups"),
     ]);
     state.items = items;
     state.index = 0;
     if (!identify && items.length) state.before = items[items.length - 1].captured_at;
-    renderProgress(progress);
     renderGroups(groups);
     renderCard();
   } catch (error) {
@@ -845,9 +854,23 @@ function chooseSpeaker(label) {
     : `${label} selected. Tap it again to clear, or confirm when you're ready.`);
 }
 
+function chooseNonSpeaker(type, label) {
+  if (!current()?.identification) return;
+  const key = `${type}:${label}`;
+  if (state.pendingNonSpeakerLabels.has(key)) {
+    state.pendingNonSpeakerLabels.delete(key);
+  } else {
+    state.pendingNonSpeakerLabels.set(key, {type, label});
+  }
+  renderIdentificationLabels();
+  renderIdentificationAction();
+  setNotice("");
+}
+
 async function confirmSpeakerAndNext() {
   const label = state.pendingSpeakerLabel;
-  if (!label) {
+  const pendingSounds = [...state.pendingNonSpeakerLabels.values()];
+  if (!label && !pendingSounds.length) {
     if (hasSavedNonSpeakerLabel()) {
       nextClip();
       return;
@@ -855,7 +878,31 @@ async function confirmSpeakerAndNext() {
     setNotice("Choose a voice or sound first.", true);
     return;
   }
-  await saveAnnotation("speaker", label);
+  for (const pending of pendingSounds) {
+    const saved = await saveAnnotation(pending.type, pending.label, null, {
+      advanceIdentificationSpeaker: false,
+      preserveScope: true,
+      quiet: true,
+    });
+    if (!saved) return;
+  }
+  if (label) {
+    const saved = await saveAnnotation("speaker", label, null, {
+      advanceIdentificationSpeaker: false,
+      preserveScope: true,
+      quiet: true,
+    });
+    if (!saved) return;
+  }
+  state.pendingSpeakerLabel = null;
+  state.pendingNonSpeakerLabels.clear();
+  const item = current();
+  state.seenTurnIds.add(item.identification.turn_id);
+  state.seenCaptureIds.add(item.capture_id);
+  state.identifiedThisSession += 1;
+  audio.pause();
+  state.autoPlayNext = true;
+  await loadBatch();
 }
 
 transcript.addEventListener("mouseup", captureSelection);
@@ -895,6 +942,10 @@ const labelClick = event => {
   if (!button) return;
   if (current()?.identification && button.dataset.type === "speaker") {
     chooseSpeaker(button.dataset.label);
+    return;
+  }
+  if (current()?.identification && ["sound", "overlap"].includes(button.dataset.type)) {
+    chooseNonSpeaker(button.dataset.type, button.dataset.label);
     return;
   }
   saveAnnotation(button.dataset.type, button.dataset.label);
@@ -977,9 +1028,8 @@ async function loadInitialView() {
     return;
   }
   try {
-    const [item, progress, groups] = await Promise.all([
+    const [item, groups] = await Promise.all([
       requestJson(`/api/motox/review/capture/${encodeURIComponent(captureId)}`),
-      requestJson("/api/motox/review/progress"),
       requestJson("/api/motox/review/groups"),
     ]);
     state.mode = "browse";
@@ -988,7 +1038,6 @@ async function loadInitialView() {
     state.before = null;
     $("#mode").value = "browse";
     $("#group").hidden = false;
-    renderProgress(progress);
     renderGroups(groups);
     renderCard();
 

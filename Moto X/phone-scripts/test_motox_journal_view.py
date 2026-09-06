@@ -32,7 +32,7 @@ class MotoXJournalViewTests(unittest.TestCase):
 
     def test_renderer_is_dark_readable_and_escapes_transcript(self):
         page = render_journal_html(SAMPLE, "2026-08-10")
-        self.assertIn('href="/dashboard-assets/journal.css?v=20260906-speaker-link"', page)
+        self.assertIn('href="/dashboard-assets/journal.css?v=20260906-infinite-feed"', page)
         self.assertIn('class="conversation"', page)
         self.assertIn("Today’s journal", page)
         self.assertIn("&lt;script&gt;alert(&#x27;nope&#x27;)&lt;/script&gt;", page)
@@ -42,6 +42,8 @@ class MotoXJournalViewTests(unittest.TestCase):
         self.assertNotIn("recording ended", page)
         self.assertNotIn(">completed<", page)
         self.assertNotIn('class="status"', page)
+        self.assertIn('class="turn speaker-unsorted"', page)
+        self.assertNotIn('class="turn speaker-ruby"', page)
 
     def test_renderer_projects_conservative_speaker_layer(self):
         page = render_journal_html(
@@ -140,6 +142,51 @@ class MotoXJournalViewTests(unittest.TestCase):
         self.assertIn("Message 14", page)
         self.assertIn("15 conversations · showing 12", page)
         self.assertIn('/journal/recent?page=2', page)
+        self.assertIn('id="journal-more"', page)
+        self.assertIn("IntersectionObserver", page)
+        self.assertLess(page.index("Message 14"), page.index("Message 3"))
+
+    def test_rolling_renderer_is_newest_first_inside_each_conversation(self):
+        two_turns = SAMPLE.replace(
+            "<!-- 1 ambient context chunk(s) attached. -->",
+            """**6:22:19 AM**
+
+**Lynn:** Newest capture
+
+[Audio](../audio/b_clip.aac)
+
+<!-- 1 ambient context chunk(s) attached. -->""",
+        )
+        page = render_journal_html(
+            two_turns,
+            "Last 24 hours",
+            {
+                "a_clip.aac": {
+                    "capture_id": "capture-a",
+                    "segments": [
+                        {
+                            "speaker": "Ruby",
+                            "source": "confirmed",
+                            "text": "Earlier segment",
+                            "audio_start_seconds": 0.2,
+                            "audio_end_seconds": 0.8,
+                        },
+                        {
+                            "speaker": "Ruby",
+                            "source": "confirmed",
+                            "text": "Later segment",
+                            "audio_start_seconds": 1.0,
+                            "audio_end_seconds": 1.8,
+                        },
+                    ],
+                }
+            },
+            page=1,
+            page_size=12,
+            page_path="/journal/recent",
+        )
+        self.assertLess(page.index("Newest capture"), page.index("Later segment"))
+        self.assertLess(page.index("Later segment"), page.index("Earlier segment"))
 
 
 if __name__ == "__main__":

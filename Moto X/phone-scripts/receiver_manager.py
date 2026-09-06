@@ -31,6 +31,7 @@ MUTEX_NAME = r"Local\PorcelainMotoXReceiverManager"
 DASHBOARD_URL = "https://sunset.tailfa86ac.ts.net/dashboard"
 SCRIPTS_DIR = Path(__file__).resolve().parent
 RECEIVER_PATH = SCRIPTS_DIR / "receiver.py"
+PIPELINE_PATH = SCRIPTS_DIR / "identification_pipeline.py"
 RECEIVER_LOG = SCRIPTS_DIR / "receiver_log.md"
 PYTHON_EXE = Path(sys.executable).resolve().with_name("python.exe")
 PYTHONW_EXE = Path(sys.executable).resolve().with_name("pythonw.exe")
@@ -45,6 +46,7 @@ LOCAL_STATE_DIR = (
 )
 MANAGER_LOG = LOCAL_STATE_DIR / "receiver_manager.log"
 CONSOLE_LOG = LOCAL_STATE_DIR / "receiver_console.log"
+PIPELINE_LOG = LOCAL_STATE_DIR / "identification_pipeline.log"
 
 
 def append_manager_log(message: str) -> None:
@@ -103,8 +105,8 @@ def normalized_path(value: str | os.PathLike[str]) -> str:
     return os.path.normcase(os.path.abspath(os.fspath(value)))
 
 
-def receiver_processes() -> list[psutil.Process]:
-    expected = normalized_path(RECEIVER_PATH)
+def script_processes(script_path: Path) -> list[psutil.Process]:
+    expected = normalized_path(script_path)
     matches: list[psutil.Process] = []
     for process in psutil.process_iter(["pid", "ppid", "cmdline", "name"]):
         try:
@@ -135,6 +137,14 @@ def receiver_processes() -> list[psutil.Process]:
     return [process for process in matches if process.pid not in parent_pids]
 
 
+def receiver_processes() -> list[psutil.Process]:
+    return script_processes(RECEIVER_PATH)
+
+
+def pipeline_processes() -> list[psutil.Process]:
+    return script_processes(PIPELINE_PATH)
+
+
 def receiver_api_status(timeout: float = 0.7) -> dict | None:
     try:
         with urllib.request.urlopen(STATUS_URL, timeout=timeout) as response:
@@ -151,6 +161,8 @@ class ReceiverManager:
         self.stopping = False
         self.child: subprocess.Popen | None = None
         self.child_log = None
+        self.pipeline_child: subprocess.Popen | None = None
+        self.pipeline_log = None
         self.last_start = 0.0
         self.restart_delay = 2.0
         self.next_start = 0.0
@@ -247,6 +259,51 @@ class ReceiverManager:
             append_manager_log(f"Started receiver PID {self.child.pid}")
             return True
 
+    def start_pipeline(self) -> bool:
+        with self.state_lock:
+            existing = pipeline_processes()
+            if existing:
+                return False
+            LOCAL_STATE_DIR.mkdir(parents=True, exist_ok=True)
+            if self.pipeline_log is not None:
+                self.pipeline_log.close()
+            self.pipeline_log = PIPELINE_LOG.open("a", encoding="utf-8", buffering=1)
+            env = os.environ.copy()
+            env["PYTHONUNBUFFERED"] = "1"
+            self.pipeline_child = subprocess.Popen(
+                [str(PYTHON_EXE), "-u", str(PIPELINE_PATH)],
+                cwd=SCRIPTS_DIR,
+                env=env,
+                stdin=subprocess.DEVNULL,
+                stdout=self.pipeline_log,
+                stderr=subprocess.STDOUT,
+                creationflags=subprocess.CREATE_NO_WINDOW,
+            )
+            append_manager_log(
+                f"Started identification pipeline PID {self.pipeline_child.pid}"
+            )
+            return True
+
+    def stop_pipeline(self) -> None:
+        processes = pipeline_processes()
+        for process in processes:
+            try:
+                append_manager_log(f"Stopping identification pipeline PID {process.pid}")
+                process.terminate()
+            except psutil.Error as exc:
+                append_manager_log(f"Could not stop pipeline PID {process.pid}: {exc}")
+        _, alive = psutil.wait_procs(processes, timeout=10)
+        for process in alive:
+            try:
+                process.kill()
+            except psutil.Error:
+                pass
+        with self.state_lock:
+            self.pipeline_child = None
+            if self.pipeline_log is not None:
+                self.pipeline_log.close()
+                self.pipeline_log = None
+
     def stop_receiver(self) -> None:
         with self.state_lock:
             self.desired_running = False
@@ -273,6 +330,7 @@ class ReceiverManager:
                 self.child_log.close()
                 self.child_log = None
             self.stopping = False
+        self.stop_pipeline()
         self._set_status("Stopped")
 
     def restart_receiver(self) -> None:
@@ -300,8 +358,19 @@ class ReceiverManager:
                 process = processes[0]
                 api_status = receiver_api_status()
                 if api_status is not None:
+                    pipeline = pipeline_processes()
+                    if not pipeline:
+                        try:
+                            self.start_pipeline()
+                        except Exception as exc:
+                            append_manager_log(
+                                f"Identification pipeline start failed: {exc!r}"
+                            )
                     health = api_status.get("capture_health", "unknown")
-                    self._set_status(f"Running · capture {health} (PID {process.pid})")
+                    pipeline_state = " · learning" if pipeline or pipeline_processes() else ""
+                    self._set_status(
+                        f"Running · capture {health}{pipeline_state} (PID {process.pid})"
+                    )
                     if time.monotonic() - self.last_start >= 60:
                         self.restart_delay = 2.0
                 else:
@@ -349,10 +418,14 @@ def print_status() -> None:
                 == startup_command(),
                 "startup_command": registered_startup_command(),
                 "receiver_pids": [process.pid for process in processes],
+                "identification_pipeline_pids": [
+                    process.pid for process in pipeline_processes()
+                ],
                 "api_healthy": receiver_api_status() is not None,
                 "dashboard": DASHBOARD_URL,
                 "receiver_log": str(RECEIVER_LOG),
                 "manager_log": str(MANAGER_LOG),
+                "identification_pipeline_log": str(PIPELINE_LOG),
             },
             indent=2,
         )

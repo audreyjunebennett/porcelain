@@ -58,7 +58,7 @@ class ChunkEvent:
     rms: float | None = None
     audio_path: str | None = None
     transcript: str = ""
-    speaker: str = "Ruby"
+    speaker: str = "Unsorted"
 
 
 class MotoXStore:
@@ -122,7 +122,7 @@ class MotoXStore:
                     rms REAL,
                     audio_path TEXT,
                     transcript TEXT NOT NULL DEFAULT '',
-                    speaker TEXT NOT NULL DEFAULT 'Ruby',
+                    speaker TEXT NOT NULL DEFAULT 'Unsorted',
                     conversation_id TEXT REFERENCES conversations(conversation_id),
                     received_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
@@ -505,8 +505,9 @@ class MotoXStore:
             show_dates=True,
         )
 
-    def recent_transcript(self, limit: int = 4) -> list[dict[str, Any]]:
+    def recent_transcript(self, limit: int = 4, offset: int = 0) -> list[dict[str, Any]]:
         safe_limit = max(1, min(int(limit), 20))
+        safe_offset = max(0, int(offset))
         with self._connection() as conn:
             privacy_filter = self._privacy_filter(conn, "chunks")
             rows = conn.execute(
@@ -517,9 +518,9 @@ class MotoXStore:
                 WHERE kind = 'speech' AND trim(transcript) <> ''
                 {privacy_filter}
                 ORDER BY captured_at DESC, capture_id DESC
-                LIMIT ?
+                LIMIT ? OFFSET ?
                 """,
-                (safe_limit,),
+                (safe_limit, safe_offset),
             ).fetchall()
         return [dict(row) for row in reversed(rows)]
 

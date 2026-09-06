@@ -82,6 +82,19 @@ class MotoXStoreTests(unittest.TestCase):
         self.assertTrue(second["duplicate"])
         self.assertEqual(1, len(self.store.recent_transcript()))
 
+    def test_recent_transcript_supports_incremental_pages(self):
+        for index in range(5):
+            self.add(
+                f"speech-{index}",
+                f"2026-07-19_01-0{index}-00",
+                "speech",
+                f"Message {index}",
+            )
+        newest = self.store.recent_transcript(limit=2)
+        older = self.store.recent_transcript(limit=2, offset=2)
+        self.assertEqual(["speech-3", "speech-4"], [row["capture_id"] for row in newest])
+        self.assertEqual(["speech-1", "speech-2"], [row["capture_id"] for row in older])
+
     def test_daily_journal_is_deterministic_and_readable(self):
         audio = Path(self.temp.name) / "audio" / "a.aac"
         self.add("a", "2026-07-19_01-00-00", "speech", "**Ruby:** Hello", str(audio))

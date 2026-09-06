@@ -63,7 +63,7 @@ WHISPER_MODEL = os.environ.get("MOTOX_WHISPER_MODEL", "large-v3")
 WHISPER_DEVICE = os.environ.get("MOTOX_WHISPER_DEVICE", "cuda")
 WHISPER_COMPUTE_TYPE = os.environ.get("MOTOX_WHISPER_COMPUTE_TYPE", "float16")
 FFMPEG_BIN = os.environ.get("MOTOX_FFMPEG_BIN", "ffmpeg")
-DEFAULT_SPEAKER = os.environ.get("MOTOX_DEFAULT_SPEAKER", "Ruby")
+DEFAULT_SPEAKER = os.environ.get("MOTOX_DEFAULT_SPEAKER", "Unsorted")
 CONVERSATION_GAP_SECONDS = int(os.environ.get("MOTOX_CONVERSATION_GAP_SECONDS", "120"))
 V1_ENABLED = os.environ.get("MOTOX_V1_ENABLED", "1") == "1"
 V1_DATABASE = Path(os.environ.get("MOTOX_V1_DATABASE", str(BASE_DIR / "motox_v1.sqlite3")))
@@ -701,9 +701,14 @@ DASHBOARD_HTML = r"""<!doctype html>
   <header><span id="dot"></span><span id="health">waiting for a capture</span></header>
   <nav class="top-actions"><a href="/review">teach Claudia</a><a id="journal" href="#">today's journal</a></nav>
   <section id="recent"><p class="muted">Recent words will appear here.</p></section>
+  <p class="muted" id="recent-more" aria-live="polite"></p>
   <footer><span class="muted" id="counts">No chunks today yet</span><span class="muted" id="updated"></span></footer>
 </main>
 <script>
+const RECENT_PAGE_SIZE = 8;
+let recentRows = [];
+let recentLoading = false;
+let recentExhausted = false;
 const escapeHtml = value => String(value).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 const speakerClass = value => String(value || 'Unsorted').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'unsorted';
 const renderRecent = rows => rows.flatMap(row => (row.segments || []).map(segment => {
@@ -756,11 +761,44 @@ document.addEventListener('click', async event => {
   if (!event.target.closest('.speaker-picker')) closeSpeakerMenus();
 });
 document.addEventListener('scroll', closeSpeakerMenus, {passive: true, capture: true});
+const mergeNewestRecent = rows => {
+  const newest = [...rows].reverse();
+  const newestIds = new Set(newest.map(row => row.capture_id));
+  recentRows = [...newest, ...recentRows.filter(row => !newestIds.has(row.capture_id))];
+};
+const renderRecentFeed = () => {
+  document.querySelector('#recent').innerHTML = recentRows.length
+    ? renderRecent(recentRows)
+    : '<p class="muted">Recent words will appear here.</p>';
+};
+const recentNeedsMore = () => {
+  const more = document.querySelector('#recent-more');
+  return more.getBoundingClientRect().top <= window.innerHeight + 600;
+};
+async function loadOlderRecent() {
+  if (recentLoading || recentExhausted || !recentRows.length) return;
+  recentLoading = true;
+  const more = document.querySelector('#recent-more');
+  more.textContent = 'loading earlier memories…';
+  try {
+    const rows = await fetch(`/api/motox/recent?limit=${RECENT_PAGE_SIZE}&offset=${recentRows.length}`).then(response => response.json());
+    const known = new Set(recentRows.map(row => row.capture_id));
+    recentRows.push(...[...rows].reverse().filter(row => !known.has(row.capture_id)));
+    recentExhausted = rows.length < RECENT_PAGE_SIZE;
+    renderRecentFeed();
+    more.textContent = recentExhausted ? 'you’ve reached the beginning of this memory feed' : '';
+  } catch (_) {
+    more.textContent = 'could not load earlier memories';
+  } finally {
+    recentLoading = false;
+    if (!recentExhausted && recentNeedsMore()) setTimeout(loadOlderRecent, 0);
+  }
+}
 async function refresh() {
   try {
     const [status, recent] = await Promise.all([
       fetch('/api/motox/status').then(r => r.json()),
-      fetch('/api/motox/recent?limit=8').then(r => r.json())
+      fetch(`/api/motox/recent?limit=${RECENT_PAGE_SIZE}&offset=0`).then(r => r.json())
     ]);
     const dot = document.querySelector('#dot');
     dot.className = status.capture_health;
@@ -769,12 +807,25 @@ async function refresh() {
     const queue = status.recorder ? ` · ${status.recorder.queue_depth} queued` : '';
     document.querySelector('#counts').textContent = `${c.speech || 0} speech · ${c.ambient || 0} ambient · ${c.silence || 0} silent${queue}`;
     document.querySelector('#journal').href = '/journal/recent';
-    document.querySelector('#recent').innerHTML = recent.length ? renderRecent([...recent].reverse()) : '<p class="muted">Recent words will appear here.</p>';
+    mergeNewestRecent(recent);
+    recentExhausted = recent.length < RECENT_PAGE_SIZE;
+    renderRecentFeed();
+    if (!recentExhausted && recentNeedsMore()) setTimeout(loadOlderRecent, 0);
     document.querySelector('#updated').textContent = `updated ${new Date().toLocaleTimeString([], {hour:'numeric', minute:'2-digit'})}`;
   } catch (_) {
     document.querySelector('#health').textContent = 'receiver unavailable';
     document.querySelector('#dot').className = 'stale';
   }
+}
+const recentMore = document.querySelector('#recent-more');
+if ('IntersectionObserver' in window) {
+  new IntersectionObserver(entries => {
+    if (entries.some(entry => entry.isIntersecting)) loadOlderRecent();
+  }, {rootMargin: '600px 0px'}).observe(recentMore);
+} else {
+  window.addEventListener('scroll', () => {
+    if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 600) loadOlderRecent();
+  }, {passive: true});
 }
 refresh(); setInterval(refresh, 10000);
 </script></body></html>"""
@@ -865,9 +916,11 @@ def motox_recent():
         return jsonify([])
     try:
         limit = int(request.args.get("limit", "8"))
+        offset = int(request.args.get("offset", "0"))
     except ValueError:
         limit = 8
-    rows = V1_STORE.recent_transcript(limit)
+        offset = 0
+    rows = V1_STORE.recent_transcript(limit, offset)
     predictions = {}
     active_speakers = {}
     if REVIEW_STORE and rows:

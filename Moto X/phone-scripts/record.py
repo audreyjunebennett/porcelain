@@ -24,7 +24,7 @@ RECORD_LOG = os.environ.get(
 )
 SAMPLE_RATE = os.environ.get("MOTOX_SAMPLE_RATE", "44100")
 BITRATE = os.environ.get("MOTOX_AUDIO_BITRATE", "128000")
-SPEAKER_LABEL = os.environ.get("MOTOX_SPEAKER", "Ruby")
+SPEAKER_LABEL = os.environ.get("MOTOX_SPEAKER", "Unsorted")
 
 
 def record_log(msg: str) -> None:

@@ -212,16 +212,27 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--database", type=Path, required=True)
     parser.add_argument("--conversation-id")
+    parser.add_argument("--capture-id", action="append", default=[])
     parser.add_argument("--target-seconds", type=float, default=300.0)
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--output-path", type=Path)
     parser.add_argument("--ffmpeg", default="ffmpeg")
     args = parser.parse_args()
 
     conversation_id = choose_conversation(args.database, args.conversation_id)
-    captures = strongest_window(
-        conversation_captures(args.database, conversation_id),
-        max(60.0, min(args.target_seconds, 1800.0)),
-    )
+    captures = conversation_captures(args.database, conversation_id)
+    if args.capture_id:
+        requested = set(args.capture_id)
+        captures = [capture for capture in captures if capture.capture_id in requested]
+        found = {capture.capture_id for capture in captures}
+        missing = requested - found
+        if missing:
+            raise RuntimeError(f"requested captures are unavailable: {sorted(missing)}")
+    else:
+        captures = strongest_window(
+            captures,
+            max(60.0, min(args.target_seconds, 1800.0)),
+        )
     waveform, source_map = assemble(captures, args.ffmpeg)
 
     token = os.environ.get("HF_TOKEN")
@@ -251,7 +262,8 @@ def main() -> None:
     }
     args.output_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    destination = args.output_dir / f"community-1-{stamp}.json"
+    destination = args.output_path or args.output_dir / f"community-1-{stamp}.json"
+    destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(f"wrote {destination}", flush=True)
     print(

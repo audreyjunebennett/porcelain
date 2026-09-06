@@ -65,6 +65,8 @@ footer a { color: #746c79; font-size: .7rem; }
 .journal-pages { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: .75rem; margin-top: 1.1rem; color: #817887; font-size: .72rem; }
 .journal-pages a { color: #c7bacf; border: 1px solid #3b3340; border-radius: 999px; padding: .65rem .8rem; text-decoration: none; text-align: center; }
 .journal-pages a:last-child { grid-column: 3; }
+.infinite-journal .journal-pages { display: none; }
+.journal-more { min-height: 2rem; margin: 1rem 0 0; color: #817887; font-size: .72rem; text-align: center; }
 
 @media (max-width: 390px) {
   main { padding-left: .8rem; padding-right: .8rem; }

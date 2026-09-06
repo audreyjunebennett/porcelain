@@ -13,8 +13,8 @@
 
 ## At a glance
 
-The Moto X receiver starts hidden after Windows login and is supervised by a
-small Claudia tray application. The tray reports receiver and capture health,
+The Moto X receiver and automatic speaker-identification pipeline start hidden
+after Windows login and are supervised by a small Claudia tray application. The tray reports receiver and capture health,
 provides start/stop/restart controls, and opens the private dashboard or
 receiver log without requiring a terminal.
 
@@ -29,6 +29,8 @@ receiver log without requiring a terminal.
 - The manager and receiver run without console windows during normal use.
 - The receiver starts for the current user at login and restarts after an
   unexpected exit with bounded exponential backoff.
+- Once the receiver API is healthy, the manager starts and supervises the
+  separate low-priority identification pipeline. Tray Stop also stops it.
 
 ## System behavior and contracts
 
@@ -49,6 +51,7 @@ receiver log without requiring a terminal.
 |-------|----------|
 | Login startup | Per-user `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` entry |
 | Hidden execution | `pythonw.exe` manager plus `CREATE_NO_WINDOW` receiver |
+| Identification worker | Hidden, separately supervised `identification_pipeline.py` |
 | Failure recovery | Manager process supervision with 2-to-60-second backoff |
 | Duplicate protection | Named manager mutex plus receiver process/API discovery |
 | Receiver log | Existing Syncthing-visible `phone-scripts/receiver_log.md` |
@@ -71,6 +74,7 @@ receiver log without requiring a terminal.
 | Tray and supervision | `Moto X/phone-scripts/receiver_manager.py` |
 | Manager dependencies | `Moto X/phone-scripts/receiver-manager-requirements.txt` |
 | Receiver | `Moto X/phone-scripts/receiver.py` |
+| Automatic identification | `Moto X/phone-scripts/identification_pipeline.py` |
 | Recorder lock portability | `Moto X/phone-scripts/record_v2.py` |
 
 ## Verification

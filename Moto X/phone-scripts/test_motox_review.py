@@ -565,6 +565,49 @@ class MotoXReviewStoreTests(unittest.TestCase):
         self.assertTrue(self.review.revert_annotation(annotation["annotation_id"]))
         self.assertEqual(turn_id, self.review.identification_candidates()[0]["identification"]["turn_id"])
 
+    def test_whole_clip_sound_annotation_handles_all_identification_turns(self):
+        turn_ids = ["1" * 32, "2" * 32]
+        self.review.add_speaker_turns(
+            [
+                {
+                    "turn_id": turn_ids[0],
+                    "capture_id": "clip-1",
+                    "audio_start_seconds": 2.0,
+                    "audio_end_seconds": 6.0,
+                    "cluster_id": "report-whole/SPEAKER_00",
+                    "embedding": [0.5, 0.5],
+                    "quality": 0.8,
+                },
+                {
+                    "turn_id": turn_ids[1],
+                    "capture_id": "clip-1",
+                    "audio_start_seconds": 8.0,
+                    "audio_end_seconds": 12.0,
+                    "cluster_id": "report-whole/SPEAKER_01",
+                    "embedding": [0.4, 0.6],
+                    "quality": 0.8,
+                },
+            ],
+            embedding_model="test-embedding",
+            embedding_version="1",
+            diarization_model="test-diarization",
+            source_id="report-whole",
+        )
+        annotation = self.review.add_annotation(
+            capture_id="clip-1",
+            start_char=0,
+            end_char=0,
+            annotation_type="sound",
+            label="Music",
+        )
+        self.assertEqual([], self.review.identification_candidates())
+        self.assertTrue(self.review.revert_annotation(annotation["annotation_id"]))
+        first = self.review.identification_candidates()[0]["identification"]["turn_id"]
+        second = self.review.identification_candidates(
+            exclude_turn_ids={first}
+        )[0]["identification"]["turn_id"]
+        self.assertEqual(set(turn_ids), {first, second})
+
     def test_identification_batch_uses_each_capture_once(self):
         self.review.add_speaker_turns(
             [

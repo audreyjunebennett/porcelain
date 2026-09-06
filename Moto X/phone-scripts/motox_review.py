@@ -781,6 +781,10 @@ class MotoXReviewStore:
             start = annotation.get("audio_start_seconds")
             end = annotation.get("audio_end_seconds")
             if start is None or end is None:
+                handled.update(
+                    turn["turn_id"]
+                    for turn in turns_by_capture.get(annotation["capture_id"], [])
+                )
                 continue
             start, end = float(start), float(end)
             for turn in turns_by_capture.get(annotation["capture_id"], []):

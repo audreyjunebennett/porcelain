@@ -177,7 +177,7 @@ def render_journal_html(
         safe_page = min(safe_page, total_pages)
         end = max(0, total_conversations - (safe_page - 1) * safe_size)
         start = max(0, end - safe_size)
-        conversations = conversations[start:end]
+        conversations = list(reversed(conversations[start:end]))
     try:
         parsed_day = datetime.strptime(day, "%Y-%m-%d")
         display_day = parsed_day.strftime("%A, %B %d").replace(" 0", " ")
@@ -187,9 +187,14 @@ def render_journal_html(
     cards: list[str] = []
     turn_count = 0
     enriched_count = 0
+    newest_first = page_size is not None
     for index, conversation in enumerate(conversations):
         turns: list[str] = []
-        for turn in conversation["turns"]:
+        conversation_turns = (
+            reversed(conversation["turns"])
+            if newest_first else conversation["turns"]
+        )
+        for turn in conversation_turns:
             layer = speaker_layers.get(turn["audio"], {})
             capture_id = layer.get("capture_id")
             if not capture_id:
@@ -200,6 +205,8 @@ def render_journal_html(
             identified = list(layer.get("speakers") or [])
             segments = list(layer.get("segments") or [])
             if segments:
+                if newest_first:
+                    segments.reverse()
                 for segment in segments:
                     turn_count += 1
                     offset = float(segment["audio_start_seconds"])
@@ -229,7 +236,7 @@ def render_journal_html(
                         if item.get("speaker") == identified[0]
                     ) / float(layer["duration_seconds"]) >= 0.65
                 )
-                else "Unsorted" if identified else turn["speaker"]
+                else "Unsorted"
             )
             turns.append(
                 _render_bubble(
@@ -295,6 +302,7 @@ def render_journal_html(
         if page_size and total_conversations > len(conversations)
         else f"{total_conversations} conversations"
     )
+    next_page = safe_page + 1 if page_size and safe_page < total_pages else ""
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -305,7 +313,7 @@ def render_journal_html(
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="manifest" href="/dashboard-assets/manifest.webmanifest">
-  <link rel="stylesheet" href="/dashboard-assets/journal.css?v=20260906-speaker-link">
+  <link rel="stylesheet" href="/dashboard-assets/journal.css?v=20260906-infinite-feed">
   <title>Today’s journal · Claudia</title>
 </head>
 <body>
@@ -315,9 +323,10 @@ def render_journal_html(
       <div><p class="eyebrow">TODAY’S JOURNAL</p><h1>{html.escape(display_day)}</h1></div>
       <a class="teach" href="/review">teach Claudia</a>
     </header>
-    <p class="summary">{conversation_summary} · {turn_count} moments · {enriched_count} speaker-enriched clips</p>
+    <p class="summary" id="journal-summary" data-total="{total_conversations}" data-visible="{len(conversations)}" data-turns="{turn_count}" data-enriched="{enriched_count}">{conversation_summary} · {turn_count} moments · {enriched_count} speaker-enriched clips</p>
     <div class="journal">{body}</div>
     {pagination}
+    <p id="journal-more" class="journal-more" data-next-page="{next_page}" aria-live="polite"></p>
     <footer><a href="{html.escape(source_path, quote=True)}">view source Markdown</a></footer>
   </main>
   <script>
@@ -344,6 +353,63 @@ def render_journal_html(
       button.hidden = true;
       player.play().catch(() => {{}});
     }});
+    const feed = document.querySelector('.journal');
+    const more = document.querySelector('#journal-more');
+    const summary = document.querySelector('#journal-summary');
+    let nextPage = Number(more.dataset.nextPage) || 0;
+    let loadingMore = false;
+    document.documentElement.classList.add('infinite-journal');
+
+    const updateSummary = () => {{
+      const total = Number(summary.dataset.total) || 0;
+      const visible = Number(summary.dataset.visible) || 0;
+      const turns = Number(summary.dataset.turns) || 0;
+      const enriched = Number(summary.dataset.enriched) || 0;
+      summary.textContent = `${{total}} conversations · showing ${{visible}} · ${{turns}} moments · ${{enriched}} speaker-enriched clips`;
+    }};
+
+    async function loadOlderJournal() {{
+      if (!nextPage || loadingMore) return;
+      loadingMore = true;
+      more.textContent = 'loading earlier conversations…';
+      try {{
+        const response = await fetch(`${{window.location.pathname}}?page=${{nextPage}}`);
+        if (!response.ok) throw new Error('Could not load earlier conversations');
+        const page = new DOMParser().parseFromString(await response.text(), 'text/html');
+        const incoming = [...page.querySelectorAll('.journal > .conversation')];
+        let appended = 0;
+        for (const card of incoming) {{
+          if (card.id && document.getElementById(card.id)) continue;
+          feed.appendChild(document.importNode(card, true));
+          appended += 1;
+        }}
+        const pageSummary = page.querySelector('#journal-summary');
+        summary.dataset.visible = String((Number(summary.dataset.visible) || 0) + appended);
+        summary.dataset.turns = String((Number(summary.dataset.turns) || 0) + (Number(pageSummary?.dataset.turns) || 0));
+        summary.dataset.enriched = String((Number(summary.dataset.enriched) || 0) + (Number(pageSummary?.dataset.enriched) || 0));
+        updateSummary();
+        nextPage = Number(page.querySelector('#journal-more')?.dataset.nextPage) || 0;
+        more.dataset.nextPage = String(nextPage || '');
+        more.textContent = nextPage ? '' : 'you’ve reached the beginning of today’s journal';
+      }} catch (error) {{
+        more.textContent = error.message;
+      }} finally {{
+        loadingMore = false;
+        if (nextPage && more.getBoundingClientRect().top <= window.innerHeight + 600) {{
+          setTimeout(loadOlderJournal, 0);
+        }}
+      }}
+    }}
+
+    if (nextPage && 'IntersectionObserver' in window) {{
+      new IntersectionObserver(entries => {{
+        if (entries.some(entry => entry.isIntersecting)) loadOlderJournal();
+      }}, {{rootMargin: '600px 0px'}}).observe(more);
+    }} else if (nextPage) {{
+      window.addEventListener('scroll', () => {{
+        if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 600) loadOlderJournal();
+      }}, {{passive: true}});
+    }}
   </script>
 </body>
 </html>"""

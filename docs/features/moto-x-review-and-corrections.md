@@ -78,10 +78,13 @@ Ruby/Lynn/Raven profiles instead of walking backward through recent clips.
   **Not sure / mixed voices** instead of forcing an identity into training.
   Tapping the selected identity again clears it.
 - Sound-only labels such as television, music, cats, or overlapping voices do
-  not require a speaker answer; after saving one, the primary action becomes
-  **Confirm sound only & next**. Whole-clip sound, overlap, and boundary labels
-  save without an additional browser confirmation; whole-clip named speaker
-  assignments retain the safety confirmation.
+  not require a speaker answer. Like identity buttons, each sound button first
+  becomes a white-outlined pending choice; tapping it again clears it, and the
+  primary **Confirm <sound> & next** action saves the choice and advances. A
+  speaker and one or more overlapping sounds can be confirmed together.
+  Whole-clip sound, overlap, and boundary labels do not show an additional
+  browser confirmation; whole-clip named speaker assignments retain the safety
+  confirmation.
 - In Smart identification, annotation chips are scoped to the current
   diarized turn. Labels from another turn in the same 30-second source capture
   do not remain visible or enable its primary action.
@@ -89,13 +92,17 @@ Ruby/Lynn/Raven profiles instead of walking backward through recent clips.
   diarized audio range, allowing a speaker identity and overlapping sound to
   be stacked on the same turn without falling back to the whole source clip.
 - Repeating the same active label for the same text/audio scope is idempotent.
-  Smart-identification sound buttons show their saved state and cannot create
-  a duplicate annotation for the current turn.
+  Smart-identification sound buttons show the same pending selection treatment
+  as identity buttons, then show their saved state and cannot create a duplicate
+  annotation for the current turn.
 - Advancing a Smart-identification turn with only sound/overlap labels does not
   invent a speaker answer. The saved sound/overlap annotation itself keeps that
   exact completed question from returning later.
 - Existing sound and overlap annotations also count that exact diarized turn as
   handled, so older television or mixed-voice answers do not re-enter the queue.
+- A whole-clip sound or overlap annotation counts every diarized turn in that
+  source capture as handled, so an all-music clip stays out of the queue after a
+  refresh.
 - When television is marked in at least three captures and at least 60% of the
   reviewed captures from one diarization report, the remaining turns from that
   report are suppressed as television-contaminated. The inference is derived
@@ -158,17 +165,24 @@ Ruby/Lynn/Raven profiles instead of walking backward through recent clips.
   avoiding hundreds of costly native media elements during initial mobile page
   rendering. Rolling views also calculate their cross-midnight speaker layer in
   one pass and load timed words only for clips that will actually be enriched.
-- The rolling journal initially renders the newest 12 conversations and offers
-  Older/Newer paging, keeping hundreds of chat bubbles out of the initial mobile
-  document while preserving access to the complete 24-hour window.
+- The rolling journal initially renders the newest 12 conversations, with
+  conversations, source captures, and timed speaker segments all ordered newest
+  to oldest. As the reader approaches the bottom, the next server-rendered page is
+  fetched and appended automatically, creating one continuous 24-hour stream
+  without putting hundreds of chat bubbles in the initial mobile document.
+  Ordinary Older/Newer links remain as a no-JavaScript fallback only.
 - The main listening dashboard shows the eight most recent speech captures as
   the same voice-colored chat bubbles, newest first so the latest transcript is
-  visible without scrolling. Teach Claudia and Today's journal remain above the
-  transcript feed for one-tap phone access. The colored capture-health line is
+  visible without scrolling. Earlier batches append automatically as the reader
+  approaches the bottom, while periodic refreshes merge newly arrived captures
+  at the top without discarding already loaded history. Teach Claudia and
+  Today's journal remain above the transcript feed for one-tap phone access. The colored capture-health line is
   the only listening-status heading; speech/ambient/silent/queued totals and the
   refreshed time sit below the feed. Prepared confident regions use the
   Ruby/Lynn/Raven projection; recordings awaiting diarization remain neutral
-  and explicitly Unsorted. Tapping a bubble's speaker badge opens a lightweight
+  and explicitly Unsorted. Legacy recorder metadata that named Ruby by default
+  is not treated as identity evidence; only human corrections or conservative
+  voice-model predictions may display a household name. Tapping a bubble's speaker badge opens a lightweight
   Unsorted/Ruby/Lynn picker; choosing a name replaces any conflicting speaker
   correction for that audio range, while choosing Unsorted clears it. Tapping
   or scrolling away closes the picker without changing anything.
@@ -181,8 +195,10 @@ Ruby/Lynn/Raven profiles instead of walking backward through recent clips.
   Ruby/Lynn/Raven answers. The queue favors clean, uncertain comparisons and
   spreads bootstrap questions across diarization clusters. `Other` is not used
   as one global voice profile because it may contain many different people.
-- Five-minute progress is estimated from labeled text coverage and detected
-  speech duration until word-level timestamps are available.
+- Five-minute progress remains available from the review progress API and is
+  estimated from labeled text coverage and detected speech duration until
+  word-level timestamps are available. Teach Claudia no longer displays the
+  Voice Library progress card; it keeps the labeling controls at the top.
 
 ## Current automatic bootstrap
 
@@ -192,11 +208,10 @@ with deterministic K-means. These groups are triage suggestions, not identity
 claims. Pyannote Community-1 remains the intended diarization baseline after
 its gated model terms are accepted.
 
-`run_community_diarization.py` is the first isolated Community-1 experiment
-worker. It reads the journal database in read-only mode, selects a strong
-contiguous conversation window, decodes source captures to in-memory mono PCM,
-and writes source-mapped ordinary and exclusive turn layers under the private,
-Git-ignored `Moto X/diarization_data/` tree. It never assigns household names.
+`run_community_diarization.py` is the Community-1 worker. It reads source rows,
+decodes a bounded set of captures to in-memory mono PCM, and writes source-
+mapped ordinary and exclusive turn layers under the private, Git-ignored
+`Moto X/diarization_data/` tree. It never assigns household names.
 
 `build_identification_turns.py` is the additive bridge from one of those reports
 to Smart identification. It merges adjacent same-cluster fragments, discards
@@ -204,6 +219,24 @@ very short regions, trims unusually long regions to a centered four-second
 question, extracts normalized WavLM Base+ embeddings, and stores the derived
 turns in the review database. Privacy-excluded captures are never decoded or
 stored by this worker.
+
+`identification_pipeline.py` supervises those two stages automatically. Closed
+conversations are prioritized, while an open conversation becomes eligible for
+a 10-minute checkpoint after a 45-second speech gap. Each job is capped at five
+minutes of source audio, runs at below-normal process priority, and covers only
+the most recent 30 hours by default. Durable run and capture-coverage tables
+make retries and manager restarts idempotent. The Windows receiver manager
+starts and supervises this daemon alongside the live receiver. Completed turns
+are visible to Smart identification immediately; the dashboard recomputes
+conservative identity guesses every ten seconds and Today's Journal does so on
+each request.
+Before starting any new backlog job, the daemon requires 75 seconds without a
+newly received speech capture. Live Whisper therefore gets priority; a bounded
+job already in flight is allowed to finish, then the daemon checks again.
+Community-1 runs in the dedicated `.venv-motox-diarization` CUDA environment;
+WavLM import runs in the ordinary `.venv-motox` CPU environment at below-normal
+priority, avoiding a second copy of the diarization stack and limiting GPU
+competition with live Whisper.
 
 Example dry run and import:
 
@@ -233,6 +266,8 @@ The existing Moto X SQLite database uses additive, in-place migrations:
   hypotheses. A newer pass supersedes only the earlier derived pass.
 - `transcription_words`: exact source-audio time and character anchors for each
   word in a transcription pass.
+- `identification_pipeline_runs` and `identification_pipeline_captures`: durable
+  automatic-worker status and exact source-capture coverage.
 
 The original `chunks.transcript`, source audio, timestamps, and conversation
 records remain unchanged.
@@ -247,15 +282,13 @@ records remain unchanged.
 | Anonymous grouping worker | `Moto X/phone-scripts/build_review_groups.py` |
 | Community-1 experiment worker | `Moto X/phone-scripts/run_community_diarization.py` |
 | Adaptive identification importer | `Moto X/phone-scripts/build_identification_turns.py` |
+| Automatic identification scheduler | `Moto X/phone-scripts/identification_pipeline.py` |
 | Tests | `test_motox_review.py`, `test_receiver_review.py` |
 
 ## Remaining work
 
 - Backfill word timestamps for worthwhile historical captures and add a
   draggable waveform/nudge editor around the shipped text-to-audio sync.
-- Run Community-1 and identification-turn import automatically when a finalized
-  conversation becomes available; the current worker is an explicit offline
-  step.
 - Calibrate similarity thresholds on held-out real Moto X examples before any
   high-confidence identity can bypass human review.
 - Add timeline-wide editing and corrected journal projection.
