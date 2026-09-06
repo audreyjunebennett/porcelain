@@ -71,6 +71,16 @@ func (ix *Indexer) RunWorkers(ctx context.Context) {
 				if wi.Kind == WorkIngest && wi.FromFanout && wi.BulkScopeKey != "" {
 					ix.decPendingBulk(wi.BulkScopeKey)
 				}
+				if wi.Kind == WorkIngest && !ix.rootIsActive(wi.Job.Root) {
+					ix.log.Debug("discarded queued ingest for removed root",
+						"msg", "indexer.job.cancelled",
+						"type", "indexer.job.cancelled",
+						"worker", id,
+						"rel", wi.Job.RelPath,
+						"root_removed", true,
+					)
+					continue
+				}
 				if wi.Kind == WorkIngest {
 					if err := ix.waitIngestGateOpen(ctx); err != nil {
 						return

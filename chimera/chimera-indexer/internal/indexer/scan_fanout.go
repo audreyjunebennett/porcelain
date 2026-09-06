@@ -100,6 +100,9 @@ func (ix *Indexer) runScanJob(ctx context.Context, scanID string, scanRootIDs []
 		roots = filtered
 	}
 	for _, r := range roots {
+		if !ix.rootIsActive(r) {
+			continue
+		}
 		m, err := NewMatcher(r.AbsPath, ix.cfg.IgnoreExtra)
 		if err != nil {
 			return fmt.Errorf("ignore matcher for %s: %w", r.AbsPath, err)
@@ -117,6 +120,11 @@ func (ix *Indexer) runScanJob(ctx context.Context, scanID string, scanRootIDs []
 		if err != nil {
 			return fmt.Errorf("walk %s: %w", r.AbsPath, err)
 		}
+		// A recursive walk can take long enough for the operator to remove its
+		// root. Do not turn the completed stale walk into new fan-out work.
+		if !ix.rootIsActive(r) {
+			continue
+		}
 		for _, c := range cands {
 			proj, flav := ix.cfg.IngestHeaders(c.Root, c.RelPath)
 			sk := ScopeKey(proj, flav)
@@ -129,6 +137,26 @@ func (ix *Indexer) runScanJob(ctx context.Context, scanID string, scanRootIDs []
 				perScopeWalk[sk] = &discoveryAgg{}
 			}
 			perScopeWalk[sk].Candidates++
+		}
+	}
+	activeCandidates := all[:0]
+	for _, candidate := range all {
+		if ix.rootIsActive(candidate.Root) {
+			activeCandidates = append(activeCandidates, candidate)
+		}
+	}
+	all = activeCandidates
+	activeScopes := map[string]struct{}{}
+	for _, root := range ix.getRoots() {
+		project, flavor := ix.cfg.IngestHeaders(root, "")
+		activeScopes[ScopeKey(project, flavor)] = struct{}{}
+	}
+	for _, candidate := range all {
+		activeScopes[ScopeKey(candidate.Project, candidate.Flavor)] = struct{}{}
+	}
+	for scopeKey := range perScopeWalk {
+		if _, active := activeScopes[scopeKey]; !active {
+			delete(perScopeWalk, scopeKey)
 		}
 	}
 
@@ -330,6 +358,10 @@ func (ix *Indexer) runFanoutList(ctx context.Context, wi WorkItem) error {
 		default:
 		}
 		tc := remaining[0]
+		remaining = remaining[1:]
+		if !ix.rootIsActive(tc.Root) {
+			continue
+		}
 		sk := ScopeKey(tc.Project, tc.Flavor)
 
 		if ix.pendingBulk(sk)+1 > int64(budget) {
@@ -346,7 +378,6 @@ func (ix *Indexer) runFanoutList(ctx context.Context, wi WorkItem) error {
 			return ix.splitFanoutRemainder(remaining, meta)
 		}
 		ix.incPendingBulk(sk)
-		remaining = remaining[1:]
 	}
 	return nil
 }

@@ -19,7 +19,7 @@ Operators define **indexer workspaces**—a project, flavor, and one or more abs
 
 - **Workspaces section** on `/ui/settings` — create, edit, delete workspaces; add/remove watched paths; native folder picker in desktop webview (`window.chimeraPickFolder` / `window.top.chimeraPickFolder` in iframe).
 - **Card identity** — Titles use **USER:PROJECT[:FLAVOR]** from the workspace row, not inferred from noisy log lines. Multiple paths on one workspace render as **one** card.
-- **Expectations on change** — Adding or removing a path updates SQLite immediately; the indexer picks up changes within `workspaces_poll_interval_ms` (default **30s**) after the work queue drains (up to **10 minutes** wait). **`index_run_id` stays stable** for the process; roots are added/removed in-process without restarting `RunWatchers`.
+- **Expectations on change** — Adding or removing a path updates SQLite immediately; the indexer picks up changes within `workspaces_poll_interval_ms` (default **30s**). Removed roots are unwatched immediately when the poll lands, and their queued ingest/fan-out work is discarded rather than drained. **`index_run_id` stays stable** for the process; roots are added/removed in-process without restarting `RunWatchers`.
 - **YAML tuning** — Advanced indexer settings remain in `indexer.supervised.yaml`; edits hot-reload without touching workspace rows.
 - **Orphan log lines** — Process-level indexer messages with no matching DB row appear under the **chimera-indexer service** summary, not as extra workspace cards.
 
@@ -93,7 +93,7 @@ Manual: create a workspace with two paths on `/ui/settings`; confirm one card; a
 - **Re-index all** — no dedicated UI control; per-workspace **Re-index** on managed cards calls `POST /api/ui/indexer/workspaces/{id}/reindex` ([`plans/archive/indexer-sync-state-sqlite-and-force-reindex.md`](../plans/archive/indexer-sync-state-sqlite-and-force-reindex.md) shipped).
 - **Best-effort per-path materialize** — planned in accurate-reporting Phase 4D; **not** implemented.
 - **Corpus purge on workspace delete** — `DELETE /api/ui/indexer/workspaces/{id}` drops the vector collection for `(ingest tenant, project_id, flavor_id)` before removing the SQLite row. Ingest tenant is the authenticated UI session principal (same tenant the indexer uses via API key). If RAG is enabled but purge fails, the workspace row is kept and the API returns 502. Structured log: `gateway.operator.workspace.purged` (success) / `gateway.operator.workspace.purge_failed` (blocked delete).
-- **Removed watch path** — fsnotify stops; sync checkpoints cleared; stale sources pushed via `PUT /v1/indexer/corpus/stale` when possible (not a full collection purge unless the whole workspace is deleted).
+- **Removed watch path** — fsnotify stops; queued ingest/fan-out work for the root is cancelled; the removed scope emits a terminal idle status so the UI does not keep showing it as active; sync checkpoints are cleared; stale sources are pushed via `PUT /v1/indexer/corpus/stale` when possible (not a full collection purge unless the whole workspace is deleted).
 - **ETag / revision** on workspaces response — not implemented.
 
 ## References

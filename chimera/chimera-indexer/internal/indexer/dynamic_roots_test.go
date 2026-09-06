@@ -70,3 +70,44 @@ func TestApplyRootsSnapshot_addsWatchPaths(t *testing.T) {
 		t.Fatal("expected fsnotify paths for new root")
 	}
 }
+
+func TestApplyRootsSnapshot_prunesRemovedRootQueue(t *testing.T) {
+	t.Parallel()
+	removed := Root{ID: "old", AbsPath: `C:\old`, Scope: ScopeFragment{WorkspaceID: "1", ProjectID: "Old"}}
+	ix := New(Resolved{Roots: []Root{removed}, QueueDepth: 20}, nil, nil)
+	defer ix.Close()
+	ix.setRoots([]Root{removed})
+	oldScope := ScopeKey("Old", "")
+	ix.incPendingBulk(oldScope)
+	if !ix.queue.Enqueue(IngestEnqueue(Job{Root: removed, RelPath: "queued.txt"}, TierBulk, true, oldScope)) {
+		t.Fatal("enqueue ingest")
+	}
+	if !ix.queue.Enqueue(WorkItem{
+		Kind:     WorkFanoutList,
+		Tier:     TierBulk,
+		FanoutID: "old-fanout",
+		Candidates: []TaggedCandidate{{
+			Candidate: Candidate{Root: removed, RelPath: "later.txt"},
+			Project:   "Old",
+		}},
+	}) {
+		t.Fatal("enqueue fanout")
+	}
+
+	changed, err := ix.ApplyRootsSnapshot(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed {
+		t.Fatal("expected root removal")
+	}
+	if got := ix.queue.Len(); got != 0 {
+		t.Fatalf("queue length after root removal = %d, want 0", got)
+	}
+	if got := ix.pendingBulk(oldScope); got != 0 {
+		t.Fatalf("pending bulk after root removal = %d, want 0", got)
+	}
+	if ix.rootIsActive(removed) {
+		t.Fatal("removed root still active")
+	}
+}

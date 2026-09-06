@@ -513,18 +513,6 @@ func runWorkspacePoll(
 				"watch_root_paths", watchPaths,
 			)
 
-			deadline := time.Now().Add(10 * time.Minute)
-			for time.Now().Before(deadline) {
-				if ix.Queue().Len() == 0 {
-					break
-				}
-				select {
-				case <-ctx.Done():
-					return
-				case <-time.After(5 * time.Second):
-				}
-			}
-
 			changed, err := ix.ApplyRootsSnapshot(ctx, newRoots)
 			if err != nil {
 				baseLog.Warn("workspace poll: apply roots failed", "err", err)

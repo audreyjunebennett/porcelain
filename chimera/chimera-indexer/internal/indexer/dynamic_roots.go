@@ -3,6 +3,7 @@ package indexer
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -56,6 +57,17 @@ func (ix *Indexer) ApplyRootsSnapshot(ctx context.Context, newRoots []Root) (cha
 		return false, nil
 	}
 
+	// Publish the new roots before pruning so workers that already dequeued an
+	// item can reject it while queued ingest and fan-out work is discarded.
+	ix.setRoots(newRoots)
+	pruned := ix.queue.PruneRoots(removed)
+	for scopeKey, count := range pruned.PendingBulkByScope {
+		for i := int64(0); i < count; i++ {
+			ix.decPendingBulk(scopeKey)
+		}
+	}
+	ix.closeRemovedScopes(removed, newRoots, pruned)
+
 	for _, r := range removed {
 		if ix.syncState != nil {
 			if gw := ix.lastGW.Load(); gw != nil {
@@ -74,8 +86,6 @@ func (ix *Indexer) ApplyRootsSnapshot(ctx context.Context, newRoots []Root) (cha
 		)
 	}
 
-	ix.setRoots(newRoots)
-
 	delta := rootsDelta{added: added, removed: removed}
 	if ch := ix.rootUpdates; ch != nil {
 		select {
@@ -93,6 +103,69 @@ func (ix *Indexer) ApplyRootsSnapshot(ctx context.Context, newRoots []Root) (cha
 		_ = ix.ScheduleScanForRoots(added, "workspace-add")
 	}
 	return true, nil
+}
+
+func (ix *Indexer) rootIsActive(root Root) bool {
+	want := rootIdentityKey(root)
+	for _, active := range ix.getRoots() {
+		if rootIdentityKey(active) == want {
+			return true
+		}
+	}
+	return false
+}
+
+func (ix *Indexer) closeRemovedScopes(removed, active []Root, pruned QueuePruneResult) {
+	activeScopes := make(map[string]struct{}, len(active))
+	for _, root := range active {
+		project, flavor := ix.cfg.IngestHeaders(root, "")
+		activeScopes[ScopeKey(project, flavor)] = struct{}{}
+	}
+	closed := map[string]Root{}
+	for _, root := range removed {
+		project, flavor := ix.cfg.IngestHeaders(root, "")
+		scopeKey := ScopeKey(project, flavor)
+		if _, stillActive := activeScopes[scopeKey]; !stillActive {
+			closed[scopeKey] = root
+		}
+	}
+	for scopeKey, root := range closed {
+		project, flavor := ix.cfg.IngestHeaders(root, "")
+		ix.workspaceFilesMu.Lock()
+		delete(ix.workspaceFilesByScope, scopeKey)
+		ix.workspaceFilesMu.Unlock()
+		ix.pendingBulkMu.Lock()
+		delete(ix.pendingBulkByScope, scopeKey)
+		ix.pendingBulkMu.Unlock()
+		ix.activeFileLogMu.Lock()
+		delete(ix.lastActiveFilePath, scopeKey)
+		delete(ix.lastActiveFileEmit, scopeKey)
+		ix.activeFileLogMu.Unlock()
+		ix.scopeStatusEmitMu.Lock()
+		delete(ix.lastScopeStatusEmitted, scopeKey)
+		ix.scopeStatusEmitMu.Unlock()
+
+		tenantID := ix.tenantIDForLogs()
+		ix.log.Info("indexer scope removed",
+			"msg", "indexer.scope.status",
+			"change_reason", "root_removed",
+			"declarative_state", "watch_idle",
+			"tenant_id", tenantID,
+			"project_id", project,
+			"ingest_project", project,
+			"flavor_id", flavor,
+			"indexer_target_key", IndexerKey(tenantID, project, flavor),
+			"workspace_files_total", 0,
+			"queue_ingest_pending", 0,
+			"queue_fanout_files_pending", 0,
+			"pending_bulk_tier1", 0,
+			"ingest_gate_closed", false,
+			"in_recovery", false,
+			"ingest_completed", atomic.LoadInt64(&ix.opsIngestOK),
+			"pruned_ingest_jobs", pruned.Ingest,
+			"pruned_fanout_candidates", pruned.FanoutCandidates,
+		)
+	}
 }
 
 // ApplyTuning copies non-root fields from next into the live indexer config

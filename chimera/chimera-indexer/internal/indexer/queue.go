@@ -31,6 +31,15 @@ type Queue struct {
 	closed bool
 }
 
+// QueuePruneResult reports work discarded when one or more roots stop being
+// active. PendingBulkByScope keeps the indexer's fair-share counters in sync.
+type QueuePruneResult struct {
+	Ingest             int
+	FanoutCandidates   int
+	Scans              int
+	PendingBulkByScope map[string]int64
+}
+
 // NewQueue creates a queue with the given capacity. Capacity <= 0 means
 // unbounded (still recommended to set a value).
 func NewQueue(capacity int) *Queue {
@@ -200,6 +209,83 @@ func (q *Queue) HasPendingKey(key string) bool {
 	defer q.mu.Unlock()
 	_, ok := q.pending[key]
 	return ok
+}
+
+// PruneRoots removes queued work that belongs to removed root identities. A
+// fan-out item may contain several roots, so retained candidates stay queued.
+// Scan jobs with an explicit root list are filtered; an empty root list means
+// "use the current roots at execution time" and remains safe to keep.
+func (q *Queue) PruneRoots(removed []Root) QueuePruneResult {
+	result := QueuePruneResult{PendingBulkByScope: map[string]int64{}}
+	if len(removed) == 0 {
+		return result
+	}
+	removedIdentity := make(map[string]struct{}, len(removed))
+	removedID := make(map[string]struct{}, len(removed))
+	for _, root := range removed {
+		removedIdentity[rootIdentityKey(root)] = struct{}{}
+		removedID[root.ID] = struct{}{}
+	}
+
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	filter := func(items []WorkItem) []WorkItem {
+		out := make([]WorkItem, 0, len(items))
+		for _, item := range items {
+			switch item.Kind {
+			case WorkIngest:
+				if _, drop := removedIdentity[rootIdentityKey(item.Job.Root)]; drop {
+					result.Ingest++
+					if item.FromFanout && item.BulkScopeKey != "" {
+						result.PendingBulkByScope[item.BulkScopeKey]++
+					}
+					continue
+				}
+			case WorkFanoutList:
+				kept := make([]TaggedCandidate, 0, len(item.Candidates))
+				for _, candidate := range item.Candidates {
+					if _, drop := removedIdentity[rootIdentityKey(candidate.Root)]; drop {
+						result.FanoutCandidates++
+						continue
+					}
+					kept = append(kept, candidate)
+				}
+				if len(kept) == 0 {
+					continue
+				}
+				item.Candidates = kept
+			case WorkScan:
+				if len(item.ScanRootIDs) > 0 {
+					kept := make([]string, 0, len(item.ScanRootIDs))
+					for _, id := range item.ScanRootIDs {
+						if _, drop := removedID[id]; !drop {
+							kept = append(kept, id)
+						}
+					}
+					if len(kept) == 0 {
+						result.Scans++
+						continue
+					}
+					item.ScanRootIDs = kept
+				}
+			}
+			out = append(out, item)
+		}
+		return out
+	}
+
+	q.tier3 = filter(q.tier3)
+	q.tier2 = filter(q.tier2)
+	q.tier1 = filter(q.tier1)
+	q.pending = make(map[string]tierSlot, q.totalLenLocked())
+	for _, tier := range []PriorityTier{TierInteractive, TierWrite, TierBulk} {
+		s := tierSlice(q, tier)
+		for idx := range *s {
+			q.pending[(*s)[idx].Key()] = tierSlot{tier: tier, idx: idx}
+		}
+	}
+	return result
 }
 
 // TallyScopeQueues counts queued WorkIngest jobs and FanoutList candidate rows by ScopeKey(project, flavor).
