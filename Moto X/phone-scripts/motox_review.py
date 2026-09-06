@@ -571,8 +571,71 @@ class MotoXReviewStore:
                     labels[turn["turn_id"]] = str(label)
         return labels
 
+    @staticmethod
+    def _non_voice_labels_for_turns(
+        turns: list[dict[str, Any]], annotations: list[dict[str, Any]]
+    ) -> set[str]:
+        """Return turns already reviewed as sound-only or overlapping audio."""
+
+        handled: set[str] = set()
+        turns_by_capture: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for turn in turns:
+            turns_by_capture[turn["capture_id"]].append(turn)
+        for annotation in annotations:
+            if annotation["annotation_type"] not in ("sound", "overlap"):
+                continue
+            start = annotation.get("audio_start_seconds")
+            end = annotation.get("audio_end_seconds")
+            if start is None or end is None:
+                continue
+            start, end = float(start), float(end)
+            for turn in turns_by_capture.get(annotation["capture_id"], []):
+                duration = turn["audio_end_seconds"] - turn["audio_start_seconds"]
+                overlap = _range_overlap(
+                    turn["audio_start_seconds"],
+                    turn["audio_end_seconds"],
+                    start,
+                    end,
+                )
+                if duration > 0 and overlap / duration >= 0.65:
+                    handled.add(turn["turn_id"])
+        return handled
+
+    @staticmethod
+    def _television_contaminated_sources(
+        turns: list[dict[str, Any]], annotations: list[dict[str, Any]]
+    ) -> set[str]:
+        """Infer report-sized TV contamination from repeated human answers."""
+
+        sources_by_capture: dict[str, set[str]] = defaultdict(set)
+        for turn in turns:
+            sources_by_capture[turn["capture_id"]].add(turn["source_id"])
+        reviewed: dict[str, set[str]] = defaultdict(set)
+        television: dict[str, set[str]] = defaultdict(set)
+        for annotation in annotations:
+            if annotation["annotation_type"] not in ("speaker", "sound", "overlap"):
+                continue
+            capture_id = annotation["capture_id"]
+            for source_id in sources_by_capture.get(capture_id, ()):
+                reviewed[source_id].add(capture_id)
+                if (
+                    annotation["annotation_type"] == "sound"
+                    and annotation.get("label") == "Television"
+                ):
+                    television[source_id].add(capture_id)
+        return {
+            source_id
+            for source_id, tv_captures in television.items()
+            if len(tv_captures) >= 3
+            and len(tv_captures) / max(1, len(reviewed[source_id])) >= 0.6
+        }
+
     def identification_candidates(
-        self, *, limit: int = 24, exclude_turn_ids: set[str] | None = None
+        self,
+        *,
+        limit: int = 24,
+        exclude_turn_ids: set[str] | None = None,
+        exclude_capture_ids: set[str] | None = None,
     ) -> list[dict[str, Any]]:
         """Rank exact diarized turns by expected speaker-learning value.
 
@@ -583,6 +646,7 @@ class MotoXReviewStore:
 
         limit = max(1, min(int(limit), 100))
         excluded = set(exclude_turn_ids or ())
+        excluded_captures = set(exclude_capture_ids or ())
         with self._connect() as connection:
             rows = connection.execute(
                 """
@@ -608,7 +672,11 @@ class MotoXReviewStore:
             turns = []
             for row in rows:
                 item = dict(row)
-                if item["turn_id"] in excluded or not Path(item["audio_path"]).is_file():
+                if (
+                    item["turn_id"] in excluded
+                    or item["capture_id"] in excluded_captures
+                    or not Path(item["audio_path"]).is_file()
+                ):
                     continue
                 try:
                     item["vector"] = _unpack_embedding(
@@ -622,13 +690,17 @@ class MotoXReviewStore:
                 for row in connection.execute(
                     """
                     SELECT * FROM review_annotations
-                    WHERE reverted_at IS NULL AND annotation_type = 'speaker'
+                    WHERE reverted_at IS NULL
                     ORDER BY created_at, annotation_id
                     """
                 ).fetchall()
             ]
 
             labels = self._speaker_labels_for_turns(turns, annotations)
+            handled_non_voice = self._non_voice_labels_for_turns(turns, annotations)
+            contaminated_sources = self._television_contaminated_sources(
+                turns, annotations
+            )
             compatible_vectors: dict[
                 tuple[str, str | None, int], dict[str, list[list[float]]]
             ] = defaultdict(lambda: defaultdict(list))
@@ -638,7 +710,10 @@ class MotoXReviewStore:
                 label = labels.get(turn["turn_id"])
                 if label:
                     cluster_votes[turn["cluster_id"]][label] += 1
-                if label not in IDENTITY_LABELS:
+                if (
+                    label not in IDENTITY_LABELS
+                    or turn["turn_id"] in handled_non_voice
+                ):
                     continue
                 key = (
                     turn["embedding_model"],
@@ -658,7 +733,11 @@ class MotoXReviewStore:
 
             ranked = []
             for turn in turns:
-                if turn["turn_id"] in labels:
+                if (
+                    turn["turn_id"] in labels
+                    or turn["turn_id"] in handled_non_voice
+                    or turn["source_id"] in contaminated_sources
+                ):
                     continue
                 key = (
                     turn["embedding_model"],
@@ -747,7 +826,17 @@ class MotoXReviewStore:
                 else:
                     diverse.append(turn)
                     seen_clusters.add(turn["cluster_id"])
-            selected = (diverse + repeated)[:limit]
+            # One question per 30-second source capture keeps a noisy room or
+            # television segment from dominating a single review batch.
+            selected = []
+            seen_captures = set()
+            for turn in diverse + repeated:
+                if turn["capture_id"] in seen_captures:
+                    continue
+                selected.append(turn)
+                seen_captures.add(turn["capture_id"])
+                if len(selected) >= limit:
+                    break
             capture_ids = list(dict.fromkeys(turn["capture_id"] for turn in selected))
             if not capture_ids:
                 return []
@@ -900,6 +989,36 @@ class MotoXReviewStore:
                 "created_at": _now(),
                 "reverted_at": None,
             }
+            existing = connection.execute(
+                """
+                SELECT * FROM review_annotations
+                WHERE reverted_at IS NULL
+                  AND capture_id = ?
+                  AND start_char = ?
+                  AND end_char = ?
+                  AND audio_start_seconds IS ?
+                  AND audio_end_seconds IS ?
+                  AND annotation_type = ?
+                  AND label IS ?
+                  AND replacement_text IS ?
+                  AND speaker_turn_id IS ?
+                ORDER BY created_at, annotation_id
+                LIMIT 1
+                """,
+                (
+                    capture_id,
+                    start_char,
+                    end_char,
+                    audio_start_seconds,
+                    audio_end_seconds,
+                    annotation_type,
+                    label,
+                    annotation["replacement_text"],
+                    speaker_turn_id,
+                ),
+            ).fetchone()
+            if existing:
+                return dict(existing)
             connection.execute(
                 """
                 INSERT INTO review_annotations (

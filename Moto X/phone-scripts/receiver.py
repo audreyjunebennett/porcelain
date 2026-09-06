@@ -653,7 +653,11 @@ refresh(); setInterval(refresh, 10000);
 
 @APP.route("/dashboard-assets/<path:filename>", methods=["GET"])
 def dashboard_asset(filename):
-    return send_from_directory(DASHBOARD_ASSET_DIR, filename, max_age=86400)
+    max_age = 0 if filename in {"review.js", "review.css"} else 86400
+    response = send_from_directory(DASHBOARD_ASSET_DIR, filename, max_age=max_age)
+    if max_age == 0:
+        response.cache_control.no_store = True
+    return response
 
 
 @APP.route("/dashboard", methods=["GET"])
@@ -663,7 +667,9 @@ def dashboard():
 
 @APP.route("/review", methods=["GET"])
 def motox_review_page():
-    return send_from_directory(DASHBOARD_ASSET_DIR, "review.html")
+    response = send_from_directory(DASHBOARD_ASSET_DIR, "review.html", max_age=0)
+    response.cache_control.no_store = True
+    return response
 
 
 @APP.route("/journal/<day>", methods=["GET"])
@@ -749,10 +755,15 @@ def motox_review_identification():
             value for value in request.args.getlist("exclude")
             if re.fullmatch(r"[a-f0-9]{32}", value)
         }
+        excluded_captures = {
+            value for value in request.args.getlist("exclude_capture")
+            if CAPTURE_ID_RE.fullmatch(value)
+        }
         return jsonify(
             REVIEW_STORE.identification_candidates(
                 limit=limit,
                 exclude_turn_ids=excluded,
+                exclude_capture_ids=excluded_captures,
             )
         )
     except (TypeError, ValueError) as exc:

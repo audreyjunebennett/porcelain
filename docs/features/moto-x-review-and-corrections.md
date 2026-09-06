@@ -25,6 +25,8 @@ Ruby/Lynn/Raven profiles instead of walking backward through recent clips.
 
 - `/review` requests approximately five-minute review batches and streams the
   original audio with range support for phone seeking.
+- The review HTML, JavaScript, and CSS are served without browser caching so a
+  normal reload picks up operator UI fixes immediately.
 - New quick-pass transcripts retain word-level timestamps. Selecting words
   automatically selects and can loop their source-audio interval. Historical
   clips without timings retain the manual audio-range fallback.
@@ -60,7 +62,34 @@ Ruby/Lynn/Raven profiles instead of walking backward through recent clips.
   **Confirm <identity> & next**. Ambiguous or overlapping speech can be marked
   **Not sure / mixed voices** instead of forcing an identity into training.
 - Sound-only labels such as television, music, cats, or overlapping voices do
-  not require a speaker answer; use **Next clip** after saving them.
+  not require a speaker answer; after saving one, the primary action becomes
+  **Next clip**.
+- In Smart identification, annotation chips are scoped to the current
+  diarized turn. Labels from another turn in the same 30-second source capture
+  do not remain visible or enable its primary action.
+- Saving a sound or overlap label in Smart identification preserves the exact
+  diarized audio range, allowing a speaker identity and overlapping sound to
+  be stacked on the same turn without falling back to the whole source clip.
+- Repeating the same active label for the same text/audio scope is idempotent.
+  Smart-identification sound buttons show their saved state and cannot create
+  a duplicate annotation for the current turn.
+- Advancing a Smart-identification turn with only sound/overlap labels records
+  a **Not sure** speaker answer for that exact turn. It does not train a named
+  voice profile, but prevents the completed question from returning later.
+- Existing sound and overlap annotations also count that exact diarized turn as
+  handled, so older television or mixed-voice answers do not re-enter the queue.
+- When television is marked in at least three captures and at least 60% of the
+  reviewed captures from one diarization report, the remaining turns from that
+  report are suppressed as television-contaminated. The inference is derived
+  from active annotations, so undoing labels can make the source eligible again.
+- Named answers that also carry a sound or overlap annotation remain visible as
+  corrections but are excluded from Ruby/Lynn/Raven voice-profile centroids.
+- A Smart-identification batch asks at most one question from each 30-second
+  source capture, and the page avoids that capture again until it is refreshed.
+  This prevents one noisy room or television recording from dominating a run;
+  the empty state explicitly offers another pass when remaining turns may exist.
+- The Smart-identification question number counts advances across adaptive
+  re-ranking reloads instead of resetting to one after every confirmed answer.
 - Accepted smart-identification answers are anchored to a deterministic turn
   ID plus source capture seconds. Undoing the answer removes it from the learned
   profile and makes that turn eligible for review again.

@@ -147,6 +147,25 @@ class MotoXReviewStoreTests(unittest.TestCase):
         annotations = self.review.candidates()[0]["annotations"]
         self.assertEqual({"Ruby", "Music"}, {row["label"] for row in annotations})
 
+    def test_duplicate_active_annotation_is_idempotent(self):
+        values = {
+            "capture_id": "clip-1",
+            "start_char": 0,
+            "end_char": 0,
+            "annotation_type": "sound",
+            "label": "Television",
+            "audio_start_seconds": 3.25,
+            "audio_end_seconds": 8.75,
+        }
+        first = self.review.add_annotation(**values)
+        second = self.review.add_annotation(**values)
+        self.assertEqual(first["annotation_id"], second["annotation_id"])
+        television = [
+            row for row in self.review.candidates()[0]["annotations"]
+            if row["label"] == "Television"
+        ]
+        self.assertEqual(1, len(television))
+
     def test_audio_range_requires_a_forward_finite_pair(self):
         with self.assertRaises(ValueError):
             self.review.add_annotation(
@@ -328,6 +347,94 @@ class MotoXReviewStoreTests(unittest.TestCase):
         self.assertEqual([], self.review.identification_candidates())
         self.assertTrue(self.review.revert_annotation(annotation["annotation_id"]))
         self.assertEqual(turn_id, self.review.identification_candidates()[0]["identification"]["turn_id"])
+
+    def test_sound_or_overlap_annotation_handles_matching_identification_turn(self):
+        turn_id = "e" * 32
+        self.review.add_speaker_turns(
+            [{
+                "turn_id": turn_id,
+                "capture_id": "clip-1",
+                "audio_start_seconds": 2.0,
+                "audio_end_seconds": 6.0,
+                "cluster_id": "report-3/SPEAKER_00",
+                "embedding": [0.5, 0.5],
+                "quality": 0.8,
+            }],
+            embedding_model="test-embedding",
+            embedding_version="1",
+            diarization_model="test-diarization",
+            source_id="report-3",
+        )
+        annotation = self.review.add_annotation(
+            capture_id="clip-1",
+            start_char=0,
+            end_char=0,
+            annotation_type="sound",
+            label="Television",
+            audio_start_seconds=2.0,
+            audio_end_seconds=6.0,
+        )
+        self.assertEqual([], self.review.identification_candidates())
+        self.assertTrue(self.review.revert_annotation(annotation["annotation_id"]))
+        self.assertEqual(turn_id, self.review.identification_candidates()[0]["identification"]["turn_id"])
+
+    def test_identification_batch_uses_each_capture_once(self):
+        self.review.add_speaker_turns(
+            [
+                {
+                    "turn_id": "f" * 32,
+                    "capture_id": "clip-1",
+                    "audio_start_seconds": 2.0,
+                    "audio_end_seconds": 5.0,
+                    "cluster_id": "report-4/SPEAKER_00",
+                    "embedding": [1.0, 0.0],
+                    "quality": 0.9,
+                },
+                {
+                    "turn_id": "0" * 32,
+                    "capture_id": "clip-1",
+                    "audio_start_seconds": 7.0,
+                    "audio_end_seconds": 10.0,
+                    "cluster_id": "report-4/SPEAKER_01",
+                    "embedding": [0.0, 1.0],
+                    "quality": 0.8,
+                },
+            ],
+            embedding_model="test-embedding",
+            embedding_version="1",
+            diarization_model="test-diarization",
+            source_id="report-4",
+        )
+        candidates = self.review.identification_candidates(limit=10)
+        self.assertEqual(1, len(candidates))
+        self.assertEqual("clip-1", candidates[0]["capture_id"])
+        self.assertEqual(
+            [],
+            self.review.identification_candidates(exclude_capture_ids={"clip-1"}),
+        )
+
+    def test_repeated_television_marks_contaminate_a_source_report(self):
+        turns = [
+            {"capture_id": f"clip-{index}", "source_id": "tv-report"}
+            for index in range(1, 5)
+        ]
+        annotations = [
+            {
+                "capture_id": f"clip-{index}",
+                "annotation_type": "sound",
+                "label": "Television",
+            }
+            for index in range(1, 4)
+        ]
+        annotations.append({
+            "capture_id": "clip-4",
+            "annotation_type": "speaker",
+            "label": "Ruby",
+        })
+        self.assertEqual(
+            {"tv-report"},
+            self.review._television_contaminated_sources(turns, annotations),
+        )
 
     def test_diarization_fragments_merge_into_question_sized_turns(self):
         turns = merge_turns(

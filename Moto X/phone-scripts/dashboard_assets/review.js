@@ -10,6 +10,8 @@ const state = {
   loopSelection: false,
   contextRadius: 2,
   seenTurnIds: new Set(),
+  seenCaptureIds: new Set(),
+  identifiedThisSession: 0,
   pendingSpeakerLabel: null,
 };
 
@@ -76,8 +78,24 @@ function renderGroups(groups) {
   select.value = active;
 }
 
+function annotationsForCurrentCard(item) {
+  const identification = item?.identification;
+  if (!identification) return item?.annotations || [];
+  const turnStart = Number(identification.audio_start_seconds);
+  const turnEnd = Number(identification.audio_end_seconds);
+  return (item.annotations || []).filter(annotation => {
+    if (annotation.speaker_turn_id) {
+      return annotation.speaker_turn_id === identification.turn_id;
+    }
+    const annotationStart = Number(annotation.audio_start_seconds);
+    const annotationEnd = Number(annotation.audio_end_seconds);
+    return Number.isFinite(annotationStart) && Number.isFinite(annotationEnd)
+      && annotationEnd > turnStart && annotationStart < turnEnd;
+  });
+}
+
 function renderAnnotations(item) {
-  $("#annotations").innerHTML = (item.annotations || []).map(annotation => {
+  $("#annotations").innerHTML = annotationsForCurrentCard(item).map(annotation => {
     const hasAudioRange = annotation.audio_start_seconds != null && annotation.audio_end_seconds != null;
     const range = hasAudioRange
       ? `${formatTimestamp(annotation.audio_start_seconds)}–${formatTimestamp(annotation.audio_end_seconds)}`
@@ -89,6 +107,46 @@ function renderAnnotations(item) {
       : `${annotation.label}: ${scope}`;
     return `<button class="annotation" data-undo="${escapeHtml(annotation.annotation_id)}" title="Tap to undo">${escapeHtml(value)} ×</button>`;
   }).join("");
+}
+
+function hasSavedNonSpeakerLabel() {
+  return annotationsForCurrentCard(current()).some(annotation =>
+    ["sound", "overlap", "boundary"].includes(annotation.annotation_type)
+  );
+}
+
+function renderIdentificationAction() {
+  const button = $("#confirm-speaker");
+  if (!current()?.identification) {
+    button.hidden = true;
+    return;
+  }
+  button.hidden = false;
+  if (state.pendingSpeakerLabel) {
+    button.disabled = false;
+    button.textContent = `Confirm ${state.pendingSpeakerLabel} & next`;
+  } else if (hasSavedNonSpeakerLabel()) {
+    button.disabled = false;
+    button.textContent = "Next clip";
+  } else {
+    button.disabled = true;
+    button.textContent = "Choose a voice or sound first";
+  }
+}
+
+function renderIdentificationLabels() {
+  const item = current();
+  if (!item?.identification) return;
+  const annotations = annotationsForCurrentCard(item);
+  document.querySelectorAll("#sound-labels [data-label]").forEach(button => {
+    const saved = annotations.some(annotation =>
+      annotation.annotation_type === button.dataset.type
+      && annotation.label === button.dataset.label
+    );
+    button.classList.toggle("saved", saved);
+    button.disabled = saved;
+    button.setAttribute("aria-pressed", String(saved));
+  });
 }
 
 function correctedTranscript(item) {
@@ -214,7 +272,9 @@ function renderCard() {
     empty.hidden = false;
     $("#position").textContent = state.mode === "identify" ? "0 questions" : "0 clips";
     $("#empty-message").textContent = state.mode === "identify"
-      ? "No unlabeled diarized turns are ready yet. Import a diarization report, or switch to Browse clips."
+      ? state.seenCaptureIds.size
+        ? "You finished this pass across distinct recordings. Tap Refresh for another pass through any remaining turns."
+        : "No unlabeled diarized turns are ready yet. Import a diarization report, or switch to Browse clips."
       : "No review clips are available in this group.";
     $("#older").hidden = state.mode === "identify";
     return;
@@ -279,18 +339,15 @@ function renderCard() {
       : "Exact audio turn selected"
     : "Whole clip selected";
   $("#position").textContent = state.mode === "identify"
-    ? `Question ${state.index + 1}`
+    ? `Question ${state.identifiedThisSession + 1}`
     : `${state.index + 1} of ${state.items.length}`;
   $("#next").textContent = "Next clip";
-  $("#next").className = identification ? "" : "primary";
+  $("#next").className = "primary";
   $("#fix").hidden = Boolean(identification);
-  $("#next").hidden = false;
-  $("#confirm-speaker").hidden = !identification;
-  $("#confirm-speaker").textContent = state.pendingSpeakerLabel
-    ? `Confirm ${state.pendingSpeakerLabel} & next`
-    : "Choose a voice first";
-  $("#confirm-speaker").disabled = !state.pendingSpeakerLabel;
+  $("#next").hidden = Boolean(identification);
   renderAnnotations(item);
+  renderIdentificationLabels();
+  renderIdentificationAction();
   renderScope();
   setNotice("");
 }
@@ -385,13 +442,25 @@ async function saveAnnotation(type, label, replacementText = null) {
       renderTranscript(item);
     }
     renderAnnotations(item);
+    renderIdentificationLabels();
+    renderIdentificationAction();
     window.getSelection()?.removeAllRanges();
     state.selection = null;
-    clearAudioRange();
-    $("#selection").textContent = "Whole clip selected";
+    if (item.identification) {
+      restoreIdentificationRange();
+      $("#selection").textContent = item.identification.selected_text
+        ? `Turn text: “${item.identification.selected_text}”`
+        : "Exact audio turn selected";
+    } else {
+      clearAudioRange();
+      $("#selection").textContent = "Whole clip selected";
+    }
     const rangeNotice = range ? ` for ${formatTimestamp(range.start)} – ${formatTimestamp(range.end)}` : "";
     await refreshProgress();
     if (item.identification && type === "speaker") {
+      state.seenTurnIds.add(item.identification.turn_id);
+      state.seenCaptureIds.add(item.capture_id);
+      state.identifiedThisSession += 1;
       await loadBatch();
       setNotice(`${label} learned from ${item.identification.duration_seconds.toFixed(1)} seconds. The next question was re-ranked.`);
     } else {
@@ -428,6 +497,8 @@ async function undo(annotationId) {
     const item = current();
     item.annotations = (item.annotations || []).filter(row => row.annotation_id !== annotationId);
     renderAnnotations(item);
+    renderIdentificationLabels();
+    renderIdentificationAction();
     setNotice("Correction undone.");
     refreshProgress();
   } catch (error) {
@@ -447,6 +518,7 @@ async function loadBatch({older = false} = {}) {
   let candidateUrl;
   if (identify) {
     for (const turnId of state.seenTurnIds) params.append("exclude", turnId);
+    for (const captureId of state.seenCaptureIds) params.append("exclude_capture", captureId);
     candidateUrl = `/api/motox/review/identification?${params}`;
   } else {
     params.set("target_seconds", "300");
@@ -475,6 +547,8 @@ function nextClip() {
   if (!state.items.length) return;
   const identification = current()?.identification;
   if (identification) state.seenTurnIds.add(identification.turn_id);
+  if (identification) state.seenCaptureIds.add(current().capture_id);
+  if (identification) state.identifiedThisSession += 1;
   state.index += 1;
   if (state.index >= state.items.length) {
     loadBatch({older: !identification});
@@ -492,15 +566,18 @@ function chooseSpeaker(label) {
     button.classList.toggle("pending", pending);
     button.setAttribute("aria-pressed", String(pending));
   });
-  $("#confirm-speaker").disabled = false;
-  $("#confirm-speaker").textContent = `Confirm ${label} & next`;
+  renderIdentificationAction();
   setNotice(`${label} selected. Confirm when you're ready.`);
 }
 
 async function confirmSpeakerAndNext() {
   const label = state.pendingSpeakerLabel;
   if (!label) {
-    setNotice("Choose the voice you hear first.", true);
+    if (hasSavedNonSpeakerLabel()) {
+      await saveAnnotation("speaker", "Not sure");
+      return;
+    }
+    setNotice("Choose a voice or sound first.", true);
     return;
   }
   await saveAnnotation("speaker", label);
@@ -548,6 +625,8 @@ $("#confirm-speaker").addEventListener("click", confirmSpeakerAndNext);
 $("#older").addEventListener("click", () => loadBatch({older: true}));
 $("#refresh").addEventListener("click", () => {
   state.seenTurnIds.clear();
+  state.seenCaptureIds.clear();
+  state.identifiedThisSession = 0;
   loadBatch();
 });
 $("#load-context").addEventListener("click", () => loadContext());
@@ -572,6 +651,8 @@ $("#mode").addEventListener("change", event => {
   state.mode = event.target.value;
   state.before = null;
   state.seenTurnIds.clear();
+  state.seenCaptureIds.clear();
+  state.identifiedThisSession = 0;
   $("#group").hidden = state.mode === "identify";
   loadBatch();
 });
