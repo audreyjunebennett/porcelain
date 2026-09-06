@@ -14,7 +14,7 @@ import threading
 import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -397,8 +397,14 @@ class MotoXStore:
             )
         """
 
-    def render_day(self, day: str) -> Path:
-        path = self.daily_path(day)
+    def _journal_content_for_range(
+        self,
+        start_at: str,
+        end_at: str,
+        heading: str,
+        *,
+        show_dates: bool = False,
+    ) -> str:
         with self._connection() as conn:
             privacy_filter = self._privacy_filter(conn, "k")
             conversations = conn.execute(
@@ -406,15 +412,16 @@ class MotoXStore:
                 SELECT DISTINCT c.*
                 FROM conversations c
                 JOIN chunks k ON k.conversation_id = c.conversation_id
-                WHERE substr(k.captured_at, 1, 10) = ? AND k.kind = 'speech'
+                WHERE k.captured_at >= ? AND k.captured_at < ?
+                  AND k.kind = 'speech'
                 {privacy_filter}
                 ORDER BY c.started_at, c.conversation_id
                 """,
-                (day,),
+                (start_at, end_at),
             ).fetchall()
 
             lines = [
-                f"# Moto X Journal — {day}",
+                f"# Moto X Journal — {heading}",
                 "",
                 "<!-- Generated from motox_v1.sqlite3. Rebuild instead of editing this file. -->",
                 "",
@@ -428,17 +435,22 @@ class MotoXStore:
                     f"""
                     SELECT * FROM chunks
                     WHERE conversation_id = ?
-                      AND substr(captured_at, 1, 10) = ?
+                      AND captured_at >= ? AND captured_at < ?
                       {privacy_filter}
                     ORDER BY captured_at, capture_id
                     """,
-                    (conversation["conversation_id"], day),
+                    (conversation["conversation_id"], start_at, end_at),
                 ).fetchall()
                 speech = [row for row in chunks if row["kind"] == "speech"]
                 if not speech:
                     continue
-                start = display_time(speech[0]["captured_at"])
-                end = display_time(speech[-1]["captured_at"])
+                def journal_time(value: str) -> str:
+                    if not show_dates:
+                        return display_time(value)
+                    return parse_timestamp(value).strftime("%b %d · %I:%M:%S %p").replace(" 0", " ")
+
+                start = journal_time(speech[0]["captured_at"])
+                end = journal_time(speech[-1]["captured_at"])
                 state = "active" if conversation["status"] == "open" else "completed"
                 lines.extend(
                     [
@@ -451,7 +463,7 @@ class MotoXStore:
                 for chunk in speech:
                     transcript = chunk["transcript"].strip()
                     if transcript:
-                        lines.extend([f"**{display_time(chunk['captured_at'])}**", "", transcript, ""])
+                        lines.extend([f"**{journal_time(chunk['captured_at'])}**", "", transcript, ""])
                     if chunk["audio_path"]:
                         audio_name = Path(chunk["audio_path"]).name
                         lines.extend([f"[Audio](../audio/{audio_name})", ""])
@@ -459,7 +471,16 @@ class MotoXStore:
                 if ambient_count:
                     lines.extend([f"<!-- {ambient_count} ambient context chunk(s) attached. -->", ""])
 
-        content = "\n".join(lines).rstrip() + "\n"
+        return "\n".join(lines).rstrip() + "\n"
+
+    def render_day(self, day: str) -> Path:
+        path = self.daily_path(day)
+        start = datetime.strptime(day, "%Y-%m-%d")
+        content = self._journal_content_for_range(
+            start.strftime(TIMESTAMP_FORMAT),
+            (start + timedelta(days=1)).strftime(TIMESTAMP_FORMAT),
+            day,
+        )
         temp_path = path.with_suffix(".md.tmp")
         temp_path.write_text(content, encoding="utf-8")
         os.replace(temp_path, path)
@@ -469,13 +490,29 @@ class MotoXStore:
         path = self.render_day(day)
         return path.read_text(encoding="utf-8")
 
+    def recent_journal_text(
+        self, now: datetime | None = None, *, hours: float = 24.0
+    ) -> str:
+        """Render an exact rolling window without altering dated journal files."""
+
+        now = now or datetime.now()
+        safe_hours = max(1.0, min(float(hours), 168.0))
+        start = now - timedelta(hours=safe_hours)
+        return self._journal_content_for_range(
+            start.strftime(TIMESTAMP_FORMAT),
+            now.strftime(TIMESTAMP_FORMAT),
+            f"last {safe_hours:g} hours",
+            show_dates=True,
+        )
+
     def recent_transcript(self, limit: int = 4) -> list[dict[str, Any]]:
         safe_limit = max(1, min(int(limit), 20))
         with self._connection() as conn:
             privacy_filter = self._privacy_filter(conn, "chunks")
             rows = conn.execute(
                 f"""
-                SELECT capture_id, captured_at, transcript, speaker, conversation_id
+                SELECT capture_id, captured_at, transcript, speaker, conversation_id,
+                       duration_seconds
                 FROM chunks
                 WHERE kind = 'speech' AND trim(transcript) <> ''
                 {privacy_filter}

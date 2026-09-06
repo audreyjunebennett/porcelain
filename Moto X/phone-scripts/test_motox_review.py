@@ -4,11 +4,56 @@ import unittest
 from pathlib import Path
 
 from build_identification_turns import merge_turns
-from motox_review import MotoXReviewStore
+from motox_review import (
+    MotoXReviewStore,
+    _compatible_embedding_version,
+    _paint_speaker_regions,
+    _timed_speaker_segments,
+)
 from motox_v1 import ChunkEvent, MotoXStore
 
 
 class MotoXReviewStoreTests(unittest.TestCase):
+    def test_newer_speaker_range_paints_only_its_overlap(self):
+        regions = _paint_speaker_regions(
+            [{
+                "speaker": "Ruby",
+                "source": "confirmed",
+                "audio_start_seconds": 0.0,
+                "audio_end_seconds": 8.0,
+            }],
+            [{
+                "speaker": "Lynn",
+                "source": "confirmed",
+                "audio_start_seconds": 2.0,
+                "audio_end_seconds": 5.0,
+            }],
+            8.0,
+        )
+        self.assertEqual(["Ruby", "Lynn", "Ruby"], [row["speaker"] for row in regions])
+        self.assertEqual(
+            [(0.0, 2.0), (2.0, 5.0), (5.0, 8.0)],
+            [
+                (row["audio_start_seconds"], row["audio_end_seconds"])
+                for row in regions
+            ],
+        )
+
+    def test_timed_words_split_into_separate_speaker_segments(self):
+        segments = _timed_speaker_segments(
+            [
+                {"word_index": 0, "word": "Hello", "start_seconds": 0.2, "end_seconds": 0.6},
+                {"word_index": 1, "word": " there.", "start_seconds": 0.6, "end_seconds": 1.0},
+                {"word_index": 2, "word": " Hi!", "start_seconds": 2.0, "end_seconds": 2.4},
+            ],
+            [
+                {"speaker": "Ruby", "source": "confirmed", "audio_start_seconds": 0.0, "audio_end_seconds": 1.1},
+                {"speaker": "Lynn", "source": "predicted", "audio_start_seconds": 1.8, "audio_end_seconds": 2.6},
+            ],
+        )
+        self.assertEqual(["Ruby", "Lynn"], [item["speaker"] for item in segments])
+        self.assertEqual("Hello there.", segments[0]["text"])
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         root = Path(self.temp.name)
@@ -32,6 +77,12 @@ class MotoXReviewStoreTests(unittest.TestCase):
 
     def tearDown(self):
         self.temp.cleanup()
+
+    def test_embedding_hardware_builds_share_a_model_family(self):
+        self.assertEqual(
+            _compatible_embedding_version("2.11.0+cpu"),
+            _compatible_embedding_version("2.11.0+cu130"),
+        )
 
     def test_candidate_keeps_machine_transcript_and_audio_private(self):
         candidate = self.review.candidates(target_seconds=300)[0]
@@ -89,6 +140,43 @@ class MotoXReviewStoreTests(unittest.TestCase):
         self.assertEqual("Ruby plays mine chat.", candidate["transcript"])
         self.assertEqual("Ruby plays Minecraft.", candidate["corrected_transcript"])
         self.assertEqual(2, len(candidate["words"]))
+
+    def test_newer_partial_speaker_annotation_splits_journal_bubbles(self):
+        journal = MotoXStore(self.database, Path(self.temp.name) / "daily")
+        text = "Ruby says hello. Lynn answers now."
+        journal.record_transcription_pass(
+            "clip-1",
+            text,
+            [
+                {"word": "Ruby", "start_seconds": 0.2, "end_seconds": 0.7, "probability": 0.9, "char_start": 0, "char_end": 4},
+                {"word": " says hello.", "start_seconds": 0.7, "end_seconds": 1.8, "probability": 0.9, "char_start": 4, "char_end": 16},
+                {"word": " Lynn", "start_seconds": 2.0, "end_seconds": 2.5, "probability": 0.9, "char_start": 16, "char_end": 21},
+                {"word": " answers now.", "start_seconds": 2.5, "end_seconds": 3.8, "probability": 0.9, "char_start": 21, "char_end": len(text)},
+            ],
+        )
+        self.review.add_annotation(
+            capture_id="clip-1",
+            start_char=0,
+            end_char=len(text),
+            annotation_type="speaker",
+            label="Ruby",
+            audio_start_seconds=0.0,
+            audio_end_seconds=4.0,
+        )
+        self.review.add_annotation(
+            capture_id="clip-1",
+            start_char=16,
+            end_char=len(text),
+            annotation_type="speaker",
+            label="Lynn",
+            audio_start_seconds=2.0,
+            audio_end_seconds=4.0,
+        )
+
+        layer = self.review.journal_speaker_predictions("2026-08-08")["clip-1"]
+        self.assertEqual(["Ruby", "Lynn"], [row["speaker"] for row in layer["segments"]])
+        self.assertEqual("Ruby says hello.", layer["segments"][0]["text"])
+        self.assertEqual("Lynn answers now.", layer["segments"][1]["text"])
 
     def test_context_expands_within_conversation(self):
         journal = MotoXStore(self.database, Path(self.temp.name) / "daily")
@@ -165,6 +253,50 @@ class MotoXReviewStoreTests(unittest.TestCase):
             if row["label"] == "Television"
         ]
         self.assertEqual(1, len(television))
+
+    def test_quick_speaker_label_replaces_and_clears_only_speaker_scope(self):
+        self.review.add_annotation(
+            capture_id="clip-1",
+            start_char=0,
+            end_char=0,
+            annotation_type="speaker",
+            label="Ruby",
+            audio_start_seconds=2.0,
+            audio_end_seconds=8.0,
+        )
+        self.review.add_annotation(
+            capture_id="clip-1",
+            start_char=0,
+            end_char=0,
+            annotation_type="sound",
+            label="Music",
+            audio_start_seconds=2.0,
+            audio_end_seconds=8.0,
+        )
+
+        changed = self.review.set_quick_speaker_label(
+            capture_id="clip-1",
+            audio_start_seconds=2.0,
+            audio_end_seconds=8.0,
+            label="Lynn",
+        )
+        self.assertEqual("Lynn", changed["label"])
+        annotations = self.review.candidates()[0]["annotations"]
+        self.assertEqual({"Lynn", "Music"}, {row["label"] for row in annotations})
+        self.assertEqual(
+            "Lynn", self.review.active_speaker_annotations(["clip-1"])["clip-1"][0]["label"]
+        )
+
+        cleared = self.review.set_quick_speaker_label(
+            capture_id="clip-1",
+            audio_start_seconds=2.0,
+            audio_end_seconds=8.0,
+            label=None,
+        )
+        self.assertEqual("Unsorted", cleared["label"])
+        annotations = self.review.candidates()[0]["annotations"]
+        self.assertEqual(["Music"], [row["label"] for row in annotations])
+        self.assertEqual({}, self.review.active_speaker_annotations(["clip-1"]))
 
     def test_audio_range_requires_a_forward_finite_pair(self):
         with self.assertRaises(ValueError):
@@ -317,6 +449,14 @@ class MotoXReviewStoreTests(unittest.TestCase):
             question["audio_start_seconds"], question["audio_end_seconds"]
         ))
         self.assertEqual({"Ruby": 1, "Lynn": 1, "Raven": 0}, question["profile_examples"])
+        journal_predictions = self.review.journal_speaker_predictions("2026-08-08")
+        self.assertEqual(
+            ["Ruby", "Lynn"], journal_predictions["clip-1"]["speakers"][:2]
+        )
+        self.assertEqual(
+            journal_predictions,
+            self.review.journal_speaker_predictions(["2026-08-08", "2026-08-09"]),
+        )
 
     def test_identification_turn_answer_is_reversible_and_reenters_queue(self):
         turn_id = "d" * 32
@@ -347,6 +487,53 @@ class MotoXReviewStoreTests(unittest.TestCase):
         self.assertEqual([], self.review.identification_candidates())
         self.assertTrue(self.review.revert_annotation(annotation["annotation_id"]))
         self.assertEqual(turn_id, self.review.identification_candidates()[0]["identification"]["turn_id"])
+
+    def test_trimmed_speaker_answer_keeps_crop_and_derived_embedding(self):
+        turn_id = "1" * 32
+        self.review.add_speaker_turns(
+            [{
+                "turn_id": turn_id,
+                "capture_id": "clip-1",
+                "audio_start_seconds": 2.0,
+                "audio_end_seconds": 6.0,
+                "cluster_id": "report-trim/SPEAKER_00",
+                "embedding": [1.0, 0.0],
+                "quality": 0.8,
+            }],
+            embedding_model="test-embedding",
+            embedding_version="1",
+            diarization_model="test-diarization",
+            source_id="report-trim",
+        )
+        annotation = self.review.add_annotation(
+            capture_id="clip-1",
+            start_char=0,
+            end_char=0,
+            annotation_type="speaker",
+            label="Ruby",
+            audio_start_seconds=2.25,
+            audio_end_seconds=5.4,
+            speaker_turn_id=turn_id,
+            speaker_embedding=[0.0, 1.0],
+            speaker_embedding_model="test-embedding",
+            speaker_embedding_version="1",
+        )
+        self.assertEqual(
+            (2.25, 5.4),
+            (annotation["audio_start_seconds"], annotation["audio_end_seconds"]),
+        )
+        with self.review._connect() as connection:
+            example = connection.execute(
+                "SELECT * FROM review_speaker_examples WHERE annotation_id = ?",
+                (annotation["annotation_id"],),
+            ).fetchone()
+        self.assertIsNotNone(example)
+        self.assertEqual(2, example["embedding_dim"])
+        prediction = self.review.journal_speaker_predictions("2026-08-08")["clip-1"]["turns"][0]
+        self.assertEqual(
+            (2.25, 5.4),
+            (prediction["audio_start_seconds"], prediction["audio_end_seconds"]),
+        )
 
     def test_sound_or_overlap_annotation_handles_matching_identification_turn(self):
         turn_id = "e" * 32

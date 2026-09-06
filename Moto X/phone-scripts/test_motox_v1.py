@@ -95,6 +95,20 @@ class MotoXStoreTests(unittest.TestCase):
         self.assertIn("[Audio](../audio/a.aac)", first)
         self.assertIn("1 ambient context chunk", first)
 
+    def test_recent_journal_is_a_rolling_24_hour_window(self):
+        audio = Path(self.temp.name) / "audio" / "a.aac"
+        self.add("old", "2026-07-18_23-59-59", "speech", "Too old", str(audio))
+        self.add("yesterday", "2026-07-19_00-30-00", "speech", "Before midnight", str(audio))
+        self.add("today", "2026-07-20_00-05-00", "speech", "After midnight", str(audio))
+
+        recent = self.store.recent_journal_text(datetime(2026, 7, 20, 0, 15, 0))
+
+        self.assertNotIn("Too old", recent)
+        self.assertIn("Before midnight", recent)
+        self.assertIn("After midnight", recent)
+        self.assertIn("Jul 19", recent)
+        self.assertIn("Jul 20", recent)
+
     def test_transcription_passes_are_versioned_with_word_timestamps(self):
         self.add("timed", "2026-07-19_02-00-00", "speech", "Hello world")
         first = self.store.record_transcription_pass(

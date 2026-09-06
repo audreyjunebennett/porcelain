@@ -70,10 +70,190 @@ def _cosine(left: list[float], right: list[float]) -> float:
     return sum(a * b for a, b in zip(left, right))
 
 
+def _compatible_embedding_version(value: str | None) -> str | None:
+    """Ignore hardware build suffixes for the same torchaudio model release."""
+
+    return str(value).split("+", 1)[0] if value else None
+
+
 def _range_overlap(
     left_start: float, left_end: float, right_start: float, right_end: float
 ) -> float:
     return max(0.0, min(left_end, right_end) - max(left_start, right_start))
+
+
+def _timed_speaker_segments(
+    words: list[dict[str, Any]], predictions: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Project timed words into conservative, non-overlapping chat turns."""
+
+    segments: list[dict[str, Any]] = []
+    for word in sorted(words, key=lambda item: int(item.get("word_index", 0))):
+        start = float(word["start_seconds"])
+        end = max(start, float(word["end_seconds"]))
+        midpoint = (start + end) / 2
+        direct = [
+            prediction
+            for prediction in predictions
+            if _range_overlap(
+                start,
+                end,
+                float(prediction["audio_start_seconds"]),
+                float(prediction["audio_end_seconds"]),
+            ) > 0
+            or float(prediction["audio_start_seconds"]) <= midpoint <= float(prediction["audio_end_seconds"])
+        ]
+        labels = list(dict.fromkeys(item["speaker"] for item in direct))
+        if len(labels) > 1:
+            speaker = "Mixed voices"
+            source = "predicted"
+        elif labels:
+            speaker = labels[0]
+            source = next(item["source"] for item in direct if item["speaker"] == speaker)
+        else:
+            nearby = [
+                prediction
+                for prediction in predictions
+                if float(prediction["audio_start_seconds"]) - 0.18
+                <= midpoint
+                <= float(prediction["audio_end_seconds"]) + 0.18
+            ]
+            nearby_labels = list(dict.fromkeys(item["speaker"] for item in nearby))
+            speaker = nearby_labels[0] if len(nearby_labels) == 1 else "Unsorted"
+            source = (
+                next(item["source"] for item in nearby if item["speaker"] == speaker)
+                if speaker != "Unsorted"
+                else "unassigned"
+            )
+
+        text = str(word.get("word") or "")
+        previous = segments[-1] if segments else None
+        if (
+            previous
+            and previous["speaker"] == speaker
+            and previous["source"] == source
+            and start - float(previous["audio_end_seconds"]) <= 1.25
+        ):
+            previous["text"] += text
+            previous["audio_end_seconds"] = end
+        else:
+            segments.append(
+                {
+                    "speaker": speaker,
+                    "source": source,
+                    "text": text,
+                    "audio_start_seconds": start,
+                    "audio_end_seconds": end,
+                }
+            )
+
+    for segment in segments:
+        segment["text"] = segment["text"].strip()
+    return [segment for segment in segments if segment["text"]]
+
+
+def _paint_speaker_regions(
+    base_regions: list[dict[str, Any]],
+    corrections: list[dict[str, Any]],
+    duration_seconds: float,
+) -> list[dict[str, Any]]:
+    """Paint newer human speaker ranges over older/predicted regions."""
+
+    duration = max(0.0, float(duration_seconds))
+    regions: list[dict[str, Any]] = []
+
+    def paint(region: dict[str, Any]) -> None:
+        start = max(0.0, min(duration, float(region["audio_start_seconds"])))
+        end = max(start, min(duration, float(region["audio_end_seconds"])))
+        if end <= start:
+            return
+        replacement = dict(region)
+        replacement["audio_start_seconds"] = start
+        replacement["audio_end_seconds"] = end
+        remaining: list[dict[str, Any]] = []
+        for existing in regions:
+            old_start = float(existing["audio_start_seconds"])
+            old_end = float(existing["audio_end_seconds"])
+            if old_end <= start or old_start >= end:
+                remaining.append(existing)
+                continue
+            if old_start < start:
+                left = dict(existing)
+                left["audio_end_seconds"] = start
+                remaining.append(left)
+            if old_end > end:
+                right = dict(existing)
+                right["audio_start_seconds"] = end
+                remaining.append(right)
+        remaining.append(replacement)
+        regions[:] = sorted(
+            remaining,
+            key=lambda item: (
+                float(item["audio_start_seconds"]),
+                float(item["audio_end_seconds"]),
+            ),
+        )
+
+    for candidate in base_regions:
+        paint(candidate)
+    for correction in corrections:
+        paint(correction)
+
+    merged: list[dict[str, Any]] = []
+    for region in regions:
+        previous = merged[-1] if merged else None
+        if (
+            previous
+            and previous.get("speaker") == region.get("speaker")
+            and previous.get("source") == region.get("source")
+            and abs(
+                float(previous["audio_end_seconds"])
+                - float(region["audio_start_seconds"])
+            ) < 0.001
+        ):
+            previous["audio_end_seconds"] = region["audio_end_seconds"]
+        else:
+            merged.append(region)
+    return merged
+
+
+def _speaker_annotation_region(
+    annotation: dict[str, Any],
+    words: list[dict[str, Any]],
+    transcript: str,
+    duration_seconds: float,
+) -> dict[str, Any] | None:
+    """Resolve a human text/audio annotation to one paintable audio region."""
+
+    start = annotation.get("audio_start_seconds")
+    end = annotation.get("audio_end_seconds")
+    if start is None or end is None:
+        start_char = int(annotation.get("start_char") or 0)
+        end_char = int(annotation.get("end_char") or 0)
+        selected_words = [
+            word
+            for word in words
+            if int(word.get("char_end") or 0) > start_char
+            and int(word.get("char_start") or 0) < end_char
+        ]
+        if selected_words:
+            start = float(selected_words[0]["start_seconds"])
+            end = float(selected_words[-1]["end_seconds"])
+        elif start_char == 0 and end_char >= len(transcript):
+            start, end = 0.0, duration_seconds
+        else:
+            return None
+    start = max(0.0, min(float(duration_seconds), float(start)))
+    end = max(start, min(float(duration_seconds), float(end)))
+    if end <= start:
+        return None
+    return {
+        "speaker": annotation["label"],
+        "audio_start_seconds": start,
+        "audio_end_seconds": end,
+        "confidence": 1.0,
+        "source": "confirmed",
+    }
 
 
 class MotoXReviewStore:
@@ -201,6 +381,20 @@ class MotoXReviewStore:
                 """
                 CREATE INDEX IF NOT EXISTS idx_review_speaker_turns_model
                 ON review_speaker_turns(embedding_model, embedding_dim, quality)
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS review_speaker_examples (
+                    annotation_id TEXT PRIMARY KEY,
+                    embedding BLOB NOT NULL,
+                    embedding_dim INTEGER NOT NULL,
+                    embedding_model TEXT NOT NULL,
+                    embedding_version TEXT,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY (annotation_id)
+                        REFERENCES review_annotations(annotation_id)
+                )
                 """
             )
             connection.execute("PRAGMA optimize")
@@ -630,6 +824,73 @@ class MotoXReviewStore:
             and len(tv_captures) / max(1, len(reviewed[source_id])) >= 0.6
         }
 
+    @classmethod
+    def _identity_profiles(
+        cls,
+        turns: list[dict[str, Any]],
+        annotations: list[dict[str, Any]],
+        speaker_examples: dict[str, dict[str, Any]],
+    ) -> dict[str, Any]:
+        labels = cls._speaker_labels_for_turns(turns, annotations)
+        handled_non_voice = cls._non_voice_labels_for_turns(turns, annotations)
+        compatible_vectors: dict[
+            tuple[str, str | None, int], dict[str, list[list[float]]]
+        ] = defaultdict(lambda: defaultdict(list))
+        cluster_votes: dict[str, Counter[str]] = defaultdict(Counter)
+        global_examples: Counter[str] = Counter()
+        direct_annotations = {
+            str(annotation["speaker_turn_id"]): annotation
+            for annotation in annotations
+            if annotation["annotation_type"] == "speaker"
+            and annotation.get("speaker_turn_id")
+        }
+        for turn in turns:
+            label = labels.get(turn["turn_id"])
+            if label:
+                cluster_votes[turn["cluster_id"]][label] += 1
+            if label not in IDENTITY_LABELS or turn["turn_id"] in handled_non_voice:
+                continue
+            annotation = direct_annotations.get(turn["turn_id"])
+            example = speaker_examples.get(
+                annotation["annotation_id"] if annotation else ""
+            )
+            if example:
+                key = (
+                    example["embedding_model"],
+                    _compatible_embedding_version(example["embedding_version"]),
+                    int(example["embedding_dim"]),
+                )
+                vector = example["vector"]
+            else:
+                adjusted = annotation and (
+                    abs(float(annotation["audio_start_seconds"]) - turn["audio_start_seconds"]) > 0.01
+                    or abs(float(annotation["audio_end_seconds"]) - turn["audio_end_seconds"]) > 0.01
+                )
+                if adjusted:
+                    continue
+                key = (
+                    turn["embedding_model"],
+                    _compatible_embedding_version(turn["embedding_version"]),
+                    int(turn["embedding_dim"]),
+                )
+                vector = turn["vector"]
+            compatible_vectors[key][label].append(vector)
+            global_examples[label] += 1
+        centroids = {
+            key: {
+                label: _mean_embedding(vectors)
+                for label, vectors in by_label.items()
+            }
+            for key, by_label in compatible_vectors.items()
+        }
+        return {
+            "labels": labels,
+            "handled_non_voice": handled_non_voice,
+            "cluster_votes": cluster_votes,
+            "global_examples": global_examples,
+            "centroids": centroids,
+        }
+
     def identification_candidates(
         self,
         *,
@@ -669,14 +930,10 @@ class MotoXReviewStore:
                 """,
                 (MIN_IDENTIFICATION_SECONDS, MAX_IDENTIFICATION_SECONDS),
             ).fetchall()
-            turns = []
+            all_turns = []
             for row in rows:
                 item = dict(row)
-                if (
-                    item["turn_id"] in excluded
-                    or item["capture_id"] in excluded_captures
-                    or not Path(item["audio_path"]).is_file()
-                ):
+                if not Path(item["audio_path"]).is_file():
                     continue
                 try:
                     item["vector"] = _unpack_embedding(
@@ -684,52 +941,50 @@ class MotoXReviewStore:
                     )
                 except ValueError:
                     continue
-                turns.append(item)
+                all_turns.append(item)
+            turns = [
+                turn for turn in all_turns
+                if turn["turn_id"] not in excluded
+                and turn["capture_id"] not in excluded_captures
+            ]
             annotations = [
                 dict(row)
                 for row in connection.execute(
                     """
                     SELECT * FROM review_annotations
                     WHERE reverted_at IS NULL
-                    ORDER BY created_at, annotation_id
+                    ORDER BY created_at, rowid
                     """
                 ).fetchall()
             ]
-
-            labels = self._speaker_labels_for_turns(turns, annotations)
-            handled_non_voice = self._non_voice_labels_for_turns(turns, annotations)
-            contaminated_sources = self._television_contaminated_sources(
-                turns, annotations
-            )
-            compatible_vectors: dict[
-                tuple[str, str | None, int], dict[str, list[list[float]]]
-            ] = defaultdict(lambda: defaultdict(list))
-            cluster_votes: dict[str, Counter[str]] = defaultdict(Counter)
-            global_examples: Counter[str] = Counter()
-            for turn in turns:
-                label = labels.get(turn["turn_id"])
-                if label:
-                    cluster_votes[turn["cluster_id"]][label] += 1
-                if (
-                    label not in IDENTITY_LABELS
-                    or turn["turn_id"] in handled_non_voice
-                ):
+            speaker_examples = {}
+            for row in connection.execute(
+                """
+                SELECT example.* FROM review_speaker_examples example
+                JOIN review_annotations annotation
+                  ON annotation.annotation_id = example.annotation_id
+                WHERE annotation.reverted_at IS NULL
+                """
+            ).fetchall():
+                example = dict(row)
+                try:
+                    example["vector"] = _unpack_embedding(
+                        example.pop("embedding"), int(example["embedding_dim"])
+                    )
+                except ValueError:
                     continue
-                key = (
-                    turn["embedding_model"],
-                    turn["embedding_version"],
-                    int(turn["embedding_dim"]),
-                )
-                compatible_vectors[key][label].append(turn["vector"])
-                global_examples[label] += 1
-
-            centroids = {
-                key: {
-                    label: _mean_embedding(vectors)
-                    for label, vectors in by_label.items()
-                }
-                for key, by_label in compatible_vectors.items()
-            }
+                speaker_examples[example["annotation_id"]] = example
+            profiles = self._identity_profiles(
+                all_turns, annotations, speaker_examples
+            )
+            labels = profiles["labels"]
+            handled_non_voice = profiles["handled_non_voice"]
+            cluster_votes = profiles["cluster_votes"]
+            global_examples = profiles["global_examples"]
+            centroids = profiles["centroids"]
+            contaminated_sources = self._television_contaminated_sources(
+                all_turns, annotations
+            )
 
             ranked = []
             for turn in turns:
@@ -741,7 +996,7 @@ class MotoXReviewStore:
                     continue
                 key = (
                     turn["embedding_model"],
-                    turn["embedding_version"],
+                    _compatible_embedding_version(turn["embedding_version"]),
                     int(turn["embedding_dim"]),
                 )
                 profile = centroids.get(key, {})
@@ -889,6 +1144,204 @@ class MotoXReviewStore:
             result.append(item)
         return result
 
+    def journal_speaker_predictions(
+        self, day: str | list[str] | tuple[str, ...]
+    ) -> dict[str, dict[str, Any]]:
+        """Return conservative derived speaker layers for prepared journal audio."""
+
+        days = {day} if isinstance(day, str) else set(day)
+        for value in days:
+            datetime.strptime(value, "%Y-%m-%d")
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT t.*, c.captured_at, c.audio_path, c.duration_seconds
+                FROM review_speaker_turns t
+                JOIN chunks c ON c.capture_id = t.capture_id
+                WHERE c.kind = 'speech' AND c.audio_path IS NOT NULL
+                  AND NOT EXISTS (
+                      SELECT 1 FROM review_annotations privacy
+                      WHERE privacy.capture_id = c.capture_id
+                        AND privacy.annotation_type = 'privacy'
+                        AND privacy.label = 'Exclude'
+                        AND privacy.reverted_at IS NULL
+                  )
+                ORDER BY t.created_at, t.turn_id
+                """
+            ).fetchall()
+            turns = []
+            for row in rows:
+                turn = dict(row)
+                try:
+                    turn["vector"] = _unpack_embedding(
+                        turn.pop("embedding"), int(turn["embedding_dim"])
+                    )
+                except ValueError:
+                    continue
+                turns.append(turn)
+            annotations = [
+                dict(row)
+                for row in connection.execute(
+                    """
+                    SELECT * FROM review_annotations
+                    WHERE reverted_at IS NULL
+                    ORDER BY created_at, rowid
+                    """
+                ).fetchall()
+            ]
+            speaker_examples = {}
+            for row in connection.execute(
+                """
+                SELECT example.* FROM review_speaker_examples example
+                JOIN review_annotations annotation
+                  ON annotation.annotation_id = example.annotation_id
+                WHERE annotation.reverted_at IS NULL
+                """
+            ).fetchall():
+                example = dict(row)
+                try:
+                    example["vector"] = _unpack_embedding(
+                        example.pop("embedding"), int(example["embedding_dim"])
+                    )
+                except ValueError:
+                    continue
+                speaker_examples[example["annotation_id"]] = example
+        profiles = self._identity_profiles(turns, annotations, speaker_examples)
+        turns_by_capture: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for turn in turns:
+            turns_by_capture[turn["capture_id"]].append(turn)
+        contaminated = self._television_contaminated_sources(turns, annotations)
+        by_capture: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for turn in turns:
+            if str(turn["captured_at"])[:10] not in days:
+                continue
+            label = profiles["labels"].get(turn["turn_id"])
+            human_labeled = label in SPEAKER_LABELS
+            if turn["turn_id"] in profiles["handled_non_voice"]:
+                continue
+            if human_labeled or turn["source_id"] in contaminated:
+                continue
+            key = (
+                turn["embedding_model"],
+                _compatible_embedding_version(turn["embedding_version"]),
+                int(turn["embedding_dim"]),
+            )
+            similarities = {
+                identity: _cosine(turn["vector"], centroid)
+                for identity, centroid in profiles["centroids"].get(key, {}).items()
+                if profiles["global_examples"][identity] >= 2
+            }
+            ordered = sorted(similarities, key=similarities.get, reverse=True)
+            if not ordered:
+                continue
+            label = ordered[0]
+            best = similarities[label]
+            second = similarities[ordered[1]] if len(ordered) > 1 else 0.0
+            margin = best - second
+            votes = profiles["cluster_votes"].get(turn["cluster_id"], Counter())
+            if votes:
+                voted_label, voted_count = votes.most_common(1)[0]
+                purity = voted_count / sum(votes.values())
+                if (
+                    voted_label in IDENTITY_LABELS
+                    and voted_count >= 2
+                    and purity >= 0.8
+                ):
+                    label = voted_label
+                    margin = max(margin, 0.08)
+            if best < 0.72 or margin < 0.04:
+                continue
+            confidence = min(0.99, max(0.5, (best - 0.5) * 1.8 + margin))
+            by_capture[turn["capture_id"]].append(
+                {
+                    "speaker": label,
+                    "audio_start_seconds": turn["audio_start_seconds"],
+                    "audio_end_seconds": turn["audio_end_seconds"],
+                    "confidence": round(confidence, 3),
+                    "source": "predicted",
+                }
+            )
+
+        speaker_annotations: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for annotation in annotations:
+            if (
+                annotation["annotation_type"] == "speaker"
+                and annotation.get("label") in SPEAKER_LABELS
+            ):
+                speaker_annotations[annotation["capture_id"]].append(annotation)
+
+        with self._connect() as connection:
+            day_placeholders = ",".join("?" for _ in days)
+            annotated_rows = connection.execute(
+                f"""
+                SELECT DISTINCT c.capture_id, c.duration_seconds
+                FROM chunks c
+                JOIN review_annotations annotation
+                  ON annotation.capture_id = c.capture_id
+                WHERE substr(c.captured_at, 1, 10) IN ({day_placeholders})
+                  AND c.kind = 'speech'
+                  AND annotation.annotation_type = 'speaker'
+                  AND annotation.reverted_at IS NULL
+                  AND NOT EXISTS (
+                      SELECT 1 FROM review_annotations privacy
+                      WHERE privacy.capture_id = c.capture_id
+                        AND privacy.annotation_type = 'privacy'
+                        AND privacy.label = 'Exclude'
+                        AND privacy.reverted_at IS NULL
+                  )
+                """,
+                tuple(sorted(days)),
+            ).fetchall()
+            annotated_durations = {
+                row["capture_id"]: float(row["duration_seconds"] or 30.0)
+                for row in annotated_rows
+            }
+            capture_ids = set(by_capture) | set(annotated_durations)
+            transcriptions = self._latest_transcriptions(
+                connection, list(capture_ids)
+            )
+
+        result = {}
+        for capture_id in capture_ids:
+            transcription = transcriptions.get(capture_id, {})
+            duration = annotated_durations.get(capture_id)
+            if duration is None:
+                duration = max(
+                    float(turn.get("duration_seconds") or 30.0)
+                    for turn in turns_by_capture[capture_id]
+                )
+            corrections = []
+            for annotation in speaker_annotations.get(capture_id, []):
+                region = _speaker_annotation_region(
+                    annotation,
+                    transcription.get("words", []),
+                    str(transcription.get("transcript") or ""),
+                    duration,
+                )
+                if region:
+                    corrections.append(region)
+            predictions = _paint_speaker_regions(
+                by_capture.get(capture_id, []), corrections, duration
+            )
+            if not predictions:
+                continue
+            speakers = list(dict.fromkeys(row["speaker"] for row in predictions))
+            result[capture_id] = {
+                "capture_id": capture_id,
+                "duration_seconds": duration,
+                "speakers": speakers,
+                "turns": predictions,
+                "segments": _timed_speaker_segments(
+                    transcription.get("words", []), predictions
+                ),
+                "source": (
+                    "confirmed"
+                    if all(row["source"] == "confirmed" for row in predictions)
+                    else "predicted"
+                ),
+            }
+        return result
+
     def add_annotation(
         self,
         *,
@@ -902,6 +1355,9 @@ class MotoXReviewStore:
         audio_start_seconds: float | None = None,
         audio_end_seconds: float | None = None,
         speaker_turn_id: str | None = None,
+        speaker_embedding: list[float] | None = None,
+        speaker_embedding_model: str | None = None,
+        speaker_embedding_version: str | None = None,
     ) -> dict[str, Any]:
         annotation_type = str(annotation_type).strip().lower()
         if annotation_type not in ANNOTATION_TYPES:
@@ -910,6 +1366,14 @@ class MotoXReviewStore:
             raise ValueError("unsupported label")
         if annotation_type == "transcript" and not (replacement_text or "").strip():
             raise ValueError("replacement text is required")
+        packed_speaker_embedding = None
+        if speaker_embedding is not None:
+            if annotation_type != "speaker" or not speaker_turn_id:
+                raise ValueError("speaker embedding requires a speaker turn")
+            speaker_embedding_model = str(speaker_embedding_model or "").strip()
+            if not speaker_embedding_model:
+                raise ValueError("speaker embedding model is required")
+            packed_speaker_embedding = _pack_embedding(speaker_embedding)
 
         with self._write_lock, self._connect() as connection:
             chunk = connection.execute(
@@ -941,10 +1405,11 @@ class MotoXReviewStore:
                 ).fetchone()
                 if not turn or turn["capture_id"] != capture_id:
                     raise ValueError("speaker turn does not match the capture")
-                # The server, rather than the browser, owns the exact region
-                # used as a training example.
-                audio_start_seconds = float(turn["audio_start_seconds"])
-                audio_end_seconds = float(turn["audio_end_seconds"])
+                # The diarized turn is the proposed crop. A human trim may
+                # refine it while the deterministic turn ID keeps provenance.
+                if audio_start_seconds is None and audio_end_seconds is None:
+                    audio_start_seconds = float(turn["audio_start_seconds"])
+                    audio_end_seconds = float(turn["audio_end_seconds"])
 
             has_audio_start = audio_start_seconds is not None
             has_audio_end = audio_end_seconds is not None
@@ -960,6 +1425,20 @@ class MotoXReviewStore:
                 audio_end_seconds = min(duration, audio_end_seconds)
                 if audio_end_seconds <= audio_start_seconds:
                     raise ValueError("audio range end must be after its start")
+                if speaker_turn_id:
+                    overlap = _range_overlap(
+                        audio_start_seconds,
+                        audio_end_seconds,
+                        float(turn["audio_start_seconds"]),
+                        float(turn["audio_end_seconds"]),
+                    )
+                    if overlap < 0.25:
+                        if packed_speaker_embedding:
+                            raise ValueError("trimmed speaker range must overlap the proposed turn")
+                        audio_start_seconds = float(turn["audio_start_seconds"])
+                        audio_end_seconds = float(turn["audio_end_seconds"])
+                    if audio_end_seconds - audio_start_seconds < 0.5:
+                        raise ValueError("trimmed speaker range must be at least 0.5 seconds")
                 audio_start_seconds = round(audio_start_seconds, 3)
                 audio_end_seconds = round(audio_end_seconds, 3)
 
@@ -1018,6 +1497,29 @@ class MotoXReviewStore:
                 ),
             ).fetchone()
             if existing:
+                if packed_speaker_embedding:
+                    connection.execute(
+                        """
+                        INSERT INTO review_speaker_examples (
+                            annotation_id, embedding, embedding_dim,
+                            embedding_model, embedding_version, created_at
+                        ) VALUES (?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(annotation_id) DO UPDATE SET
+                            embedding = excluded.embedding,
+                            embedding_dim = excluded.embedding_dim,
+                            embedding_model = excluded.embedding_model,
+                            embedding_version = excluded.embedding_version,
+                            created_at = excluded.created_at
+                        """,
+                        (
+                            existing["annotation_id"],
+                            packed_speaker_embedding[0],
+                            packed_speaker_embedding[1],
+                            speaker_embedding_model,
+                            speaker_embedding_version,
+                            _now(),
+                        ),
+                    )
                 return dict(existing)
             connection.execute(
                 """
@@ -1029,6 +1531,23 @@ class MotoXReviewStore:
                 """,
                 tuple(annotation.values()),
             )
+            if packed_speaker_embedding:
+                connection.execute(
+                    """
+                    INSERT INTO review_speaker_examples (
+                        annotation_id, embedding, embedding_dim,
+                        embedding_model, embedding_version, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        annotation["annotation_id"],
+                        packed_speaker_embedding[0],
+                        packed_speaker_embedding[1],
+                        speaker_embedding_model,
+                        speaker_embedding_version,
+                        _now(),
+                    ),
+                )
         return annotation
 
     def revert_annotation(self, annotation_id: str) -> bool:
@@ -1041,6 +1560,171 @@ class MotoXReviewStore:
                 (_now(), annotation_id),
             )
         return cursor.rowcount == 1
+
+    def set_quick_speaker_label(
+        self,
+        *,
+        capture_id: str,
+        audio_start_seconds: float,
+        audio_end_seconds: float,
+        label: str | None,
+    ) -> dict[str, Any]:
+        """Replace the speaker correction for one dashboard audio region.
+
+        ``None`` means Unsorted: overlapping human speaker corrections are
+        reverted and no replacement is added. Other annotation kinds remain
+        untouched.
+        """
+
+        if label not in (None, "Ruby", "Lynn"):
+            raise ValueError("quick speaker label must be Unsorted, Ruby, or Lynn")
+        start = float(audio_start_seconds)
+        end = float(audio_end_seconds)
+        if not isfinite(start) or not isfinite(end):
+            raise ValueError("audio range times must be finite")
+
+        with self._write_lock, self._connect() as connection:
+            chunk = connection.execute(
+                """
+                SELECT duration_seconds,
+                       COALESCE((
+                           SELECT tp.transcript FROM transcription_passes tp
+                           WHERE tp.capture_id = c.capture_id AND tp.is_current = 1
+                           ORDER BY tp.created_at DESC, tp.pass_id DESC LIMIT 1
+                       ), c.transcript) AS transcript
+                FROM chunks c WHERE c.capture_id = ?
+                """,
+                (capture_id,),
+            ).fetchone()
+            if not chunk:
+                raise KeyError("unknown capture")
+            duration = max(0.0, float(chunk["duration_seconds"] or 30.0))
+            start = round(max(0.0, start), 3)
+            end = round(min(duration, end), 3)
+            if end <= start:
+                raise ValueError("audio range end must be after its start")
+
+            active = connection.execute(
+                """
+                SELECT * FROM review_annotations
+                WHERE capture_id = ? AND annotation_type = 'speaker'
+                  AND reverted_at IS NULL
+                ORDER BY created_at, annotation_id
+                """,
+                (capture_id,),
+            ).fetchall()
+            conflicting_ids = []
+            for annotation in active:
+                old_start = annotation["audio_start_seconds"]
+                old_end = annotation["audio_end_seconds"]
+                if old_start is None or old_end is None:
+                    old_start, old_end = 0.0, duration
+                old_start, old_end = float(old_start), float(old_end)
+                shorter = min(end - start, old_end - old_start)
+                overlap = _range_overlap(start, end, old_start, old_end)
+                if shorter > 0 and overlap / shorter >= 0.65:
+                    conflicting_ids.append(annotation["annotation_id"])
+
+            changed_at = _now()
+            if conflicting_ids:
+                connection.executemany(
+                    """
+                    UPDATE review_annotations SET reverted_at = ?
+                    WHERE annotation_id = ? AND reverted_at IS NULL
+                    """,
+                    [(changed_at, annotation_id) for annotation_id in conflicting_ids],
+                )
+
+            annotation = None
+            if label is not None:
+                matching_turn = connection.execute(
+                    """
+                    SELECT turn_id, audio_start_seconds, audio_end_seconds
+                    FROM review_speaker_turns
+                    WHERE capture_id = ?
+                    ORDER BY audio_start_seconds, turn_id
+                    """,
+                    (capture_id,),
+                ).fetchall()
+                best_turn_id = None
+                best_coverage = 0.0
+                for turn in matching_turn:
+                    turn_start = float(turn["audio_start_seconds"])
+                    turn_end = float(turn["audio_end_seconds"])
+                    turn_duration = turn_end - turn_start
+                    overlap = _range_overlap(start, end, turn_start, turn_end)
+                    coverage = overlap / turn_duration if turn_duration > 0 else 0.0
+                    target_coverage = overlap / (end - start)
+                    if target_coverage < 0.65:
+                        coverage = 0.0
+                    if coverage > best_coverage:
+                        best_turn_id = turn["turn_id"]
+                        best_coverage = coverage
+                if best_coverage < 0.65:
+                    best_turn_id = None
+
+                transcript = str(chunk["transcript"] or "")
+                annotation = {
+                    "annotation_id": uuid.uuid4().hex,
+                    "capture_id": capture_id,
+                    "start_char": 0,
+                    "end_char": 0,
+                    "selected_text": "",
+                    "audio_start_seconds": start,
+                    "audio_end_seconds": end,
+                    "annotation_type": "speaker",
+                    "label": label,
+                    "replacement_text": None,
+                    "speaker_turn_id": best_turn_id,
+                    "source": "human",
+                    "created_at": changed_at,
+                    "reverted_at": None,
+                }
+                connection.execute(
+                    """
+                    INSERT INTO review_annotations (
+                        annotation_id, capture_id, start_char, end_char, selected_text,
+                        audio_start_seconds, audio_end_seconds, annotation_type, label,
+                        replacement_text, speaker_turn_id, source, created_at, reverted_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    tuple(annotation.values()),
+                )
+
+        return {
+            "capture_id": capture_id,
+            "audio_start_seconds": start,
+            "audio_end_seconds": end,
+            "label": label or "Unsorted",
+            "reverted_count": len(conflicting_ids),
+            "annotation": annotation,
+        }
+
+    def active_speaker_annotations(
+        self, capture_ids: list[str]
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Return active human speaker ranges for lightweight dashboard projection."""
+
+        capture_ids = list(dict.fromkeys(str(value) for value in capture_ids if value))
+        if not capture_ids:
+            return {}
+        placeholders = ",".join("?" for _ in capture_ids)
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT * FROM review_annotations
+                WHERE capture_id IN ({placeholders})
+                  AND annotation_type = 'speaker'
+                  AND label IN ('Ruby', 'Lynn')
+                  AND reverted_at IS NULL
+                ORDER BY created_at, annotation_id
+                """,
+                capture_ids,
+            ).fetchall()
+        result: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for row in rows:
+            result[row["capture_id"]].append(dict(row))
+        return dict(result)
 
     def progress(self) -> dict[str, Any]:
         seconds = {label: 0.0 for label in SPEAKER_LABELS + SOUND_LABELS[:2]}

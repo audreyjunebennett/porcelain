@@ -3,6 +3,7 @@ const state = {
   index: 0,
   selection: null,
   audioSelection: {start: null, end: null},
+  trimWindow: {start: 0, end: 30},
   mode: "identify",
   group: "all",
   before: null,
@@ -12,6 +13,9 @@ const state = {
   seenTurnIds: new Set(),
   seenCaptureIds: new Set(),
   identifiedThisSession: 0,
+  autoPlayNext: false,
+  waveform: null,
+  waveformToken: 0,
   pendingSpeakerLabel: null,
 };
 
@@ -19,6 +23,7 @@ const $ = selector => document.querySelector(selector);
 const transcript = $("#transcript");
 const notice = $("#notice");
 const audio = $("#audio");
+const trimStage = $("#trim-stage");
 
 function escapeHtml(value) {
   return String(value).replace(/[&<>'"]/g, character => ({
@@ -127,7 +132,7 @@ function renderIdentificationAction() {
     button.textContent = `Confirm ${state.pendingSpeakerLabel} & next`;
   } else if (hasSavedNonSpeakerLabel()) {
     button.disabled = false;
-    button.textContent = "Next clip";
+    button.textContent = "Confirm sound only & next";
   } else {
     button.disabled = true;
     button.textContent = "Choose a voice or sound first";
@@ -163,11 +168,8 @@ function correctedTranscript(item) {
 function scopeDescription() {
   const item = current();
   const range = activeAudioRange();
-  if (range && state.selection) {
-    return [`${formatTimestamp(range.start)}–${formatTimestamp(range.end)}`, `“${state.selection.text}”`];
-  }
-  if (range) return [`${formatTimestamp(range.start)}–${formatTimestamp(range.end)}`, "selected audio"];
-  if (state.selection) return ["SELECTED WORDS", `“${state.selection.text}”`];
+  if (range) return [`${formatTimestamp(range.start)}–${formatTimestamp(range.end)}`, "Use whole clip"];
+  if (state.selection) return ["SELECTED WORDS", "Use whole clip"];
   return ["WHOLE CLIP", item ? formatDuration(item.duration_seconds) : ""];
 }
 
@@ -176,7 +178,25 @@ function renderScope() {
   const whole = !state.selection && !activeAudioRange();
   const scope = $("#scope");
   scope.classList.toggle("whole", whole);
-  scope.innerHTML = `<span>Applying to</span><strong>${escapeHtml(title)}</strong><small>${escapeHtml(detail)}</small>`;
+  scope.innerHTML = `<span>Applying to</span><strong>${escapeHtml(title)}</strong>${detail ? `<small>${escapeHtml(detail)}</small>` : ""}`;
+  scope.setAttribute("aria-label", whole
+    ? "Applying to whole clip"
+    : `Applying to ${title}. Tap to use the whole clip.`);
+}
+
+function clearScopeToWholeClip() {
+  if (!state.selection && !activeAudioRange()) {
+    setNotice("Already applying to the whole clip.");
+    return;
+  }
+  audio.pause();
+  window.getSelection()?.removeAllRanges();
+  state.selection = null;
+  clearAudioRange();
+  configureTrimWindow();
+  setLoop(false);
+  renderTranscript(current());
+  setNotice("Selection cleared. Labels will apply to the whole clip.");
 }
 
 function activeAudioRange() {
@@ -184,6 +204,197 @@ function activeAudioRange() {
   return Number.isFinite(start) && Number.isFinite(end) && end > start
     ? {start, end}
     : null;
+}
+
+function currentAudioDuration() {
+  const duration = Number(audio.duration);
+  if (Number.isFinite(duration) && duration > 0) return duration;
+  return Math.max(0.5, Number(current()?.duration_seconds) || 30);
+}
+
+function configureTrimWindow() {
+  const duration = currentAudioDuration();
+  const range = activeAudioRange();
+  if (!current()?.identification || !range) {
+    state.trimWindow = {start: 0, end: duration};
+    renderTrimEditor();
+    return;
+  }
+  const padding = Math.max(2, (range.end - range.start) * 0.75);
+  let start = Math.max(0, range.start - padding);
+  let end = Math.min(duration, range.end + padding);
+  const targetWidth = Math.min(duration, Math.max(8, range.end - range.start + padding * 2));
+  if (end - start < targetWidth) {
+    if (start === 0) end = Math.min(duration, targetWidth);
+    else if (end === duration) start = Math.max(0, duration - targetWidth);
+  }
+  state.trimWindow = {start, end};
+  renderTrimEditor();
+}
+
+function trimPercent(seconds) {
+  const width = state.trimWindow.end - state.trimWindow.start;
+  return width > 0
+    ? Math.max(0, Math.min(100, ((seconds - state.trimWindow.start) / width) * 100))
+    : 0;
+}
+
+function drawWaveform() {
+  const canvas = $("#trim-wave");
+  const width = Math.max(1, Math.round(canvas.clientWidth * window.devicePixelRatio));
+  const height = Math.max(1, Math.round(canvas.clientHeight * window.devicePixelRatio));
+  if (canvas.width !== width) canvas.width = width;
+  if (canvas.height !== height) canvas.height = height;
+  const context = canvas.getContext("2d");
+  context.clearRect(0, 0, width, height);
+  const waveform = state.waveform;
+  if (!waveform?.samples?.length) return;
+  const center = height / 2;
+  const bars = Math.max(24, Math.floor(width / (5 * window.devicePixelRatio)));
+  const windowDuration = state.trimWindow.end - state.trimWindow.start;
+  context.fillStyle = "#8b7b96";
+  for (let index = 0; index < bars; index += 1) {
+    const at = state.trimWindow.start + ((index + 0.5) / bars) * windowDuration;
+    const sampleIndex = Math.max(0, Math.min(
+      waveform.samples.length - 1,
+      Math.floor((at / waveform.duration) * waveform.samples.length),
+    ));
+    const amplitude = Math.max(0.06, waveform.samples[sampleIndex]);
+    const barHeight = Math.max(2, amplitude * height * 0.88);
+    const barWidth = Math.max(1, 2 * window.devicePixelRatio);
+    const x = ((index + 0.5) / bars) * width;
+    context.fillRect(x - barWidth / 2, center - barHeight / 2, barWidth, barHeight);
+  }
+}
+
+async function loadWaveform(item) {
+  const token = ++state.waveformToken;
+  state.waveform = null;
+  drawWaveform();
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return;
+  let context;
+  try {
+    const response = await fetch(`/api/motox/review/audio/${encodeURIComponent(item.capture_id)}`);
+    if (!response.ok) return;
+    const bytes = await response.arrayBuffer();
+    context = new AudioContextClass();
+    const buffer = await context.decodeAudioData(bytes.slice(0));
+    if (token !== state.waveformToken) return;
+    const channel = buffer.getChannelData(0);
+    const sampleCount = 360;
+    const stride = Math.max(1, Math.floor(channel.length / sampleCount));
+    const samples = [];
+    let peak = 0;
+    for (let index = 0; index < sampleCount; index += 1) {
+      let value = 0;
+      const start = index * stride;
+      const end = Math.min(channel.length, start + stride);
+      for (let cursor = start; cursor < end; cursor += Math.max(1, Math.floor(stride / 64))) {
+        value = Math.max(value, Math.abs(channel[cursor]));
+      }
+      peak = Math.max(peak, value);
+      samples.push(value);
+    }
+    const scale = peak > 0 ? peak : 1;
+    state.waveform = {duration: buffer.duration, samples: samples.map(value => value / scale)};
+    drawWaveform();
+  } catch (_) {
+    // The trim handles and audio remain fully usable if waveform decoding is
+    // unavailable for a browser/codec combination.
+  } finally {
+    context?.close().catch(() => {});
+  }
+}
+
+function renderTrimEditor() {
+  if (!trimStage) return;
+  const duration = currentAudioDuration();
+  const range = activeAudioRange() || {start: 0, end: duration};
+  const startPercent = trimPercent(range.start);
+  const endPercent = trimPercent(range.end);
+  $("#trim-start").style.left = `${startPercent}%`;
+  $("#trim-end").style.left = `${endPercent}%`;
+  $("#trim-selection").style.left = `${startPercent}%`;
+  $("#trim-selection").style.width = `${Math.max(0, endPercent - startPercent)}%`;
+  $("#trim-start").setAttribute("aria-valuemax", String(duration));
+  $("#trim-end").setAttribute("aria-valuemax", String(duration));
+  $("#trim-start").setAttribute("aria-valuenow", range.start.toFixed(2));
+  $("#trim-end").setAttribute("aria-valuenow", range.end.toFixed(2));
+  $("#trim-window-start").textContent = formatTimestamp(state.trimWindow.start);
+  $("#trim-window-end").textContent = formatTimestamp(state.trimWindow.end);
+  const playhead = Number(audio.currentTime);
+  const inWindow = Number.isFinite(playhead)
+    && playhead >= state.trimWindow.start && playhead <= state.trimWindow.end;
+  $("#trim-playhead").style.opacity = inWindow ? "1" : "0";
+  if (inWindow) $("#trim-playhead").style.left = `${trimPercent(playhead)}%`;
+  $("#trim-play").textContent = audio.paused ? "▶" : "❚❚";
+  drawWaveform();
+}
+
+function trimTimeFromPointer(event) {
+  const rect = trimStage.getBoundingClientRect();
+  const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+  return state.trimWindow.start + ratio * (state.trimWindow.end - state.trimWindow.start);
+}
+
+function setTrimBoundary(boundary, seconds) {
+  const duration = currentAudioDuration();
+  const range = activeAudioRange() || {start: 0, end: duration};
+  const minimum = 0.5;
+  if (boundary === "start") {
+    state.audioSelection.start = Math.max(0, Math.min(seconds, range.end - minimum));
+    state.audioSelection.end = range.end;
+  } else {
+    state.audioSelection.start = range.start;
+    state.audioSelection.end = Math.min(duration, Math.max(seconds, range.start + minimum));
+  }
+  syncTranscriptToAudioRange();
+  renderAudioRange();
+}
+
+function bindTrimHandle(selector, boundary) {
+  const handle = $(selector);
+  let dragOffset = 0;
+  let pointerStartX = 0;
+  let dragged = false;
+  handle.addEventListener("pointerdown", event => {
+    event.preventDefault();
+    handle.classList.add("dragging");
+    handle.setPointerCapture(event.pointerId);
+    const range = activeAudioRange() || {start: 0, end: currentAudioDuration()};
+    const boundaryTime = boundary === "start" ? range.start : range.end;
+    dragOffset = boundaryTime - trimTimeFromPointer(event);
+    pointerStartX = event.clientX;
+    dragged = false;
+  });
+  handle.addEventListener("pointermove", event => {
+    if (!handle.hasPointerCapture(event.pointerId)) return;
+    if (Math.abs(event.clientX - pointerStartX) < 3 && !dragged) return;
+    if (!dragged) audio.pause();
+    dragged = true;
+    setTrimBoundary(boundary, trimTimeFromPointer(event) + dragOffset);
+  });
+  const finish = event => {
+    if (!handle.hasPointerCapture(event.pointerId)) return;
+    handle.releasePointerCapture(event.pointerId);
+    handle.classList.remove("dragging");
+    if (!dragged) return;
+    const range = activeAudioRange();
+    if (range) audio.currentTime = range.start;
+    setLoop(true);
+    audio.play().catch(() => {});
+    setNotice(`Crop adjusted to ${formatTimestamp(range.start)} – ${formatTimestamp(range.end)}. This exact audio will be saved.`);
+  };
+  handle.addEventListener("pointerup", finish);
+  handle.addEventListener("pointercancel", finish);
+  handle.addEventListener("keydown", event => {
+    if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+    event.preventDefault();
+    const range = activeAudioRange() || {start: 0, end: currentAudioDuration()};
+    const currentValue = boundary === "start" ? range.start : range.end;
+    setTrimBoundary(boundary, currentValue + (event.key === "ArrowRight" ? 0.1 : -0.1));
+  });
 }
 
 function renderAudioRange() {
@@ -195,6 +406,27 @@ function renderAudioRange() {
       ? `${formatTimestamp(start)} – choose end`
       : "Whole clip";
   renderScope();
+  renderTrimEditor();
+}
+
+function syncTranscriptToAudioRange() {
+  const item = current();
+  const range = activeAudioRange();
+  if (!item || !range) return false;
+  const words = (item.words || []).filter(word =>
+    Number(word.end_seconds) > range.start && Number(word.start_seconds) < range.end
+  );
+  if (!words.length) {
+    state.selection = null;
+    renderTranscript(item);
+    return false;
+  }
+  const start = Number(words[0].char_start);
+  const end = Number(words[words.length - 1].char_end);
+  const text = item.transcript.slice(start, end).trim();
+  state.selection = {start, end, text};
+  renderTranscript(item);
+  return true;
 }
 
 function clearAudioRange() {
@@ -217,50 +449,80 @@ function restoreIdentificationRange() {
 
 function setLoop(enabled) {
   state.loopSelection = Boolean(enabled);
-  const button = $("#range-loop");
-  button.setAttribute("aria-pressed", String(state.loopSelection));
-  button.textContent = state.loopSelection ? "Loop on" : "Loop off";
 }
 
-function setAudioBoundary(boundary) {
-  const item = current();
-  if (!item) return;
-  const mediaDuration = Number.isFinite(audio.duration) ? audio.duration : item.duration_seconds;
-  const at = Math.max(0, Math.min(Number(audio.currentTime) || 0, Number(mediaDuration) || 30));
-  if (boundary === "start") {
-    state.audioSelection.start = at;
-    if (Number.isFinite(state.audioSelection.end) && state.audioSelection.end <= at) {
-      state.audioSelection.end = null;
-    }
-    setNotice(`Start set at ${formatTimestamp(at)}. Scrub forward and tap End here.`);
+function playNextClipIfArmed() {
+  if (!state.autoPlayNext) return;
+  state.autoPlayNext = false;
+  const playFromSelection = () => {
+    const range = activeAudioRange();
+    if (range) audio.currentTime = range.start;
+    audio.play().catch(() => {
+      setNotice("Your browser blocked automatic playback. Tap play once and the next clips should continue automatically.", true);
+    });
+  };
+  if (audio.readyState >= HTMLMediaElement.HAVE_METADATA) {
+    playFromSelection();
   } else {
-    const start = Number.isFinite(state.audioSelection.start) ? state.audioSelection.start : 0;
-    if (at <= start) {
-      setNotice("The end must be after the selected start.", true);
-      return;
-    }
-    state.audioSelection.start = start;
-    state.audioSelection.end = at;
-    setNotice(`Audio range selected: ${formatTimestamp(start)} – ${formatTimestamp(at)}.`);
+    audio.addEventListener("loadedmetadata", playFromSelection, {once: true});
   }
-  renderAudioRange();
+}
+
+function renderTranscriptText(value, highlight) {
+  value = String(value || "");
+  transcript.replaceChildren();
+  const start = Number(highlight?.start);
+  const end = Number(highlight?.end);
+  if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end <= start || end > value.length) {
+    transcript.textContent = value;
+    return;
+  }
+  transcript.append(document.createTextNode(value.slice(0, start)));
+  const selected = document.createElement("mark");
+  selected.className = "transcript-selection";
+  selected.textContent = value.slice(start, end);
+  transcript.append(selected, document.createTextNode(value.slice(end)));
+}
+
+function renderTranscriptActions(item) {
+  const fix = $("#fix");
+  const status = $("#selection");
+  if (item.identification) {
+    fix.hidden = true;
+    status.hidden = true;
+    return;
+  }
+  const audioOnly = Boolean(activeAudioRange() && !state.selection);
+  fix.hidden = audioOnly;
+  const selected = state.selection?.text?.trim();
+  const abbreviated = selected && selected.length > 28 ? `${selected.slice(0, 27)}…` : selected;
+  fix.textContent = abbreviated ? `Correct “${abbreviated}”` : "Correct transcript";
+  status.hidden = !audioOnly;
+  status.textContent = audioOnly
+    ? "No timed words overlap this crop; its speaker label will apply to audio only."
+    : "";
 }
 
 function renderTranscript(item) {
-  if (item.identification) {
-    transcript.textContent = item.identification.selected_text
-      || "No word-timed excerpt is available for this older capture. Identify the voice from the selected audio; the full transcript remains in Browse clips.";
-    transcript.classList.remove("corrected");
-    $("#transcript-version").hidden = true;
-    return;
-  }
   const corrected = item.corrected_transcript ?? item.transcript;
   const hasCorrections = corrected !== item.transcript;
+  const showingOriginal = item.identification || state.showOriginal || !hasCorrections;
+  const value = item.identification || showingOriginal ? item.transcript : corrected;
+  const highlight = showingOriginal ? state.selection : null;
+  if (item.identification) {
+    renderTranscriptText(value || item.identification.selected_text
+      || "No word-timed transcript is available for this older capture. Identify the voice from the selected audio.", highlight);
+    transcript.classList.remove("corrected");
+    $("#transcript-version").hidden = true;
+    renderTranscriptActions(item);
+    return;
+  }
   const button = $("#transcript-version");
   button.hidden = !hasCorrections;
   button.textContent = state.showOriginal ? "Show corrected" : "Show original";
-  transcript.textContent = state.showOriginal ? item.transcript : corrected;
+  renderTranscriptText(value, highlight);
   transcript.classList.toggle("corrected", hasCorrections && !state.showOriginal);
+  renderTranscriptActions(item);
 }
 
 function renderCard() {
@@ -268,6 +530,7 @@ function renderCard() {
   const card = $("#card");
   const empty = $("#empty");
   if (!item) {
+    state.autoPlayNext = false;
     card.hidden = true;
     empty.hidden = false;
     $("#position").textContent = state.mode === "identify" ? "0 questions" : "0 clips";
@@ -312,10 +575,9 @@ function renderCard() {
       : "Unsorted · teach me this one";
   $("#learning-reason").hidden = !identification;
   $("#learning-reason").textContent = identification?.reason || "";
-  $("#audio-range-actions").hidden = Boolean(identification);
   $("#instruction").textContent = identification
-    ? "This exact diarized turn is selected and will loop while it plays."
-    : "Select words to select and loop their audio automatically.";
+    ? "Drag either bracket to clean the crop. Matching timed words stay highlighted and the selection loops while it plays."
+    : "Select words to move the audio brackets around them, or drag the brackets to highlight matching words.";
   $("#speaker-prompt").innerHTML = identification
     ? `${escapeHtml(identification.prompt)} <span>Other and Not sure are always okay</span>`
     : "Who is vocalizing? <span>one identity per region</span>";
@@ -332,18 +594,18 @@ function renderCard() {
     ));
   });
   audio.src = `/api/motox/review/audio/${encodeURIComponent(item.capture_id)}`;
+  configureTrimWindow();
+  loadWaveform(item);
+  playNextClipIfArmed();
   renderTranscript(item);
-  $("#selection").textContent = identification
-    ? identification.selected_text
-      ? `Turn text: “${identification.selected_text}”`
-      : "Exact audio turn selected"
-    : "Whole clip selected";
+  if (identification) {
+    syncTranscriptToAudioRange();
+  }
   $("#position").textContent = state.mode === "identify"
     ? `Question ${state.identifiedThisSession + 1}`
     : `${state.index + 1} of ${state.items.length}`;
   $("#next").textContent = "Next clip";
   $("#next").className = "primary";
-  $("#fix").hidden = Boolean(identification);
   $("#next").hidden = Boolean(identification);
   renderAnnotations(item);
   renderIdentificationLabels();
@@ -367,14 +629,12 @@ function selectionInsideTranscript() {
 
 function captureSelection() {
   if (current()?.identification) {
-    setNotice("Smart identification keeps this diarized turn's exact audio boundary.");
+    setNotice("Use the waveform brackets to adjust this suggested audio crop.");
     return;
   }
   state.selection = selectionInsideTranscript();
-  $("#selection").textContent = state.selection
-    ? `Selected: “${state.selection.text}”`
-    : "Whole clip selected";
   if (state.selection) syncAudioToSelectedWords();
+  renderTranscript(current());
   renderScope();
 }
 
@@ -416,7 +676,7 @@ async function saveAnnotation(type, label, replacementText = null) {
     ? {start: 0, end: 0, text: ""}
     : {start: 0, end: item.transcript.length, text: item.transcript});
   const wholeClip = !state.selection && !range;
-  if (wholeClip && type !== "transcript" && !window.confirm(
+  if (wholeClip && type === "speaker" && !window.confirm(
     `Apply “${label}” to the WHOLE ${formatDuration(item.duration_seconds)} clip?`
   )) return;
   try {
@@ -447,13 +707,20 @@ async function saveAnnotation(type, label, replacementText = null) {
     window.getSelection()?.removeAllRanges();
     state.selection = null;
     if (item.identification) {
-      restoreIdentificationRange();
-      $("#selection").textContent = item.identification.selected_text
-        ? `Turn text: “${item.identification.selected_text}”`
-        : "Exact audio turn selected";
+      if (range) {
+        state.audioSelection = {start: range.start, end: range.end};
+        syncTranscriptToAudioRange();
+        renderAudioRange();
+      } else if (wholeClip) {
+        clearAudioRange();
+        configureTrimWindow();
+        setLoop(false);
+      } else {
+        restoreIdentificationRange();
+      }
     } else {
       clearAudioRange();
-      $("#selection").textContent = "Whole clip selected";
+      renderTranscript(item);
     }
     const rangeNotice = range ? ` for ${formatTimestamp(range.start)} – ${formatTimestamp(range.end)}` : "";
     await refreshProgress();
@@ -461,8 +728,11 @@ async function saveAnnotation(type, label, replacementText = null) {
       state.seenTurnIds.add(item.identification.turn_id);
       state.seenCaptureIds.add(item.capture_id);
       state.identifiedThisSession += 1;
+      audio.pause();
+      state.autoPlayNext = true;
       await loadBatch();
-      setNotice(`${label} learned from ${item.identification.duration_seconds.toFixed(1)} seconds. The next question was re-ranked.`);
+      const acceptedSeconds = Number(annotation.audio_end_seconds) - Number(annotation.audio_start_seconds);
+      setNotice(`${label} learned from ${acceptedSeconds.toFixed(1)} clean seconds. The next question was re-ranked.`);
     } else {
       setNotice(`${label || "Correction"} saved${rangeNotice}. Tap the chip below to undo.`);
     }
@@ -545,6 +815,8 @@ async function loadBatch({older = false} = {}) {
 
 function nextClip() {
   if (!state.items.length) return;
+  audio.pause();
+  state.autoPlayNext = true;
   const identification = current()?.identification;
   if (identification) state.seenTurnIds.add(identification.turn_id);
   if (identification) state.seenCaptureIds.add(current().capture_id);
@@ -560,21 +832,24 @@ function nextClip() {
 function chooseSpeaker(label) {
   const item = current();
   if (!item?.identification) return;
-  state.pendingSpeakerLabel = label;
+  const cleared = state.pendingSpeakerLabel === label;
+  state.pendingSpeakerLabel = cleared ? null : label;
   document.querySelectorAll("#labels [data-label]").forEach(button => {
-    const pending = button.dataset.label === label;
+    const pending = button.dataset.label === state.pendingSpeakerLabel;
     button.classList.toggle("pending", pending);
     button.setAttribute("aria-pressed", String(pending));
   });
   renderIdentificationAction();
-  setNotice(`${label} selected. Confirm when you're ready.`);
+  setNotice(cleared
+    ? `${label} cleared. You can choose another voice, or confirm a saved sound by itself.`
+    : `${label} selected. Tap it again to clear, or confirm when you're ready.`);
 }
 
 async function confirmSpeakerAndNext() {
   const label = state.pendingSpeakerLabel;
   if (!label) {
     if (hasSavedNonSpeakerLabel()) {
-      await saveAnnotation("speaker", "Not sure");
+      nextClip();
       return;
     }
     setNotice("Choose a voice or sound first.", true);
@@ -585,14 +860,9 @@ async function confirmSpeakerAndNext() {
 
 transcript.addEventListener("mouseup", captureSelection);
 transcript.addEventListener("touchend", () => setTimeout(captureSelection, 100));
-$("#range-start").addEventListener("click", () => setAudioBoundary("start"));
-$("#range-end").addEventListener("click", () => setAudioBoundary("end"));
-$("#range-clear").addEventListener("click", () => {
-  clearAudioRange();
-  setNotice("Audio selection cleared; labels will use selected text or the whole clip.");
-});
-$("#range-loop").addEventListener("click", () => setLoop(!state.loopSelection));
+$("#scope").addEventListener("click", clearScopeToWholeClip);
 audio.addEventListener("timeupdate", () => {
+  renderTrimEditor();
   const range = activeAudioRange();
   if (state.loopSelection && range && audio.currentTime >= range.end) {
     audio.currentTime = range.start;
@@ -600,9 +870,26 @@ audio.addEventListener("timeupdate", () => {
   }
 });
 audio.addEventListener("loadedmetadata", () => {
+  configureTrimWindow();
   const range = activeAudioRange();
   if (range) audio.currentTime = range.start;
 });
+audio.addEventListener("play", renderTrimEditor);
+audio.addEventListener("pause", renderTrimEditor);
+$("#trim-play").addEventListener("click", () => {
+  if (!audio.paused) {
+    audio.pause();
+    return;
+  }
+  const range = activeAudioRange();
+  if (range && (audio.currentTime < range.start || audio.currentTime >= range.end)) {
+    audio.currentTime = range.start;
+  }
+  audio.play().catch(() => setNotice("Tap the standard audio play button once to allow playback.", true));
+});
+bindTrimHandle("#trim-start", "start");
+bindTrimHandle("#trim-end", "end");
+window.addEventListener("resize", drawWaveform);
 const labelClick = event => {
   const button = event.target.closest("[data-label]");
   if (!button) return;
@@ -637,9 +924,6 @@ $("#transcript-version").addEventListener("click", () => {
   state.selection = null;
   restoreIdentificationRange();
   renderTranscript(current());
-  $("#selection").textContent = current()?.identification
-    ? "Exact audio turn selected"
-    : "Whole clip selected";
 });
 $("#exclude").addEventListener("click", () => saveAnnotation("privacy", "Exclude"));
 $("#group").addEventListener("change", event => {
@@ -661,11 +945,14 @@ $("#fix").addEventListener("click", () => {
   if (!item) return;
   if (!state.showOriginal && item.corrected_transcript !== item.transcript) {
     state.showOriginal = true;
+    window.getSelection()?.removeAllRanges();
+    state.selection = null;
+    clearAudioRange();
     renderTranscript(item);
     setNotice("Showing the original machine text. Select the words you want to correct, then tap Fix again.");
     return;
   }
-  captureSelection();
+  state.selection = selectionInsideTranscript() || state.selection;
   const selected = state.selection?.text || item.transcript;
   $("#original").textContent = selected;
   $("#replacement").value = selected;
@@ -682,4 +969,42 @@ $("#fix-form").addEventListener("submit", event => {
   saveAnnotation("transcript", null, replacement);
 });
 
-loadBatch();
+async function loadInitialView() {
+  const parameters = new URLSearchParams(window.location.search);
+  const captureId = parameters.get("capture");
+  if (!captureId) {
+    await loadBatch();
+    return;
+  }
+  try {
+    const [item, progress, groups] = await Promise.all([
+      requestJson(`/api/motox/review/capture/${encodeURIComponent(captureId)}`),
+      requestJson("/api/motox/review/progress"),
+      requestJson("/api/motox/review/groups"),
+    ]);
+    state.mode = "browse";
+    state.items = [item];
+    state.index = 0;
+    state.before = null;
+    $("#mode").value = "browse";
+    $("#group").hidden = false;
+    renderProgress(progress);
+    renderGroups(groups);
+    renderCard();
+
+    const start = Number(parameters.get("start"));
+    const end = Number(parameters.get("end"));
+    if (Number.isFinite(start) && Number.isFinite(end) && end > start) {
+      state.audioSelection = {start, end};
+      configureTrimWindow();
+      syncTranscriptToAudioRange();
+      renderAudioRange();
+      setLoop(true);
+    }
+    setNotice("Opened from Today’s Journal. Tap an existing label chip to undo it, then choose the corrected speaker.");
+  } catch (error) {
+    setNotice(error.message, true);
+  }
+}
+
+loadInitialView();

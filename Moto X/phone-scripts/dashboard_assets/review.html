@@ -3,11 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#08070b">
+  <meta name="theme-color" content="#000000">
+  <meta name="color-scheme" content="dark">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <link rel="manifest" href="/dashboard-assets/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/dashboard-assets/apple-touch-icon.png">
-  <link rel="stylesheet" href="/dashboard-assets/review.css?v=20260905-confirm-speaker">
+  <link rel="stylesheet" href="/dashboard-assets/review.css?v=20260906-selection-paint">
   <title>Teach Claudia</title>
 </head>
 <body>
@@ -53,30 +54,42 @@
         <button id="skip" class="quiet" type="button">Skip ›</button>
       </div>
 
-      <audio id="audio" controls preload="metadata"></audio>
+      <audio id="audio" preload="metadata"></audio>
 
       <div class="audio-range-picker" aria-label="Audio time selection">
         <div class="audio-range-status">
           <span>Audio selection</span>
           <strong id="audio-range">Whole clip</strong>
         </div>
-        <div id="audio-range-actions" class="audio-range-actions">
-          <button id="range-start" type="button">Start here</button>
-          <button id="range-end" type="button">End here</button>
-          <button id="range-loop" class="quiet-range" type="button" aria-pressed="false">Loop off</button>
-          <button id="range-clear" class="quiet-range" type="button">Clear</button>
+        <div id="trim-editor" class="trim-editor">
+          <button id="trim-play" class="trim-play" type="button" aria-label="Play selected audio">▶</button>
+          <div id="trim-stage" class="trim-stage" aria-label="Trim selected audio">
+            <canvas id="trim-wave" class="trim-wave" aria-hidden="true"></canvas>
+            <div id="trim-selection" class="trim-selection" aria-hidden="true"></div>
+            <div id="trim-playhead" class="trim-playhead" aria-hidden="true"></div>
+            <button id="trim-start" class="trim-handle start" type="button" role="slider" aria-label="Selection start" aria-valuemin="0" aria-valuemax="30" aria-valuenow="0"></button>
+            <button id="trim-end" class="trim-handle end" type="button" role="slider" aria-label="Selection end" aria-valuemin="0" aria-valuemax="30" aria-valuenow="30"></button>
+          </div>
+        </div>
+        <div class="trim-times" aria-hidden="true">
+          <span id="trim-window-start">0:00.0</span>
+          <span>drag brackets to clean the crop</span>
+          <span id="trim-window-end">0:30.0</span>
         </div>
       </div>
 
-      <div id="scope" class="scope whole" aria-live="polite">
+      <button id="scope" class="scope whole" type="button" aria-live="polite" aria-label="Applying to whole clip">
         <span>Applying to</span><strong>WHOLE CLIP</strong>
-      </div>
+      </button>
       <div class="transcript-toolbar">
         <p id="instruction" class="instruction">Select words to select and loop their audio automatically.</p>
         <button id="transcript-version" class="tiny" type="button" hidden>Show original</button>
       </div>
       <div id="transcript" class="transcript" tabindex="0" aria-label="Selectable transcript"></div>
-      <div id="selection" class="selection muted">Whole clip selected</div>
+      <div class="transcript-actions">
+        <div id="selection" class="selection muted" hidden></div>
+        <button id="fix" class="transcript-fix" type="button">Correct transcript</button>
+      </div>
 
       <div class="label-section">
         <p id="speaker-prompt" class="label-title">Who is vocalizing? <span>one identity per region</span></p>
@@ -115,7 +128,6 @@
       </details>
 
       <div class="actions">
-        <button id="fix" type="button">Fix selected words</button>
         <button id="next" class="primary" type="button">Next clip</button>
         <button id="confirm-speaker" class="primary" type="button" hidden>Choose a voice or sound first</button>
       </div>
@@ -138,6 +150,6 @@
     </form>
   </dialog>
 
-  <script src="/dashboard-assets/review.js?v=20260905-tv-contamination-filter"></script>
+  <script src="/dashboard-assets/review.js?v=20260906-selection-paint"></script>
 </body>
 </html>

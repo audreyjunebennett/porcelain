@@ -7,7 +7,7 @@ import subprocess
 import sys
 import threading
 import wave
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 # Load D:\Rebirth\.env if present (gitignored, holds HF_TOKEN and gateway creds)
@@ -98,6 +98,70 @@ V1_STORE = (
     else None
 )
 REVIEW_STORE = MotoXReviewStore(V1_DATABASE) if V1_STORE is not None else None
+_REVIEW_EMBEDDING_LOCK = threading.Lock()
+_REVIEW_EMBEDDING_MODEL = None
+_REVIEW_EMBEDDING_VERSION = None
+
+
+def extract_review_speaker_embedding(
+    capture_id: str, start_seconds: float, end_seconds: float
+) -> tuple[list[float], str, str]:
+    """Embed the exact human-trimmed range used as a voice example."""
+
+    audio_path = REVIEW_STORE.get_audio_path(capture_id) if REVIEW_STORE else None
+    if audio_path is None:
+        raise RuntimeError("speaker example audio is unavailable")
+    duration = float(end_seconds) - float(start_seconds)
+    process = subprocess.run(
+        [
+            FFMPEG_BIN,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-ss",
+            str(float(start_seconds)),
+            "-t",
+            str(duration),
+            "-i",
+            str(audio_path),
+            "-ac",
+            "1",
+            "-ar",
+            "16000",
+            "-f",
+            "f32le",
+            "pipe:1",
+        ],
+        capture_output=True,
+        timeout=90,
+        check=False,
+    )
+    if process.returncode != 0 or not process.stdout:
+        raise RuntimeError("could not decode the trimmed speaker example")
+    waveform = torch.from_numpy(
+        np.frombuffer(process.stdout, dtype=np.float32).copy()
+    )
+    if waveform.numel() < 8000:
+        raise RuntimeError("trimmed speaker example is too short")
+
+    global _REVIEW_EMBEDDING_MODEL, _REVIEW_EMBEDDING_VERSION
+    with _REVIEW_EMBEDDING_LOCK, torch.inference_mode():
+        if _REVIEW_EMBEDDING_MODEL is None:
+            import torchaudio
+
+            _REVIEW_EMBEDDING_MODEL = (
+                torchaudio.pipelines.WAVLM_BASE_PLUS.get_model().cpu().eval()
+            )
+            _REVIEW_EMBEDDING_VERSION = torchaudio.__version__
+        features, _ = _REVIEW_EMBEDDING_MODEL.extract_features(waveform[None])
+        vector = torch.nn.functional.normalize(
+            features[-1].mean(dim=1).squeeze(0), dim=0
+        )
+    return (
+        vector.cpu().tolist(),
+        "torchaudio/wavlm-base-plus",
+        str(_REVIEW_EMBEDDING_VERSION),
+    )
 
 print("Loading Silero VAD model...")
 torch.set_num_threads(1)
@@ -583,7 +647,8 @@ DASHBOARD_HTML = r"""<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#09070d">
+  <meta name="theme-color" content="#000000">
+  <meta name="color-scheme" content="dark">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Claudia">
@@ -592,7 +657,8 @@ DASHBOARD_HTML = r"""<!doctype html>
   <link rel="apple-touch-icon" sizes="180x180" href="/dashboard-assets/apple-touch-icon.png">
   <title>Claudia</title>
   <style>
-    :root { color-scheme: dark; font-family: system-ui, sans-serif; }
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; background: #000; }
+    html { background: #000; }
     body { margin: 0; background: #000; color: #ddd8cf; min-height: 100vh; }
     main { max-width: 34rem; margin: auto; padding: 8vh 1.25rem 3rem; }
     header { display: flex; align-items: center; gap: .65rem; color: #a99f91; }
@@ -600,38 +666,101 @@ DASHBOARD_HTML = r"""<!doctype html>
     #dot.healthy { background: #78b892; box-shadow: 0 0 .6rem #78b89277; }
     #dot.late { background: #c9a55b; }
     #dot.stale { background: #b96b68; }
-    h1 { font-size: 1.3rem; font-weight: 500; margin: 1.2rem 0 .2rem; }
     .muted { color: #776f65; font-size: .82rem; }
-    #recent { margin: 8vh 0 3rem; }
-    .line { margin: 0 0 1.2rem; line-height: 1.45; }
-    .time { color: #776f65; font-size: .72rem; margin-bottom: .2rem; }
-    footer { display: flex; justify-content: space-between; align-items: center; gap: .75rem; }
-    footer .actions { display: flex; gap: .45rem; }
+    .top-actions { display: flex; gap: .5rem; margin: 1.15rem 0 1.4rem; }
+    .top-actions a { flex: 1; text-align: center; }
+    #recent { display: flex; flex-direction: column; gap: .65rem; margin: 1rem 0 3rem; }
+    .bubble { box-sizing: border-box; width: fit-content; max-width: 88%; padding: .72rem .82rem; border: 1px solid #332c37; border-radius: 1rem 1rem 1rem .3rem; background: #19161c; }
+    .bubble.speaker-ruby { align-self: flex-end; border-color: #68487a; border-radius: 1rem 1rem .3rem 1rem; background: linear-gradient(145deg, #392445, #2b1c35); }
+    .bubble.speaker-lynn { align-self: flex-start; border-color: #37644f; background: linear-gradient(145deg, #1e3a2d, #182d24); }
+    .bubble.speaker-raven { align-self: flex-start; border-color: #744936; background: linear-gradient(145deg, #3d271f, #2f1e19); }
+    .bubble-meta { display: flex; justify-content: space-between; gap: .8rem; margin-bottom: .3rem; font-size: .7rem; }
+    .speaker-trigger { color: #d7a9f1; }
+    .speaker-lynn .speaker-trigger { color: #8fd6ad; }
+    .speaker-raven .speaker-trigger { color: #e3a27e; }
+    .speaker-unsorted .speaker-trigger, .speaker-mixed-voices .speaker-trigger { color: #aaa1ad; }
+    .bubble-meta time { color: #776f7b; white-space: nowrap; }
+    .speaker-picker { position: relative; }
+    .speaker-trigger { appearance: none; border: 0; border-radius: .5rem; background: transparent; font: inherit; font-weight: 700; padding: .18rem .28rem; margin: -.18rem -.28rem; cursor: pointer; }
+    .speaker-trigger:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+    .speaker-menu { position: absolute; z-index: 5; top: calc(100% + .35rem); left: -.3rem; min-width: 8.5rem; padding: .32rem; border: 1px solid #504655; border-radius: .75rem; background: #17131b; box-shadow: 0 .7rem 2rem #000b; }
+    .speaker-ruby .speaker-menu { left: auto; right: -.3rem; }
+    .speaker-menu[hidden] { display: none; }
+    .speaker-menu button { display: block; width: 100%; padding: .58rem .65rem; border: 0; border-radius: .5rem; background: transparent; color: #ddd8cf; font: inherit; text-align: left; cursor: pointer; }
+    .speaker-menu button:hover, .speaker-menu button:focus-visible { background: #302936; outline: none; }
+    .bubble p { margin: 0; line-height: 1.42; overflow-wrap: anywhere; }
+    footer { display: grid; gap: .3rem; text-align: center; }
     a { box-sizing: border-box; color: #aaa195; text-decoration: none; border: 1px solid #302d29; padding: .55rem .75rem; border-radius: 999px; }
     @media (max-width: 420px) {
-      footer { flex-direction: column; align-items: stretch; gap: .65rem; }
-      footer .actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: .5rem; }
-      footer a { display: block; padding: .55rem .45rem; text-align: center; white-space: nowrap; }
+      .top-actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+      .top-actions a { display: block; padding: .6rem .45rem; white-space: nowrap; }
     }
   </style>
 </head>
 <body><main>
   <header><span id="dot"></span><span id="health">waiting for a capture</span></header>
-  <h1>Claudia is listening</h1>
-  <div class="muted" id="counts">No chunks today yet</div>
+  <nav class="top-actions"><a href="/review">teach Claudia</a><a id="journal" href="#">today's journal</a></nav>
   <section id="recent"><p class="muted">Recent words will appear here.</p></section>
-  <footer><span class="muted" id="updated"></span><span class="actions"><a href="/review">teach Claudia</a><a id="journal" href="#">today's journal</a></span></footer>
+  <footer><span class="muted" id="counts">No chunks today yet</span><span class="muted" id="updated"></span></footer>
 </main>
 <script>
 const escapeHtml = value => String(value).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
-const renderTranscript = value => escapeHtml(value)
-  .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
-  .replaceAll('\n', '<br>');
+const speakerClass = value => String(value || 'Unsorted').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'unsorted';
+const renderRecent = rows => rows.flatMap(row => (row.segments || []).map(segment => {
+  const offset = Number(segment.audio_start_seconds);
+  const end = Number(segment.audio_end_seconds);
+  const time = row.captured_at.slice(11).replaceAll('-', ':') + (Number.isFinite(offset) && offset > 0 ? ` +${offset.toFixed(1)}s` : '');
+  return `<article class="bubble speaker-${speakerClass(segment.speaker)}" data-speaker-bubble><div class="bubble-meta"><span class="speaker-picker"><button class="speaker-trigger" type="button" aria-expanded="false" data-capture="${escapeHtml(row.capture_id)}" data-start="${Number.isFinite(offset) ? offset : 0}" data-end="${Number.isFinite(end) ? end : Number(row.duration_seconds || 30)}" data-speaker="${escapeHtml(segment.speaker)}">${escapeHtml(segment.speaker)} ▾</button><span class="speaker-menu" hidden><button type="button" data-quick-speaker="Unsorted">Unsorted</button><button type="button" data-quick-speaker="Ruby">Ruby</button><button type="button" data-quick-speaker="Lynn">Lynn</button></span></span><time>${escapeHtml(time)}</time></div><p>${escapeHtml(segment.text)}</p></article>`;
+})).join('');
+const closeSpeakerMenus = () => document.querySelectorAll('.speaker-menu:not([hidden])').forEach(menu => {
+  menu.hidden = true;
+  menu.previousElementSibling?.setAttribute('aria-expanded', 'false');
+});
+document.addEventListener('click', async event => {
+  const choice = event.target.closest('[data-quick-speaker]');
+  if (choice) {
+    const picker = choice.closest('.speaker-picker');
+    const trigger = picker.querySelector('.speaker-trigger');
+    const label = choice.dataset.quickSpeaker;
+    closeSpeakerMenus();
+    if (label === trigger.dataset.speaker) return;
+    choice.disabled = true;
+    try {
+      const response = await fetch('/api/motox/review/quick-speaker', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({capture_id: trigger.dataset.capture, audio_start_seconds: Number(trigger.dataset.start), audio_end_seconds: Number(trigger.dataset.end), label})
+      });
+      const saved = await response.json();
+      if (!response.ok) throw new Error(saved.error || 'Could not save speaker');
+      const bubble = trigger.closest('[data-speaker-bubble]');
+      bubble.className = `bubble speaker-${speakerClass(saved.label)}`;
+      trigger.dataset.speaker = saved.label;
+      trigger.textContent = `${saved.label} ▾`;
+      document.querySelector('#updated').textContent = `${saved.label} saved`;
+    } catch (error) {
+      document.querySelector('#updated').textContent = error.message;
+    } finally {
+      choice.disabled = false;
+    }
+    return;
+  }
+  const trigger = event.target.closest('.speaker-trigger');
+  if (trigger) {
+    const menu = trigger.nextElementSibling;
+    const opening = menu.hidden;
+    closeSpeakerMenus();
+    menu.hidden = !opening;
+    trigger.setAttribute('aria-expanded', String(opening));
+    return;
+  }
+  if (!event.target.closest('.speaker-picker')) closeSpeakerMenus();
+});
+document.addEventListener('scroll', closeSpeakerMenus, {passive: true, capture: true});
 async function refresh() {
   try {
     const [status, recent] = await Promise.all([
       fetch('/api/motox/status').then(r => r.json()),
-      fetch('/api/motox/recent?limit=4').then(r => r.json())
+      fetch('/api/motox/recent?limit=8').then(r => r.json())
     ]);
     const dot = document.querySelector('#dot');
     dot.className = status.capture_health;
@@ -639,8 +768,8 @@ async function refresh() {
     const c = status.today_counts || {};
     const queue = status.recorder ? ` · ${status.recorder.queue_depth} queued` : '';
     document.querySelector('#counts').textContent = `${c.speech || 0} speech · ${c.ambient || 0} ambient · ${c.silence || 0} silent${queue}`;
-    document.querySelector('#journal').href = `/journal/${status.today}`;
-    document.querySelector('#recent').innerHTML = recent.length ? recent.map(row => `<div class="line"><div class="time">${escapeHtml(row.captured_at.slice(11).replaceAll('-', ':'))}</div>${renderTranscript(row.transcript)}</div>`).join('') : '<p class="muted">Recent words will appear here.</p>';
+    document.querySelector('#journal').href = '/journal/recent';
+    document.querySelector('#recent').innerHTML = recent.length ? renderRecent([...recent].reverse()) : '<p class="muted">Recent words will appear here.</p>';
     document.querySelector('#updated').textContent = `updated ${new Date().toLocaleTimeString([], {hour:'numeric', minute:'2-digit'})}`;
   } catch (_) {
     document.querySelector('#health').textContent = 'receiver unavailable';
@@ -653,7 +782,7 @@ refresh(); setInterval(refresh, 10000);
 
 @APP.route("/dashboard-assets/<path:filename>", methods=["GET"])
 def dashboard_asset(filename):
-    max_age = 0 if filename in {"review.js", "review.css"} else 86400
+    max_age = 0 if filename in {"review.js", "review.css", "manifest.webmanifest"} else 86400
     response = send_from_directory(DASHBOARD_ASSET_DIR, filename, max_age=max_age)
     if max_age == 0:
         response.cache_control.no_store = True
@@ -677,10 +806,36 @@ def motox_journal_page(day):
     if V1_STORE is None:
         return "Moto X v1 journal is disabled", 503
     try:
-        content = V1_STORE.journal_text(day)
+        recent = day == "recent"
+        now = datetime.now()
+        content = V1_STORE.recent_journal_text(now) if recent else V1_STORE.journal_text(day)
+        if REVIEW_STORE:
+            prediction_days = (
+                [(now - timedelta(days=1)).strftime("%Y-%m-%d"), now.strftime("%Y-%m-%d")]
+                if recent else [day]
+            )
+            predictions = REVIEW_STORE.journal_speaker_predictions(prediction_days)
+        else:
+            predictions = {}
     except ValueError:
         return "invalid date; expected YYYY-MM-DD", 400
-    return Response(render_journal_html(content, day), mimetype="text/html")
+    speaker_layers = {}
+    for capture_id, prediction in predictions.items():
+        audio_path = REVIEW_STORE.get_audio_path(capture_id)
+        if audio_path and audio_path.name in content:
+            speaker_layers[audio_path.name] = prediction
+    return Response(
+        render_journal_html(
+            content,
+            "Last 24 hours" if recent else day,
+            speaker_layers,
+            source_path="/api/motox/journal/recent" if recent else None,
+            page=max(1, request.args.get("page", 1, type=int) or 1),
+            page_size=12 if recent else None,
+            page_path="/journal/recent" if recent else None,
+        ),
+        mimetype="text/html",
+    )
 
 
 @APP.route("/api/motox/journal-audio/<filename>", methods=["GET"])
@@ -709,10 +864,67 @@ def motox_recent():
     if V1_STORE is None:
         return jsonify([])
     try:
-        limit = int(request.args.get("limit", "4"))
+        limit = int(request.args.get("limit", "8"))
     except ValueError:
-        limit = 4
-    return jsonify(V1_STORE.recent_transcript(limit))
+        limit = 8
+    rows = V1_STORE.recent_transcript(limit)
+    predictions = {}
+    active_speakers = {}
+    if REVIEW_STORE and rows:
+        days = sorted({row["captured_at"][:10] for row in rows})
+        predictions = REVIEW_STORE.journal_speaker_predictions(days)
+        active_speakers = REVIEW_STORE.active_speaker_annotations(
+            [row["capture_id"] for row in rows]
+        )
+    for row in rows:
+        layer = predictions.get(row["capture_id"], {})
+        segments = list(layer.get("segments") or [])
+        if not segments:
+            text = re.sub(r"^\*\*[^*]+:\*\*\s*", "", row["transcript"]).strip()
+            duration = max(0.0, float(row.get("duration_seconds") or 30.0))
+            speaker = "Unsorted"
+            for annotation in active_speakers.get(row["capture_id"], []):
+                start = annotation.get("audio_start_seconds")
+                end = annotation.get("audio_end_seconds")
+                coverage = 1.0 if start is None or end is None else (
+                    max(0.0, float(end) - float(start)) / duration if duration else 0.0
+                )
+                if coverage >= 0.65:
+                    speaker = annotation["label"]
+            segments = [{
+                "speaker": speaker,
+                "source": "confirmed" if speaker != "Unsorted" else "unassigned",
+                "text": text,
+                "audio_start_seconds": 0.0,
+                "audio_end_seconds": duration,
+            }]
+        row["segments"] = segments
+    return jsonify(rows)
+
+
+@APP.route("/api/motox/review/quick-speaker", methods=["POST"])
+def motox_review_quick_speaker():
+    if REVIEW_STORE is None:
+        return jsonify({"error": "Moto X review is disabled"}), 503
+    payload = request.get_json(silent=True) or {}
+    capture_id = str(payload.get("capture_id", ""))
+    if not CAPTURE_ID_RE.fullmatch(capture_id):
+        return jsonify({"error": "invalid capture id"}), 400
+    label = payload.get("label")
+    if label == "Unsorted":
+        label = None
+    try:
+        result = REVIEW_STORE.set_quick_speaker_label(
+            capture_id=capture_id,
+            audio_start_seconds=payload.get("audio_start_seconds"),
+            audio_end_seconds=payload.get("audio_end_seconds"),
+            label=label,
+        )
+        return jsonify(result)
+    except KeyError:
+        return jsonify({"error": "unknown capture"}), 404
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": str(exc)}), 400
 
 
 @APP.route("/api/motox/review/candidates", methods=["GET"])
@@ -783,6 +995,18 @@ def motox_review_context(capture_id):
         return jsonify({"error": str(exc)}), 400
 
 
+@APP.route("/api/motox/review/capture/<capture_id>", methods=["GET"])
+def motox_review_capture(capture_id):
+    if REVIEW_STORE is None or not CAPTURE_ID_RE.fullmatch(capture_id):
+        return jsonify({"error": "review capture not found"}), 404
+    try:
+        items = REVIEW_STORE.context(capture_id, 1)
+        item = next(row for row in items if row["capture_id"] == capture_id)
+        return jsonify(item)
+    except (KeyError, StopIteration):
+        return jsonify({"error": "unknown capture"}), 404
+
+
 @APP.route("/api/motox/review/groups", methods=["GET"])
 def motox_review_groups():
     if REVIEW_STORE is None:
@@ -813,6 +1037,25 @@ def motox_review_annotation():
     if not CAPTURE_ID_RE.fullmatch(capture_id):
         return jsonify({"error": "invalid capture id"}), 400
     try:
+        speaker_embedding = None
+        speaker_embedding_model = None
+        speaker_embedding_version = None
+        if (
+            str(payload.get("annotation_type", "")).strip().lower() == "speaker"
+            and payload.get("label") in ("Ruby", "Lynn", "Raven")
+            and payload.get("speaker_turn_id")
+            and payload.get("audio_start_seconds") is not None
+            and payload.get("audio_end_seconds") is not None
+        ):
+            (
+                speaker_embedding,
+                speaker_embedding_model,
+                speaker_embedding_version,
+            ) = extract_review_speaker_embedding(
+                capture_id,
+                float(payload["audio_start_seconds"]),
+                float(payload["audio_end_seconds"]),
+            )
         annotation = REVIEW_STORE.add_annotation(
             capture_id=capture_id,
             start_char=int(payload.get("start_char", 0)),
@@ -823,12 +1066,17 @@ def motox_review_annotation():
             audio_start_seconds=payload.get("audio_start_seconds"),
             audio_end_seconds=payload.get("audio_end_seconds"),
             speaker_turn_id=payload.get("speaker_turn_id"),
+            speaker_embedding=speaker_embedding,
+            speaker_embedding_model=speaker_embedding_model,
+            speaker_embedding_version=speaker_embedding_version,
         )
         return jsonify(annotation), 201
     except KeyError:
         return jsonify({"error": "unknown capture"}), 404
     except (TypeError, ValueError) as exc:
         return jsonify({"error": str(exc)}), 400
+    except RuntimeError as exc:
+        return jsonify({"error": str(exc)}), 503
 
 
 @APP.route("/api/motox/review/annotations/<annotation_id>", methods=["DELETE"])
@@ -870,7 +1118,7 @@ def motox_journal(day):
     if V1_STORE is None:
         return "Moto X v1 journal is disabled", 503
     try:
-        content = V1_STORE.journal_text(day)
+        content = V1_STORE.recent_journal_text() if day == "recent" else V1_STORE.journal_text(day)
     except ValueError:
         return "invalid date; expected YYYY-MM-DD", 400
     return Response(content, mimetype="text/markdown")

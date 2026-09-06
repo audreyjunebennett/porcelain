@@ -7,7 +7,7 @@
   "scope": "/",
   "display": "standalone",
   "background_color": "#000000",
-  "theme_color": "#09070d",
+  "theme_color": "#000000",
   "icons": [
     {
       "src": "/dashboard-assets/claudia-listening-192.png",

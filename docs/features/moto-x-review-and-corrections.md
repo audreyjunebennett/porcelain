@@ -58,12 +58,30 @@ Ruby/Lynn/Raven profiles instead of walking backward through recent clips.
 - Smart identification considers only 1.5–8 second diarized regions, loops the
   exact region, and keeps **Other** and **Not sure** available even when the two
   nearest verified profiles are shown in the question.
+- Smart identification presents the diarizer's region as an editable proposed
+  crop in a large touch-first waveform trimmer. Ruby can drag either bracket,
+  preview the looping result, and remove an adjacent interjection before
+  confirming; the initial crop remains unchanged when no edit is needed. The
+  native browser audio controls remain hidden behind this single larger player.
+  Each bracket has one visual edge and a larger invisible touch target; tapping
+  inside that target does not move or visually duplicate the boundary.
+- Tapping the **Applying to** scope bubble clears an automatic or edited crop
+  and switches the answer back to the whole source clip. That explicit whole-
+  clip scope remains active after accepting the safety confirmation and saving
+  an additional sound label.
+- A named answer stores a WavLM embedding extracted from the exact accepted
+  crop. The deterministic diarized turn ID remains attached as provenance, but
+  no longer overwrites a human-adjusted audio boundary. Compatible CPU and CUDA
+  builds of the same torchaudio release share one model family.
 - Smart identification is a two-step choice: select an identity, then use
   **Confirm <identity> & next**. Ambiguous or overlapping speech can be marked
   **Not sure / mixed voices** instead of forcing an identity into training.
+  Tapping the selected identity again clears it.
 - Sound-only labels such as television, music, cats, or overlapping voices do
   not require a speaker answer; after saving one, the primary action becomes
-  **Next clip**.
+  **Confirm sound only & next**. Whole-clip sound, overlap, and boundary labels
+  save without an additional browser confirmation; whole-clip named speaker
+  assignments retain the safety confirmation.
 - In Smart identification, annotation chips are scoped to the current
   diarized turn. Labels from another turn in the same 30-second source capture
   do not remain visible or enable its primary action.
@@ -73,9 +91,9 @@ Ruby/Lynn/Raven profiles instead of walking backward through recent clips.
 - Repeating the same active label for the same text/audio scope is idempotent.
   Smart-identification sound buttons show their saved state and cannot create
   a duplicate annotation for the current turn.
-- Advancing a Smart-identification turn with only sound/overlap labels records
-  a **Not sure** speaker answer for that exact turn. It does not train a named
-  voice profile, but prevents the completed question from returning later.
+- Advancing a Smart-identification turn with only sound/overlap labels does not
+  invent a speaker answer. The saved sound/overlap annotation itself keeps that
+  exact completed question from returning later.
 - Existing sound and overlap annotations also count that exact diarized turn as
   handled, so older television or mixed-voice answers do not re-enter the queue.
 - When television is marked in at least three captures and at least 60% of the
@@ -90,9 +108,75 @@ Ruby/Lynn/Raven profiles instead of walking backward through recent clips.
   the empty state explicitly offers another pass when remaining turns may exist.
 - The Smart-identification question number counts advances across adaptive
   re-ranking reloads instead of resetting to one after every confirmed answer.
+- A manual **Next**, **Skip**, or confirmed Smart-identification answer arms the
+  following clip to play automatically from its selected audio boundary. The
+  initial page load remains quiet, and browser autoplay rejection is surfaced.
 - Accepted smart-identification answers are anchored to a deterministic turn
   ID plus source capture seconds. Undoing the answer removes it from the learned
   profile and makes that turn eligible for review again.
+- The dashboard's **Today's journal** view is an exact rolling 24-hour window,
+  so midnight does not hide the preceding evening. Date-addressed journals stay
+  available as deterministic archive views.
+- Today's journal projects conservative speaker enrichment from prepared
+  diarized turns and the current clean identity centroids. Confirmed identities
+  and high-confidence predictions can replace the provisional chunk speaker;
+  low-confidence turns keep the original display instead of forcing a name.
+  Identity readiness is independent per person, so a missing Raven profile does
+  not prevent Ruby or Lynn predictions.
+- Where word timestamps are available, the journal projects words onto those
+  diarized turns and renders separate chat bubbles: Ruby on the right in purple,
+  Lynn on the left in green, and Raven on the left in orange. Unassigned or
+  genuinely mixed words remain neutral instead of collapsing names into a
+  combined `Ruby / Lynn` chunk label.
+- A journal bubble's colored speaker name links its exact source-audio range to
+  Teach Claudia; the journal has no redundant separate edit link. The main
+  listening dashboard alone uses the lightweight Unsorted/Ruby/Lynn picker.
+- Adjusting a Teach Claudia audio crop recomputes its visible excerpt from word
+  timestamps and saves matching character boundaries. Confirmed journal turns
+  use the accepted human crop rather than expanding back to the diarizer's
+  original boundary. When word timings are unavailable, a narrow crop remains
+  audio-only instead of presenting the whole transcript as though it matched.
+- The waveform and transcript are one bidirectional selection: dragging either
+  audio bracket paints the overlapping timed words in mint, while selecting
+  transcript words snaps the audio brackets to their word times and loops that
+  range. The full transcript remains visible for context. Older captures without
+  word timings state that the selection is audio-only.
+- The touch trimmer uses only play/pause and its draggable brackets. Active
+  crops loop automatically; the compact **Applying to** row is the sole action
+  that clears text and audio scope back to the whole clip. Transcript correction
+  appears beside the selected text, and the clip advance/confirmation action is
+  sticky at the bottom of the viewport.
+- Speaker corrections project as non-overlapping region paint. A newer Ruby,
+  Lynn, Raven, Other, Unknown, or Not sure range replaces an older identity only
+  where their audio overlaps, preserving the older speaker on either side and
+  producing separate timed chat bubbles where word timestamps are available.
+- Conversation status appears only as **recording now** while a conversation is
+  active. Ended conversations show no lifecycle badge, avoiding any implication
+  that speaker review is complete. Each journal bubble links its source capture
+  and exact timed range back to Teach Claudia for reversible speaker correction.
+- Journal audio controls are created lazily only after **Play turn** is tapped,
+  avoiding hundreds of costly native media elements during initial mobile page
+  rendering. Rolling views also calculate their cross-midnight speaker layer in
+  one pass and load timed words only for clips that will actually be enriched.
+- The rolling journal initially renders the newest 12 conversations and offers
+  Older/Newer paging, keeping hundreds of chat bubbles out of the initial mobile
+  document while preserving access to the complete 24-hour window.
+- The main listening dashboard shows the eight most recent speech captures as
+  the same voice-colored chat bubbles, newest first so the latest transcript is
+  visible without scrolling. Teach Claudia and Today's journal remain above the
+  transcript feed for one-tap phone access. The colored capture-health line is
+  the only listening-status heading; speech/ambient/silent/queued totals and the
+  refreshed time sit below the feed. Prepared confident regions use the
+  Ruby/Lynn/Raven projection; recordings awaiting diarization remain neutral
+  and explicitly Unsorted. Tapping a bubble's speaker badge opens a lightweight
+  Unsorted/Ruby/Lynn picker; choosing a name replaces any conflicting speaker
+  correction for that audio range, while choosing Unsorted clears it. Tapping
+  or scrolling away closes the picker without changing anything.
+- The installed PWA manifest and every in-scope page declare the same opaque
+  black theme/background plus a dark color scheme, allowing Android's
+  standalone system chrome to choose its dark treatment consistently. The
+  manifest is served without a long cache so installed-shell updates are not
+  held behind the ordinary static-asset cache.
 - Compatible WavLM embeddings form normalized per-person centroids from human
   Ruby/Lynn/Raven answers. The queue favors clean, uncertain comparisons and
   spreads bootstrap questions across diarization clusters. `Other` is not used
@@ -174,8 +258,6 @@ records remain unchanged.
   step.
 - Calibrate similarity thresholds on held-out real Moto X examples before any
   high-confidence identity can bypass human review.
-- Resolve the speaker layer as region painting (newer identities replace older
-  identities only where they overlap) while sound labels remain additive.
 - Add timeline-wide editing and corrected journal projection.
 - Implement checkpoint/boundary/final conversation ASR workers. Every final
   turn must source-map back to capture IDs and seconds so existing corrections

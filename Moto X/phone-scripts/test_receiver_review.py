@@ -64,17 +64,57 @@ class ReceiverReviewApiTests(unittest.TestCase):
         page = self.client.get("/review")
         self.assertEqual(200, page.status_code)
         self.assertIn('data-label="Music"', page.get_data(as_text=True))
-        self.assertIn('id="range-start"', page.get_data(as_text=True))
-        self.assertIn('id="range-end"', page.get_data(as_text=True))
+        self.assertIn('id="trim-start"', page.get_data(as_text=True))
+        self.assertIn('id="trim-end"', page.get_data(as_text=True))
+        self.assertNotIn('id="range-start"', page.get_data(as_text=True))
+        self.assertNotIn('id="range-end"', page.get_data(as_text=True))
+        self.assertNotIn('id="range-loop"', page.get_data(as_text=True))
+        self.assertNotIn('id="range-clear"', page.get_data(as_text=True))
         self.assertIn('id="transcript-version"', page.get_data(as_text=True))
         self.assertIn('data-label="Unknown person"', page.get_data(as_text=True))
         self.assertIn('id="load-context"', page.get_data(as_text=True))
+        script = self.client.get("/dashboard-assets/review.js")
+        self.assertIn("syncTranscriptToAudioRange", script.get_data(as_text=True))
+        self.assertIn("transcript-selection", script.get_data(as_text=True))
+        script.close()
         self.assertIn('id="exclude"', page.get_data(as_text=True))
         self.assertIn('value="identify"', page.get_data(as_text=True))
+        self.assertIn('<meta name="theme-color" content="#000000">', page.get_data(as_text=True))
+        self.assertIn('<button id="scope"', page.get_data(as_text=True))
+        self.assertIn('class="transcript-actions"', page.get_data(as_text=True))
         page.close()
         response = self.client.get("/api/motox/review/candidates?limit=1")
         self.assertEqual(200, response.status_code)
         self.assertEqual("review-clip", response.get_json()[0]["capture_id"])
+        response.close()
+
+    def test_pwa_manifest_and_pages_request_an_opaque_dark_shell(self):
+        manifest = self.client.get("/dashboard-assets/manifest.webmanifest")
+        self.assertEqual("#000000", manifest.get_json()["theme_color"])
+        self.assertEqual("#000000", manifest.get_json()["background_color"])
+        self.assertEqual("standalone", manifest.get_json()["display"])
+        self.assertIn("no-cache", manifest.headers.get("Cache-Control", ""))
+        manifest.close()
+
+        dashboard = self.client.get("/dashboard").get_data(as_text=True)
+        journal = self.client.get("/journal/recent").get_data(as_text=True)
+        for page in (dashboard, journal):
+            self.assertIn('<meta name="theme-color" content="#000000">', page)
+            self.assertIn('<meta name="color-scheme" content="dark">', page)
+            self.assertIn('rel="manifest" href="/dashboard-assets/manifest.webmanifest"', page)
+
+    def test_recent_journal_route_uses_rolling_view(self):
+        page = self.client.get("/journal/recent")
+        self.assertEqual(200, page.status_code)
+        text = page.get_data(as_text=True)
+        self.assertIn("Last 24 hours", text)
+        self.assertIn('/api/motox/journal/recent', text)
+        page.close()
+
+    def test_exact_review_capture_api_supports_journal_edit_links(self):
+        response = self.client.get("/api/motox/review/capture/review-clip")
+        self.assertEqual(200, response.status_code)
+        self.assertEqual("review-clip", response.get_json()["capture_id"])
         response.close()
 
     def test_identification_api_returns_and_accepts_exact_turn(self):
@@ -106,14 +146,85 @@ class ReceiverReviewApiTests(unittest.TestCase):
         saved.close()
         self.assertEqual([], self.client.get("/api/motox/review/identification").get_json())
 
-    def test_dashboard_footer_stacks_actions_on_narrow_screens(self):
+    def test_dashboard_keeps_actions_above_recent_transcripts(self):
         response = self.client.get("/dashboard")
         self.assertEqual(200, response.status_code)
         html = response.get_data(as_text=True)
         self.assertIn('@media (max-width: 420px)', html)
-        self.assertIn('footer .actions { display: grid;', html)
-        self.assertIn('<span class="actions">', html)
-        self.assertIn('`/journal/${status.today}`', html)
+        self.assertIn('.top-actions { display: grid;', html)
+        self.assertIn('<nav class="top-actions">', html)
+        self.assertLess(html.index('<nav class="top-actions">'), html.index('<section id="recent">'))
+        self.assertNotIn('<span class="actions">', html)
+        self.assertNotIn("Claudia is listening", html)
+        self.assertGreater(html.index('id="counts"'), html.index('<section id="recent">'))
+        self.assertIn("'/journal/recent'", html)
+        self.assertIn("/api/motox/recent?limit=8", html)
+        self.assertIn("renderRecent([...recent].reverse())", html)
+        self.assertIn('class="bubble speaker-${speakerClass(segment.speaker)}"', html)
+        self.assertIn('data-quick-speaker="Unsorted"', html)
+        self.assertIn('data-quick-speaker="Ruby"', html)
+        self.assertIn('data-quick-speaker="Lynn"', html)
+        self.assertIn("addEventListener('scroll', closeSpeakerMenus", html)
+        response.close()
+
+    def test_dashboard_quick_speaker_can_label_and_clear_recent_audio(self):
+        saved = self.client.post(
+            "/api/motox/review/quick-speaker",
+            json={
+                "capture_id": "review-clip",
+                "audio_start_seconds": 0,
+                "audio_end_seconds": 30,
+                "label": "Ruby",
+            },
+        )
+        self.assertEqual(200, saved.status_code)
+        self.assertEqual("Ruby", saved.get_json()["label"])
+        saved.close()
+        recent = self.client.get("/api/motox/recent?limit=8").get_json()
+        self.assertEqual("Ruby", recent[0]["segments"][0]["speaker"])
+        self.assertEqual(30.0, recent[0]["segments"][0]["audio_end_seconds"])
+
+        cleared = self.client.post(
+            "/api/motox/review/quick-speaker",
+            json={
+                "capture_id": "review-clip",
+                "audio_start_seconds": 0,
+                "audio_end_seconds": 30,
+                "label": "Unsorted",
+            },
+        )
+        self.assertEqual(200, cleared.status_code)
+        self.assertEqual("Unsorted", cleared.get_json()["label"])
+        cleared.close()
+        recent = self.client.get("/api/motox/recent?limit=8").get_json()
+        self.assertEqual("Unsorted", recent[0]["segments"][0]["speaker"])
+
+    def test_recent_feed_projects_timed_speaker_bubbles(self):
+        receiver.V1_STORE.record_transcription_pass(
+            "review-clip",
+            "Ruby plays mine chat with Lynn.",
+            [{
+                "word": "Ruby plays",
+                "start_seconds": 4.1,
+                "end_seconds": 5.0,
+                "probability": 0.9,
+                "char_start": 0,
+                "char_end": 10,
+            }],
+        )
+        receiver.REVIEW_STORE.add_annotation(
+            capture_id="review-clip",
+            start_char=0,
+            end_char=10,
+            annotation_type="speaker",
+            label="Ruby",
+            speaker_turn_id=self.speaker_turn_id,
+        )
+        response = self.client.get("/api/motox/recent?limit=8")
+        self.assertEqual(200, response.status_code)
+        segment = response.get_json()[0]["segments"][0]
+        self.assertEqual("Ruby", segment["speaker"])
+        self.assertEqual("Ruby plays", segment["text"])
         response.close()
 
     def test_journal_page_is_rendered_and_raw_markdown_is_preserved(self):
